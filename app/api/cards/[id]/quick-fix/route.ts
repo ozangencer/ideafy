@@ -10,6 +10,8 @@ import {
   convertToTipTapTaskList,
   escapeShellArg,
   buildQuickFixPrompt,
+  saveCardImagesToTemp,
+  generateImageReferences,
 } from "@/lib/prompts";
 
 const execAsync = promisify(exec);
@@ -77,7 +79,15 @@ export async function POST(
     .run();
 
   try {
-    const prompt = buildQuickFixPrompt(card);
+    let prompt = buildQuickFixPrompt(card);
+
+    // Extract and save images for CLI context
+    const savedImages = saveCardImagesToTemp(card.id, card);
+    const imageReferences = generateImageReferences(savedImages);
+    if (imageReferences) {
+      prompt = `${prompt}\n\n${imageReferences}`;
+    }
+
     const escapedPrompt = escapeShellArg(prompt);
 
     // Quick fix uses --dangerously-skip-permissions for full access

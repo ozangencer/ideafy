@@ -5,6 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Image from "@tiptap/extension-image";
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { SkillMention, McpMention, CardMention, DocumentMention } from "@/lib/mention-extension";
@@ -115,11 +116,51 @@ export function MarkdownEditor({
       DocumentMention.configure({
         suggestion: documentSuggestion,
       }),
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "editor-image",
+        },
+      }),
     ],
     content: "",
     editorProps: {
       attributes: {
         class: "prose-kanban",
+      },
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
+
+            // Check file size (max 5MB)
+            const MAX_SIZE = 5 * 1024 * 1024;
+            if (file.size > MAX_SIZE) {
+              console.warn("Image too large (max 5MB)");
+              return true;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = reader.result as string;
+              view.dispatch(
+                view.state.tr.replaceSelectionWith(
+                  view.state.schema.nodes.image.create({ src: base64 })
+                )
+              );
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+        return false;
       },
     },
     onUpdate: ({ editor }) => {

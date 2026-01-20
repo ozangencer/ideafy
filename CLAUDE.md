@@ -1,4 +1,4 @@
-# Claude Kanban - Development Workflow Managemento
+# ideafy - Development Workflow Management
 
 ## Proje Özeti
 
@@ -256,7 +256,7 @@ Obsidian skill hala mevcut ama bu proje tercih edilmeli.
 
 ## MCP Kanban Workflow (Claude Code için)
 
-Claude Kanban projesi üzerinde çalışırken aşağıdaki workflow'u takip et:
+ideafy projesi üzerinde çalışırken aşağıdaki workflow'u takip et:
 
 ### Kullanılabilir MCP Tool'ları
 

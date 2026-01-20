@@ -19,6 +19,8 @@ import {
   escapeShellArg,
   detectPhase,
   buildPhasePrompt,
+  saveCardImagesToTemp,
+  generateImageReferences,
   type Phase,
 } from "@/lib/prompts";
 
@@ -82,8 +84,15 @@ export async function POST(
 
   // Detect current phase
   const phase = detectPhase(card);
-  const prompt = buildPhasePrompt(phase, card);
+  let prompt = buildPhasePrompt(phase, card);
   const newStatus = getNewStatus(phase, card.status as Status);
+
+  // Extract and save images for CLI context
+  const savedImages = saveCardImagesToTemp(card.id, card);
+  const imageReferences = generateImageReferences(savedImages);
+  if (imageReferences) {
+    prompt = `${prompt}\n\n${imageReferences}`;
+  }
 
   console.log(`[Claude CLI] Phase: ${phase}`);
   console.log(`[Claude CLI] Current status: ${card.status} → New status: ${newStatus}`);

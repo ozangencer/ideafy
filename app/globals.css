@@ -265,6 +265,19 @@ button:disabled {
   @apply border-border my-4;
 }
 
+/* Editor images */
+.prose-kanban img,
+.editor-image {
+  @apply max-w-full h-auto rounded-md my-2;
+  max-height: 400px;
+  object-fit: contain;
+}
+
+.prose-kanban img.ProseMirror-selectednode,
+.editor-image.ProseMirror-selectednode {
+  @apply outline outline-2 outline-primary outline-offset-2;
+}
+
 /* Mention styles */
 .mention {
   @apply px-1.5 py-0.5 rounded text-sm font-mono;

@@ -50,7 +50,7 @@ export function BackupMenu() {
       // Get filename from Content-Disposition header
       const contentDisposition = response.headers.get("Content-Disposition");
       const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-      const filename = filenameMatch?.[1] || "claude-kanban-export.json";
+      const filename = filenameMatch?.[1] || "ideafy-export.json";
 
       // Download the file
       const blob = await response.blob();

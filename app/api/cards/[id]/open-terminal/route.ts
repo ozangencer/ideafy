@@ -322,7 +322,7 @@ export async function POST(
     // iTerm2 or Terminal.app - use AppleScript
     // Write command to temp script to avoid complex escaping
     const timestamp = Date.now();
-    const scriptPath = join(tmpdir(), `claude-kanban-${timestamp}.sh`);
+    const scriptPath = join(tmpdir(), `ideafy-${timestamp}.sh`);
     writeFileSync(scriptPath, `#!/bin/bash\n${claudeCommand}\n`, { mode: 0o755 });
 
     // Note: App is named "iTerm" not "iTerm2" on this system

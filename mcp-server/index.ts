@@ -46,6 +46,68 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Database path - relative to MCP server location
 const DB_PATH = resolve(__dirname, "../data/kanban.db");
 
+// ============================================================================
+// Image Extraction Helpers
+// ============================================================================
+
+interface ExtractedImage {
+  id: string;
+  data: string;
+  mimeType: string;
+  fieldName: string;
+  index: number;
+}
+
+function extractImagesFromHtml(html: string, fieldName: string): {
+  cleanedHtml: string;
+  images: ExtractedImage[];
+} {
+  const images: ExtractedImage[] = [];
+  let index = 0;
+
+  const imgRegex = /<img[^>]*src=["']data:(image\/[^;]+);base64,([^"']+)["'][^>]*>/gi;
+
+  const cleanedHtml = html.replace(imgRegex, (match, mimeType, data) => {
+    const id = `${fieldName}_image_${index}`;
+    images.push({ id, data, mimeType, fieldName, index });
+    index++;
+    return `[IMAGE: ${id}]`;
+  });
+
+  return { cleanedHtml, images };
+}
+
+function extractCardImages(card: Card): {
+  cleanedCard: Card;
+  images: ExtractedImage[];
+} {
+  const allImages: ExtractedImage[] = [];
+  const cleanedCard = { ...card };
+
+  // Process description
+  if (card.description) {
+    const { cleanedHtml, images } = extractImagesFromHtml(card.description, 'description');
+    cleanedCard.description = cleanedHtml;
+    allImages.push(...images);
+  }
+
+  // Process solutionSummary
+  if (card.solutionSummary) {
+    const { cleanedHtml, images } = extractImagesFromHtml(card.solutionSummary, 'solutionSummary');
+    cleanedCard.solutionSummary = cleanedHtml;
+    allImages.push(...images);
+  }
+
+  // Process testScenarios
+  if (card.testScenarios) {
+    const { cleanedHtml, images } = extractImagesFromHtml(card.testScenarios, 'testScenarios');
+    cleanedCard.testScenarios = cleanedHtml;
+    allImages.push(...images);
+  }
+
+  return { cleanedCard, images: allImages };
+}
+
 // Initialize database connection
 const db = new Database(DB_PATH);
 
@@ -309,9 +371,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        return {
-          content: [{ type: "text", text: JSON.stringify(card, null, 2) }],
-        };
+        // Extract images from HTML fields
+        const { cleanedCard, images } = extractCardImages(card);
+
+        // Build content array
+        const content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [
+          { type: "text", text: JSON.stringify(cleanedCard, null, 2) }
+        ];
+
+        // Add images as separate content blocks
+        for (const img of images) {
+          content.push({
+            type: "image",
+            data: img.data,
+            mimeType: img.mimeType,
+          });
+        }
+
+        return { content };
       }
 
       case "update_card": {
@@ -419,9 +496,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const cards = db.prepare(query).all(...params) as Card[];
 
-        return {
-          content: [{ type: "text", text: JSON.stringify(cards, null, 2) }],
-        };
+        // Extract images from all cards (max 10 total)
+        const allImages: ExtractedImage[] = [];
+        const cleanedCards: Card[] = [];
+        const MAX_IMAGES = 10;
+
+        for (const card of cards) {
+          const { cleanedCard, images } = extractCardImages(card);
+          cleanedCards.push(cleanedCard);
+
+          // Add images up to the limit
+          for (const img of images) {
+            if (allImages.length < MAX_IMAGES) {
+              allImages.push({ ...img, id: `card_${card.id.slice(0, 8)}_${img.id}` });
+            }
+          }
+        }
+
+        // Build content array
+        const content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [
+          { type: "text", text: JSON.stringify(cleanedCards, null, 2) }
+        ];
+
+        // Add images as separate content blocks
+        for (const img of allImages) {
+          content.push({
+            type: "image",
+            data: img.data,
+            mimeType: img.mimeType,
+          });
+        }
+
+        if (allImages.length === MAX_IMAGES) {
+          content.push({
+            type: "text",
+            text: `Note: Only first ${MAX_IMAGES} images shown. Use get_card for full image access.`
+          });
+        }
+
+        return { content };
       }
 
       case "create_card": {

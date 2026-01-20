@@ -6,7 +6,7 @@ import { BackupScheduler } from "@/components/backup-scheduler";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Claude Kanban",
+  title: "ideafy",
   description: "Development workflow management for solo founders",
   icons: {
     icon: [

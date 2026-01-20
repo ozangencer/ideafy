@@ -3,6 +3,10 @@
  * All prompts used in API routes are defined here for easy maintenance
  */
 
+import { writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -63,6 +67,77 @@ export function convertToTipTapTaskList(html: string): string {
  */
 export function escapeShellArg(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+// ============================================================================
+// Image Extraction for CLI Context
+// ============================================================================
+
+export interface SavedImage {
+  id: string;
+  path: string;
+  fieldName: string;
+}
+
+/**
+ * Save embedded base64 images from card HTML fields to temp files.
+ * Returns array of saved image metadata for reference in prompts.
+ */
+export function saveCardImagesToTemp(
+  cardId: string,
+  card: { description: string; solutionSummary?: string | null; testScenarios?: string | null }
+): SavedImage[] {
+  const savedImages: SavedImage[] = [];
+  const timestamp = Date.now();
+
+  const imgRegex = /<img[^>]*src=["']data:(image\/[^;]+);base64,([^"']+)["'][^>]*>/gi;
+
+  const fields = [
+    { name: 'description', value: card.description },
+    { name: 'solutionSummary', value: card.solutionSummary },
+    { name: 'testScenarios', value: card.testScenarios },
+  ];
+
+  for (const field of fields) {
+    if (!field.value) continue;
+
+    let match;
+    let index = 0;
+    while ((match = imgRegex.exec(field.value)) !== null) {
+      const mimeType = match[1];
+      const base64Data = match[2];
+      const ext = mimeType.split('/')[1] || 'png';
+
+      const filename = `kanban-${cardId.slice(0, 8)}-${field.name}-${index}-${timestamp}.${ext}`;
+      const filepath = join(tmpdir(), filename);
+
+      const buffer = Buffer.from(base64Data, 'base64');
+      writeFileSync(filepath, buffer);
+
+      savedImages.push({ id: `${field.name}_image_${index}`, path: filepath, fieldName: field.name });
+      index++;
+    }
+    imgRegex.lastIndex = 0; // Reset regex state between fields
+  }
+
+  return savedImages;
+}
+
+/**
+ * Generate markdown reference section for saved images.
+ * Tells Claude to use the Read tool to view them.
+ */
+export function generateImageReferences(images: SavedImage[]): string {
+  if (images.length === 0) return '';
+
+  return [
+    '## Attached Images',
+    '',
+    ...images.map(img => `- **${img.id}** (${img.fieldName}): Read file at \`${img.path}\``),
+    '',
+    'Use the Read tool to view these images for visual context.',
+    ''
+  ].join('\n');
 }
 
 // ============================================================================

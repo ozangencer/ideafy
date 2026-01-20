@@ -1,8 +1,8 @@
-# Claude Kanban - Product Narrative
+# ideafy - Product Narrative
 
 ## Vision Statement
 
-**Claude Kanban, solo founder'ların AI-assisted development workflow'unu end-to-end yönetmelerini sağlayan bir task orchestration sistemidir.**
+**ideafy, solo founder'ların AI-assisted development workflow'unu end-to-end yönetmelerini sağlayan bir task orchestration sistemidir.**
 
 Bu uygulama, Linear'ın minimal ve profesyonel tasarım dilini Claude Code'un agentic yetenekleriyle birleştirerek, tek kişilik ekiplerin "fikirden production'a" sürecini otomatize etmeyi hedefler.
 
@@ -627,7 +627,7 @@ Ancak solo founder use case'i için over-engineering'den kaçınılmalı.
 
 ## Competitive Positioning
 
-| Feature            | Linear | Notion    | Claude Kanban |
+| Feature            | Linear | Notion    | ideafy |
 | ------------------ | ------ | --------- | ------------- |
 | Task tracking      | ✓      | ✓         | ✓             |
 | AI assistance      | ×      | ✓ (basic) | ✓ (deep)      |
@@ -640,7 +640,7 @@ Ancak solo founder use case'i için over-engineering'den kaçınılmalı.
 
 > "Click a button, Claude writes the code."
 
-Linear görevleri takip eder. Claude Kanban görevleri **çalıştırır**.
+Linear görevleri takip eder. ideafy görevleri **çalıştırır**.
 
 ---
 

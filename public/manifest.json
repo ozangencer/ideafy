@@ -1,6 +1,6 @@
 {
-  "name": "Claude Kanban",
-  "short_name": "Kanban",
+  "name": "ideafy",
+  "short_name": "ideafy",
   "description": "Development workflow management for solo founders",
   "start_url": "/",
   "display": "standalone",

@@ -6,7 +6,7 @@ import { writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { TerminalApp } from "@/lib/types";
-import { stripHtml, buildIdeationPrompt } from "@/lib/prompts";
+import { stripHtml, buildIdeationPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
 
 export async function POST(
   request: NextRequest,
@@ -60,7 +60,14 @@ export async function POST(
     );
   }
 
-  const prompt = buildIdeationPrompt(card);
+  let prompt = buildIdeationPrompt(card);
+
+  // Extract and save images for CLI context
+  const savedImages = saveCardImagesToTemp(card.id, card);
+  const imageReferences = generateImageReferences(savedImages);
+  if (imageReferences) {
+    prompt = `${prompt}\n\n${imageReferences}`;
+  }
 
   console.log(`[Ideate] Opening interactive ideation for card: ${id}`);
   console.log(`[Ideate] Working dir: ${workingDir}`);
@@ -97,7 +104,7 @@ export async function POST(
     // iTerm2 or Terminal.app - use AppleScript
     // Write command to temp script to avoid complex escaping
     const timestamp = Date.now();
-    const scriptPath = join(tmpdir(), `claude-kanban-ideate-${timestamp}.sh`);
+    const scriptPath = join(tmpdir(), `ideafy-ideate-${timestamp}.sh`);
     writeFileSync(scriptPath, `#!/bin/bash\n${claudeCommand}\n`, { mode: 0o755 });
 
     const appName = terminal === "iterm2" ? "iTerm" : "Terminal";
