@@ -5,7 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import Image from "@tiptap/extension-image";
+import ImageResize from "tiptap-extension-resize-image";
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { SkillMention, McpMention, CardMention, DocumentMention } from "@/lib/mention-extension";
@@ -116,12 +116,9 @@ export function MarkdownEditor({
       DocumentMention.configure({
         suggestion: documentSuggestion,
       }),
-      Image.configure({
+      ImageResize.configure({
         inline: false,
         allowBase64: true,
-        HTMLAttributes: {
-          class: "editor-image",
-        },
       }),
     ],
     content: "",
@@ -150,11 +147,14 @@ export function MarkdownEditor({
             const reader = new FileReader();
             reader.onload = () => {
               const base64 = reader.result as string;
-              view.dispatch(
-                view.state.tr.replaceSelectionWith(
-                  view.state.schema.nodes.image.create({ src: base64 })
-                )
-              );
+              const nodeType = view.state.schema.nodes.imageResize || view.state.schema.nodes.image;
+              if (nodeType) {
+                view.dispatch(
+                  view.state.tr.replaceSelectionWith(
+                    nodeType.create({ src: base64 })
+                  )
+                );
+              }
             };
             reader.readAsDataURL(file);
             return true;

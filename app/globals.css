@@ -278,6 +278,56 @@ button:disabled {
   @apply outline outline-2 outline-primary outline-offset-2;
 }
 
+/* Resizable image wrapper */
+.tiptap-resizable-view {
+  @apply relative inline-block my-2;
+  max-width: 100%;
+}
+
+.tiptap-resizable-view img {
+  @apply block rounded-md;
+  max-height: 400px;
+}
+
+/* Resize handles */
+.tiptap-resize-handle {
+  @apply absolute bg-primary rounded-sm opacity-0 transition-opacity;
+  width: 8px;
+  height: 8px;
+  z-index: 10;
+}
+
+.tiptap-resizable-view:hover .tiptap-resize-handle,
+.tiptap-resizable-view.is-resizing .tiptap-resize-handle {
+  @apply opacity-100;
+}
+
+/* Handle positions */
+.tiptap-resize-handle[data-position="top"] {
+  @apply top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-n-resize;
+}
+.tiptap-resize-handle[data-position="bottom"] {
+  @apply bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-s-resize;
+}
+.tiptap-resize-handle[data-position="left"] {
+  @apply left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-w-resize;
+}
+.tiptap-resize-handle[data-position="right"] {
+  @apply right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-e-resize;
+}
+.tiptap-resize-handle[data-position="top-left"] {
+  @apply top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nw-resize;
+}
+.tiptap-resize-handle[data-position="top-right"] {
+  @apply top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-ne-resize;
+}
+.tiptap-resize-handle[data-position="bottom-left"] {
+  @apply bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-sw-resize;
+}
+.tiptap-resize-handle[data-position="bottom-right"] {
+  @apply bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-se-resize;
+}
+
 /* Mention styles */
 .mention {
   @apply px-1.5 py-0.5 rounded text-sm font-mono;
@@ -370,4 +420,30 @@ button:disabled {
 
 .tippy-content {
   padding: 0 !important;
+}
+
+/* xterm.js Terminal Styles */
+.xterm {
+  padding: 4px;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: #0d0d0d;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #444;
 }
