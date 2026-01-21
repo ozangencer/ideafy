@@ -22,6 +22,7 @@ export const createClaudeSlice: StoreSlice<
     | "evaluateIdea"
     | "lockCard"
     | "unlockCard"
+    | "clearProcessing"
   >
 > = (set, get) => ({
   startingCardId: null,
@@ -306,5 +307,39 @@ export const createClaudeSlice: StoreSlice<
     set((state) => ({
       lockedCardIds: removeId(state.lockedCardIds, cardId),
     }));
+  },
+
+  clearProcessing: async (cardId) => {
+    try {
+      const response = await fetch(`/api/cards/${cardId}/clear-processing`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = await parseJson<{ error?: string }>(response);
+        return { success: false, error: data.error || "Failed to clear processing" };
+      }
+
+      // Update local state
+      set((state) => ({
+        startingCardId: state.startingCardId === cardId ? null : state.startingCardId,
+        quickFixingCardId: state.quickFixingCardId === cardId ? null : state.quickFixingCardId,
+        evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
+        lockedCardIds: removeId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId
+            ? { ...card, processingType: null, updatedAt: nowIso() }
+            : card
+        ),
+      }));
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to clear processing:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
   },
 });

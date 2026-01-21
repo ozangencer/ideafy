@@ -107,7 +107,7 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
                 }`}
               >
                 {mention.type === "skill" && "/"}
-                {mention.type === "mcp" && "@"}
+                {mention.type === "mcp" && "/"}
                 {mention.type === "card" && "["}
                 {mention.type === "document" && "#"}
                 {mention.label}

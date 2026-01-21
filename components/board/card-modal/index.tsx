@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import {
   Status,
@@ -91,8 +91,8 @@ export function CardModal() {
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<SectionType>("detail");
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [cardHistory, setCardHistory] = useState<string[]>([]);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   // Git state
   const [gitBranchName, setGitBranchName] = useState<string | null>(null);
@@ -137,6 +137,83 @@ export function CardModal() {
   const isTitleValid = (title || "").trim().length > 0;
   const canSave = projectId !== null && isTitleValid;
 
+  // Auto-save debounce ref
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-save effect for edit mode
+  useEffect(() => {
+    // Only auto-save for existing cards (not drafts) with valid data
+    if (!selectedCard || isDraftMode || !canSave || !hasUnsavedChanges) {
+      return;
+    }
+
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Debounced save after 1500ms
+    saveTimeoutRef.current = setTimeout(() => {
+      setSaveStatus("saving");
+
+      const selectedProject = projects.find((p) => p.id === projectId);
+
+      updateCard(selectedCard.id, {
+        title,
+        description,
+        solutionSummary,
+        testScenarios,
+        aiOpinion,
+        status,
+        complexity,
+        priority,
+        projectId,
+        projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+      });
+
+      setSaveStatus("saved");
+
+      // Clear saved status after 2 seconds
+      if (savedTimeoutRef.current) {
+        clearTimeout(savedTimeoutRef.current);
+      }
+      savedTimeoutRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 2000);
+    }, 1500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [
+    selectedCard,
+    isDraftMode,
+    canSave,
+    hasUnsavedChanges,
+    title,
+    description,
+    solutionSummary,
+    testScenarios,
+    aiOpinion,
+    status,
+    complexity,
+    priority,
+    projectId,
+    projects,
+    updateCard,
+  ]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+    };
+  }, []);
+
   // Section content mapping
   const sectionValues: Record<SectionType, string> = {
     detail: description,
@@ -163,6 +240,14 @@ export function CardModal() {
 
   useEffect(() => {
     if (selectedCard) {
+      // Cancel any pending auto-save when selectedCard changes externally
+      // This prevents auto-save from overwriting MCP tool updates
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+        setSaveStatus("idle");
+      }
+
       setTitle(selectedCard.title);
       setDescription(selectedCard.description);
       setSolutionSummary(selectedCard.solutionSummary);
@@ -309,17 +394,6 @@ export function CardModal() {
       handleClose();
     }
   }, [selectedCard, updateCard, handleClose]);
-
-  // Handle backdrop click
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      if (hasUnsavedChanges) {
-        setShowUnsavedDialog(true);
-      } else {
-        handleClose();
-      }
-    }
-  }, [hasUnsavedChanges, handleClose]);
 
   // Handle send message in chat
   const handleSendMessage = useCallback((content: string, mentions: MentionData[]) => {
@@ -559,7 +633,6 @@ export function CardModal() {
       className={`fixed inset-0 z-50 flex justify-end transition-colors duration-200 ${
         isVisible ? "bg-black/40" : "bg-transparent"
       }`}
-      onClick={handleBackdropClick}
     >
       <div
         className={`bg-surface border-l border-border w-full h-full flex flex-col shadow-2xl transition-all duration-200 ease-out ${
@@ -757,6 +830,7 @@ export function CardModal() {
           status={status}
           isDraftMode={isDraftMode}
           canSave={canSave}
+          saveStatus={saveStatus}
           onDelete={handleDelete}
           onWithdraw={handleWithdraw}
           onCancel={handleClose}
@@ -765,26 +839,6 @@ export function CardModal() {
       </div>
 
       {/* Dialogs */}
-      <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes. Are you sure you want to discard them?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleClose}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Discard
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <AlertDialog open={showRollbackDialog} onOpenChange={setShowRollbackDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

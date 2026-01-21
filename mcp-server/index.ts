@@ -194,8 +194,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             complexity: {
               type: "string",
-              enum: ["simple", "medium", "complex"],
-              description: "Task complexity",
+              enum: ["low", "medium", "high"],
+              description: "Task complexity (low, medium, high)",
             },
             priority: {
               type: "string",

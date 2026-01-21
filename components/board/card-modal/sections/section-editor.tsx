@@ -21,15 +21,16 @@ export function SectionEditor({
   const config = SECTION_CONFIG[sectionType];
 
   return (
-    <div className="h-full flex flex-col p-4">
-      <MarkdownEditor
-        value={value}
-        onChange={onChange}
-        placeholder={config.placeholder}
-        minHeight="100%"
-        onCardClick={onCardClick}
-        projectId={projectId}
-      />
+    <div className="h-full flex flex-col p-4 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto section-editor-wrapper">
+        <MarkdownEditor
+          value={value}
+          onChange={onChange}
+          placeholder={config.placeholder}
+          onCardClick={onCardClick}
+          projectId={projectId}
+        />
+      </div>
     </div>
   );
 }

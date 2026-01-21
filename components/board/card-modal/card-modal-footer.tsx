@@ -12,14 +12,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Archive } from "lucide-react";
+import { Archive, Loader2, Check } from "lucide-react";
 import { Status } from "@/lib/types";
+
+type SaveStatus = "idle" | "saving" | "saved";
 
 interface CardModalFooterProps {
   title: string;
   status: Status;
   isDraftMode: boolean;
   canSave: boolean;
+  saveStatus: SaveStatus;
   onDelete: () => void;
   onWithdraw: () => void;
   onCancel: () => void;
@@ -31,6 +34,7 @@ export function CardModalFooter({
   status,
   isDraftMode,
   canSave,
+  saveStatus,
   onDelete,
   onWithdraw,
   onCancel,
@@ -78,13 +82,32 @@ export function CardModalFooter({
           </Button>
         )}
       </div>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button onClick={onSave} disabled={!canSave}>
-          {isDraftMode ? "Create Card" : "Save Changes"}
-        </Button>
+      <div className="flex gap-2 items-center">
+        {isDraftMode ? (
+          <>
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button onClick={onSave} disabled={!canSave}>
+              Create Card
+            </Button>
+          </>
+        ) : (
+          <>
+            {saveStatus === "saving" && (
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </span>
+            )}
+            {saveStatus === "saved" && (
+              <span className="flex items-center gap-2 text-sm text-green-500">
+                <Check className="h-4 w-4" />
+                Saved
+              </span>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

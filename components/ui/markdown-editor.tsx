@@ -8,8 +8,8 @@ import TaskItem from "@tiptap/extension-task-item";
 import ImageResize from "tiptap-extension-resize-image";
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { SkillMention, McpMention, CardMention, DocumentMention } from "@/lib/mention-extension";
-import { createSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
+import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
+import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
 import tippy, { Instance } from "tippy.js";
 
@@ -24,7 +24,6 @@ interface MarkdownEditorProps {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
-  minHeight?: string;
   onCardClick?: (cardId: string) => void;
   projectId?: string | null;
 }
@@ -33,14 +32,13 @@ export function MarkdownEditor({
   value,
   onChange,
   placeholder = "Write here...",
-  minHeight = "80px",
   onCardClick,
   projectId,
 }: MarkdownEditorProps) {
   const isUpdatingFromExternal = useRef(false);
   const lastSyncedValue = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { skills, mcps, cards, projects, activeProjectId, documents } = useKanbanStore();
+  const { cards, projects, activeProjectId, documents, getUnifiedItems } = useKanbanStore();
 
   // Ref to hold current documents for the callback
   const documentsRef = useRef<typeof documents>([]);
@@ -68,14 +66,10 @@ export function MarkdownEditor({
   // Callback to get current documents (used by suggestion)
   const getDocuments = useCallback(() => documentsRef.current, []);
 
-  const skillSuggestion = useMemo(
-    () => createSuggestion({ char: "/", items: skills, prefix: "/", nodeType: "skillMention" }),
-    [skills]
-  );
-
-  const mcpSuggestion = useMemo(
-    () => createSuggestion({ char: "@", items: mcps, prefix: "@", nodeType: "mcpMention" }),
-    [mcps]
+  // Unified suggestion for / trigger (skills, MCPs, plugins)
+  const unifiedSuggestion = useMemo(
+    () => createUnifiedSuggestion({ getItems: getUnifiedItems }),
+    [getUnifiedItems]
   );
 
   const cardSuggestion = useMemo(
@@ -104,11 +98,8 @@ export function MarkdownEditor({
         placeholder,
         emptyEditorClass: "is-editor-empty",
       }),
-      SkillMention.configure({
-        suggestion: skillSuggestion,
-      }),
-      McpMention.configure({
-        suggestion: mcpSuggestion,
+      UnifiedMention.configure({
+        suggestion: unifiedSuggestion,
       }),
       CardMention.configure({
         suggestion: cardSuggestion,
@@ -250,8 +241,7 @@ export function MarkdownEditor({
   return (
     <div
       ref={containerRef}
-      className="tiptap-editor"
-      style={{ minHeight }}
+      className="tiptap-editor h-full"
       onClick={handleContainerClick}
     >
       <EditorContent editor={editor} />

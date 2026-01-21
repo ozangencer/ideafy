@@ -3,7 +3,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import ImageResize from "tiptap-extension-resize-image";
-import { SkillMention, McpMention, CardMention, DocumentMention } from "@/lib/mention-extension";
+import { SkillMention, McpMention, UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 
 // Base extensions used by both content editor and chat input
 export function getBaseExtensions(placeholder: string = "Write here...") {
@@ -28,7 +28,7 @@ export function getBaseExtensions(placeholder: string = "Write here...") {
   ];
 }
 
-// Mention extensions factory
+// Mention extensions factory (legacy - keeping for backward compatibility)
 export function getMentionExtensions(config: {
   skillSuggestion: ReturnType<typeof import("@/lib/suggestion").createSuggestion>;
   mcpSuggestion: ReturnType<typeof import("@/lib/suggestion").createSuggestion>;
@@ -41,6 +41,25 @@ export function getMentionExtensions(config: {
     }),
     McpMention.configure({
       suggestion: config.mcpSuggestion,
+    }),
+    CardMention.configure({
+      suggestion: config.cardSuggestion,
+    }),
+    DocumentMention.configure({
+      suggestion: config.documentSuggestion,
+    }),
+  ];
+}
+
+// Unified mention extensions factory (new - uses / trigger for skills, MCPs, plugins)
+export function getUnifiedMentionExtensions(config: {
+  unifiedSuggestion: ReturnType<typeof import("@/lib/suggestion").createUnifiedSuggestion>;
+  cardSuggestion: ReturnType<typeof import("@/lib/suggestion").createCardSuggestion>;
+  documentSuggestion: ReturnType<typeof import("@/lib/suggestion").createDocumentSuggestion>;
+}) {
+  return [
+    UnifiedMention.configure({
+      suggestion: config.unifiedSuggestion,
     }),
     CardMention.configure({
       suggestion: config.cardSuggestion,

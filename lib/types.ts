@@ -160,10 +160,20 @@ export const SECTION_CONFIG: Record<SectionType, {
 };
 
 // Mention types for chat input
+export type UnifiedItemType = "skill" | "mcp" | "plugin";
+
 export interface MentionData {
-  type: "skill" | "mcp" | "card" | "document";
+  type: "skill" | "mcp" | "plugin" | "card" | "document";
   id: string;
   label: string;
+}
+
+// Unified item for slash command suggestions
+export interface UnifiedItem {
+  id: string;
+  label: string;
+  type: UnifiedItemType;
+  description?: string;
 }
 
 // Tool call data from Claude responses

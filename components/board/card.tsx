@@ -5,7 +5,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, getDisplayId, COLUMNS } from "@/lib/types";
 import { useKanbanStore } from "@/lib/store";
-import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal } from "lucide-react";
+import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
@@ -132,7 +132,7 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, clearProcessing, settings, startDevServer, stopDevServer } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -194,6 +194,11 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   const handleUnlock = (e: React.MouseEvent) => {
     e.stopPropagation();
     unlockCard(card.id);
+  };
+
+  const handleClearProcessing = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await clearProcessing(card.id);
   };
 
   const handleStartClick = (e: React.MouseEvent) => {
@@ -353,6 +358,21 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="left">Unlock</TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Clear processing button - for stuck background processing from DB */}
+            {isBackgroundProcessing && card.processingType && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleClearProcessing}
+                    className="absolute top-2 right-2 p-1.5 rounded bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors z-10"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Clear stuck processing</TooltipContent>
               </Tooltip>
             )}
 

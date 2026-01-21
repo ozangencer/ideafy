@@ -14,7 +14,7 @@ export function McpList() {
   const [copiedMcp, setCopiedMcp] = useState<string | null>(null);
 
   const copyToClipboard = (mcp: string) => {
-    navigator.clipboard.writeText(`@${mcp}`);
+    navigator.clipboard.writeText(`/${mcp}`);
     setCopiedMcp(mcp);
     setTimeout(() => setCopiedMcp(null), 1500);
   };
@@ -44,7 +44,7 @@ export function McpList() {
               </>
             ) : (
               <>
-                <span className="text-blue-500/70 font-mono text-xs">@</span>
+                <span className="text-blue-500/70 font-mono text-xs">/</span>
                 <span className="truncate">{mcp}</span>
               </>
             )}

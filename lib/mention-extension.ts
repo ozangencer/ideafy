@@ -1,12 +1,14 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import Suggestion, { SuggestionOptions } from "@tiptap/suggestion";
 import { PluginKey } from "@tiptap/pm/state";
-import { MentionItem } from "@/components/ui/mention-popup";
+import { MentionItem, UnifiedMentionItem } from "@/components/ui/mention-popup";
 import { CardMentionItem } from "@/components/ui/card-mention-popup";
 import { DocumentMentionItem } from "@/components/ui/document-mention-popup";
+import { UnifiedItemType } from "@/lib/types";
 
 const SkillSuggestionPluginKey = new PluginKey("skillSuggestion");
 const McpSuggestionPluginKey = new PluginKey("mcpSuggestion");
+const UnifiedSuggestionPluginKey = new PluginKey("unifiedSuggestion");
 const CardSuggestionPluginKey = new PluginKey("cardSuggestion");
 const DocumentSuggestionPluginKey = new PluginKey("documentSuggestion");
 
@@ -122,7 +124,7 @@ export const McpMention = Node.create<MentionOptions>({
     return {
       HTMLAttributes: {},
       suggestion: {
-        char: "@",
+        char: "/",
         allowSpaces: false,
         items: () => [],
       },
@@ -165,12 +167,12 @@ export const McpMention = Node.create<MentionOptions>({
           class: "mention mcp-mention",
         }
       ),
-      `@${node.attrs.label}`,
+      `/${node.attrs.label}`,
     ];
   },
 
   renderText({ node }) {
-    return `@${node.attrs.label}`;
+    return `/${node.attrs.label}`;
   },
 
   addKeyboardShortcuts() {
@@ -201,6 +203,117 @@ export const McpMention = Node.create<MentionOptions>({
       Suggestion({
         editor: this.editor,
         pluginKey: McpSuggestionPluginKey,
+        ...this.options.suggestion,
+      }),
+    ];
+  },
+});
+
+// Unified Mention Options (skills, MCPs, plugins with / trigger)
+export interface UnifiedMentionOptions {
+  HTMLAttributes: Record<string, unknown>;
+  suggestion: Omit<SuggestionOptions<UnifiedMentionItem>, "editor">;
+}
+
+export const UnifiedMention = Node.create<UnifiedMentionOptions>({
+  name: "unifiedMention",
+  group: "inline",
+  inline: true,
+  selectable: false,
+  atom: true,
+
+  addOptions() {
+    return {
+      HTMLAttributes: {},
+      suggestion: {
+        char: "/",
+        allowSpaces: false,
+        items: () => [],
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-id"),
+        renderHTML: (attributes) => {
+          if (!attributes.id) return {};
+          return { "data-id": attributes.id };
+        },
+      },
+      label: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-label"),
+        renderHTML: (attributes) => {
+          if (!attributes.label) return {};
+          return { "data-label": attributes.label };
+        },
+      },
+      itemType: {
+        default: "skill" as UnifiedItemType,
+        parseHTML: (element) => element.getAttribute("data-item-type") as UnifiedItemType,
+        renderHTML: (attributes) => {
+          if (!attributes.itemType) return {};
+          return { "data-item-type": attributes.itemType };
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: `span[data-type="${this.name}"]` }];
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const itemType = node.attrs.itemType as UnifiedItemType;
+    return [
+      "span",
+      mergeAttributes(
+        { "data-type": this.name },
+        this.options.HTMLAttributes,
+        HTMLAttributes,
+        {
+          class: `mention unified-mention unified-mention--${itemType}`,
+        }
+      ),
+      `/${node.attrs.label}`,
+    ];
+  },
+
+  renderText({ node }) {
+    return `/${node.attrs.label}`;
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () =>
+        this.editor.commands.command(({ tr, state }) => {
+          let isMention = false;
+          const { selection } = state;
+          const { empty, anchor } = selection;
+
+          if (!empty) return false;
+
+          state.doc.nodesBetween(anchor - 1, anchor, (node, pos) => {
+            if (node.type.name === this.name) {
+              isMention = true;
+              tr.insertText("", pos, pos + node.nodeSize);
+              return false;
+            }
+          });
+
+          return isMention;
+        }),
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      Suggestion({
+        editor: this.editor,
+        pluginKey: UnifiedSuggestionPluginKey,
         ...this.options.suggestion,
       }),
     ];

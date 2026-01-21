@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { X, ArrowLeft, FileDown, Maximize2, Minimize2 } from "lucide-react";
+import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2 } from "lucide-react";
 import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS } from "@/lib/types";
 import { Project } from "@/lib/types";
 
@@ -66,6 +66,20 @@ export function CardModalHeader({
     <div className="shrink-0 border-b border-border">
       {/* Title row */}
       <div className="flex items-start gap-3 px-6 py-4">
+        {/* Close button (Notion-style >>) */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="text-muted-foreground hover:text-foreground shrink-0 mt-1"
+            >
+              <ChevronsRight className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Close panel</TooltipContent>
+        </Tooltip>
         <div className="flex-1 min-w-0">
           {displayId && (
             <div className="mb-2">
@@ -127,14 +141,6 @@ export function CardModalHeader({
             title={isExpanded ? "Collapse panel" : "Expand panel"}
           >
             {isExpanded ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-5 w-5" />
           </Button>
         </div>
       </div>

@@ -9,6 +9,7 @@ import {
   Project,
   SectionType,
   Status,
+  UnifiedItem,
 } from "../types";
 
 export interface KanbanStore {
@@ -40,9 +41,10 @@ export interface KanbanStore {
   // Completed column filter
   completedFilter: CompletedFilter;
 
-  // Skills & MCPs state
+  // Skills, MCPs & Plugins state
   skills: string[];
   mcps: string[];
+  plugins: string[];
 
   // Claude integration state
   startingCardId: string | null;
@@ -108,9 +110,11 @@ export interface KanbanStore {
   // Completed filter actions
   setCompletedFilter: (filter: CompletedFilter) => void;
 
-  // Skills & MCPs actions
+  // Skills, MCPs & Plugins actions
   fetchSkills: () => Promise<void>;
   fetchMcps: () => Promise<void>;
+  fetchPlugins: () => Promise<void>;
+  getUnifiedItems: () => UnifiedItem[];
 
   // Claude integration actions
   startTask: (cardId: string) => Promise<{ success: boolean; error?: string }>;
@@ -120,6 +124,7 @@ export interface KanbanStore {
   evaluateIdea: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   lockCard: (cardId: string) => void;
   unlockCard: (cardId: string) => void;
+  clearProcessing: (cardId: string) => Promise<{ success: boolean; error?: string }>;
 
   // Dev server actions
   startDevServer: (cardId: string) => Promise<{ success: boolean; port?: number; error?: string }>;

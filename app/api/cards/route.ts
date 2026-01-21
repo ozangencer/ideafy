@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, isNotNull, and, lt } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml } from "@/lib/markdown";
 
+// Processing timeout in milliseconds (30 minutes)
+const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
+
 export async function GET() {
+  // Auto-cleanup stuck processing states (older than 30 minutes)
+  const timeoutThreshold = new Date(Date.now() - PROCESSING_TIMEOUT_MS).toISOString();
+
+  db.update(schema.cards)
+    .set({ processingType: null })
+    .where(
+      and(
+        isNotNull(schema.cards.processingType),
+        lt(schema.cards.updatedAt, timeoutThreshold)
+      )
+    )
+    .run();
+
   const rows = db.select().from(schema.cards).orderBy(desc(schema.cards.taskNumber)).all();
 
   const cards: Card[] = rows.map((row) => ({

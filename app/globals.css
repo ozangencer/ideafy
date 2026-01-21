@@ -163,6 +163,15 @@ button:disabled {
   @apply outline-none min-h-[80px];
 }
 
+/* Modal section editor - full height with scroll */
+.section-editor-wrapper .tiptap-editor {
+  @apply h-full border-0 bg-transparent p-0;
+}
+
+.section-editor-wrapper .tiptap-editor .ProseMirror {
+  @apply min-h-0;
+}
+
 .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
   @apply text-muted-foreground pointer-events-none float-left h-0;
   content: attr(data-placeholder);
@@ -339,6 +348,23 @@ button:disabled {
 
 .mcp-mention {
   @apply bg-blue-500/20 text-blue-400;
+}
+
+/* Unified mention styles (/ trigger) */
+.unified-mention {
+  @apply px-1.5 py-0.5 rounded text-sm font-mono border-l-2;
+}
+
+.unified-mention--skill {
+  @apply bg-zinc-500/20 text-zinc-300 border-l-zinc-500;
+}
+
+.unified-mention--mcp {
+  @apply bg-blue-500/20 text-blue-400 border-l-blue-500;
+}
+
+.unified-mention--plugin {
+  @apply bg-purple-500/20 text-purple-400 border-l-purple-500;
 }
 
 .card-mention {

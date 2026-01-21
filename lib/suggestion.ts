@@ -1,10 +1,10 @@
 import { ReactRenderer } from "@tiptap/react";
 import tippy, { Instance, Props } from "tippy.js";
-import { MentionPopup, MentionPopupRef, MentionItem } from "@/components/ui/mention-popup";
+import { MentionPopup, MentionPopupRef, MentionItem, UnifiedMentionPopup, UnifiedMentionPopupRef, UnifiedMentionItem } from "@/components/ui/mention-popup";
 import { CardMentionPopup, CardMentionPopupRef, CardMentionItem } from "@/components/ui/card-mention-popup";
 import { DocumentMentionPopup, DocumentMentionPopupRef, DocumentMentionItem } from "@/components/ui/document-mention-popup";
 import { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
-import { Card, Project, DocumentFile, getDisplayId } from "@/lib/types";
+import { Card, Project, DocumentFile, getDisplayId, UnifiedItem, UnifiedItemType } from "@/lib/types";
 
 interface SuggestionConfig {
   char: string;
@@ -78,6 +78,113 @@ export function createSuggestion(config: SuggestionConfig): Omit<SuggestionOptio
         },
 
         onUpdate(props: SuggestionProps<MentionItem>) {
+          component.updateProps({
+            items: props.items,
+            command: props.command,
+          });
+
+          if (!props.clientRect) {
+            return;
+          }
+
+          popup[0].setProps({
+            getReferenceClientRect: props.clientRect as () => DOMRect,
+          });
+        },
+
+        onKeyDown(props: { event: KeyboardEvent }) {
+          if (props.event.key === "Escape") {
+            popup[0].hide();
+            return true;
+          }
+
+          return component.ref?.onKeyDown(props.event) ?? false;
+        },
+
+        onExit() {
+          popup[0].destroy();
+          component.destroy();
+        },
+      };
+    },
+  };
+}
+
+// Unified suggestion for / trigger (skills, MCPs, plugins)
+interface UnifiedSuggestionConfig {
+  getItems: () => UnifiedItem[];
+}
+
+export function createUnifiedSuggestion(
+  config: UnifiedSuggestionConfig
+): Omit<SuggestionOptions<UnifiedMentionItem>, "editor"> {
+  return {
+    char: "/",
+    allowSpaces: false,
+    startOfLine: false,
+
+    items: ({ query }) => {
+      const items = config.getItems();
+      return items
+        .filter((item) =>
+          item.label.toLowerCase().includes(query.toLowerCase())
+        )
+        .slice(0, 10)
+        .map((item) => ({
+          id: item.id,
+          label: item.label,
+          type: item.type,
+          description: item.description,
+        }));
+    },
+
+    command: ({ editor, range, props }) => {
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(range, [
+          {
+            type: "unifiedMention",
+            attrs: {
+              id: props.id,
+              label: props.label,
+              itemType: props.type,
+            },
+          },
+        ])
+        .run();
+    },
+
+    render: () => {
+      let component: ReactRenderer<UnifiedMentionPopupRef>;
+      let popup: Instance<Props>[];
+
+      return {
+        onStart: (props: SuggestionProps<UnifiedMentionItem>) => {
+          component = new ReactRenderer(UnifiedMentionPopup, {
+            props: {
+              items: props.items,
+              command: props.command,
+            },
+            editor: props.editor,
+          });
+
+          if (!props.clientRect) {
+            return;
+          }
+
+          popup = tippy("body", {
+            getReferenceClientRect: props.clientRect as () => DOMRect,
+            appendTo: () => document.body,
+            content: component.element,
+            showOnCreate: true,
+            interactive: true,
+            trigger: "manual",
+            placement: "bottom-start",
+          });
+        },
+
+        onUpdate(props: SuggestionProps<UnifiedMentionItem>) {
           component.updateProps({
             items: props.items,
             command: props.command,

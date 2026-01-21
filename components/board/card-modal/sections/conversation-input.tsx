@@ -8,8 +8,8 @@ import { useCallback, useRef, useMemo, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Send, Square } from "lucide-react";
 import { useKanbanStore } from "@/lib/store";
-import { SkillMention, McpMention, CardMention, DocumentMention } from "@/lib/mention-extension";
-import { createSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
+import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
+import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { MentionData, SectionType } from "@/lib/types";
 import { commonEditorProps } from "@/lib/editor-config";
 
@@ -47,7 +47,7 @@ export function ConversationInput({
   onCancel,
   placeholder = "Type a message...",
 }: ConversationInputProps) {
-  const { skills, mcps, cards, projects, activeProjectId, documents } = useKanbanStore();
+  const { cards, projects, activeProjectId, documents, getUnifiedItems } = useKanbanStore();
   const documentsRef = useRef<typeof documents>([]);
   const [isEmpty, setIsEmpty] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -72,14 +72,10 @@ export function ConversationInput({
 
   const getDocuments = useCallback(() => documentsRef.current, []);
 
-  const skillSuggestion = useMemo(
-    () => createSuggestion({ char: "/", items: skills, prefix: "/", nodeType: "skillMention" }),
-    [skills]
-  );
-
-  const mcpSuggestion = useMemo(
-    () => createSuggestion({ char: "@", items: mcps, prefix: "@", nodeType: "mcpMention" }),
-    [mcps]
+  // Unified suggestion for / trigger (skills, MCPs, plugins)
+  const unifiedSuggestion = useMemo(
+    () => createUnifiedSuggestion({ getItems: getUnifiedItems }),
+    [getUnifiedItems]
   );
 
   const cardSuggestion = useMemo(
@@ -98,9 +94,15 @@ export function ConversationInput({
     type NodeType = { type?: string; attrs?: Record<string, unknown>; content?: NodeType[] };
 
     const traverse = (node: NodeType) => {
-      if (node.type === "skillMention" && node.attrs) {
+      if (node.type === "unifiedMention" && node.attrs) {
+        // Unified mention - extract type from itemType attribute
+        const itemType = node.attrs.itemType as "skill" | "mcp" | "plugin";
+        mentions.push({ type: itemType, id: node.attrs.id as string, label: node.attrs.label as string });
+      } else if (node.type === "skillMention" && node.attrs) {
+        // Legacy skill mention
         mentions.push({ type: "skill", id: node.attrs.id as string, label: node.attrs.label as string });
       } else if (node.type === "mcpMention" && node.attrs) {
+        // Legacy mcp mention
         mentions.push({ type: "mcp", id: node.attrs.id as string, label: node.attrs.label as string });
       } else if (node.type === "cardMention" && node.attrs) {
         mentions.push({ type: "card", id: node.attrs.id as string, label: node.attrs.label as string });
@@ -147,11 +149,8 @@ export function ConversationInput({
         inline: false,
         allowBase64: true,
       }),
-      SkillMention.configure({
-        suggestion: skillSuggestion,
-      }),
-      McpMention.configure({
-        suggestion: mcpSuggestion,
+      UnifiedMention.configure({
+        suggestion: unifiedSuggestion,
       }),
       CardMention.configure({
         suggestion: cardSuggestion,
