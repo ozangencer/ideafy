@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { ConversationMessage as Message, SectionType, SECTION_CONFIG } from "@/lib/types";
 import { ConversationMessage } from "./conversation-message";
 import { ConversationInput } from "./conversation-input";
@@ -33,11 +33,26 @@ export function ConversationPanel({
   onCancel,
 }: ConversationPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(messages.length);
+  const userScrolledUpRef = useRef(false);
   const config = SECTION_CONFIG[sectionType];
 
-  // Auto-scroll to bottom when new messages arrive
+  // Check if user scrolled up from bottom
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    // Consider "at bottom" if within 50px of the bottom
+    userScrolledUpRef.current = scrollHeight - scrollTop - clientHeight > 50;
+  }, []);
+
+  // Auto-scroll to bottom only when new messages arrive and user is at bottom
   useEffect(() => {
-    if (scrollRef.current) {
+    const messageCount = messages.length;
+    const isNewMessage = messageCount > prevMessageCountRef.current;
+    prevMessageCountRef.current = messageCount;
+
+    // Scroll if: new message added, streaming, or user hasn't scrolled up
+    if (scrollRef.current && (isNewMessage || streamingMessage) && !userScrolledUpRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, streamingMessage]);
@@ -75,6 +90,7 @@ export function ConversationPanel({
       {/* Messages */}
       <div
         ref={scrollRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-3 space-y-3"
       >
         {allMessages.length === 0 ? (

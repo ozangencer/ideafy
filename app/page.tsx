@@ -41,8 +41,10 @@ export default function Home() {
     fetchMcps();
   }, [fetchCards, fetchProjects, fetchSettings, fetchSkills, fetchMcps]);
 
-  // Polling: Refresh data every 10 seconds
+  // Polling: Refresh data every 10 seconds (skip when modal/editor is open to prevent form reset)
   useEffect(() => {
+    if (isModalOpen || isDocumentEditorOpen) return;
+
     const interval = setInterval(() => {
       fetchCards();
       fetchSkills();
@@ -53,12 +55,12 @@ export default function Home() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchDocuments, activeProjectId]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
 
-  // Focus refresh: Refresh when tab becomes visible
+  // Focus refresh: Refresh when tab becomes visible (skip when modal/editor is open)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && !isModalOpen && !isDocumentEditorOpen) {
         fetchCards();
         fetchSkills();
         fetchMcps();
@@ -70,7 +72,7 @@ export default function Home() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchDocuments, activeProjectId]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
 
   // Get active project name for display
   const activeProject = projects.find((p) => p.id === activeProjectId);
