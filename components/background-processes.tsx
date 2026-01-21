@@ -10,7 +10,15 @@ import {
 } from "@/components/ui/popover";
 import { SECTION_CONFIG } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import type { BackgroundProcess } from "@/lib/types";
+import type { BackgroundProcess, ProcessType } from "@/lib/types";
+
+// Process type config for display
+const PROCESS_TYPE_CONFIG: Record<ProcessType, { label: string; color: string; bgColor: string }> = {
+  chat: { label: "Chat", color: "text-blue-500", bgColor: "bg-blue-500" },
+  autonomous: { label: "Autonomous", color: "text-purple-500", bgColor: "bg-purple-500" },
+  "quick-fix": { label: "Quick Fix", color: "text-amber-500", bgColor: "bg-amber-500" },
+  evaluate: { label: "Evaluate", color: "text-cyan-500", bgColor: "bg-cyan-500" },
+};
 
 function ProcessItem({
   process,
@@ -19,32 +27,43 @@ function ProcessItem({
   process: BackgroundProcess;
   onKill: () => void;
 }) {
-  const sectionConfig = SECTION_CONFIG[process.sectionType];
   const displayName = process.displayId || process.cardId.slice(0, 8);
+  const processConfig = PROCESS_TYPE_CONFIG[process.processType];
+  const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
+
+  // Build label: for chat show section, for others show process type
+  const label = process.processType === "chat" && sectionConfig
+    ? sectionConfig.label
+    : processConfig.label;
 
   return (
-    <div className="flex items-center justify-between py-2 px-1 border-b border-border last:border-b-0">
-      <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-start justify-between py-2 px-1 border-b border-border last:border-b-0 gap-2">
+      <div className="flex gap-2 min-w-0 flex-1">
         <span
-          className={`w-2 h-2 rounded-full ${
+          className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
             process.status === "running"
-              ? "bg-blue-500 animate-pulse"
+              ? `${processConfig.bgColor} animate-pulse`
               : process.status === "completed"
               ? "bg-green-500"
               : "bg-red-500"
           }`}
         />
-        <span className="text-sm font-medium truncate">{displayName}</span>
-        <span className="text-xs text-muted-foreground">
-          {sectionConfig?.label || process.sectionType}
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground shrink-0">{displayName}</span>
+            <span className="text-sm font-medium truncate">{process.cardTitle}</span>
+          </div>
+          <span className={`text-xs ${process.status === "running" ? processConfig.color : "text-muted-foreground"}`}>
+            {label}
+          </span>
+        </div>
       </div>
       {process.status === "running" && (
         <Button
           variant="ghost"
           size="sm"
           onClick={onKill}
-          className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+          className="h-6 px-2 text-xs text-destructive hover:text-destructive shrink-0 mt-0.5"
         >
           Kill
         </Button>
@@ -62,52 +81,73 @@ export function BackgroundProcesses() {
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
-  // Track running process IDs to detect completion
-  const runningIdsRef = useRef<Set<string>>(new Set());
+  // Track running processes to detect completion
+  const runningProcessesRef = useRef<Map<string, BackgroundProcess>>(new Map());
+  // Track killed process IDs to show correct toast
+  const killedIdsRef = useRef<Set<string>>(new Set());
+
+  // Handle kill with tracking
+  const handleKill = async (processId: string) => {
+    killedIdsRef.current.add(processId);
+    await killBackgroundProcess(processId);
+  };
 
   // Detect when processes complete and show toast
   useEffect(() => {
-    const currentRunningIds = new Set(
-      backgroundProcesses.filter((p) => p.status === "running").map((p) => p.id)
+    const currentRunning = new Map(
+      backgroundProcesses.filter((p) => p.status === "running").map((p) => [p.id, p])
     );
-    const previousRunningIds = runningIdsRef.current;
+    const previousRunning = runningProcessesRef.current;
 
-    // Find processes that were running but are now gone (completed)
-    previousRunningIds.forEach((id) => {
-      if (!currentRunningIds.has(id)) {
-        // Process completed - find its info from previous state
-        const [cardId, sectionType] = id.split("-");
-        const sectionLabel = SECTION_CONFIG[sectionType as keyof typeof SECTION_CONFIG]?.label || sectionType;
-        toast({
-          title: "Process Completed",
-          description: `Chat ${sectionLabel.toLowerCase()} finished for ${cardId.slice(0, 8)}`,
-        });
+    // Find processes that were running but are now gone (completed or killed)
+    previousRunning.forEach((process, id) => {
+      if (!currentRunning.has(id)) {
+        const displayName = process.displayId || process.cardId.slice(0, 8);
+        const processConfig = PROCESS_TYPE_CONFIG[process.processType];
+        const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
+
+        const label = process.processType === "chat" && sectionConfig
+          ? `Chat (${sectionConfig.label.toLowerCase()})`
+          : processConfig.label;
+
+        // Check if this process was killed
+        const wasKilled = killedIdsRef.current.has(id);
+        if (wasKilled) {
+          killedIdsRef.current.delete(id);
+          toast({
+            title: "Process Cancelled",
+            description: `${label} was stopped for ${displayName}`,
+          });
+        } else {
+          toast({
+            title: "Process Completed",
+            description: `${label} finished for ${displayName}`,
+          });
+        }
       }
     });
 
-    runningIdsRef.current = currentRunningIds;
+    runningProcessesRef.current = currentRunning;
   }, [backgroundProcesses, toast]);
 
-  // Polling: refresh processes every 3 seconds when popover is open or there are running processes
+  // Always poll - component is always mounted
   useEffect(() => {
     // Initial fetch
     fetchBackgroundProcesses();
 
-    const hasRunning = backgroundProcesses.some((p) => p.status === "running");
-    if (!hasRunning && !isOpen) return;
-
+    // Always poll every 3 seconds to catch new processes
     const interval = setInterval(() => {
       fetchBackgroundProcesses();
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [fetchBackgroundProcesses, isOpen, backgroundProcesses.length]);
+  }, [fetchBackgroundProcesses]);
 
   const runningCount = backgroundProcesses.filter(
     (p) => p.status === "running"
   ).length;
 
-  // Don't render anything if no processes
+  // Don't render the button if no processes, but keep component mounted for polling
   if (backgroundProcesses.length === 0) {
     return null;
   }
@@ -155,7 +195,7 @@ export function BackgroundProcesses() {
             <ProcessItem
               key={process.id}
               process={process}
-              onKill={() => killBackgroundProcess(process.id)}
+              onKill={() => handleKill(process.id)}
             />
           ))}
         </div>

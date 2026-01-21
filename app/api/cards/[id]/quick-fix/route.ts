@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { exec } from "child_process";
+import { spawn, exec } from "child_process";
 import { promisify } from "util";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
 import {
   stripHtml,
   convertToTipTapTaskList,
-  escapeShellArg,
   buildQuickFixPrompt,
   saveCardImagesToTemp,
   generateImageReferences,
 } from "@/lib/prompts";
+import {
+  registerProcess,
+  unregisterProcess,
+  getProcess,
+  killProcess,
+} from "@/lib/process-registry";
+import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
 
 const execAsync = promisify(exec);
 
@@ -69,8 +75,20 @@ export async function POST(
     );
   }
 
+  // Compute display ID for process tracking
+  const displayId = project && card.taskNumber
+    ? `${project.idPrefix}-${card.taskNumber}`
+    : null;
+  const processKey = `${id}-quick-fix`;
+
   console.log(`[Quick Fix] Starting quick fix for card ${id}`);
   console.log(`[Quick Fix] Working dir: ${workingDir}`);
+
+  // Kill any existing process for this card
+  const existing = getProcess(processKey);
+  if (existing) {
+    killProcess(processKey);
+  }
 
   // Mark card as processing (persists through page refresh)
   db.update(schema.cards)
@@ -88,39 +106,91 @@ export async function POST(
       prompt = `${prompt}\n\n${imageReferences}`;
     }
 
-    const escapedPrompt = escapeShellArg(prompt);
-
-    // Quick fix uses --dangerously-skip-permissions for full access
-    // No plan mode - direct implementation
-    const command = `CI=true claude -p ${escapedPrompt} --dangerously-skip-permissions --output-format json < /dev/null`;
-
     console.log(`[Quick Fix] Prompt length: ${prompt.length} chars`);
 
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: workingDir,
-      timeout: 10 * 60 * 1000, // 10 minute timeout
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+    // Run Claude CLI with spawn for process tracking
+    const { responseText, cost, duration } = await new Promise<{
+      responseText: string;
+      cost?: number;
+      duration?: number;
+    }>((resolve, reject) => {
+      const claudeProcess = spawn(getClaudePath(), [
+        "-p", prompt,
+        "--dangerously-skip-permissions",
+        "--output-format", "json",
+      ], {
+        cwd: workingDir,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: getClaudeCIEnv(),
+      });
+
+      // Close stdin immediately
+      claudeProcess.stdin?.end();
+
+      // Register process for tracking
+      registerProcess(processKey, claudeProcess, {
+        cardId: id,
+        sectionType: null,
+        processType: "quick-fix",
+        cardTitle: card.title,
+        displayId,
+        startedAt: new Date().toISOString(),
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      claudeProcess.stdout?.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      claudeProcess.stderr?.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      // Set timeout
+      const timeout = setTimeout(() => {
+        claudeProcess.kill();
+        unregisterProcess(processKey);
+        reject(new Error("Quick fix timed out after 10 minutes"));
+      }, 10 * 60 * 1000);
+
+      claudeProcess.on("close", (code) => {
+        clearTimeout(timeout);
+        unregisterProcess(processKey);
+
+        if (stderr) {
+          console.log(`[Quick Fix] stderr: ${stderr}`);
+        }
+
+        if (code !== 0 && !stdout.trim()) {
+          reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+          return;
+        }
+
+        try {
+          const response: ClaudeResponse = JSON.parse(stdout);
+          if (response.is_error) {
+            reject(new Error(response.result || "Claude returned an error"));
+            return;
+          }
+          resolve({
+            responseText: response.result || "",
+            cost: response.cost_usd,
+            duration: response.duration_ms,
+          });
+        } catch {
+          console.log(`[Quick Fix] JSON parse failed, using raw output`);
+          resolve({ responseText: stdout.trim() });
+        }
+      });
+
+      claudeProcess.on("error", (error) => {
+        clearTimeout(timeout);
+        unregisterProcess(processKey);
+        reject(error);
+      });
     });
-
-    if (stderr) {
-      console.log(`[Quick Fix] stderr: ${stderr}`);
-    }
-
-    let responseText = stdout.trim();
-    let cost: number | undefined;
-    let duration: number | undefined;
-
-    try {
-      const response: ClaudeResponse = JSON.parse(stdout);
-      if (response.is_error) {
-        throw new Error(response.result || "Claude returned an error");
-      }
-      responseText = response.result || "";
-      cost = response.cost_usd;
-      duration = response.duration_ms;
-    } catch {
-      console.log(`[Quick Fix] JSON parse failed, using raw output`);
-    }
 
     // Convert markdown response to HTML for TipTap editor
     const markedHtml = await marked(responseText);

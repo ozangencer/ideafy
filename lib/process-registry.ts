@@ -1,12 +1,13 @@
 import { ChildProcess } from "child_process";
-import type { SectionType, BackgroundProcess } from "@/lib/types";
+import type { SectionType, ProcessType, BackgroundProcess } from "@/lib/types";
 
 // Process metadata stored alongside the ChildProcess
 interface ProcessEntry {
   process: ChildProcess;
   metadata: {
     cardId: string;
-    sectionType: SectionType;
+    sectionType: SectionType | null;
+    processType: ProcessType;
     cardTitle: string;
     displayId: string | null;
     startedAt: string;
@@ -51,6 +52,7 @@ export function getAllProcesses(): BackgroundProcess[] {
       id: key,
       cardId: entry.metadata.cardId,
       sectionType: entry.metadata.sectionType,
+      processType: entry.metadata.processType,
       cardTitle: entry.metadata.cardTitle,
       displayId: entry.metadata.displayId,
       pid: entry.process.pid || 0,

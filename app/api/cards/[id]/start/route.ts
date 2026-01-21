@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
 import {
   generateBranchName,
   isGitRepo,
-  branchExists,
   createWorktree,
   worktreeExists,
   getWorktreePath,
@@ -23,8 +21,13 @@ import {
   generateImageReferences,
   type Phase,
 } from "@/lib/prompts";
-
-const execAsync = promisify(exec);
+import {
+  registerProcess,
+  unregisterProcess,
+  getProcess,
+  killProcess,
+} from "@/lib/process-registry";
+import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
 
 interface ClaudeResponse {
   result?: string;
@@ -96,6 +99,12 @@ export async function POST(
 
   console.log(`[Claude CLI] Phase: ${phase}`);
   console.log(`[Claude CLI] Current status: ${card.status} → New status: ${newStatus}`);
+
+  // Compute display ID for process tracking
+  const displayId = project && card.taskNumber
+    ? `${project.idPrefix}-${card.taskNumber}`
+    : null;
+  const processKey = `${id}-autonomous`;
 
   // Mark card as processing (persists through page refresh)
   db.update(schema.cards)
@@ -174,7 +183,15 @@ export async function POST(
 
   try {
     // Run Claude CLI in the appropriate directory (worktree for implementation)
-    const result = await runClaudeCli(prompt, actualWorkingDir, phase);
+    const result = await runClaudeCli({
+      prompt,
+      cwd: actualWorkingDir,
+      phase,
+      processKey,
+      cardId: id,
+      cardTitle: card.title,
+      displayId,
+    });
 
     // Convert markdown response to HTML for TipTap editor
     const markedHtml = await marked(result.response);
@@ -267,57 +284,116 @@ export async function POST(
   }
 }
 
+interface RunClaudeOptions {
+  prompt: string;
+  cwd: string;
+  phase: Phase;
+  processKey: string;
+  cardId: string;
+  cardTitle: string;
+  displayId: string | null;
+}
+
 async function runClaudeCli(
-  prompt: string,
-  cwd: string,
-  phase: Phase
+  options: RunClaudeOptions
 ): Promise<{ response: string; cost?: number; duration?: number }> {
-  const escapedPrompt = escapeShellArg(prompt);
+  const { prompt, cwd, phase, processKey, cardId, cardTitle, displayId } = options;
+
+  // Kill any existing process for this card
+  const existing = getProcess(processKey);
+  if (existing) {
+    killProcess(processKey);
+  }
 
   // Planning phase uses dontAsk for safety (read-only exploration)
   // Implementation and retest need full permissions to write code
   const permissionFlag = phase === "planning"
-    ? "--permission-mode dontAsk"
+    ? "--permission-mode"
     : "--dangerously-skip-permissions";
+  const permissionValue = phase === "planning" ? "dontAsk" : null;
 
-  const command = `CI=true claude -p ${escapedPrompt} ${permissionFlag} --output-format json < /dev/null`;
+  const args = [
+    "-p", prompt,
+    ...(permissionValue ? [permissionFlag, permissionValue] : [permissionFlag]),
+    "--output-format", "json",
+  ];
 
   console.log(`[Claude CLI] Running in ${cwd}:`);
   console.log(`[Claude CLI] Prompt length: ${prompt.length} chars`);
 
-  try {
-    const { stdout, stderr } = await execAsync(command, {
+  return new Promise((resolve, reject) => {
+    const claudeProcess = spawn(getClaudePath(), args, {
       cwd,
-      timeout: 10 * 60 * 1000, // 10 minute timeout for implementation
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      stdio: ["pipe", "pipe", "pipe"],
+      env: getClaudeCIEnv(),
     });
 
-    if (stderr) {
-      console.log(`[Claude CLI] stderr: ${stderr}`);
-    }
+    // Close stdin immediately (equivalent to < /dev/null)
+    claudeProcess.stdin?.end();
 
-    console.log(`[Claude CLI] stdout length: ${stdout.length}`);
+    // Register process for tracking
+    registerProcess(processKey, claudeProcess, {
+      cardId,
+      sectionType: null,
+      processType: "autonomous",
+      cardTitle,
+      displayId,
+      startedAt: new Date().toISOString(),
+    });
 
-    try {
-      const response: ClaudeResponse = JSON.parse(stdout);
+    let stdout = "";
+    let stderr = "";
 
-      if (response.is_error) {
-        throw new Error(response.result || "Claude returned an error");
+    claudeProcess.stdout?.on("data", (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    claudeProcess.stderr?.on("data", (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    // Set timeout
+    const timeout = setTimeout(() => {
+      claudeProcess.kill();
+      unregisterProcess(processKey);
+      reject(new Error("Claude CLI timed out after 10 minutes"));
+    }, 10 * 60 * 1000);
+
+    claudeProcess.on("close", (code) => {
+      clearTimeout(timeout);
+      unregisterProcess(processKey);
+
+      if (stderr) {
+        console.log(`[Claude CLI] stderr: ${stderr}`);
+      }
+      console.log(`[Claude CLI] stdout length: ${stdout.length}`);
+
+      if (code !== 0 && !stdout.trim()) {
+        reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+        return;
       }
 
-      return {
-        response: response.result || "",
-        cost: response.cost_usd,
-        duration: response.duration_ms,
-      };
-    } catch {
-      console.log(`[Claude CLI] JSON parse failed, using raw output`);
-      return { response: stdout.trim() };
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("TIMEOUT")) {
-      throw new Error("Claude CLI timed out after 10 minutes");
-    }
-    throw error;
-  }
+      try {
+        const response: ClaudeResponse = JSON.parse(stdout);
+        if (response.is_error) {
+          reject(new Error(response.result || "Claude returned an error"));
+          return;
+        }
+        resolve({
+          response: response.result || "",
+          cost: response.cost_usd,
+          duration: response.duration_ms,
+        });
+      } catch {
+        console.log(`[Claude CLI] JSON parse failed, using raw output`);
+        resolve({ response: stdout.trim() });
+      }
+    });
+
+    claudeProcess.on("error", (error) => {
+      clearTimeout(timeout);
+      unregisterProcess(processKey);
+      reject(error);
+    });
+  });
 }

@@ -5,7 +5,8 @@ import { conversations, cards, projects } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { tmpdir } from "os";
 import type { SectionType, ConversationMessage } from "@/lib/types";
 import {
   registerProcess,
@@ -13,6 +14,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
+import { getClaudePath, getClaudeEnv } from "@/lib/claude-cli";
 
 // Card context info
 interface CardContext {
@@ -69,10 +71,13 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// Temp directory for images
+const IMAGES_TEMP_DIR = join(tmpdir(), "ideafy-images");
+
 // Extract base64 images from HTML content and save to temp files
 function extractAndSaveImages(content: string): { textContent: string; imagePaths: string[] } {
   const imagePaths: string[] = [];
-  const tempDir = "/tmp/ideafy-images";
+  const tempDir = IMAGES_TEMP_DIR;
 
   // Create temp directory if it doesn't exist
   if (!existsSync(tempDir)) {
@@ -242,24 +247,20 @@ export async function POST(
         "--output-format", "stream-json",
         "--verbose",
         "--allowedTools", "Read",
-        "--add-dir", "/tmp/ideafy-images"
+        "--add-dir", IMAGES_TEMP_DIR
       ];
 
-      const claudeProcess = spawn("/Users/ozangencer/.local/bin/claude", claudeArgs, {
+      const claudeProcess = spawn(getClaudePath(), claudeArgs, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          HOME: "/Users/ozangencer",
-          USER: "ozangencer",
-          PATH: "/Users/ozangencer/.local/bin:/usr/local/bin:/usr/bin:/bin",
-        },
+        env: getClaudeEnv(),
       });
 
       // Register process with metadata
       registerProcess(processKey, claudeProcess, {
         cardId,
         sectionType: sectionType as SectionType,
+        processType: "chat",
         cardTitle: card.title,
         displayId: displayId !== cardId ? displayId : null,
         startedAt: new Date().toISOString(),

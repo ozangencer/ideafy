@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import { marked } from "marked";
 import {
   stripHtml,
   convertToTipTapTaskList,
-  escapeShellArg,
   buildEvaluatePrompt,
 } from "@/lib/prompts";
-
-const execAsync = promisify(exec);
+import {
+  registerProcess,
+  unregisterProcess,
+  getProcess,
+  killProcess,
+} from "@/lib/process-registry";
+import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
 
 interface ClaudeResponse {
   result?: string;
@@ -69,9 +72,21 @@ export async function POST(
   // Get narrativePath from project
   const narrativePath = project?.narrativePath || null;
 
+  // Compute display ID for process tracking
+  const displayId = project && card.taskNumber
+    ? `${project.idPrefix}-${card.taskNumber}`
+    : null;
+  const processKey = `${id}-evaluate`;
+
   console.log(`[Evaluate] Starting evaluation for card ${id}`);
   console.log(`[Evaluate] Working dir: ${workingDir}`);
   console.log(`[Evaluate] Narrative path: ${narrativePath || 'default (docs/product-narrative.md)'}`);
+
+  // Kill any existing process for this card
+  const existing = getProcess(processKey);
+  if (existing) {
+    killProcess(processKey);
+  }
 
   // Mark card as processing (persists through page refresh)
   db.update(schema.cards)
@@ -81,38 +96,92 @@ export async function POST(
 
   try {
     const prompt = buildEvaluatePrompt(card, narrativePath);
-    const escapedPrompt = escapeShellArg(prompt);
-
-    // Use permission-mode dontAsk since we're only reading files for context
-    const command = `CI=true claude -p ${escapedPrompt} --permission-mode dontAsk --output-format json < /dev/null`;
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: workingDir,
-      timeout: 5 * 60 * 1000, // 5 minute timeout
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+    // Run Claude CLI with spawn for process tracking
+    const { responseText, cost, duration } = await new Promise<{
+      responseText: string;
+      cost?: number;
+      duration?: number;
+    }>((resolve, reject) => {
+      const claudeProcess = spawn(getClaudePath(), [
+        "-p", prompt,
+        "--permission-mode", "dontAsk",
+        "--output-format", "json",
+      ], {
+        cwd: workingDir,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: getClaudeCIEnv(),
+      });
+
+      // Close stdin immediately
+      claudeProcess.stdin?.end();
+
+      // Register process for tracking
+      registerProcess(processKey, claudeProcess, {
+        cardId: id,
+        sectionType: null,
+        processType: "evaluate",
+        cardTitle: card.title,
+        displayId,
+        startedAt: new Date().toISOString(),
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      claudeProcess.stdout?.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      claudeProcess.stderr?.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      // Set timeout (5 minutes for evaluate)
+      const timeout = setTimeout(() => {
+        claudeProcess.kill();
+        unregisterProcess(processKey);
+        reject(new Error("Evaluate timed out after 5 minutes"));
+      }, 5 * 60 * 1000);
+
+      claudeProcess.on("close", (code) => {
+        clearTimeout(timeout);
+        unregisterProcess(processKey);
+
+        if (stderr) {
+          console.log(`[Evaluate] stderr: ${stderr}`);
+        }
+
+        if (code !== 0 && !stdout.trim()) {
+          reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+          return;
+        }
+
+        try {
+          const response: ClaudeResponse = JSON.parse(stdout);
+          if (response.is_error) {
+            reject(new Error(response.result || "Claude returned an error"));
+            return;
+          }
+          resolve({
+            responseText: response.result || "",
+            cost: response.cost_usd,
+            duration: response.duration_ms,
+          });
+        } catch {
+          console.log(`[Evaluate] JSON parse failed, using raw output`);
+          resolve({ responseText: stdout.trim() });
+        }
+      });
+
+      claudeProcess.on("error", (error) => {
+        clearTimeout(timeout);
+        unregisterProcess(processKey);
+        reject(error);
+      });
     });
-
-    if (stderr) {
-      console.log(`[Evaluate] stderr: ${stderr}`);
-    }
-
-    let responseText = stdout.trim();
-    let cost: number | undefined;
-    let duration: number | undefined;
-
-    try {
-      const response: ClaudeResponse = JSON.parse(stdout);
-      if (response.is_error) {
-        throw new Error(response.result || "Claude returned an error");
-      }
-      responseText = response.result || "";
-      cost = response.cost_usd;
-      duration = response.duration_ms;
-    } catch {
-      console.log(`[Evaluate] JSON parse failed, using raw output`);
-    }
 
     // Convert markdown response to HTML for TipTap editor
     const markedHtml = await marked(responseText);

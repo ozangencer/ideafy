@@ -37,9 +37,15 @@ export const createClaudeSlice: StoreSlice<
     }));
 
     try {
-      const response = await fetch(`/api/cards/${cardId}/start`, {
+      // Start the API call (process starts immediately on backend)
+      const fetchPromise = fetch(`/api/cards/${cardId}/start`, {
         method: "POST",
       });
+
+      // Refresh background processes after a short delay to show the new process
+      setTimeout(() => get().fetchBackgroundProcesses(), 500);
+
+      const response = await fetchPromise;
 
       const data = await parseJson<{
         phase: string;
@@ -85,6 +91,9 @@ export const createClaudeSlice: StoreSlice<
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
 
+      // Refresh background processes to remove completed process
+      get().fetchBackgroundProcesses();
+
       return { success: true, phase: data.phase, newStatus: data.newStatus };
     } catch (error) {
       console.error("Failed to start task:", error);
@@ -92,6 +101,8 @@ export const createClaudeSlice: StoreSlice<
         startingCardId: null,
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
+      // Refresh background processes on error too
+      get().fetchBackgroundProcesses();
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -190,9 +201,15 @@ export const createClaudeSlice: StoreSlice<
     }));
 
     try {
-      const response = await fetch(`/api/cards/${cardId}/quick-fix`, {
+      // Start the API call (process starts immediately on backend)
+      const fetchPromise = fetch(`/api/cards/${cardId}/quick-fix`, {
         method: "POST",
       });
+
+      // Refresh background processes after a short delay to show the new process
+      setTimeout(() => get().fetchBackgroundProcesses(), 500);
+
+      const response = await fetchPromise;
 
       const data = await parseJson<{
         newStatus: Card["status"];
@@ -220,6 +237,9 @@ export const createClaudeSlice: StoreSlice<
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
 
+      // Refresh background processes to remove completed process
+      get().fetchBackgroundProcesses();
+
       return { success: true };
     } catch (error) {
       console.error("Failed to quick fix:", error);
@@ -227,6 +247,8 @@ export const createClaudeSlice: StoreSlice<
         quickFixingCardId: null,
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
+      // Refresh background processes on error too
+      get().fetchBackgroundProcesses();
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -241,9 +263,15 @@ export const createClaudeSlice: StoreSlice<
     }));
 
     try {
-      const response = await fetch(`/api/cards/${cardId}/evaluate`, {
+      // Start the API call (process starts immediately on backend)
+      const fetchPromise = fetch(`/api/cards/${cardId}/evaluate`, {
         method: "POST",
       });
+
+      // Refresh background processes after a short delay to show the new process
+      setTimeout(() => get().fetchBackgroundProcesses(), 500);
+
+      const response = await fetchPromise;
 
       const data = await parseJson<{
         aiOpinion: string;
@@ -285,6 +313,9 @@ export const createClaudeSlice: StoreSlice<
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
 
+      // Refresh background processes to remove completed process
+      get().fetchBackgroundProcesses();
+
       return { success: true };
     } catch (error) {
       console.error("Failed to evaluate idea:", error);
@@ -292,6 +323,8 @@ export const createClaudeSlice: StoreSlice<
         evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
+      // Refresh background processes on error too
+      get().fetchBackgroundProcesses();
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

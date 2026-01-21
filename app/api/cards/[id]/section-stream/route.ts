@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from "child_process";
 import { NextRequest } from "next/server";
+import { getClaudePath, getClaudeEnv } from "@/lib/claude-cli";
 
 // Store active processes for cleanup
 const activeProcesses = new Map<string, ChildProcess>();
@@ -41,7 +42,7 @@ export async function POST(
         }
       };
 
-      const claudeProcess = spawn("/Users/ozangencer/.local/bin/claude", [
+      const claudeProcess = spawn(getClaudePath(), [
         "-p", prompt,
         "--print",
         "--output-format", "stream-json",
@@ -49,12 +50,7 @@ export async function POST(
       ], {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          HOME: "/Users/ozangencer",
-          USER: "ozangencer",
-          PATH: "/Users/ozangencer/.local/bin:/usr/local/bin:/usr/bin:/bin",
-        },
+        env: getClaudeEnv(),
       });
 
       activeProcesses.set(processKey, claudeProcess);

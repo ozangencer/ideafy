@@ -9,7 +9,7 @@ export const createBackgroundProcessesSlice: StoreSlice<
     | "fetchBackgroundProcesses"
     | "killBackgroundProcess"
   >
-> = (set) => ({
+> = (set, get) => ({
   backgroundProcesses: [],
 
   fetchBackgroundProcesses: async () => {
@@ -24,17 +24,27 @@ export const createBackgroundProcessesSlice: StoreSlice<
 
   killBackgroundProcess: async (processKey: string) => {
     try {
+      // Find the process to get cardId before killing
+      const process = get().backgroundProcesses.find((p) => p.id === processKey);
+      const cardId = process?.cardId;
+
       const response = await fetch(
         `/api/processes?processKey=${encodeURIComponent(processKey)}`,
         { method: "DELETE" }
       );
+
       if (response.ok) {
-        // Refresh the list
+        // Remove from local list
         set((state) => ({
           backgroundProcesses: state.backgroundProcesses.filter(
             (p) => p.id !== processKey
           ),
         }));
+
+        // Clear processing state on the card (updates DB and local state)
+        if (cardId) {
+          await get().clearProcessing(cardId);
+        }
       }
     } catch (error) {
       console.error("Failed to kill background process:", error);

@@ -200,10 +200,13 @@ export interface ConversationMessage {
 }
 
 // Background process tracking
+export type ProcessType = "chat" | "autonomous" | "quick-fix" | "evaluate";
+
 export interface BackgroundProcess {
-  id: string;              // `${cardId}-${sectionType}`
+  id: string;              // `${cardId}-${sectionType}` or `${cardId}-${processType}`
   cardId: string;
-  sectionType: SectionType;
+  sectionType: SectionType | null;
+  processType: ProcessType;
   cardTitle: string;
   displayId: string | null;
   pid: number;
