@@ -56,7 +56,7 @@ body {
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid #5e6ad2;
+  outline: 2px solid hsl(var(--border));
   outline-offset: 2px;
 }
 
@@ -76,7 +76,7 @@ textarea::placeholder {
 
 input:focus,
 textarea:focus {
-  border-color: #5e6ad2;
+  border-color: hsl(var(--muted-foreground) / 0.5);
   outline: none;
 }
 
@@ -114,7 +114,7 @@ button:disabled {
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 16%;
     --input: 0 0% 16%;
-    --ring: 235 58% 60%;
+    --ring: 0 0% 40%;
     --radius: 0.5rem;
     --surface: 0 0% 10%;
   }
@@ -137,7 +137,7 @@ button:disabled {
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 88%;
     --input: 0 0% 88%;
-    --ring: 235 58% 50%;
+    --ring: 0 0% 50%;
     --surface: 0 0% 96%;
   }
 }
@@ -156,7 +156,7 @@ button:disabled {
 /* TipTap Editor Styles */
 .tiptap-editor {
   @apply w-full px-3 py-2 rounded-md text-sm bg-background border border-input;
-  @apply focus-within:border-accent-blue focus-within:ring-1 focus-within:ring-accent-blue;
+  @apply focus-within:border-muted-foreground/50 focus-within:ring-0;
 }
 
 .tiptap-editor .ProseMirror {

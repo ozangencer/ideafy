@@ -456,8 +456,14 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                           <div className="relative">
                             <Brain className="w-3.5 h-3.5" />
                             {hasAiOpinion && (
-                              <span className="absolute -bottom-1 -right-1 flex items-center justify-center w-2.5 h-2.5 rounded-full bg-green-500">
-                                <Check className="w-1.5 h-1.5 text-white" strokeWidth={4} />
+                              <span className={`absolute -bottom-1 -right-1 flex items-center justify-center w-2.5 h-2.5 rounded-full ${
+                                card.aiVerdict === 'negative' ? 'bg-red-500' : 'bg-green-500'
+                              }`}>
+                                {card.aiVerdict === 'negative' ? (
+                                  <X className="w-1.5 h-1.5 text-white" strokeWidth={4} />
+                                ) : (
+                                  <Check className="w-1.5 h-1.5 text-white" strokeWidth={4} />
+                                )}
                               </span>
                             )}
                           </div>

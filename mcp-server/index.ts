@@ -111,6 +111,47 @@ function extractCardImages(card: Card): {
 // Initialize database connection
 const db = new Database(DB_PATH);
 
+// ============================================================================
+// Card ID Resolution Helper
+// ============================================================================
+
+/**
+ * Resolves a card identifier to UUID.
+ * Accepts: UUID, PREFIX-XX (e.g., KAN-54, INK-12), or just the number XX
+ */
+function resolveCardId(identifier: string): string | null {
+  // Check if it's already a UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(identifier)) {
+    return identifier;
+  }
+
+  // Check for PREFIX-XX format (e.g., KAN-54, INK-12)
+  const prefixMatch = identifier.match(/^([A-Z]+)-(\d+)$/i);
+  if (prefixMatch) {
+    const prefix = prefixMatch[1].toUpperCase();
+    const taskNumber = parseInt(prefixMatch[2], 10);
+
+    // Find project by prefix, then find card by task_number and project_id
+    const project = db.prepare(`SELECT id FROM projects WHERE UPPER(id_prefix) = ?`).get(prefix) as { id: string } | undefined;
+    if (project) {
+      const card = db.prepare(`SELECT id FROM cards WHERE task_number = ? AND project_id = ?`).get(taskNumber, project.id) as { id: string } | undefined;
+      return card?.id || null;
+    }
+    return null;
+  }
+
+  // Check for just number (search across all cards)
+  const numberMatch = identifier.match(/^(\d+)$/);
+  if (numberMatch) {
+    const taskNumber = parseInt(numberMatch[1], 10);
+    const card = db.prepare(`SELECT id FROM cards WHERE task_number = ?`).get(taskNumber) as { id: string } | undefined;
+    return card?.id || null;
+  }
+
+  return null;
+}
+
 // Types
 interface Card {
   id: string;
@@ -155,7 +196,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             id: {
               type: "string",
-              description: "The card ID (UUID)",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
             },
           },
           required: ["id"],
@@ -169,7 +210,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             id: {
               type: "string",
-              description: "The card ID (UUID)",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
             },
             title: {
               type: "string",
@@ -214,7 +255,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             id: {
               type: "string",
-              description: "The card ID (UUID)",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
             },
             status: {
               type: "string",
@@ -292,7 +333,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             id: {
               type: "string",
-              description: "The card ID (UUID)",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
             },
             solutionSummary: {
               type: "string",
@@ -310,7 +351,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             id: {
               type: "string",
-              description: "The card ID (UUID)",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
             },
             testScenarios: {
               type: "string",
@@ -328,11 +369,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             id: {
               type: "string",
-              description: "The card ID (UUID)",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
             },
             aiOpinion: {
               type: "string",
               description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low/medium/high] - reasoning), ## Final Score ([X/10] - justification)",
+            },
+            aiVerdict: {
+              type: "string",
+              enum: ["positive", "negative"],
+              description: "The verdict based on Summary Verdict: positive (Strong Yes, Yes, Maybe with score >= 6) or negative (No, Strong No, Maybe with score < 6)",
             },
           },
           required: ["id", "aiOpinion"],
@@ -349,7 +395,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "get_card": {
-        const { id } = args as { id: string };
+        const { id: rawId } = args as { id: string };
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
         const card = db.prepare(`
           SELECT
             id, title, description,
@@ -392,7 +445,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "update_card": {
-        const { id, ...updates } = args as { id: string } & Partial<Card>;
+        const { id: rawId, ...updates } = args as { id: string } & Partial<Card>;
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
 
         // Fields that need markdown to HTML conversion
         const markdownFields = ["description", "solutionSummary", "testScenarios"];
@@ -442,7 +502,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "move_card": {
-        const { id, status } = args as { id: string; status: Status };
+        const { id: rawId, status } = args as { id: string; status: Status };
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
 
         const result = db.prepare(`
           UPDATE cards SET status = ?, updated_at = ? WHERE id = ?
@@ -606,7 +673,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "save_plan": {
-        const { id, solutionSummary } = args as { id: string; solutionSummary: string };
+        const { id: rawId, solutionSummary } = args as { id: string; solutionSummary: string };
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
 
         // Convert markdown to Tiptap-compatible HTML with TaskList support
         const htmlContent = markdownToTiptapHtml(solutionSummary);
@@ -630,7 +704,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "save_tests": {
-        const { id, testScenarios } = args as { id: string; testScenarios: string };
+        const { id: rawId, testScenarios } = args as { id: string; testScenarios: string };
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
 
         // Convert markdown to Tiptap-compatible HTML with TaskList support
         const htmlContent = markdownToTiptapHtml(testScenarios);
@@ -654,16 +735,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "save_opinion": {
-        const { id, aiOpinion } = args as { id: string; aiOpinion: string };
+        const { id: rawId, aiOpinion, aiVerdict } = args as { id: string; aiOpinion: string; aiVerdict?: "positive" | "negative" };
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
 
         // Convert markdown to Tiptap-compatible HTML
         const htmlContent = markdownToTiptapHtml(aiOpinion);
 
         const result = db.prepare(`
           UPDATE cards
-          SET ai_opinion = ?, updated_at = ?
+          SET ai_opinion = ?, ai_verdict = ?, updated_at = ?
           WHERE id = ?
-        `).run(htmlContent, new Date().toISOString(), id);
+        `).run(htmlContent, aiVerdict || null, new Date().toISOString(), id);
 
         if (result.changes === 0) {
           return {
@@ -673,7 +761,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         return {
-          content: [{ type: "text", text: `AI opinion saved to card ${id}` }],
+          content: [{ type: "text", text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}` }],
         };
       }
 

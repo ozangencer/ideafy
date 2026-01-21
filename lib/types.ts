@@ -12,6 +12,7 @@ export type Priority = "low" | "medium" | "high";
 export type GitBranchStatus = "active" | "merged" | "rolled_back" | null;
 export type GitWorktreeStatus = "active" | "removed" | null;
 export type ProcessingType = "autonomous" | "quick-fix" | "evaluate" | null;
+export type AiVerdict = "positive" | "negative" | null;
 
 export interface Card {
   id: string;
@@ -20,6 +21,7 @@ export interface Card {
   solutionSummary: string;
   testScenarios: string;
   aiOpinion: string;
+  aiVerdict: AiVerdict;
   status: Status;
   complexity: Complexity;
   priority: Priority;

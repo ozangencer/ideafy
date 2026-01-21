@@ -118,6 +118,24 @@ export async function POST(
     const markedHtml = await marked(responseText);
     const aiOpinion = convertToTipTapTaskList(markedHtml);
 
+    // Extract verdict from "## Summary Verdict" section
+    const verdictMatch = responseText.match(/##\s*Summary\s*Verdict[\s\S]*?(Strong\s*Yes|Yes|Maybe|No|Strong\s*No)/i);
+    const verdictText = verdictMatch?.[1]?.toLowerCase().replace(/\s+/g, '') || '';
+
+    // Also check final score as backup (e.g., 7/10)
+    const scoreMatch = responseText.match(/##\s*Final\s*Score[\s\S]*?(\d+)\/10/i);
+    const score = scoreMatch ? parseInt(scoreMatch[1], 10) : null;
+
+    // Determine verdict: positive if "yes/strong yes/maybe with score >= 6"
+    let aiVerdict: "positive" | "negative" | null = null;
+    if (verdictText === 'strongyes' || verdictText === 'yes') {
+      aiVerdict = 'positive';
+    } else if (verdictText === 'no' || verdictText === 'strongno') {
+      aiVerdict = 'negative';
+    } else if (verdictText === 'maybe' && score !== null) {
+      aiVerdict = score >= 6 ? 'positive' : 'negative';
+    }
+
     // Extract priority from response
     let priority: "low" | "medium" | "high" | null = null;
     const priorityMatch = responseText.match(/\[PRIORITY:\s*(low|medium|high)\]/i);
@@ -132,10 +150,11 @@ export async function POST(
       complexity = complexityMatch[1].toLowerCase() as "trivial" | "low" | "medium" | "high" | "very_high";
     }
 
-    // Update database - update aiOpinion, priority, and complexity (if found)
+    // Update database - update aiOpinion, aiVerdict, priority, and complexity (if found)
     const updatedAt = new Date().toISOString();
-    const updates: { aiOpinion: string; updatedAt: string; priority?: string; complexity?: string } = {
+    const updates: { aiOpinion: string; aiVerdict: string | null; updatedAt: string; priority?: string; complexity?: string } = {
       aiOpinion,
+      aiVerdict,
       updatedAt,
     };
 
@@ -149,6 +168,10 @@ export async function POST(
       console.log(`[Evaluate] Updating complexity to: ${complexity}`);
     }
 
+    if (aiVerdict) {
+      console.log(`[Evaluate] Updating verdict to: ${aiVerdict}`);
+    }
+
     // Clear processing flag on success
     db.update(schema.cards)
       .set({ ...updates, processingType: null })
@@ -159,6 +182,7 @@ export async function POST(
       success: true,
       cardId: id,
       aiOpinion,
+      aiVerdict,
       priority,
       complexity,
       cost,

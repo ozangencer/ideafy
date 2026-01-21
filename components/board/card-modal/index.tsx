@@ -345,6 +345,7 @@ export function CardModal() {
           solutionSummary,
           testScenarios,
           aiOpinion,
+          aiVerdict: null,
           status,
           complexity,
           priority,

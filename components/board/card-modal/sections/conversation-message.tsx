@@ -5,6 +5,26 @@ import { Brain, Wrench, User, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 
+// Tool ismini gruba çevir
+function getToolGroup(name: string): string {
+  if (name.startsWith("mcp__")) {
+    // mcp__kanban__get_card → kanban
+    const parts = name.split("__");
+    return parts[1] || name;
+  }
+  return name; // Bash, Read, Write vs.
+}
+
+// Tool'ları grupla ve say
+function groupToolCalls(toolCalls: ToolCall[]): Map<string, number> {
+  const groups = new Map<string, number>();
+  for (const tool of toolCalls) {
+    const group = getToolGroup(tool.name);
+    groups.set(group, (groups.get(group) || 0) + 1);
+  }
+  return groups;
+}
+
 interface ConversationMessageProps {
   message: Message;
 }
@@ -73,17 +93,17 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
           {renderContent()}
         </div>
 
-        {/* Tool calls indicator */}
+        {/* Tool calls indicator - grouped */}
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mt-2 pt-2 border-t border-border/50">
             <div className="flex flex-wrap gap-1">
-              {message.toolCalls.map((tool: ToolCall, i: number) => (
+              {Array.from(groupToolCalls(message.toolCalls)).map(([group, count]) => (
                 <span
-                  key={i}
+                  key={group}
                   className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400"
                 >
                   <Wrench className="w-3 h-3" />
-                  {tool.name}
+                  {group}: {count}
                 </span>
               ))}
             </div>

@@ -247,6 +247,7 @@ export const createClaudeSlice: StoreSlice<
 
       const data = await parseJson<{
         aiOpinion: string;
+        aiVerdict?: Card["aiVerdict"];
         priority?: Card["priority"];
         complexity?: Card["complexity"];
         error?: string;
@@ -266,6 +267,7 @@ export const createClaudeSlice: StoreSlice<
 
           const updates: Partial<Card> = {
             aiOpinion: data.aiOpinion,
+            aiVerdict: data.aiVerdict ?? null,
             updatedAt: nowIso(),
           };
 
