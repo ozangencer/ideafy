@@ -59,3 +59,18 @@ export const settings = sqliteTable("settings", {
 
 export type SettingRecord = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
+
+// Conversations tablosu - AI chat history per card section
+export const conversations = sqliteTable("conversations", {
+  id: text("id").primaryKey(),
+  cardId: text("card_id").notNull().references(() => cards.id, { onDelete: "cascade" }),
+  sectionType: text("section_type").notNull(), // "detail" | "opinion" | "solution" | "tests"
+  role: text("role").notNull(), // "user" | "assistant"
+  content: text("content").notNull(),
+  mentions: text("mentions"), // JSON array of mention data
+  toolCalls: text("tool_calls"), // JSON array of tool call data
+  createdAt: text("created_at").notNull(),
+});
+
+export type ConversationRecord = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;

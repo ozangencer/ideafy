@@ -330,5 +330,79 @@ mcp__kanban__save_tests({
 
 ---
 
-**Son Güncelleme:** 2026-01-17
-**Versiyon:** 0.3.2
+## Section-Based AI Chat Stream
+
+Her card section'ının (Detail, AI's Opinion, Solution Summary, Test Scenarios) altında inline AI chat input var. Kullanıcı o section'a özel soru sorar, Claude cevap verir ve section otomatik güncellenir.
+
+### Mimari
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Card Modal                                         │
+│  ┌───────────────────────────────────────────────┐  │
+│  │ Detail Section                                │  │
+│  │ [TipTap Editor]                               │  │
+│  │ [💬 Ask AI...                        ] [Send] │  │
+│  │ [Activity Log - thinking/tools]               │  │
+│  │ [AI Response - streaming markdown]            │  │
+│  └───────────────────────────────────────────────┘  │
+│  (Same for Opinion, Solution, Tests sections)       │
+└─────────────────────────────────────────────────────┘
+```
+
+### Dosyalar
+
+| Dosya | Açıklama |
+|-------|----------|
+| `components/claude/SectionChatInput.tsx` | Section-based chat component |
+| `app/api/cards/[id]/section-stream/route.ts` | SSE streaming endpoint |
+
+### API Endpoint
+
+**POST** `/api/cards/[id]/section-stream`
+
+```typescript
+// Request body
+{
+  prompt: string;       // Full prompt with system + user message
+  projectPath: string;  // Project folder for Claude context
+  sectionType: string;  // "detail" | "opinion" | "solution" | "tests"
+}
+
+// SSE Response events
+{ type: "start", data: { pid } }
+{ type: "text", data: "response text" }
+{ type: "thinking", data: "thinking content" }
+{ type: "tool_use", data: { name, input } }
+{ type: "tool_result", data: { name, output } }
+{ type: "close", data: { code } }
+{ type: "error", data: "error message" }
+```
+
+### Claude CLI Spawn Config
+
+```typescript
+spawn("/Users/ozangencer/.local/bin/claude", [
+  "-p", prompt,
+  "--print",
+  "--output-format", "stream-json",
+  "--verbose"
+], {
+  cwd: projectPath,
+  stdio: ["ignore", "pipe", "pipe"],  // stdin ignored, stdout/stderr piped
+  env: { HOME, USER, PATH }
+});
+```
+
+### Önemli Notlar
+
+- `--input-format stream-json` ve `--include-partial-messages` KULLANMA - stdin beklemesine neden olur
+- `stdio[0]` mutlaka `"ignore"` olmalı - `"pipe"` olursa stdout üretmez
+- Markdown → HTML çevrimi `marked` ile yapılıyor (GFM + breaks enabled)
+- Activity log sadece loading sırasında görünür
+- Toggle loading sırasında disabled
+
+---
+
+**Son Güncelleme:** 2026-01-21
+**Versiyon:** 0.4.0

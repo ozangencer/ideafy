@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { Card, Status, Project, DocumentFile, AppSettings, CompletedFilter } from "./types";
+import { Card, Status, Project, DocumentFile, AppSettings, CompletedFilter, ConversationMessage, SectionType, MentionData } from "./types";
 
 interface KanbanStore {
   // Cards state
@@ -44,6 +44,12 @@ interface KanbanStore {
   // Settings state
   settings: AppSettings | null;
   isSettingsLoading: boolean;
+
+  // Conversation state
+  conversations: Record<string, ConversationMessage[]>; // key: `${cardId}-${sectionType}`
+  streamingMessage: ConversationMessage | null;
+  isConversationLoading: boolean;
+  conversationAbortController: AbortController | null;
 
   // Card actions
   fetchCards: () => Promise<void>;
@@ -113,6 +119,14 @@ interface KanbanStore {
   // Settings actions
   fetchSettings: () => Promise<void>;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
+
+  // Conversation actions
+  fetchConversation: (cardId: string, sectionType: SectionType) => Promise<void>;
+  sendMessage: (cardId: string, sectionType: SectionType, content: string, mentions: MentionData[], projectPath: string, currentSectionContent: string) => Promise<void>;
+  cancelConversation: () => void;
+  clearConversation: (cardId: string, sectionType: SectionType) => Promise<void>;
+  setStreamingMessage: (message: ConversationMessage | null) => void;
+  appendToStreamingMessage: (text: string) => void;
 }
 
 export const useKanbanStore = create<KanbanStore>()(
@@ -160,13 +174,30 @@ export const useKanbanStore = create<KanbanStore>()(
   settings: null,
   isSettingsLoading: false,
 
+  // Conversation initial state
+  conversations: {},
+  streamingMessage: null,
+  isConversationLoading: false,
+  conversationAbortController: null as AbortController | null,
+
   // Card actions
   fetchCards: async () => {
     set({ isLoading: true });
     try {
       const response = await fetch("/api/cards");
       const cards = await response.json();
-      set({ cards, isLoading: false });
+
+      // Also update selectedCard if it matches one of the fetched cards
+      const currentSelectedCard = get().selectedCard;
+      let newSelectedCard = currentSelectedCard;
+      if (currentSelectedCard) {
+        const updatedCard = cards.find((c: Card) => c.id === currentSelectedCard.id);
+        if (updatedCard) {
+          newSelectedCard = updatedCard;
+        }
+      }
+
+      set({ cards, selectedCard: newSelectedCard, isLoading: false });
     } catch (error) {
       console.error("Failed to fetch cards:", error);
       set({ isLoading: false });
@@ -920,6 +951,162 @@ export const useKanbanStore = create<KanbanStore>()(
     } catch (error) {
       console.error("Failed to update settings:", error);
     }
+  },
+
+  // Conversation actions
+  fetchConversation: async (cardId, sectionType) => {
+    const key = `${cardId}-${sectionType}`;
+    try {
+      const response = await fetch(`/api/cards/${cardId}/conversations?section=${sectionType}`);
+      const messages = await response.json();
+      set((state) => ({
+        conversations: {
+          ...state.conversations,
+          [key]: Array.isArray(messages) ? messages : [],
+        },
+      }));
+    } catch (error) {
+      console.error("Failed to fetch conversation:", error);
+    }
+  },
+
+  sendMessage: async (cardId, sectionType, content, mentions, projectPath, currentSectionContent) => {
+    const key = `${cardId}-${sectionType}`;
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    set({ isConversationLoading: true, conversationAbortController: abortController });
+
+    // Create streaming placeholder
+    const streamingId = `streaming-${Date.now()}`;
+    set({
+      streamingMessage: {
+        id: streamingId,
+        cardId,
+        sectionType,
+        role: "assistant",
+        content: "",
+        mentions: [],
+        createdAt: new Date().toISOString(),
+        isStreaming: true,
+      },
+    });
+
+    try {
+      const response = await fetch(`/api/cards/${cardId}/chat-stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionType,
+          content,
+          mentions,
+          projectPath,
+          currentSectionContent,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error("Failed to start chat stream");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullContent = "";
+      let assistantMessageId = "";
+      let hadToolCalls = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const messages = buffer.split("\n\n");
+        buffer = messages.pop() || "";
+
+        for (const message of messages) {
+          if (!message.trim()) continue;
+
+          const match = message.match(/^data:\s*(.+)$/m);
+          if (match) {
+            try {
+              const event = JSON.parse(match[1]);
+
+              switch (event.type) {
+                case "start":
+                  assistantMessageId = event.data.messageId;
+                  break;
+                case "text":
+                  fullContent += event.data;
+                  get().appendToStreamingMessage(event.data);
+                  break;
+                case "tool_use":
+                case "tool_result":
+                  hadToolCalls = true;
+                  break;
+                case "close":
+                  // Message was saved on backend, refresh conversation
+                  await get().fetchConversation(cardId, sectionType);
+                  // If there were tool calls, refresh cards (they might have been updated)
+                  if (hadToolCalls) {
+                    await get().fetchCards();
+                  }
+                  break;
+              }
+            } catch {
+              // Invalid JSON, skip
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Don't log abort errors
+      if (error instanceof Error && error.name !== "AbortError") {
+        console.error("Failed to send message:", error);
+      }
+    } finally {
+      set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
+    }
+  },
+
+  cancelConversation: () => {
+    const controller = get().conversationAbortController;
+    if (controller) {
+      controller.abort();
+      set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
+    }
+  },
+
+  clearConversation: async (cardId, sectionType) => {
+    const key = `${cardId}-${sectionType}`;
+    try {
+      await fetch(`/api/cards/${cardId}/conversations?section=${sectionType}`, {
+        method: "DELETE",
+      });
+      set((state) => ({
+        conversations: {
+          ...state.conversations,
+          [key]: [],
+        },
+      }));
+    } catch (error) {
+      console.error("Failed to clear conversation:", error);
+    }
+  },
+
+  setStreamingMessage: (message) => set({ streamingMessage: message }),
+
+  appendToStreamingMessage: (text) => {
+    set((state) => {
+      if (!state.streamingMessage) return state;
+      return {
+        streamingMessage: {
+          ...state.streamingMessage,
+          content: state.streamingMessage.content + text,
+        },
+      };
+    });
   },
     }),
     {

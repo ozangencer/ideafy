@@ -422,28 +422,107 @@ button:disabled {
   padding: 0 !important;
 }
 
-/* xterm.js Terminal Styles */
-.xterm {
-  padding: 4px;
+/* Split Panel Styles */
+.split-panel-divider {
+  user-select: none;
+  touch-action: none;
 }
 
-.xterm-viewport {
-  overflow-y: auto !important;
+.split-panel-divider:active {
+  @apply bg-accent/30;
 }
 
-.xterm-viewport::-webkit-scrollbar {
-  width: 8px;
+/* Chat Input Container */
+.chat-input-container {
+  @apply relative;
 }
 
-.xterm-viewport::-webkit-scrollbar-track {
-  background: #0d0d0d;
+.chat-input-container .ProseMirror {
+  @apply outline-none px-3 py-2 text-sm min-h-[38px] max-h-[200px] overflow-y-auto;
 }
 
-.xterm-viewport::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 4px;
+/* Chat input image styles - smaller than main editor */
+.chat-input-container .ProseMirror img,
+.chat-input-container .tiptap-resizable-view img {
+  max-height: 150px;
+  max-width: 100%;
+  @apply rounded my-1;
 }
 
-.xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: #444;
+.chat-input-container .tiptap-resizable-view {
+  @apply my-1;
 }
+
+.chat-input-container .ProseMirror p {
+  @apply m-0;
+}
+
+.chat-input-container .ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-muted-foreground/50 pointer-events-none float-left h-0;
+  content: attr(data-placeholder);
+}
+
+/* Chat Input Editor Prose */
+.chat-input-editor {
+  @apply text-sm;
+}
+
+.chat-input-editor p {
+  @apply m-0 leading-relaxed;
+}
+
+/* Section Editor Full Height */
+.section-editor-container {
+  @apply h-full;
+}
+
+.section-editor-container .tiptap-editor {
+  @apply h-full flex flex-col;
+}
+
+.section-editor-container .tiptap-editor .ProseMirror {
+  @apply flex-1 overflow-y-auto;
+}
+
+/* Conversation Message Styles */
+.conversation-message {
+  @apply transition-opacity duration-200;
+}
+
+.conversation-message.streaming {
+  @apply opacity-80;
+}
+
+/* Conversation message images */
+.prose img,
+.message-html-content img {
+  @apply max-w-full h-auto rounded-md my-2;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+/* Message HTML content (for user messages with images) */
+.message-html-content {
+  @apply text-sm;
+}
+
+.message-html-content p {
+  @apply my-1;
+}
+
+/* Tab Indicator Animation */
+[data-state="active"]::after {
+  content: "";
+  @apply absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full;
+  animation: tabIndicator 0.2s ease-out;
+}
+
+@keyframes tabIndicator {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+

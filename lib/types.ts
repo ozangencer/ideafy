@@ -119,6 +119,73 @@ export const TERMINAL_OPTIONS: { value: TerminalApp; label: string }[] = [
   { value: "terminal", label: "Terminal.app" },
 ];
 
+// Section types for card modal tabs
+export type SectionType = "detail" | "opinion" | "solution" | "tests";
+
+export const SECTION_CONFIG: Record<SectionType, {
+  label: string;
+  icon: string;
+  color: string;
+  placeholder: string;
+  chatPlaceholder: string;
+}> = {
+  detail: {
+    label: "Detail",
+    icon: "FileText",
+    color: "#3b82f6", // blue
+    placeholder: "Describe the task...",
+    chatPlaceholder: "Ask about this task...",
+  },
+  opinion: {
+    label: "AI's Opinion",
+    icon: "Brain",
+    color: "#a855f7", // purple
+    placeholder: "AI's evaluation of this idea...",
+    chatPlaceholder: "Ask for technical analysis...",
+  },
+  solution: {
+    label: "Solution",
+    icon: "Lightbulb",
+    color: "#f59e0b", // amber
+    placeholder: "Document the agreed solution...",
+    chatPlaceholder: "Refine the solution approach...",
+  },
+  tests: {
+    label: "Tests",
+    icon: "TestTube2",
+    color: "#22c55e", // green
+    placeholder: "- [ ] Test case 1\n- [ ] Test case 2",
+    chatPlaceholder: "Add test scenarios...",
+  },
+};
+
+// Mention types for chat input
+export interface MentionData {
+  type: "skill" | "mcp" | "card" | "document";
+  id: string;
+  label: string;
+}
+
+// Tool call data from Claude responses
+export interface ToolCall {
+  name: string;
+  input: Record<string, unknown>;
+  output?: string;
+}
+
+// Conversation message interface
+export interface ConversationMessage {
+  id: string;
+  cardId: string;
+  sectionType: SectionType;
+  role: "user" | "assistant";
+  content: string;
+  mentions: MentionData[];
+  toolCalls?: ToolCall[];
+  createdAt: string;
+  isStreaming?: boolean;
+}
+
 // Completed column filter - Updated in main for conflict test
 export type CompletedFilter = 'today' | 'yesterday' | 'this_week' | 'all';
 
