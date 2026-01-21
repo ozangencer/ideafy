@@ -42,3 +42,4 @@ backups/
 
 # Misc
 *.log
+sqlite.db

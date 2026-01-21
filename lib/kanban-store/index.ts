@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { createBackgroundProcessesSlice } from "./slices/background-processes";
 import { createCardsSlice } from "./slices/cards";
 import { createClaudeSlice } from "./slices/claude";
 import { createConversationSlice } from "./slices/conversation";
@@ -15,6 +16,7 @@ import { KanbanStore } from "./types";
 export const useKanbanStore = create<KanbanStore>()(
   persist(
     (set, get) => ({
+      ...createBackgroundProcessesSlice(set, get),
       ...createCardsSlice(set, get),
       ...createProjectsSlice(set, get),
       ...createDocumentsSlice(set, get),

@@ -6,6 +6,10 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import ImageResize from "tiptap-extension-resize-image";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableCell } from "@tiptap/extension-table-cell";
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
@@ -111,6 +115,12 @@ export function MarkdownEditor({
         inline: false,
         allowBase64: true,
       }),
+      Table.configure({
+        resizable: false,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: "",
     editorProps: {

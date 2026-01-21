@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { conversations, cards, projects } from "@/lib/db/schema";
@@ -6,10 +6,13 @@ import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import type { SectionType, MentionData, ConversationMessage } from "@/lib/types";
-
-// Store active processes for cleanup
-const activeProcesses = new Map<string, ChildProcess>();
+import type { SectionType, ConversationMessage } from "@/lib/types";
+import {
+  registerProcess,
+  unregisterProcess,
+  getProcess,
+  killProcess,
+} from "@/lib/process-registry";
 
 // Card context info
 interface CardContext {
@@ -208,10 +211,9 @@ export async function POST(
 
   // Kill any existing process for this card+section
   const processKey = `${cardId}-${sectionType}`;
-  const existing = activeProcesses.get(processKey);
+  const existing = getProcess(processKey);
   if (existing) {
-    existing.kill();
-    activeProcesses.delete(processKey);
+    killProcess(processKey);
   }
 
   const encoder = new TextEncoder();
@@ -254,7 +256,14 @@ export async function POST(
         },
       });
 
-      activeProcesses.set(processKey, claudeProcess);
+      // Register process with metadata
+      registerProcess(processKey, claudeProcess, {
+        cardId,
+        sectionType: sectionType as SectionType,
+        cardTitle: card.title,
+        displayId: displayId !== cardId ? displayId : null,
+        startedAt: new Date().toISOString(),
+      });
       sendEvent("start", { pid: claudeProcess.pid, messageId: assistantMessageId });
 
       let stdoutBuffer = "";
@@ -316,7 +325,7 @@ export async function POST(
       });
 
       claudeProcess.on("close", async (code) => {
-        activeProcesses.delete(processKey);
+        unregisterProcess(processKey);
 
         // Save assistant message to database
         if (fullResponse.trim()) {
@@ -344,7 +353,7 @@ export async function POST(
       });
 
       claudeProcess.on("error", (error) => {
-        activeProcesses.delete(processKey);
+        unregisterProcess(processKey);
         sendEvent("error", error.message);
         if (!isClosed) {
           isClosed = true;
@@ -356,7 +365,7 @@ export async function POST(
         isClosed = true;
         if (claudeProcess && !claudeProcess.killed) {
           claudeProcess.kill();
-          activeProcesses.delete(processKey);
+          unregisterProcess(processKey);
         }
       });
     },
@@ -381,11 +390,9 @@ export async function DELETE(
   const sectionType = searchParams.get("sectionType") || "";
 
   const processKey = `${cardId}-${sectionType}`;
-  const active = activeProcesses.get(processKey);
+  const killed = killProcess(processKey);
 
-  if (active) {
-    active.kill();
-    activeProcesses.delete(processKey);
+  if (killed) {
     return Response.json({ success: true, message: "Stream stopped" });
   }
 

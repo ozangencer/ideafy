@@ -69,6 +69,7 @@ export function CardModal() {
     fetchConversation,
     sendMessage,
     cancelConversation,
+    detachConversation,
     clearConversation,
   } = useKanbanStore();
   const { toast } = useToast();
@@ -319,12 +320,14 @@ export function CardModal() {
   const handleClose = useCallback(() => {
     setCardHistory([]);
     setIsVisible(false);
+    // Detach from conversation stream - process continues in background
+    detachConversation();
     if (isDraftMode) {
       setTimeout(() => discardDraft(), 200);
     } else {
       setTimeout(() => closeModal(), 200);
     }
-  }, [isDraftMode, discardDraft, closeModal]);
+  }, [isDraftMode, discardDraft, closeModal, detachConversation]);
 
   // Handle export
   const handleExport = useCallback(() => {

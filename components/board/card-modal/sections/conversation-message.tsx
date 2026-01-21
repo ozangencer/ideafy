@@ -4,6 +4,7 @@ import { ConversationMessage as Message, ToolCall } from "@/lib/types";
 import { Brain, Wrench, User, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
 
 // Tool ismini gruba çevir
 function getToolGroup(name: string): string {
@@ -38,7 +39,7 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
 
   // Render HTML content directly for messages with images
   const renderContent = () => {
-    if (isStreaming && !message.content) {
+    if (isStreaming && !message.content && !message.activeToolCall) {
       return (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="w-3 h-3 animate-spin" />
@@ -58,7 +59,11 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
     }
 
     // For other messages, use ReactMarkdown
-    return <ReactMarkdown rehypePlugins={[rehypeRaw]}>{message.content}</ReactMarkdown>;
+    return (
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+        {message.content}
+      </ReactMarkdown>
+    );
   };
 
   return (
@@ -92,6 +97,21 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
         <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0 max-w-none text-sm">
           {renderContent()}
         </div>
+
+        {/* Active tool call indicator (streaming) */}
+        {isStreaming && message.activeToolCall && (
+          <div className="mt-2 pt-2 border-t border-border/50">
+            <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded bg-amber-500/10 text-amber-400">
+              {message.activeToolCall.status === "running" ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Wrench className="w-3 h-3" />
+              )}
+              {getToolGroup(message.activeToolCall.name)}
+              {message.activeToolCall.status === "running" && "..."}
+            </span>
+          </div>
+        )}
 
         {/* Tool calls indicator - grouped */}
         {message.toolCalls && message.toolCalls.length > 0 && (

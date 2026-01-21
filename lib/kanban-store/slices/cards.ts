@@ -2,7 +2,7 @@ import { Card, Status } from "../../types";
 import { nowIso, parseJson, replaceCardById, updateCardById } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 
-const createDraftCard = (status: Status, projectId: string | null, projectFolder: string) => ({
+const createDraftCard = (status: Status, projectId: string | null, projectFolder: string): Card => ({
   id: `draft-${Date.now()}`,
   title: "",
   description: "",
@@ -11,8 +11,8 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   aiOpinion: "",
   aiVerdict: null,
   status,
-  complexity: "medium",
-  priority: "medium",
+  complexity: "medium" as const,
+  priority: "medium" as const,
   projectFolder,
   projectId,
   taskNumber: null,

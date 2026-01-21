@@ -1,6 +1,7 @@
 import { StateCreator } from "zustand";
 import {
   AppSettings,
+  BackgroundProcess,
   Card,
   CompletedFilter,
   ConversationMessage,
@@ -61,6 +62,9 @@ export interface KanbanStore {
   streamingMessage: ConversationMessage | null;
   isConversationLoading: boolean;
   conversationAbortController: AbortController | null;
+
+  // Background processes state
+  backgroundProcesses: BackgroundProcess[];
 
   // Card actions
   fetchCards: () => Promise<void>;
@@ -145,9 +149,18 @@ export interface KanbanStore {
     currentSectionContent: string
   ) => Promise<void>;
   cancelConversation: () => void;
+  detachConversation: () => void;
   clearConversation: (cardId: string, sectionType: SectionType) => Promise<void>;
   setStreamingMessage: (message: ConversationMessage | null) => void;
   appendToStreamingMessage: (text: string) => void;
+
+  // Background processes actions
+  fetchBackgroundProcesses: () => Promise<void>;
+  killBackgroundProcess: (processKey: string) => Promise<void>;
 }
 
-export type StoreSlice<T> = StateCreator<KanbanStore, [], [], T>;
+// Custom slice creator type that makes the store parameter optional
+export type StoreSlice<T> = (
+  set: Parameters<StateCreator<KanbanStore, [], [], T>>[0],
+  get: Parameters<StateCreator<KanbanStore, [], [], T>>[1]
+) => T;

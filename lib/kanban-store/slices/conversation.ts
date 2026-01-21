@@ -12,6 +12,7 @@ export const createConversationSlice: StoreSlice<
     | "fetchConversation"
     | "sendMessage"
     | "cancelConversation"
+    | "detachConversation"
     | "clearConversation"
     | "setStreamingMessage"
     | "appendToStreamingMessage"
@@ -114,20 +115,49 @@ export const createConversationSlice: StoreSlice<
               switch (event.type) {
                 case "start":
                   assistantMessageId = (event.data as { messageId: string }).messageId;
+                  // Refresh background processes list
+                  get().fetchBackgroundProcesses();
                   break;
                 case "text":
                   fullContent += event.data as string;
                   get().appendToStreamingMessage(event.data as string);
                   break;
-                case "tool_use":
-                case "tool_result":
+                case "tool_use": {
                   hadToolCalls = true;
+                  const toolData = event.data as { name: string };
+                  set((state) => {
+                    if (!state.streamingMessage) return state;
+                    return {
+                      streamingMessage: {
+                        ...state.streamingMessage,
+                        activeToolCall: { name: toolData.name, status: "running" },
+                      },
+                    };
+                  });
                   break;
+                }
+                case "tool_result": {
+                  hadToolCalls = true;
+                  set((state) => {
+                    if (!state.streamingMessage) return state;
+                    return {
+                      streamingMessage: {
+                        ...state.streamingMessage,
+                        activeToolCall: state.streamingMessage.activeToolCall
+                          ? { ...state.streamingMessage.activeToolCall, status: "completed" }
+                          : undefined,
+                      },
+                    };
+                  });
+                  break;
+                }
                 case "close":
                   await get().fetchConversation(cardId, sectionType as SectionType);
                   if (hadToolCalls) {
                     await get().fetchCards();
                   }
+                  // Refresh background processes list
+                  get().fetchBackgroundProcesses();
                   break;
               }
             } catch {
@@ -151,6 +181,11 @@ export const createConversationSlice: StoreSlice<
       controller.abort();
       set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
     }
+  },
+
+  detachConversation: () => {
+    // Clear UI state without aborting the process - lets it run in background
+    set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
   },
 
   clearConversation: async (cardId, sectionType) => {

@@ -7,6 +7,7 @@ import { CardModal } from "@/components/board/card-modal";
 import { DocumentEditor } from "@/components/editor/document-editor";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
+import { BackgroundProcesses } from "@/components/background-processes";
 import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
@@ -108,6 +109,9 @@ export default function Home() {
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               </div>
+
+              {/* Background Processes */}
+              <BackgroundProcesses />
 
               {/* Keyboard hint */}
               <span className="text-xs text-muted-foreground hidden lg:block">

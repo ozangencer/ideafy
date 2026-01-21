@@ -274,6 +274,27 @@ button:disabled {
   @apply border-border my-4;
 }
 
+/* Table styles */
+.prose-kanban table,
+.prose table {
+  @apply w-full border-collapse my-3 text-sm;
+}
+
+.prose-kanban th,
+.prose th {
+  @apply bg-surface border border-border px-3 py-2 text-left font-semibold;
+}
+
+.prose-kanban td,
+.prose td {
+  @apply border border-border px-3 py-2;
+}
+
+.prose-kanban tr:hover,
+.prose tr:hover {
+  @apply bg-surface/50;
+}
+
 /* Editor images */
 .prose-kanban img,
 .editor-image {

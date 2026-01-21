@@ -194,8 +194,21 @@ export interface ConversationMessage {
   content: string;
   mentions: MentionData[];
   toolCalls?: ToolCall[];
+  activeToolCall?: { name: string; status: "running" | "completed" };
   createdAt: string;
   isStreaming?: boolean;
+}
+
+// Background process tracking
+export interface BackgroundProcess {
+  id: string;              // `${cardId}-${sectionType}`
+  cardId: string;
+  sectionType: SectionType;
+  cardTitle: string;
+  displayId: string | null;
+  pid: number;
+  status: "running" | "completed" | "error";
+  startedAt: string;
 }
 
 // Completed column filter - Updated in main for conflict test
