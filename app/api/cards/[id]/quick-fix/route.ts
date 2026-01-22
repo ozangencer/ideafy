@@ -209,11 +209,11 @@ export async function POST(
       : convertToTipTapTaskList(await marked("## Test Scenarios\n- [ ] Bug fix verified\n- [ ] No regression"));
 
     // Auto-commit the changes
-    const displayId = project
+    const commitDisplayId = project
       ? `${project.idPrefix}-${card.taskNumber}`
       : `TASK-${card.taskNumber || "X"}`;
 
-    const commitMessage = `fix(${displayId}): Quick fix - ${card.title}`;
+    const commitMessage = `fix(${commitDisplayId}): Quick fix - ${card.title}`;
 
     try {
       // Stage all changes

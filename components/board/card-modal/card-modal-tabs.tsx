@@ -11,12 +11,21 @@ const SECTION_ICONS: Record<SectionType, typeof FileText> = {
   tests: TestTube2,
 };
 
+// Check if HTML content has meaningful text
+function hasContent(html: string): boolean {
+  if (!html) return false;
+  // Strip HTML tags and check if there's actual text
+  const text = html.replace(/<[^>]*>/g, "").trim();
+  return text.length > 0;
+}
+
 interface CardModalTabsProps {
   activeTab: SectionType;
   onTabChange: (tab: SectionType) => void;
+  sectionValues: Record<SectionType, string>;
 }
 
-export function CardModalTabs({ activeTab, onTabChange }: CardModalTabsProps) {
+export function CardModalTabs({ activeTab, onTabChange, sectionValues }: CardModalTabsProps) {
   return (
     <div className="shrink-0 border-b border-border px-4">
       <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as SectionType)}>
@@ -25,6 +34,7 @@ export function CardModalTabs({ activeTab, onTabChange }: CardModalTabsProps) {
             const config = SECTION_CONFIG[section];
             const Icon = SECTION_ICONS[section];
             const isActive = activeTab === section;
+            const isFilled = hasContent(sectionValues[section]);
 
             return (
               <TabsTrigger
@@ -41,6 +51,12 @@ export function CardModalTabs({ activeTab, onTabChange }: CardModalTabsProps) {
                   style={{ color: isActive ? config.color : undefined }}
                 />
                 <span>{config.label}</span>
+                {isFilled && !isActive && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: config.color }}
+                  />
+                )}
               </TabsTrigger>
             );
           })}

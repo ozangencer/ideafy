@@ -788,7 +788,7 @@ export function CardModal() {
         )}
 
         {/* Section Tabs */}
-        <CardModalTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        <CardModalTabs activeTab={activeTab} onTabChange={setActiveTab} sectionValues={sectionValues} />
 
         {/* Main Content - Split Panel */}
         <div className="flex-1 overflow-hidden relative">

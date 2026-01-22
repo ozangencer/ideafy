@@ -132,7 +132,7 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, clearProcessing, settings, startDevServer, stopDevServer } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -194,11 +194,6 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   const handleUnlock = (e: React.MouseEvent) => {
     e.stopPropagation();
     unlockCard(card.id);
-  };
-
-  const handleClearProcessing = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await clearProcessing(card.id);
   };
 
   const handleStartClick = (e: React.MouseEvent) => {
@@ -361,20 +356,6 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
               </Tooltip>
             )}
 
-            {/* Clear processing button - for stuck background processing from DB */}
-            {isBackgroundProcessing && card.processingType && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={handleClearProcessing}
-                    className="absolute top-2 right-2 p-1.5 rounded bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-colors z-10"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="left">Clear stuck processing</TooltipContent>
-              </Tooltip>
-            )}
 
             {/* Title with displayId and priority */}
             <div className={`flex items-start gap-2 mb-1 ${isLocked && !isBackgroundProcessing ? "pr-8" : ""}`}>
