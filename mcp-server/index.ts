@@ -24,11 +24,12 @@ function markdownToTiptapHtml(markdown: string): string {
 
   // Convert standard checkbox lists to Tiptap TaskList format
   // Match: <ul> containing <li><input ...checkbox...> items
+  // Note: Using [\s\S]*? instead of [^<]* to handle <code> tags inside list items
   html = html.replace(
-    /<ul>\s*((?:<li><input[^>]*type="checkbox"[^>]*>\s*[^<]*<\/li>\s*)+)<\/ul>/gi,
+    /<ul>\s*((?:<li><input[^>]*type="checkbox"[^>]*>[\s\S]*?<\/li>\s*)+)<\/ul>/gi,
     (match, items) => {
       const taskItems = items.replace(
-        /<li><input([^>]*)type="checkbox"([^>]*)>\s*([^<]*)<\/li>/gi,
+        /<li><input([^>]*)type="checkbox"([^>]*)>([\s\S]*?)<\/li>/gi,
         (itemMatch: string, before: string, after: string, text: string) => {
           const isChecked = before.includes('checked') || after.includes('checked');
           return `<li data-type="taskItem" data-checked="${isChecked}"><label><input type="checkbox"${isChecked ? ' checked="checked"' : ''}><span></span></label><div><p>${text.trim()}</p></div></li>`;
@@ -319,10 +320,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             projectId: {
               type: "string",
-              description: "Project ID to associate with (optional)",
+              description: "Project ID to associate with (required)",
             },
           },
-          required: ["title"],
+          required: ["title", "projectId"],
         },
       },
       {
@@ -382,6 +383,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["id", "aiOpinion"],
+        },
+      },
+      {
+        name: "get_project_by_folder",
+        description: "Find a project by its folder path. Use this to check if the current working directory is registered as a kanban project.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            folderPath: {
+              type: "string",
+              description: "Full path to the project folder (e.g., /Users/name/projects/my-app)",
+            },
+          },
+          required: ["folderPath"],
         },
       },
     ],
@@ -762,6 +777,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         return {
           content: [{ type: "text", text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}` }],
+        };
+      }
+
+      case "get_project_by_folder": {
+        const { folderPath } = args as { folderPath: string };
+
+        const project = db.prepare(`
+          SELECT
+            id, name, folder_path as folderPath, id_prefix as idPrefix,
+            color, next_task_number as nextTaskNumber
+          FROM projects
+          WHERE folder_path = ?
+        `).get(folderPath) as {
+          id: string;
+          name: string;
+          folderPath: string;
+          idPrefix: string;
+          color: string;
+          nextTaskNumber: number;
+        } | undefined;
+
+        if (!project) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                found: false,
+                message: "Bu proje kanban'da kayitli degil. Oncelikle projeyi kanban'a eklemen gerekiyor."
+              })
+            }],
+          };
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ found: true, project })
+          }],
         };
       }
 

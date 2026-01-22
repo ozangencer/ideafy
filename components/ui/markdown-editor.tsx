@@ -10,7 +10,7 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
@@ -42,7 +42,11 @@ export function MarkdownEditor({
   const isUpdatingFromExternal = useRef(false);
   const lastSyncedValue = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { cards, projects, activeProjectId, documents, getUnifiedItems } = useKanbanStore();
+  const { cards, projects, activeProjectId, documents, skills, mcps } = useKanbanStore();
+
+  // Local state for project-specific skills/mcps
+  const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
+  const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
 
   // Ref to hold current documents for the callback
   const documentsRef = useRef<typeof documents>([]);
@@ -66,6 +70,52 @@ export function MarkdownEditor({
       documentsRef.current = documents;
     }
   }, [projectId, activeProjectId, documents]);
+
+  // Fetch project-specific skills/mcps based on card's project
+  useEffect(() => {
+    const effectiveProjectId = projectId || activeProjectId;
+
+    if (!effectiveProjectId) {
+      setLocalProjectSkills([]);
+      setLocalProjectMcps([]);
+      return;
+    }
+
+    // Fetch project's skills and mcps
+    Promise.all([
+      fetch(`/api/projects/${effectiveProjectId}/skills/list`).then(r => r.json()).catch(() => ({ skills: [] })),
+      fetch(`/api/projects/${effectiveProjectId}/mcps/list`).then(r => r.json()).catch(() => ({ mcps: [] })),
+    ]).then(([skillsData, mcpsData]) => {
+      setLocalProjectSkills(skillsData.skills || []);
+      setLocalProjectMcps(mcpsData.mcps || []);
+    });
+  }, [projectId, activeProjectId]);
+
+  // Create unified items getter that merges global + card's project items
+  const getUnifiedItems = useCallback(() => {
+    const items: Array<{ id: string; label: string; type: "skill" | "mcp" | "plugin" }> = [];
+    const addedIds = new Set<string>();
+
+    // Merge global + project skills
+    const allSkills = Array.from(new Set([...skills, ...localProjectSkills]));
+    allSkills.forEach((skill) => {
+      if (!addedIds.has(`skill-${skill}`)) {
+        addedIds.add(`skill-${skill}`);
+        items.push({ id: skill, label: skill, type: "skill" });
+      }
+    });
+
+    // Merge global + project MCPs
+    const allMcps = Array.from(new Set([...mcps, ...localProjectMcps]));
+    allMcps.forEach((mcp) => {
+      if (!addedIds.has(`mcp-${mcp}`)) {
+        addedIds.add(`mcp-${mcp}`);
+        items.push({ id: mcp, label: mcp, type: "mcp" });
+      }
+    });
+
+    return items;
+  }, [skills, mcps, localProjectSkills, localProjectMcps]);
 
   // Callback to get current documents (used by suggestion)
   const getDocuments = useCallback(() => documentsRef.current, []);

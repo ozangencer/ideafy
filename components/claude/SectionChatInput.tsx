@@ -13,10 +13,23 @@ marked.setOptions({
   breaks: true,
 });
 
-// Strip HTML tags for cleaner prompts
+// Decode HTML entities and strip tags for cleaner prompts
 function stripHtml(html: string): string {
   if (!html) return "";
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  // First decode common HTML entities
+  const decoded = html
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#x22;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+  // Then strip HTML tags
+  return decoded.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 // Truncate text to max length

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import {
   Collapsible,
@@ -10,8 +10,14 @@ import {
 import { ChevronRight, Plug, Check } from "lucide-react";
 
 export function McpList() {
-  const { mcps } = useKanbanStore();
+  const { mcps, projectMcps } = useKanbanStore();
   const [copiedMcp, setCopiedMcp] = useState<string | null>(null);
+
+  // Merge global + project MCPs, remove duplicates
+  const allMcps = useMemo(() =>
+    Array.from(new Set([...mcps, ...projectMcps])).sort(),
+    [mcps, projectMcps]
+  );
 
   const copyToClipboard = (mcp: string) => {
     navigator.clipboard.writeText(`/${mcp}`);
@@ -19,7 +25,7 @@ export function McpList() {
     setTimeout(() => setCopiedMcp(null), 1500);
   };
 
-  if (mcps.length === 0) return null;
+  if (allMcps.length === 0) return null;
 
   return (
     <Collapsible defaultOpen={false} className="px-2 mt-2">
@@ -27,10 +33,10 @@ export function McpList() {
         <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
         <Plug className="h-3 w-3" />
         <span>MCPs</span>
-        <span className="ml-auto text-[10px] opacity-60">{mcps.length}</span>
+        <span className="ml-auto text-[10px] opacity-60">{allMcps.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 space-y-0.5">
-        {mcps.map((mcp) => (
+        {allMcps.map((mcp) => (
           <button
             key={mcp}
             onClick={() => copyToClipboard(mcp)}

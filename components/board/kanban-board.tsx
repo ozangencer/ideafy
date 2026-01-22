@@ -31,26 +31,43 @@ const COMPLEXITY_ORDER: Record<Complexity, number> = {
 
 // Filter completed cards by date filter
 function filterByCompletedDate(cards: Card[], filter: CompletedFilter): Card[] {
+  // 'all' filter or any unknown/invalid filter should return all cards
+  if (!filter || filter === 'all') {
+    return cards;
+  }
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  return cards.filter(card => {
-    // Use completedAt if available, otherwise fall back to updatedAt for legacy cards
-    const dateToCheck = card.completedAt || card.updatedAt;
-    const cardDate = new Date(dateToCheck);
-    const cardDateOnly = new Date(cardDate.getFullYear(), cardDate.getMonth(), cardDate.getDate());
-
-    switch (filter) {
-      case 'today':
+  switch (filter) {
+    case 'today':
+      return cards.filter(card => {
+        const dateToCheck = card.completedAt || card.updatedAt;
+        const cardDate = new Date(dateToCheck);
+        const cardDateOnly = new Date(cardDate.getFullYear(), cardDate.getMonth(), cardDate.getDate());
         return cardDateOnly.getTime() === today.getTime();
-      case 'yesterday':
+      });
+    case 'yesterday': {
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+      return cards.filter(card => {
+        const dateToCheck = card.completedAt || card.updatedAt;
+        const cardDate = new Date(dateToCheck);
+        const cardDateOnly = new Date(cardDate.getFullYear(), cardDate.getMonth(), cardDate.getDate());
         return cardDateOnly.getTime() === yesterday.getTime();
-      case 'this_week':
-        return cardDate >= weekAgo;
+      });
     }
-  });
+    case 'this_week': {
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return cards.filter(card => {
+        const dateToCheck = card.completedAt || card.updatedAt;
+        const cardDate = new Date(dateToCheck);
+        return cardDate >= weekAgo;
+      });
+    }
+    default:
+      // For any unrecognized filter value, show all cards
+      return cards;
+  }
 }
 
 // Sort cards by priority (desc) then complexity (asc)

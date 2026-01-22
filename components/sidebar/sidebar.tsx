@@ -29,6 +29,7 @@ export function Sidebar() {
     toggleSidebar,
     setSidebarWidth,
     activeProjectId,
+    fetchProjectExtensions,
   } = useKanbanStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -72,6 +73,11 @@ export function Sidebar() {
       document.body.style.userSelect = "";
     }
   }, [isDragging]);
+
+  // Fetch project-specific extensions when project changes
+  useEffect(() => {
+    fetchProjectExtensions(activeProjectId);
+  }, [activeProjectId, fetchProjectExtensions]);
 
   if (isSidebarCollapsed) {
     return (

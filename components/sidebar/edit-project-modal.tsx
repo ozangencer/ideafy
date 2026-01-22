@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Folder, Loader2, FileText, GitBranch } from "lucide-react";
+import { Folder, Loader2, FileText, GitBranch, Plug } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Popover,
@@ -66,20 +66,36 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [hookInstalled, setHookInstalled] = useState<boolean | null>(null);
   const [isTogglingHook, setIsTogglingHook] = useState(false);
+  const [mcpSkillsInstalled, setMcpSkillsInstalled] = useState<boolean | null>(null);
+  const [isTogglingMcpSkills, setIsTogglingMcpSkills] = useState(false);
 
-  // Check hook status on mount
+  // Check hook and MCP/Skills status on mount
   useEffect(() => {
-    const checkHookStatus = async () => {
+    const checkStatuses = async () => {
       try {
-        const response = await fetch(`/api/projects/${project.id}/hook`);
-        const data = await response.json();
-        setHookInstalled(data.installed ?? false);
+        const [hookRes, mcpRes, skillsRes] = await Promise.all([
+          fetch(`/api/projects/${project.id}/hook`),
+          fetch(`/api/projects/${project.id}/mcp`),
+          fetch(`/api/projects/${project.id}/skills`),
+        ]);
+
+        const [hookData, mcpData, skillsData] = await Promise.all([
+          hookRes.json(),
+          mcpRes.json(),
+          skillsRes.json(),
+        ]);
+
+        setHookInstalled(hookData.installed ?? false);
+        // MCP & Skills are considered installed if both are installed
+        const bothInstalled = (mcpData.installed ?? false) && (skillsData.installed ?? false);
+        setMcpSkillsInstalled(bothInstalled);
       } catch (error) {
-        console.error("Failed to check hook status:", error);
+        console.error("Failed to check statuses:", error);
         setHookInstalled(false);
+        setMcpSkillsInstalled(false);
       }
     };
-    checkHookStatus();
+    checkStatuses();
   }, [project.id]);
 
   const handleToggleHook = async (enabled: boolean) => {
@@ -96,6 +112,32 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
       console.error("Failed to toggle hook:", error);
     } finally {
       setIsTogglingHook(false);
+    }
+  };
+
+  const handleToggleMcpSkills = async (enabled: boolean) => {
+    setIsTogglingMcpSkills(true);
+    try {
+      // Install or remove both MCP and Skills together
+      const [mcpRes, skillsRes] = await Promise.all([
+        fetch(`/api/projects/${project.id}/mcp`, {
+          method: enabled ? "POST" : "DELETE",
+        }),
+        fetch(`/api/projects/${project.id}/skills`, {
+          method: enabled ? "POST" : "DELETE",
+        }),
+      ]);
+
+      const mcpData = await mcpRes.json();
+      const skillsData = await skillsRes.json();
+
+      if (mcpRes.ok && skillsRes.ok) {
+        setMcpSkillsInstalled(mcpData.installed && skillsData.installed);
+      }
+    } catch (error) {
+      console.error("Failed to toggle MCP & Skills:", error);
+    } finally {
+      setIsTogglingMcpSkills(false);
     }
   };
 
@@ -314,6 +356,29 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                 checked={hookInstalled ?? false}
                 onCheckedChange={handleToggleHook}
                 disabled={isTogglingHook || hookInstalled === null}
+              />
+            </div>
+          </div>
+
+          {/* Kanban MCP & Skills */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Plug className="h-4 w-4 text-muted-foreground" />
+                <label className="text-sm font-medium">Kanban MCP & Skills</label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Install kanban tools and /human-test command to this project
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isTogglingMcpSkills && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              <Switch
+                checked={mcpSkillsInstalled ?? false}
+                onCheckedChange={handleToggleMcpSkills}
+                disabled={isTogglingMcpSkills || mcpSkillsInstalled === null}
               />
             </div>
           </div>

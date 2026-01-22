@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { installKanbanHook, removeKanbanHook } from "@/lib/hooks";
-import * as fs from "fs";
-import * as path from "path";
+import { installKanbanSkills, removeKanbanSkills, hasKanbanSkills } from "@/lib/mcp-skills-installer";
 
-// Check if hook is installed
+// Check if kanban skills are installed
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -27,48 +25,18 @@ export async function GET(
       return NextResponse.json({ installed: false, reason: "no_folder" });
     }
 
-    const settingsPath = path.join(project.folderPath, ".claude", "settings.json");
-
-    if (!fs.existsSync(settingsPath)) {
-      return NextResponse.json({ installed: false, reason: "no_settings" });
-    }
-
-    try {
-      const content = fs.readFileSync(settingsPath, "utf-8");
-      const settings = JSON.parse(content);
-
-      // Check UserPromptSubmit hooks for kanban hook (nested hooks structure)
-      const hasHook = settings.hooks?.UserPromptSubmit?.some(
-        (hookGroup: unknown) => {
-          if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
-            return false;
-          }
-          const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
-          return innerHooks.some(
-            (hook: unknown) =>
-              typeof hook === "object" &&
-              hook !== null &&
-              "command" in hook &&
-              typeof (hook as { command: string }).command === "string" &&
-              (hook as { command: string }).command.includes("KANBAN_CARD_ID")
-          );
-        }
-      );
-
-      return NextResponse.json({ installed: !!hasHook });
-    } catch {
-      return NextResponse.json({ installed: false, reason: "parse_error" });
-    }
+    const installed = hasKanbanSkills(project.folderPath);
+    return NextResponse.json({ installed });
   } catch (error) {
-    console.error("Failed to check hook status:", error);
+    console.error("Failed to check skills status:", error);
     return NextResponse.json(
-      { error: "Failed to check hook status" },
+      { error: "Failed to check skills status" },
       { status: 500 }
     );
   }
 }
 
-// Install hook
+// Install kanban skills
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -93,26 +61,26 @@ export async function POST(
       );
     }
 
-    const result = installKanbanHook(project.folderPath);
+    const result = installKanbanSkills(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: true });
     } else {
       return NextResponse.json(
-        { error: result.error || "Failed to install hook" },
+        { error: result.error || "Failed to install skills" },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error("Failed to install hook:", error);
+    console.error("Failed to install skills:", error);
     return NextResponse.json(
-      { error: "Failed to install hook" },
+      { error: "Failed to install skills" },
       { status: 500 }
     );
   }
 }
 
-// Remove hook
+// Remove kanban skills
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -137,20 +105,20 @@ export async function DELETE(
       );
     }
 
-    const result = removeKanbanHook(project.folderPath);
+    const result = removeKanbanSkills(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: false });
     } else {
       return NextResponse.json(
-        { error: result.error || "Failed to remove hook" },
+        { error: result.error || "Failed to remove skills" },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error("Failed to remove hook:", error);
+    console.error("Failed to remove skills:", error);
     return NextResponse.json(
-      { error: "Failed to remove hook" },
+      { error: "Failed to remove skills" },
       { status: 500 }
     );
   }

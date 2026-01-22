@@ -47,6 +47,8 @@ export interface KanbanStore {
   skills: string[];
   mcps: string[];
   plugins: string[];
+  projectSkills: string[];
+  projectMcps: string[];
 
   // Claude integration state
   startingCardId: string | null;
@@ -120,6 +122,7 @@ export interface KanbanStore {
   fetchSkills: () => Promise<void>;
   fetchMcps: () => Promise<void>;
   fetchPlugins: () => Promise<void>;
+  fetchProjectExtensions: (projectId: string | null) => Promise<void>;
   getUnifiedItems: () => UnifiedItem[];
 
   // Claude integration actions

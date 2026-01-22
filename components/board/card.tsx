@@ -33,10 +33,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-// Strip HTML tags for preview text
+// Decode HTML entities and strip tags for preview text
 function stripHtml(html: string): string {
   if (!html) return "";
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  // First decode common HTML entities
+  const decoded = html
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#x22;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+  // Then strip HTML tags
+  return decoded.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 // Linear-style priority icon with bars (3 levels)
