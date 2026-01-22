@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectList } from "./project-list";
 import { SkillList } from "./skill-list";
@@ -18,15 +18,68 @@ import {
 } from "@/components/ui/tooltip";
 import { ChevronLeft, ChevronRight, FolderKanban, Settings } from "lucide-react";
 
+const MIN_WIDTH = 200;
+const MAX_WIDTH = 400;
+const COLLAPSED_WIDTH = 48;
+
 export function Sidebar() {
-  const { isSidebarCollapsed, toggleSidebar, activeProjectId } =
-    useKanbanStore();
+  const {
+    isSidebarCollapsed,
+    sidebarWidth,
+    toggleSidebar,
+    setSidebarWidth,
+    activeProjectId,
+  } = useKanbanStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Handle drag resize
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX;
+      const clampedWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
+      setSidebarWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, setSidebarWidth]);
+
+  // Add cursor style to body during drag
+  useEffect(() => {
+    if (isDragging) {
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    } else {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  }, [isDragging]);
 
   if (isSidebarCollapsed) {
     return (
       <TooltipProvider>
-        <div className="w-12 border-r border-border bg-card flex flex-col items-center py-4 shrink-0">
+        <div
+          className="border-r border-border bg-card flex flex-col items-center py-4 shrink-0 transition-[width] duration-200 ease-out"
+          style={{ width: COLLAPSED_WIDTH }}
+        >
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -89,7 +142,15 @@ export function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="w-64 border-r border-border bg-card flex flex-col h-full shrink-0">
+      <div
+        ref={sidebarRef}
+        className="relative border-r border-border bg-card flex flex-col h-full shrink-0 transition-[width] duration-200 ease-out"
+        style={{
+          width: isDragging ? undefined : sidebarWidth,
+          minWidth: isDragging ? sidebarWidth : undefined,
+          maxWidth: isDragging ? sidebarWidth : undefined,
+        }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
@@ -153,6 +214,12 @@ export function Sidebar() {
             )}
           </div>
         </ScrollArea>
+
+        {/* Resize Handle */}
+        <div
+          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+          onMouseDown={handleMouseDown}
+        />
       </div>
 
       {isSettingsOpen && (

@@ -12,6 +12,9 @@ import { createSettingsSlice } from "./slices/settings";
 import { createSkillsSlice } from "./slices/skills";
 import { createUiSlice } from "./slices/ui";
 import { KanbanStore } from "./types";
+import { CompletedFilter } from "../types";
+
+const VALID_COMPLETED_FILTERS: CompletedFilter[] = ['today', 'yesterday', 'this_week', 'all'];
 
 export const useKanbanStore = create<KanbanStore>()(
   persist(
@@ -32,6 +35,7 @@ export const useKanbanStore = create<KanbanStore>()(
       partialize: (state) => ({
         collapsedColumns: state.collapsedColumns,
         isSidebarCollapsed: state.isSidebarCollapsed,
+        sidebarWidth: state.sidebarWidth,
         completedFilter: state.completedFilter,
       }),
       merge: (persistedState, currentState) => {
@@ -40,10 +44,22 @@ export const useKanbanStore = create<KanbanStore>()(
         if (!collapsedColumns.includes("withdrawn")) {
           collapsedColumns.push("withdrawn");
         }
+        // Validate completedFilter - reset to default if invalid
+        const completedFilter = persisted.completedFilter &&
+          VALID_COMPLETED_FILTERS.includes(persisted.completedFilter)
+          ? persisted.completedFilter
+          : currentState.completedFilter;
+        // Validate sidebarWidth - ensure it's within bounds (200-400px)
+        const sidebarWidth = persisted.sidebarWidth &&
+          persisted.sidebarWidth >= 200 && persisted.sidebarWidth <= 400
+          ? persisted.sidebarWidth
+          : currentState.sidebarWidth;
         return {
           ...currentState,
           ...persisted,
           collapsedColumns,
+          completedFilter,
+          sidebarWidth,
         };
       },
     }

@@ -35,6 +35,7 @@ export interface KanbanStore {
 
   // Sidebar state
   isSidebarCollapsed: boolean;
+  sidebarWidth: number;
 
   // Column collapse state
   collapsedColumns: Status[];
@@ -107,6 +108,7 @@ export interface KanbanStore {
 
   // Sidebar actions
   toggleSidebar: () => void;
+  setSidebarWidth: (width: number) => void;
 
   // Column collapse actions
   toggleColumnCollapse: (columnId: Status) => void;
