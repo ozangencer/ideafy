@@ -1,4 +1,5 @@
 import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
 
 // Create a configured Turndown instance
 function createTurndownService(): TurndownService {
@@ -10,6 +11,9 @@ function createTurndownService(): TurndownService {
     strongDelimiter: "**",
     linkStyle: "inlined",
   });
+
+  // Use GFM plugin for tables, strikethrough, etc.
+  turndownService.use(gfm);
 
   // Handle task lists (checkboxes)
   turndownService.addRule("taskListItems", {
