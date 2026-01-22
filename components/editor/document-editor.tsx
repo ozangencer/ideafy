@@ -5,7 +5,7 @@ import { useKanbanStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { X, FileText, ExternalLink, FolderOpen } from "lucide-react";
+import { X, FileText, ExternalLink, FolderOpen, Maximize2, Minimize2 } from "lucide-react";
 
 export function DocumentEditor() {
   const {
@@ -17,6 +17,7 @@ export function DocumentEditor() {
 
   const [isOpening, setIsOpening] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleClose = () => {
     closeDocumentEditor();
@@ -79,7 +80,9 @@ export function DocumentEditor() {
       />
 
       {/* Panel */}
-      <div className="relative bg-card border-l border-border w-full max-w-[700px] h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+      <div className={`relative bg-card border-l border-border w-full h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 transition-all ${
+          isExpanded ? "max-w-[1200px]" : "max-w-[700px]"
+        }`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
@@ -111,6 +114,15 @@ export function DocumentEditor() {
             >
               <ExternalLink className="h-4 w-4 mr-2" />
               {isOpening ? "Opening..." : "Open in Editor"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="h-8 w-8"
+              title={isExpanded ? "Collapse panel" : "Expand panel"}
+            >
+              {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </Button>
             <Button
               variant="ghost"
