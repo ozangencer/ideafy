@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { conversations, cards, projects } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { tmpdir } from "os";
 import type { SectionType, ConversationMessage } from "@/lib/types";
@@ -23,6 +23,7 @@ interface CardContext {
   title: string;
   projectName: string;
   sectionContent: string;
+  narrativeContent?: string; // Product narrative for opinion context
 }
 
 // Build card context string
@@ -46,11 +47,28 @@ Current description: ${ctx.sectionContent || "(empty)"}
 
 Provide helpful suggestions, clarifications, or improvements. Be concise and practical.`,
 
-  opinion: (ctx) => `You are a senior software architect evaluating a development task.
+  opinion: (ctx) => {
+    let prompt = `You are a senior software architect evaluating a development task.
 ${buildCardContext(ctx)}
-Current opinion: ${ctx.sectionContent || "(none)"}
+Current opinion: ${ctx.sectionContent || "(none)"}`;
 
-Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.`,
+    // Add product narrative context if available
+    if (ctx.narrativeContent) {
+      prompt += `
+
+## Product Narrative (Brand Context)
+Use this product narrative to understand the project vision, goals, and constraints when evaluating:
+
+${ctx.narrativeContent}
+
+---`;
+    }
+
+    prompt += `
+
+Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.`;
+    return prompt;
+  },
 
   solution: (ctx) => `You are helping plan the implementation of a development task.
 ${buildCardContext(ctx)}
@@ -69,6 +87,29 @@ Suggest test cases covering happy paths, edge cases, and error conditions. Use c
 function stripHtml(html: string): string {
   if (!html) return "";
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Read product narrative file for a project
+function readNarrativeContent(projectFolderPath: string, customNarrativePath?: string | null): string | undefined {
+  try {
+    // Use custom path if provided, otherwise default to docs/product-narrative.md
+    const narrativePath = customNarrativePath
+      ? join(projectFolderPath, customNarrativePath)
+      : join(projectFolderPath, "docs", "product-narrative.md");
+
+    if (existsSync(narrativePath)) {
+      const content = readFileSync(narrativePath, "utf-8");
+      // Limit content to prevent overly long prompts
+      const maxLength = 3000;
+      if (content.length > maxLength) {
+        return content.slice(0, maxLength) + "\n\n[... narrative truncated for brevity ...]";
+      }
+      return content;
+    }
+  } catch (error) {
+    console.error("Failed to read narrative:", error);
+  }
+  return undefined;
 }
 
 // Temp directory for images
@@ -142,15 +183,26 @@ export async function POST(
     return new Response("Card not found", { status: 404 });
   }
 
-  // Get project info for display ID
+  // Get project info for display ID and narrative
   let displayId = cardId; // fallback to UUID
   let projectName = "";
+  let narrativeContent: string | undefined;
+  let projectFolderPath = projectPath || "";
+  let projectNarrativePath: string | null = null;
+
   if (card.projectId) {
     const [project] = await db.select().from(projects).where(eq(projects.id, card.projectId));
     if (project) {
       displayId = `${project.idPrefix}-${card.taskNumber}`;
       projectName = project.name;
+      projectFolderPath = project.folderPath;
+      projectNarrativePath = project.narrativePath;
     }
+  }
+
+  // Read narrative content for opinion section
+  if (sectionType === "opinion" && projectFolderPath) {
+    narrativeContent = readNarrativeContent(projectFolderPath, projectNarrativePath);
   }
 
   // Get conversation history for context
@@ -199,6 +251,7 @@ export async function POST(
     title: card.title,
     projectName,
     sectionContent: stripHtml(currentSectionContent || ""),
+    narrativeContent, // Include narrative for opinion section
   };
   const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
   const conversationContext = buildConversationContext(parsedHistory);
