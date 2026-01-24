@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, getDisplayId, COLUMNS } from "@/lib/types";
+import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
 import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
@@ -616,16 +617,34 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     <TooltipContent side="top">Has solution</TooltipContent>
                   </Tooltip>
                 )}
-                {stripHtml(card.testScenarios) && !isBackgroundProcessing && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="p-1 rounded bg-blue-500/15 text-blue-500">
-                        <FlaskConical className="w-3 h-3" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Has tests</TooltipContent>
-                  </Tooltip>
-                )}
+                {stripHtml(card.testScenarios) && !isBackgroundProcessing && (() => {
+                  const progress = parseTestProgress(card.testScenarios);
+                  const isComplete = progress && progress.checked === progress.total;
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={`p-1 rounded flex items-center gap-1 ${
+                          isComplete
+                            ? "bg-green-500/15 text-green-500"
+                            : "bg-blue-500/15 text-blue-500"
+                        }`}>
+                          <FlaskConical className="w-3 h-3" />
+                          {progress && (
+                            <span className="text-[10px] font-mono">
+                              {progress.checked}/{progress.total}
+                            </span>
+                          )}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {progress
+                          ? `Tests: ${progress.checked}/${progress.total} completed`
+                          : "Has tests"
+                        }
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })()}
               </div>
             </div>
           </div>
