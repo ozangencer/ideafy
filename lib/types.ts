@@ -64,6 +64,15 @@ export interface DocumentFile {
   isClaudeMd: boolean;
 }
 
+export interface TreeNode {
+  name: string;
+  type: "folder" | "file";
+  path: string;
+  document?: DocumentFile;
+  children: TreeNode[];
+  fileCount: number;
+}
+
 export function getDisplayId(
   card: Card,
   project: Project | null | undefined

@@ -9,17 +9,20 @@ export const createDocumentsSlice: StoreSlice<
     | "selectedDocument"
     | "documentContent"
     | "isDocumentEditorOpen"
+    | "expandedDocFolders"
     | "fetchDocuments"
     | "openDocument"
     | "saveDocument"
     | "closeDocumentEditor"
     | "setDocumentContent"
+    | "toggleDocFolder"
   >
 > = (set, get) => ({
   documents: [],
   selectedDocument: null,
   documentContent: "",
   isDocumentEditorOpen: false,
+  expandedDocFolders: ["docs/", "notes/"],
 
   fetchDocuments: async (projectId) => {
     try {
@@ -75,4 +78,14 @@ export const createDocumentsSlice: StoreSlice<
   },
 
   setDocumentContent: (content) => set({ documentContent: content }),
+
+  toggleDocFolder: (path) => {
+    const { expandedDocFolders } = get();
+    const isExpanded = expandedDocFolders.includes(path);
+    set({
+      expandedDocFolders: isExpanded
+        ? expandedDocFolders.filter((p) => p !== path)
+        : [...expandedDocFolders, path],
+    });
+  },
 });

@@ -37,6 +37,7 @@ export const useKanbanStore = create<KanbanStore>()(
         isSidebarCollapsed: state.isSidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
         completedFilter: state.completedFilter,
+        expandedDocFolders: state.expandedDocFolders,
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<KanbanStore>;
@@ -54,12 +55,17 @@ export const useKanbanStore = create<KanbanStore>()(
           persisted.sidebarWidth >= 200 && persisted.sidebarWidth <= 400
           ? persisted.sidebarWidth
           : currentState.sidebarWidth;
+        // Validate expandedDocFolders - ensure it's an array
+        const expandedDocFolders = Array.isArray(persisted.expandedDocFolders)
+          ? persisted.expandedDocFolders
+          : currentState.expandedDocFolders;
         return {
           ...currentState,
           ...persisted,
           collapsedColumns,
           completedFilter,
           sidebarWidth,
+          expandedDocFolders,
         };
       },
     }

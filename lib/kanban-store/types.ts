@@ -32,6 +32,7 @@ export interface KanbanStore {
   selectedDocument: DocumentFile | null;
   documentContent: string;
   isDocumentEditorOpen: boolean;
+  expandedDocFolders: string[];
 
   // Sidebar state
   isSidebarCollapsed: boolean;
@@ -107,6 +108,7 @@ export interface KanbanStore {
   saveDocument: () => Promise<void>;
   closeDocumentEditor: () => void;
   setDocumentContent: (content: string) => void;
+  toggleDocFolder: (path: string) => void;
 
   // Sidebar actions
   toggleSidebar: () => void;
