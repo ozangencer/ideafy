@@ -8,6 +8,7 @@ export const createBackgroundProcessesSlice: StoreSlice<
     | "backgroundProcesses"
     | "fetchBackgroundProcesses"
     | "killBackgroundProcess"
+    | "clearCompletedProcesses"
   >
 > = (set, get) => ({
   backgroundProcesses: [],
@@ -48,6 +49,22 @@ export const createBackgroundProcessesSlice: StoreSlice<
       }
     } catch (error) {
       console.error("Failed to kill background process:", error);
+    }
+  },
+
+  clearCompletedProcesses: async () => {
+    try {
+      const response = await fetch("/api/processes", { method: "POST" });
+      if (response.ok) {
+        // Remove completed processes from local state
+        set((state) => ({
+          backgroundProcesses: state.backgroundProcesses.filter(
+            (p) => p.status === "running"
+          ),
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to clear completed processes:", error);
     }
   },
 });

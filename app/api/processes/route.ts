@@ -1,10 +1,16 @@
 import { NextRequest } from "next/server";
-import { getAllProcesses, killProcess } from "@/lib/process-registry";
+import { getAllProcesses, killProcess, clearCompletedProcesses } from "@/lib/process-registry";
 
 // GET: List all active processes
 export async function GET() {
   const processes = getAllProcesses();
   return Response.json(processes);
+}
+
+// POST: Clear completed processes
+export async function POST() {
+  clearCompletedProcesses();
+  return Response.json({ success: true, message: "Completed processes cleared" });
 }
 
 // DELETE: Kill a specific process by processKey

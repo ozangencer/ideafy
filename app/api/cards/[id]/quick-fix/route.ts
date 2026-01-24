@@ -14,7 +14,7 @@ import {
 } from "@/lib/prompts";
 import {
   registerProcess,
-  unregisterProcess,
+  completeProcess,
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
@@ -151,13 +151,13 @@ export async function POST(
       // Set timeout
       const timeout = setTimeout(() => {
         claudeProcess.kill();
-        unregisterProcess(processKey);
+        completeProcess(processKey);
         reject(new Error("Quick fix timed out after 10 minutes"));
       }, 10 * 60 * 1000);
 
       claudeProcess.on("close", (code) => {
         clearTimeout(timeout);
-        unregisterProcess(processKey);
+        completeProcess(processKey);
 
         if (stderr) {
           console.log(`[Quick Fix] stderr: ${stderr}`);
@@ -187,7 +187,7 @@ export async function POST(
 
       claudeProcess.on("error", (error) => {
         clearTimeout(timeout);
-        unregisterProcess(processKey);
+        completeProcess(processKey);
         reject(error);
       });
     });

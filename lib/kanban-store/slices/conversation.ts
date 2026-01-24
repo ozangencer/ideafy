@@ -51,6 +51,24 @@ export const createConversationSlice: StoreSlice<
   ) => {
     const key = `${cardId}-${sectionType}`;
 
+    // Add user message to conversations immediately (optimistic update)
+    const userMessage: ConversationMessage = {
+      id: `temp-user-${Date.now()}`,
+      cardId,
+      sectionType,
+      role: "user",
+      content,
+      mentions,
+      createdAt: nowIso(),
+    };
+
+    set((state) => ({
+      conversations: {
+        ...state.conversations,
+        [key]: [...(state.conversations[key] || []), userMessage],
+      },
+    }));
+
     const abortController = new AbortController();
     set({ isConversationLoading: true, conversationAbortController: abortController });
 

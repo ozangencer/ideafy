@@ -10,7 +10,7 @@ import {
 } from "@/lib/prompts";
 import {
   registerProcess,
-  unregisterProcess,
+  completeProcess,
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
@@ -142,13 +142,13 @@ export async function POST(
       // Set timeout (5 minutes for evaluate)
       const timeout = setTimeout(() => {
         claudeProcess.kill();
-        unregisterProcess(processKey);
+        completeProcess(processKey);
         reject(new Error("Evaluate timed out after 5 minutes"));
       }, 5 * 60 * 1000);
 
       claudeProcess.on("close", (code) => {
         clearTimeout(timeout);
-        unregisterProcess(processKey);
+        completeProcess(processKey);
 
         if (stderr) {
           console.log(`[Evaluate] stderr: ${stderr}`);
@@ -178,7 +178,7 @@ export async function POST(
 
       claudeProcess.on("error", (error) => {
         clearTimeout(timeout);
-        unregisterProcess(processKey);
+        completeProcess(processKey);
         reject(error);
       });
     });

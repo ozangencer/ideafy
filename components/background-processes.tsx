@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +23,11 @@ const PROCESS_TYPE_CONFIG: Record<ProcessType, { label: string; color: string; b
 function ProcessItem({
   process,
   onKill,
+  onCardClick,
 }: {
   process: BackgroundProcess;
   onKill: () => void;
+  onCardClick: () => void;
 }) {
   const displayName = process.displayId || process.cardId.slice(0, 8);
   const processConfig = PROCESS_TYPE_CONFIG[process.processType];
@@ -36,8 +38,16 @@ function ProcessItem({
     ? sectionConfig.label
     : processConfig.label;
 
+  const handleKillClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card modal from opening
+    onKill();
+  };
+
   return (
-    <div className="flex items-start justify-between py-2 px-1 border-b border-border last:border-b-0 gap-2">
+    <div
+      className="flex items-start justify-between py-2 px-1 border-b border-border last:border-b-0 gap-2 cursor-pointer hover:bg-muted/50 rounded-sm transition-colors"
+      onClick={onCardClick}
+    >
       <div className="flex gap-2 min-w-0 flex-1">
         <span
           className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
@@ -62,7 +72,7 @@ function ProcessItem({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onKill}
+          onClick={handleKillClick}
           className="h-6 px-2 text-xs text-destructive hover:text-destructive shrink-0 mt-0.5"
         >
           Kill
@@ -77,6 +87,10 @@ export function BackgroundProcesses() {
     backgroundProcesses,
     fetchBackgroundProcesses,
     killBackgroundProcess,
+    clearCompletedProcesses,
+    cards,
+    selectCard,
+    openModal,
   } = useKanbanStore();
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
@@ -86,20 +100,49 @@ export function BackgroundProcesses() {
   // Track killed process IDs to show correct toast
   const killedIdsRef = useRef<Set<string>>(new Set());
 
+  // Separate running and completed processes
+  const { runningProcesses, completedProcesses } = useMemo(() => {
+    const running = backgroundProcesses.filter((p) => p.status === "running");
+    // Sort completed by completedAt descending (newest first)
+    const completed = backgroundProcesses
+      .filter((p) => p.status === "completed")
+      .sort((a, b) => {
+        const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+    return { runningProcesses: running, completedProcesses: completed };
+  }, [backgroundProcesses]);
+
   // Handle kill with tracking
   const handleKill = async (processId: string) => {
     killedIdsRef.current.add(processId);
     await killBackgroundProcess(processId);
   };
 
+  // Handle clear completed
+  const handleClearCompleted = async () => {
+    await clearCompletedProcesses();
+  };
+
+  // Handle clicking on a process to open its card
+  const handleCardClick = (cardId: string) => {
+    const card = cards.find((c) => c.id === cardId);
+    if (card) {
+      selectCard(card);
+      openModal();
+      setIsOpen(false); // Close the popover
+    }
+  };
+
   // Detect when processes complete and show toast
   useEffect(() => {
     const currentRunning = new Map(
-      backgroundProcesses.filter((p) => p.status === "running").map((p) => [p.id, p])
+      runningProcesses.map((p) => [p.id, p])
     );
     const previousRunning = runningProcessesRef.current;
 
-    // Find processes that were running but are now gone (completed or killed)
+    // Find processes that were running but are now gone or completed
     previousRunning.forEach((process, id) => {
       if (!currentRunning.has(id)) {
         const displayName = process.displayId || process.cardId.slice(0, 8);
@@ -128,7 +171,7 @@ export function BackgroundProcesses() {
     });
 
     runningProcessesRef.current = currentRunning;
-  }, [backgroundProcesses, toast]);
+  }, [runningProcesses, toast]);
 
   // Always poll - component is always mounted
   useEffect(() => {
@@ -143,9 +186,8 @@ export function BackgroundProcesses() {
     return () => clearInterval(interval);
   }, [fetchBackgroundProcesses]);
 
-  const runningCount = backgroundProcesses.filter(
-    (p) => p.status === "running"
-  ).length;
+  const runningCount = runningProcesses.length;
+  const completedCount = completedProcesses.length;
 
   // Don't render the button if no processes, but keep component mounted for polling
   if (backgroundProcesses.length === 0) {
@@ -184,18 +226,45 @@ export function BackgroundProcesses() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">
-        <div className="p-3 border-b border-border">
-          <h4 className="text-sm font-medium">Background Processes</h4>
-          <p className="text-xs text-muted-foreground">
-            {runningCount} running, {backgroundProcesses.length - runningCount} completed
-          </p>
+        <div className="p-3 border-b border-border flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium">Background Processes</h4>
+            <p className="text-xs text-muted-foreground">
+              {runningCount} running, {completedCount} completed
+            </p>
+          </div>
+          {completedCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearCompleted}
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </Button>
+          )}
         </div>
         <div className="max-h-64 overflow-y-auto p-2">
-          {backgroundProcesses.map((process) => (
+          {/* Running processes first */}
+          {runningProcesses.map((process) => (
             <ProcessItem
               key={process.id}
               process={process}
               onKill={() => handleKill(process.id)}
+              onCardClick={() => handleCardClick(process.cardId)}
+            />
+          ))}
+          {/* Separator if both running and completed exist */}
+          {runningCount > 0 && completedCount > 0 && (
+            <div className="my-2 border-t border-border" />
+          )}
+          {/* Completed processes */}
+          {completedProcesses.map((process) => (
+            <ProcessItem
+              key={process.id}
+              process={process}
+              onKill={() => handleKill(process.id)}
+              onCardClick={() => handleCardClick(process.cardId)}
             />
           ))}
         </div>

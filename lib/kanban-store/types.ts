@@ -164,6 +164,7 @@ export interface KanbanStore {
   // Background processes actions
   fetchBackgroundProcesses: () => Promise<void>;
   killBackgroundProcess: (processKey: string) => Promise<void>;
+  clearCompletedProcesses: () => Promise<void>;
 }
 
 // Custom slice creator type that makes the store parameter optional

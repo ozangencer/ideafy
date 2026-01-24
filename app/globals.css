@@ -380,12 +380,24 @@ button:disabled {
   @apply bg-zinc-500/20 text-zinc-300 border-l-zinc-500;
 }
 
+.light .unified-mention--skill {
+  @apply bg-zinc-200 text-zinc-700 border-l-zinc-500;
+}
+
 .unified-mention--mcp {
   @apply bg-blue-500/20 text-blue-400 border-l-blue-500;
 }
 
+.light .unified-mention--mcp {
+  @apply bg-blue-100 text-blue-700 border-l-blue-500;
+}
+
 .unified-mention--plugin {
   @apply bg-purple-500/20 text-purple-400 border-l-purple-500;
+}
+
+.light .unified-mention--plugin {
+  @apply bg-purple-100 text-purple-700 border-l-purple-500;
 }
 
 .card-mention {

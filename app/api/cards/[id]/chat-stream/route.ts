@@ -10,7 +10,7 @@ import { tmpdir } from "os";
 import type { SectionType, ConversationMessage } from "@/lib/types";
 import {
   registerProcess,
-  unregisterProcess,
+  completeProcess,
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
@@ -379,7 +379,7 @@ export async function POST(
       });
 
       claudeProcess.on("close", async (code) => {
-        unregisterProcess(processKey);
+        completeProcess(processKey);
 
         // Save assistant message to database
         if (fullResponse.trim()) {
@@ -407,7 +407,7 @@ export async function POST(
       });
 
       claudeProcess.on("error", (error) => {
-        unregisterProcess(processKey);
+        completeProcess(processKey);
         sendEvent("error", error.message);
         if (!isClosed) {
           isClosed = true;
@@ -419,7 +419,7 @@ export async function POST(
         isClosed = true;
         if (claudeProcess && !claudeProcess.killed) {
           claudeProcess.kill();
-          unregisterProcess(processKey);
+          completeProcess(processKey);
         }
       });
     },

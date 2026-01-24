@@ -23,7 +23,7 @@ import {
 } from "@/lib/prompts";
 import {
   registerProcess,
-  unregisterProcess,
+  completeProcess,
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
@@ -355,13 +355,13 @@ async function runClaudeCli(
     // Set timeout
     const timeout = setTimeout(() => {
       claudeProcess.kill();
-      unregisterProcess(processKey);
+      completeProcess(processKey);
       reject(new Error("Claude CLI timed out after 10 minutes"));
     }, 10 * 60 * 1000);
 
     claudeProcess.on("close", (code) => {
       clearTimeout(timeout);
-      unregisterProcess(processKey);
+      completeProcess(processKey);
 
       if (stderr) {
         console.log(`[Claude CLI] stderr: ${stderr}`);
@@ -392,7 +392,7 @@ async function runClaudeCli(
 
     claudeProcess.on("error", (error) => {
       clearTimeout(timeout);
-      unregisterProcess(processKey);
+      completeProcess(processKey);
       reject(error);
     });
   });

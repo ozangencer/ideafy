@@ -1,20 +1,23 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { ConversationMessage as Message, SectionType, SECTION_CONFIG } from "@/lib/types";
 import { ConversationMessage } from "./conversation-message";
 import { ConversationInput } from "./conversation-input";
-import { MessageSquare, Trash2 } from "lucide-react";
+import { MessageSquare, Trash2, Terminal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface ConversationPanelProps {
   cardId: string;
   sectionType: SectionType;
   messages: Message[];
   isLoading: boolean;
+  isBackgroundProcessing: boolean;
   streamingMessage: Message | null;
   projectPath: string;
   projectId: string | null;
+  testScenarios?: string;
   onSendMessage: (content: string, mentions: Message["mentions"]) => void;
   onClearHistory: () => void;
   onCancel?: () => void;
@@ -25,9 +28,11 @@ export function ConversationPanel({
   sectionType,
   messages,
   isLoading,
+  isBackgroundProcessing,
   streamingMessage,
   projectPath,
   projectId,
+  testScenarios,
   onSendMessage,
   onClearHistory,
   onCancel,
@@ -36,6 +41,45 @@ export function ConversationPanel({
   const prevMessageCountRef = useRef(messages.length);
   const userScrolledUpRef = useRef(false);
   const config = SECTION_CONFIG[sectionType];
+  const { toast } = useToast();
+  const [isGeneratingTests, setIsGeneratingTests] = useState(false);
+
+  // Check if testScenarios has content (strip HTML tags)
+  const hasTestScenarios = testScenarios && testScenarios.replace(/<[^>]*>/g, "").trim().length > 0;
+
+  // Handle generate tests button click
+  const handleGenerateTests = async () => {
+    setIsGeneratingTests(true);
+    try {
+      const response = await fetch(`/api/cards/${cardId}/generate-tests`, {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          variant: "destructive",
+          title: "Failed to Generate Tests",
+          description: data.error || "Could not open terminal",
+        });
+        return;
+      }
+
+      toast({
+        title: "Terminal Opened",
+        description: data.message || "Claude Code is generating tests",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate tests",
+      });
+    } finally {
+      setIsGeneratingTests(false);
+    }
+  };
 
   // Check if user scrolled up from bottom
   const handleScroll = useCallback(() => {
@@ -57,9 +101,27 @@ export function ConversationPanel({
     }
   }, [messages, streamingMessage]);
 
-  const allMessages = streamingMessage
-    ? [...messages, streamingMessage]
-    : messages;
+  // Build message list with streaming or background processing indicator
+  const allMessages = (() => {
+    if (streamingMessage) {
+      return [...messages, streamingMessage];
+    }
+    // Show a "thinking" placeholder when process runs in background without active stream
+    if (isBackgroundProcessing && !isLoading) {
+      const backgroundPlaceholder: Message = {
+        id: "background-processing",
+        cardId,
+        sectionType,
+        role: "assistant",
+        content: "",
+        mentions: [],
+        createdAt: new Date().toISOString(),
+        isStreaming: true, // This will show "Thinking..." in ConversationMessage
+      };
+      return [...messages, backgroundPlaceholder];
+    }
+    return messages;
+  })();
 
   return (
     <div className="flex flex-col h-full bg-background/50">
@@ -74,17 +136,36 @@ export function ConversationPanel({
             </span>
           )}
         </div>
-        {messages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearHistory}
-            className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="w-3 h-3 mr-1" />
-            Clear
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Generate Tests button - only show on tests tab when scenarios exist */}
+          {sectionType === "tests" && hasTestScenarios && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateTests}
+              disabled={isGeneratingTests}
+              className="h-6 px-2 text-xs border-green-500/50 text-green-500 hover:bg-green-500/10"
+            >
+              {isGeneratingTests ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : (
+                <Terminal className="w-3 h-3 mr-1" />
+              )}
+              Generate Tests
+            </Button>
+          )}
+          {messages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearHistory}
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Messages */}

@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import ImageResize from "tiptap-extension-resize-image";
-import { useCallback, useRef, useMemo, useEffect, useState } from "react";
+import { useCallback, useRef, useMemo, useEffect, useState, useLayoutEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Send, Square } from "lucide-react";
 import { useKanbanStore } from "@/lib/store";
@@ -53,6 +53,16 @@ export function ConversationInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
+
+  // Refs to avoid recreating editorProps on every render
+  const isLoadingRef = useRef(isLoading);
+  const onSendRef = useRef(onSend);
+
+  // Keep refs in sync with props
+  useLayoutEffect(() => {
+    isLoadingRef.current = isLoading;
+    onSendRef.current = onSend;
+  }, [isLoading, onSend]);
 
   // Fetch and maintain documents for the card's project
   useEffect(() => {
@@ -180,33 +190,36 @@ export function ConversationInput({
     return hasImages;
   }, []);
 
+  // Memoize extensions to prevent editor recreation on re-renders
+  const extensions = useMemo(() => [
+    StarterKit.configure({
+      heading: false,
+      codeBlock: false,
+      blockquote: false,
+      horizontalRule: false,
+    }),
+    Placeholder.configure({
+      placeholder,
+      emptyEditorClass: "is-editor-empty",
+    }),
+    ImageResize.configure({
+      inline: false,
+      allowBase64: true,
+    }),
+    UnifiedMention.configure({
+      suggestion: unifiedSuggestion,
+    }),
+    CardMention.configure({
+      suggestion: cardSuggestion,
+    }),
+    DocumentMention.configure({
+      suggestion: documentSuggestion,
+    }),
+  ], [placeholder, unifiedSuggestion, cardSuggestion, documentSuggestion]);
+
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        heading: false,
-        codeBlock: false,
-        blockquote: false,
-        horizontalRule: false,
-      }),
-      Placeholder.configure({
-        placeholder,
-        emptyEditorClass: "is-editor-empty",
-      }),
-      ImageResize.configure({
-        inline: false,
-        allowBase64: true,
-      }),
-      UnifiedMention.configure({
-        suggestion: unifiedSuggestion,
-      }),
-      CardMention.configure({
-        suggestion: cardSuggestion,
-      }),
-      DocumentMention.configure({
-        suggestion: documentSuggestion,
-      }),
-    ],
+    extensions,
     editorProps: {
       attributes: {
         class: "prose-kanban chat-input-editor",
@@ -214,6 +227,7 @@ export function ConversationInput({
       // Handle image paste
       handlePaste: commonEditorProps.handlePaste,
       // Handle Enter key here - this runs AFTER suggestion handlers
+      // Using refs to avoid recreating this function on every render
       handleKeyDown: (view, event) => {
         if (event.key === "Enter" && !event.shiftKey) {
           // Check if suggestion popup is open - if so, let it handle the key
@@ -224,13 +238,14 @@ export function ConversationInput({
           // No suggestion open - send the message
           event.preventDefault();
 
-          if (editor && !isLoading && checkHasContent(editor)) {
+          // Use refs to get current values without causing re-renders
+          if (editor && !isLoadingRef.current && checkHasContent(editor)) {
             const json = editor.getJSON();
             const hasImages = JSON.stringify(json).includes('"type":"imageResize"') ||
                               JSON.stringify(json).includes('"type":"image"');
             const content = hasImages ? editor.getHTML() : view.state.doc.textContent.trim();
             const mentions = extractMentions(json);
-            onSend(content, mentions);
+            onSendRef.current(content, mentions);
             editor.commands.clearContent();
           }
           return true;

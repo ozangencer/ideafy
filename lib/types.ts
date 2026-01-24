@@ -221,6 +221,7 @@ export interface BackgroundProcess {
   pid: number;
   status: "running" | "completed" | "error";
   startedAt: string;
+  completedAt?: string;    // When the process finished
 }
 
 // Completed column filter - Updated in main for conflict test

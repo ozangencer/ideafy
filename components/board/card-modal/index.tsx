@@ -71,6 +71,9 @@ export function CardModal() {
     cancelConversation,
     detachConversation,
     clearConversation,
+    // Background processes
+    backgroundProcesses,
+    fetchBackgroundProcesses,
   } = useKanbanStore();
   const { toast } = useToast();
 
@@ -284,9 +287,33 @@ export function CardModal() {
     }
   }, [activeTab, selectedCard, isDraftMode, fetchConversation]);
 
+  // Poll background processes to detect running chat streams
+  useEffect(() => {
+    if (!selectedCard || isDraftMode) return;
+
+    // Initial fetch
+    fetchBackgroundProcesses();
+
+    // Poll every 2 seconds while modal is open
+    const interval = setInterval(() => {
+      fetchBackgroundProcesses();
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [selectedCard, isDraftMode, fetchBackgroundProcesses]);
+
   // Get current conversation messages
   const conversationKey = selectedCard ? `${selectedCard.id}-${activeTab}` : "";
   const currentMessages = conversations[conversationKey] || [];
+
+  // Check if there's a background process running for this card+section
+  const isBackgroundProcessing = useMemo(() => {
+    if (!selectedCard) return false;
+    const processKey = `${selectedCard.id}-${activeTab}`;
+    return backgroundProcesses.some(
+      (p) => p.id === processKey && p.status === "running"
+    );
+  }, [selectedCard, activeTab, backgroundProcesses]);
 
   // Handle card mention click
   const handleCardClick = useCallback((cardId: string) => {
@@ -809,9 +836,11 @@ export function CardModal() {
                   sectionType={activeTab}
                   messages={currentMessages}
                   isLoading={isConversationLoading}
+                  isBackgroundProcessing={isBackgroundProcessing}
                   streamingMessage={streamingMessage?.cardId === selectedCard.id && streamingMessage?.sectionType === activeTab ? streamingMessage : null}
                   projectPath={project.folderPath}
                   projectId={projectId}
+                  testScenarios={testScenarios}
                   onSendMessage={handleSendMessage}
                   onClearHistory={handleClearConversation}
                   onCancel={cancelConversation}

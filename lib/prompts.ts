@@ -487,3 +487,50 @@ ${data.successMetrics || "_Not provided_"}
 Generated: ${now}
 `;
 }
+
+// ============================================================================
+// Test Generation Prompt (Human Test cards)
+// ============================================================================
+
+export function buildTestGenerationPrompt(
+  card: { id: string; title: string; testScenarios: string },
+  displayId: string | null
+): string {
+  const title = stripHtml(card.title);
+  const scenarios = stripHtml(card.testScenarios);
+  const taskHeader = displayId ? `[${displayId}] ${title}` : title;
+
+  return `# ${taskHeader}
+
+## Instructions
+1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+2. Review the testScenarios field containing manual test cases
+3. Detect the test framework from package.json (Jest, Vitest, or other)
+4. Convert the manual test scenarios into unit test code
+5. Create test files following project conventions
+
+## Test Scenarios to Convert
+${scenarios}
+
+## Output Format
+After generating tests, update the testScenarios field with:
+
+\`\`\`markdown
+## Test Scenarios
+[Keep the original manual scenarios as checkboxes]
+
+## Unit Test Files
+| File | Description |
+|------|-------------|
+| \`path/to/test.test.ts\` | Unit tests for X |
+
+**Running Tests:** \`npm test -- path/to/tests\`
+\`\`\`
+
+Use mcp__kanban__save_tests to update the card with the new format.
+
+Focus on:
+- Testing happy paths and edge cases from scenarios
+- Mocking external dependencies
+- Following existing test patterns in the codebase`;
+}
