@@ -157,7 +157,7 @@ export function CardModal() {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    // Debounced save after 1500ms
+    // Debounced save after 500ms
     saveTimeoutRef.current = setTimeout(() => {
       setSaveStatus("saving");
 
@@ -185,7 +185,7 @@ export function CardModal() {
       savedTimeoutRef.current = setTimeout(() => {
         setSaveStatus("idle");
       }, 2000);
-    }, 1500);
+    }, 500);
 
     return () => {
       if (saveTimeoutRef.current) {

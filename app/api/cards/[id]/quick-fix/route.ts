@@ -118,6 +118,7 @@ export async function POST(
         "-p", prompt,
         "--dangerously-skip-permissions",
         "--output-format", "json",
+        "--setting-sources", "user",
       ], {
         cwd: workingDir,
         stdio: ["pipe", "pipe", "pipe"],

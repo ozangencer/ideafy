@@ -292,7 +292,8 @@ Must include at the end:
 [COMPLEXITY: trivial/low/medium/high/very_high]
 [PRIORITY: low/medium/high]
 
-Do NOT implement yet - plan only.`;
+IMPORTANT: Do NOT implement yet - plan only.
+IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output the complete plan directly as your response text. Your output will be automatically saved to the card.`;
 
     case "implementation":
       return `Kanban: ${card.id}
@@ -311,7 +312,8 @@ After coding, write test scenarios:
 ### Regression
 - [ ] Existing feature still works
 
-Write code, then output only test scenarios.`;
+Write code, then output only test scenarios.
+IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output the test scenarios directly as your response text. Your output will be automatically saved to the card.`;
 
     case "retest":
       return `Kanban: ${card.id}
@@ -320,7 +322,8 @@ Read card via MCP (mcp__kanban__get_card). Review previous implementation and te
 
 Task: "${title}" failed during testing.
 
-User will describe the error - wait and fix.`;
+User will describe the error - wait and fix.
+IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output your response directly as text. Your output will be automatically saved to the card.`;
   }
 }
 

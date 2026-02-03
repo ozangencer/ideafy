@@ -316,6 +316,9 @@ async function runClaudeCli(
     "-p", prompt,
     ...(permissionValue ? [permissionFlag, permissionValue] : [permissionFlag]),
     "--output-format", "json",
+    // Skip project-level hooks (e.g. UserPromptSubmit that injects save_plan instructions)
+    // Autonomous flow handles saving automatically, so project hooks interfere
+    "--setting-sources", "user",
   ];
 
   console.log(`[Claude CLI] Running in ${cwd}:`);
