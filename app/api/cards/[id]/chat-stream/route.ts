@@ -299,7 +299,7 @@ export async function POST(
         "--print",
         "--output-format", "stream-json",
         "--verbose",
-        "--allowedTools", "Read",
+        "--allowedTools", "Read", "Edit", "Write",
         "--add-dir", IMAGES_TEMP_DIR
       ];
 
