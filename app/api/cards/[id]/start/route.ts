@@ -252,6 +252,9 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
 
+    // Mark process as completed AFTER DB updates, so UI stays in sync
+    completeProcess(processKey);
+
     return NextResponse.json({
       success: true,
       cardId: id,
@@ -274,6 +277,8 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
+    // Mark process as completed on error too
+    completeProcess(processKey);
     return NextResponse.json(
       {
         error: "Failed to run Claude CLI",
@@ -305,16 +310,11 @@ async function runClaudeCli(
     killProcess(processKey);
   }
 
-  // Planning phase uses dontAsk for safety (read-only exploration)
-  // Implementation and retest need full permissions to write code
-  const permissionFlag = phase === "planning"
-    ? "--permission-mode"
-    : "--dangerously-skip-permissions";
-  const permissionValue = phase === "planning" ? "dontAsk" : null;
-
+  // All autonomous phases need full permissions since there's no user to approve
+  // Planning prompt already constrains Claude to "plan only, don't implement"
   const args = [
     "-p", prompt,
-    ...(permissionValue ? [permissionFlag, permissionValue] : [permissionFlag]),
+    "--dangerously-skip-permissions",
     "--output-format", "json",
     // Skip project-level hooks (e.g. UserPromptSubmit that injects save_plan instructions)
     // Autonomous flow handles saving automatically, so project hooks interfere
@@ -358,13 +358,15 @@ async function runClaudeCli(
     // Set timeout
     const timeout = setTimeout(() => {
       claudeProcess.kill();
-      completeProcess(processKey);
+      // Don't call completeProcess here - let the route handler do it
+      // after all DB updates are done, so the UI stays in sync
       reject(new Error("Claude CLI timed out after 10 minutes"));
     }, 10 * 60 * 1000);
 
     claudeProcess.on("close", (code) => {
       clearTimeout(timeout);
-      completeProcess(processKey);
+      // Don't call completeProcess here - the route handler will call it
+      // after DB updates, so the background icon stays "running" until truly done
 
       if (stderr) {
         console.log(`[Claude CLI] stderr: ${stderr}`);
@@ -395,7 +397,7 @@ async function runClaudeCli(
 
     claudeProcess.on("error", (error) => {
       clearTimeout(timeout);
-      completeProcess(processKey);
+      // Don't call completeProcess here - let the route handler do it
       reject(error);
     });
   });

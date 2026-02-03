@@ -26,11 +26,23 @@ interface CompletedEntry {
   completedAt: string;
 }
 
-// Global registry for active processes
-const processRegistry = new Map<string, ProcessEntry>();
+// Use globalThis to ensure the same Map instance is shared across all
+// Next.js API route bundles. Module-level variables can be duplicated
+// when Next.js compiles routes into separate bundles.
+const g = globalThis as unknown as {
+  __kanban_processRegistry?: Map<string, ProcessEntry>;
+  __kanban_completedProcessRegistry?: Map<string, CompletedEntry>;
+};
 
-// Registry for completed processes (keeps last 5)
-const completedProcessRegistry = new Map<string, CompletedEntry>();
+if (!g.__kanban_processRegistry) {
+  g.__kanban_processRegistry = new Map<string, ProcessEntry>();
+}
+if (!g.__kanban_completedProcessRegistry) {
+  g.__kanban_completedProcessRegistry = new Map<string, CompletedEntry>();
+}
+
+const processRegistry = g.__kanban_processRegistry;
+const completedProcessRegistry = g.__kanban_completedProcessRegistry;
 const MAX_COMPLETED = 5;
 
 export function registerProcess(

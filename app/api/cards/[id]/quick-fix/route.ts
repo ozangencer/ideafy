@@ -152,13 +152,11 @@ export async function POST(
       // Set timeout
       const timeout = setTimeout(() => {
         claudeProcess.kill();
-        completeProcess(processKey);
         reject(new Error("Quick fix timed out after 10 minutes"));
       }, 10 * 60 * 1000);
 
       claudeProcess.on("close", (code) => {
         clearTimeout(timeout);
-        completeProcess(processKey);
 
         if (stderr) {
           console.log(`[Quick Fix] stderr: ${stderr}`);
@@ -188,7 +186,6 @@ export async function POST(
 
       claudeProcess.on("error", (error) => {
         clearTimeout(timeout);
-        completeProcess(processKey);
         reject(error);
       });
     });
@@ -253,6 +250,9 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
 
+    // Mark process as completed AFTER DB updates
+    completeProcess(processKey);
+
     return NextResponse.json({
       success: true,
       cardId: id,
@@ -269,6 +269,7 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
+    completeProcess(processKey);
     return NextResponse.json(
       {
         error: "Failed to run quick fix",

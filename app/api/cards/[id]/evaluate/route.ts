@@ -107,7 +107,7 @@ export async function POST(
     }>((resolve, reject) => {
       const claudeProcess = spawn(getClaudePath(), [
         "-p", prompt,
-        "--permission-mode", "dontAsk",
+        "--dangerously-skip-permissions",
         "--output-format", "json",
         "--setting-sources", "user",
       ], {
@@ -143,13 +143,11 @@ export async function POST(
       // Set timeout (5 minutes for evaluate)
       const timeout = setTimeout(() => {
         claudeProcess.kill();
-        completeProcess(processKey);
         reject(new Error("Evaluate timed out after 5 minutes"));
       }, 5 * 60 * 1000);
 
       claudeProcess.on("close", (code) => {
         clearTimeout(timeout);
-        completeProcess(processKey);
 
         if (stderr) {
           console.log(`[Evaluate] stderr: ${stderr}`);
@@ -179,7 +177,6 @@ export async function POST(
 
       claudeProcess.on("error", (error) => {
         clearTimeout(timeout);
-        completeProcess(processKey);
         reject(error);
       });
     });
@@ -248,6 +245,9 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
 
+    // Mark process as completed AFTER DB updates
+    completeProcess(processKey);
+
     return NextResponse.json({
       success: true,
       cardId: id,
@@ -265,6 +265,7 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
+    completeProcess(processKey);
     return NextResponse.json(
       {
         error: "Failed to evaluate idea",

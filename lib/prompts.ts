@@ -302,18 +302,27 @@ Read card via MCP (mcp__kanban__get_card). Follow the approved plan in solutionS
 
 Task: Implement "${title}".
 
-After coding, write test scenarios:
+After implementing the code, your FINAL response must be ONLY manual test scenarios in this EXACT format:
+
+## Test Scenarios
+
 ### Happy Path
-- [ ] Test case
+- [ ] Description of what to test manually and expected result
+- [ ] Another test case
 
 ### Edge Cases
-- [ ] Test case
+- [ ] Edge case to verify
 
 ### Regression
-- [ ] Existing feature still works
+- [ ] Existing feature that should still work
 
-Write code, then output only test scenarios.
-IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output the test scenarios directly as your response text. Your output will be automatically saved to the card.`;
+Rules:
+- Every line must be a markdown checkbox (- [ ])
+- Write actionable manual test steps, NOT a summary of code changes
+- Do NOT include code summaries, file lists, or implementation details in your output
+- Your response text will be automatically saved as test scenarios
+
+IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results.`;
 
     case "retest":
       return `Kanban: ${card.id}
