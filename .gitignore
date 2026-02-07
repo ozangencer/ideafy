@@ -40,6 +40,13 @@ backups/
 # Git worktrees
 .worktrees/
 
+# User-specific settings
+.claude/settings.local.json
+mcp-server/mcp-config.json
+
+# Electron
+electron/node_modules/
+
 # Misc
 *.log
 sqlite.db

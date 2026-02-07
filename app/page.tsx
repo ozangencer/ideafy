@@ -8,6 +8,7 @@ import { DocumentEditor } from "@/components/editor/document-editor";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
+import { QuickEntryOverlay } from "@/components/quick-entry/quick-entry-overlay";
 import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,24 @@ export default function Home() {
   } = useKanbanStore();
 
   useKeyboardShortcuts();
+
+  // Electron IPC: listen for global Cmd+K trigger
+  const { openQuickEntry } = useKanbanStore();
+  useEffect(() => {
+    const handler = () => openQuickEntry();
+    window.addEventListener("trigger-quick-entry", handler);
+    return () => window.removeEventListener("trigger-quick-entry", handler);
+  }, [openQuickEntry]);
+
+  // Electron IPC: refresh data when quick entry creates a card
+  useEffect(() => {
+    const handler = () => {
+      fetchCards();
+      if (activeProjectId) fetchDocuments(activeProjectId);
+    };
+    window.addEventListener("refresh-data", handler);
+    return () => window.removeEventListener("refresh-data", handler);
+  }, [fetchCards, fetchDocuments, activeProjectId]);
 
   // Initial fetch
   useEffect(() => {
@@ -113,13 +132,16 @@ export default function Home() {
               {/* Background Processes */}
               <BackgroundProcesses />
 
-              {/* Keyboard hint */}
+              {/* Keyboard hints */}
               <span className="text-xs text-muted-foreground hidden lg:block">
-                Press{" "}
                 <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">
+                  {"\u2318"}K
+                </kbd>{" "}
+                quick entry{" "}
+                <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs ml-1">
                   N
                 </kbd>{" "}
-                for new
+                new card
               </span>
 
               {/* Theme Toggle */}
@@ -144,6 +166,7 @@ export default function Home() {
       {/* Modals */}
       {isModalOpen && <CardModal />}
       {isDocumentEditorOpen && <DocumentEditor />}
+      <QuickEntryOverlay />
     </div>
   );
 }

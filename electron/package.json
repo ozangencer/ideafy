@@ -1,0 +1,10 @@
+{
+  "name": "ideafy",
+  "version": "0.1.0",
+  "main": "main.js",
+  "description": "ideafy - Kanban for Claude Code",
+  "author": "Ozan Gencer",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
