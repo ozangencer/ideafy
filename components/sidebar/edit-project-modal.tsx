@@ -61,6 +61,9 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   const [documentPathsText, setDocumentPathsText] = useState(
     project.documentPaths?.join("\n") || ""
   );
+  const [narrativePath, setNarrativePath] = useState(
+    project.narrativePath || ""
+  );
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
@@ -176,6 +179,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
         idPrefix: idPrefix.trim() || project.idPrefix,
         color,
         documentPaths: documentPaths.length > 0 ? documentPaths : null,
+        narrativePath: narrativePath.trim() || null,
         useWorktrees,
       });
       onClose();
@@ -334,6 +338,27 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
             <p className="text-xs text-muted-foreground">
               One path per line. Leave empty for smart discovery (CLAUDE.md, README.md,
               docs/, notes/, specs/, plans/, .github/, etc.)
+            </p>
+          </div>
+
+          {/* Narrative Path */}
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <label htmlFor="edit-narrativePath" className="text-sm font-medium">
+                Product Narrative Path
+              </label>
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            </div>
+            <Input
+              id="edit-narrativePath"
+              value={narrativePath}
+              onChange={(e) => setNarrativePath(e.target.value)}
+              placeholder="docs/product-narrative.md"
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Relative path to the product narrative file. Leave empty to use default (docs/product-narrative.md).
             </p>
           </div>
 

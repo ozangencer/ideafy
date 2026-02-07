@@ -4,6 +4,9 @@
   "main": "main.js",
   "description": "ideafy - Kanban for Claude Code",
   "author": "Ozan Gencer",
+  "scripts": {
+    "postinstall": "/usr/libexec/PlistBuddy -c 'Set :CFBundleName ideafy' node_modules/electron/dist/Electron.app/Contents/Info.plist && /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName ideafy' node_modules/electron/dist/Electron.app/Contents/Info.plist 2>/dev/null; true"
+  },
   "devDependencies": {
     "electron": "^33.0.0"
   }

@@ -4,6 +4,7 @@ import { db, schema } from "@/lib/db";
 import fs from "fs";
 import path from "path";
 import { DocumentFile } from "@/lib/types";
+import { safeResolvePath } from "@/lib/path-utils";
 
 // Smart discovery configuration
 const IMPORTANT_ROOT_FILES = [
@@ -94,7 +95,9 @@ function findMarkdownFilesWithCustomPaths(
   const seen = new Set<string>();
 
   for (const pattern of customPaths) {
-    const fullPath = path.join(baseDir, pattern);
+    // Validate path doesn't escape base directory
+    const fullPath = safeResolvePath(baseDir, pattern);
+    if (!fullPath) continue; // Skip paths that escape the base directory
 
     // Check if it's a directory
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {

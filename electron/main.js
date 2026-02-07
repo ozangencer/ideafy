@@ -183,13 +183,12 @@ function createQuickEntryWindow() {
     y: Math.round(screenH * 0.25),
     frame: false,
     transparent: true,
+    backgroundColor: "#00000000",
     resizable: false,
     movable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    hasShadow: true,
-    vibrancy: "under-window",
-    visualEffectState: "active",
+    hasShadow: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload-quick-entry.js"),
@@ -288,7 +287,7 @@ function createTray() {
     },
     {
       label: "Quick Entry",
-      accelerator: "CommandOrControl+K",
+      accelerator: "CommandOrControl+Shift+K",
       click: () => showQuickEntry(),
     },
     { type: "separator" },
@@ -312,22 +311,76 @@ function createTray() {
 // ── Global Shortcut ───────────────────────────────────────────────────
 
 function registerGlobalShortcut() {
-  const registered = globalShortcut.register("CommandOrControl+K", () => {
-    if (quickEntryWindow && quickEntryWindow.isVisible()) {
-      hideQuickEntry();
+  // Cmd+K → Toggle kanban main window
+  const regMain = globalShortcut.register("CommandOrControl+K", () => {
+    if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused()) {
+      mainWindow.hide();
     } else {
-      showQuickEntry();
+      showAndFocusMainWindow();
     }
   });
 
-  if (!registered) {
+  if (!regMain) {
     console.warn("Warning: Could not register global shortcut Cmd+K");
+  }
+
+  // Cmd+Shift+K → Toggle quick entry
+  const regQuick = globalShortcut.register(
+    "CommandOrControl+Shift+K",
+    () => {
+      if (quickEntryWindow && quickEntryWindow.isVisible()) {
+        hideQuickEntry();
+      } else {
+        showQuickEntry();
+      }
+    }
+  );
+
+  if (!regQuick) {
+    console.warn("Warning: Could not register global shortcut Cmd+Shift+K");
   }
 }
 
 // ── App Lifecycle ─────────────────────────────────────────────────────
 
 app.on("ready", async () => {
+  // Set dock icon to ideafy logo
+  if (process.platform === "darwin") {
+    const dockIcon = nativeImage.createFromPath(
+      path.join(PROJECT_ROOT, "public", "icon-512.png")
+    );
+    app.dock.setIcon(dockIcon);
+  }
+
+  // Set app name and menu bar
+  if (process.platform === "darwin") {
+    app.setName("ideafy");
+    const appMenu = Menu.buildFromTemplate([
+      {
+        label: "ideafy",
+        submenu: [
+          { role: "about", label: "About ideafy" },
+          { type: "separator" },
+          { role: "hide", label: "Hide ideafy" },
+          { role: "hideOthers" },
+          { role: "unhide" },
+          { type: "separator" },
+          {
+            label: "Quit ideafy",
+            accelerator: "CmdOrCtrl+Q",
+            click: () => {
+              app.isQuitting = true;
+              app.quit();
+            },
+          },
+        ],
+      },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+    ]);
+    Menu.setApplicationMenu(appMenu);
+  }
+
   ensureDataDir();
   runDbPush();
   await startNextServer();

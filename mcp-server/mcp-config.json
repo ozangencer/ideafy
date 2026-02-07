@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "kanban": {
-      "command": "npx",
-      "args": ["tsx", "/Users/ozangencer/vibecode/claude-kanban/mcp-server/index.ts"]
-    }
-  }
-}

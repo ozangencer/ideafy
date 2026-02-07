@@ -5,6 +5,7 @@ import { Brain, Wrench, User, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
+import DOMPurify from "isomorphic-dompurify";
 
 // Tool ismini gruba çevir
 function getToolGroup(name: string): string {
@@ -48,12 +49,16 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
       );
     }
 
-    // For user messages with images, render HTML directly
+    // For user messages with images, render sanitized HTML
     if (isUser && hasHtmlImages) {
+      const sanitized = DOMPurify.sanitize(message.content, {
+        ALLOWED_TAGS: ["img", "p", "br", "strong", "em", "a", "span", "div"],
+        ALLOWED_ATTR: ["src", "alt", "class", "href", "style", "width", "height"],
+      });
       return (
         <div
           className="message-html-content"
-          dangerouslySetInnerHTML={{ __html: message.content }}
+          dangerouslySetInnerHTML={{ __html: sanitized }}
         />
       );
     }

@@ -3,15 +3,82 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import * as fs from "fs";
 import * as path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import {
   buildNarrativePrompt,
   generateFallbackContent,
   type NarrativeData,
 } from "@/lib/prompts";
+import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
+import { safeResolvePath } from "@/lib/path-utils";
 
-const execAsync = promisify(exec);
+/**
+ * Run Claude CLI using spawn (shell-free) and collect output
+ */
+function runClaudeCLI(prompt: string, cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const claudePath = getClaudePath();
+    const claudeProcess = spawn(
+      claudePath,
+      ["-p", prompt, "--permission-mode", "dontAsk", "--output-format", "json"],
+      {
+        cwd,
+        env: getClaudeCIEnv(),
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    let stdout = "";
+    let stderr = "";
+
+    claudeProcess.stdout.on("data", (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    claudeProcess.stderr.on("data", (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    claudeProcess.stdin.end();
+
+    const timeout = setTimeout(() => {
+      claudeProcess.kill("SIGTERM");
+      reject(new Error("Claude CLI timed out after 10 minutes"));
+    }, 600000);
+
+    claudeProcess.on("close", (code: number | null) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+      }
+    });
+
+    claudeProcess.on("error", (err: Error) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Parse Claude CLI JSON output to extract narrative content
+ */
+function parseClaudeOutput(stdout: string): string {
+  try {
+    const response = JSON.parse(stdout);
+    if (response.result) {
+      return response.result;
+    } else if (Array.isArray(response)) {
+      const textBlocks = response.filter((b: { type: string }) => b.type === "text");
+      return textBlocks.map((b: { text: string }) => b.text).join("\n");
+    }
+    return stdout;
+  } catch {
+    return stdout;
+  }
+}
 
 // GET - Read narrative from project folder
 export async function GET(
@@ -30,7 +97,12 @@ export async function GET(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const narrativePath = path.join(project.folderPath, "docs", "product-narrative.md");
+  const relativePath = project.narrativePath || "docs/product-narrative.md";
+  const narrativePath = safeResolvePath(project.folderPath, relativePath);
+
+  if (!narrativePath) {
+    return NextResponse.json({ error: "Invalid narrative path" }, { status: 400 });
+  }
 
   try {
     if (fs.existsSync(narrativePath)) {
@@ -74,48 +146,30 @@ export async function POST(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const docsDir = path.join(project.folderPath, "docs");
-  const narrativePath = path.join(docsDir, "product-narrative.md");
+  const relativePath = project.narrativePath || "docs/product-narrative.md";
+  const narrativePath = safeResolvePath(project.folderPath, relativePath);
+
+  if (!narrativePath) {
+    return NextResponse.json({ error: "Invalid narrative path" }, { status: 400 });
+  }
+
+  const narrativeDir = path.dirname(narrativePath);
 
   try {
-    // Create docs directory if it doesn't exist
-    if (!fs.existsSync(docsDir)) {
-      fs.mkdirSync(docsDir, { recursive: true });
+    // Create parent directory if it doesn't exist
+    if (!fs.existsSync(narrativeDir)) {
+      fs.mkdirSync(narrativeDir, { recursive: true });
     }
 
     // Build prompt for Claude
     const prompt = buildNarrativePrompt(project.name, body);
-    const escapedPrompt = prompt.replace(/'/g, "'\\''");
-
-    // Run Claude CLI in autonomous mode
-    const command = `CI=true claude -p '${escapedPrompt}' --permission-mode dontAsk --output-format json < /dev/null`;
 
     console.log("Running Claude for narrative generation...");
 
-    const { stdout } = await execAsync(command, {
-      cwd: project.folderPath,
-      timeout: 600000, // 10 minutes timeout
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-    });
+    const stdout = await runClaudeCLI(prompt, project.folderPath);
 
     // Parse Claude's JSON response
-    let narrativeContent: string;
-    try {
-      const response = JSON.parse(stdout);
-      // Extract text from response
-      if (response.result) {
-        narrativeContent = response.result;
-      } else if (Array.isArray(response)) {
-        // Handle array response format
-        const textBlocks = response.filter((b: { type: string }) => b.type === "text");
-        narrativeContent = textBlocks.map((b: { text: string }) => b.text).join("\n");
-      } else {
-        narrativeContent = stdout;
-      }
-    } catch {
-      // If JSON parsing fails, use raw output
-      narrativeContent = stdout;
-    }
+    let narrativeContent = parseClaudeOutput(stdout);
 
     // Clean up the content (remove JSON artifacts if any)
     narrativeContent = narrativeContent
@@ -173,45 +227,30 @@ export async function PUT(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const docsDir = path.join(project.folderPath, "docs");
-  const narrativePath = path.join(docsDir, "product-narrative.md");
+  const relativePath = project.narrativePath || "docs/product-narrative.md";
+  const narrativePath = safeResolvePath(project.folderPath, relativePath);
+
+  if (!narrativePath) {
+    return NextResponse.json({ error: "Invalid narrative path" }, { status: 400 });
+  }
+
+  const narrativeDir = path.dirname(narrativePath);
 
   try {
-    // Create docs directory if it doesn't exist
-    if (!fs.existsSync(docsDir)) {
-      fs.mkdirSync(docsDir, { recursive: true });
+    // Create parent directory if it doesn't exist
+    if (!fs.existsSync(narrativeDir)) {
+      fs.mkdirSync(narrativeDir, { recursive: true });
     }
 
     // Build prompt for Claude
     const prompt = buildNarrativePrompt(project.name, body);
-    const escapedPrompt = prompt.replace(/'/g, "'\\''");
-
-    // Run Claude CLI in autonomous mode
-    const command = `CI=true claude -p '${escapedPrompt}' --permission-mode dontAsk --output-format json < /dev/null`;
 
     console.log("Running Claude for narrative update...");
 
-    const { stdout } = await execAsync(command, {
-      cwd: project.folderPath,
-      timeout: 600000, // 10 minutes timeout
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-    });
+    const stdout = await runClaudeCLI(prompt, project.folderPath);
 
     // Parse Claude's JSON response
-    let narrativeContent: string;
-    try {
-      const response = JSON.parse(stdout);
-      if (response.result) {
-        narrativeContent = response.result;
-      } else if (Array.isArray(response)) {
-        const textBlocks = response.filter((b: { type: string }) => b.type === "text");
-        narrativeContent = textBlocks.map((b: { text: string }) => b.text).join("\n");
-      } else {
-        narrativeContent = stdout;
-      }
-    } catch {
-      narrativeContent = stdout;
-    }
+    let narrativeContent = parseClaudeOutput(stdout);
 
     // Clean up the content
     narrativeContent = narrativeContent

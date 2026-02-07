@@ -82,6 +82,12 @@ export default function QuickEntryPage() {
     requestAnimationFrame(() => titleRef.current?.focus());
   }, []);
 
+  // Force transparent background for Electron quick entry window
+  useEffect(() => {
+    document.documentElement.style.background = "transparent";
+    document.body.style.background = "transparent";
+  }, []);
+
   // Auto-resize Electron window to match content
   useEffect(() => {
     const el = containerRef.current;
@@ -91,7 +97,7 @@ export default function QuickEntryPage() {
 
     const ro = new ResizeObserver(() => {
       const h = el.offsetHeight;
-      if (h > 0) api.resizeWindow(h + 2); // +2 for border
+      if (h > 0) api.resizeWindow(h);
     });
     ro.observe(el);
     return () => ro.disconnect();

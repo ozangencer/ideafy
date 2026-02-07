@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
-// Get the MCP server path relative to this file
-const MCP_SERVER_PATH = path.resolve(__dirname, "../mcp-server/index.ts");
+// Get the MCP server path relative to project root (works in both dev and build)
+const MCP_SERVER_PATH = path.resolve(process.cwd(), "mcp-server/index.ts");
 
 // Human-test skill content to embed
 const HUMAN_TEST_SKILL = `---

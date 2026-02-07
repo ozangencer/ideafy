@@ -107,6 +107,7 @@ export function CardModal() {
   const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [showCommitFirstDialog, setShowCommitFirstDialog] = useState(false);
+  const [showDiscardDraftDialog, setShowDiscardDraftDialog] = useState(false);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictInfo, setConflictInfo] = useState<{
     conflictFiles: string[];
@@ -131,6 +132,15 @@ export function CardModal() {
     complexity !== (selectedCard.complexity || "medium") ||
     priority !== (selectedCard.priority || "medium") ||
     projectId !== selectedCard.projectId
+  );
+
+  // Check if draft has any user-entered content
+  const hasDraftChanges = isDraftMode && (
+    title.trim() !== "" ||
+    description.trim() !== "" ||
+    solutionSummary.trim() !== "" ||
+    testScenarios.trim() !== "" ||
+    aiOpinion.trim() !== ""
   );
 
   // Get project and displayId
@@ -345,6 +355,10 @@ export function CardModal() {
 
   // Handle close
   const handleClose = useCallback(() => {
+    if (isDraftMode && hasDraftChanges) {
+      setShowDiscardDraftDialog(true);
+      return;
+    }
     setCardHistory([]);
     setIsVisible(false);
     // Detach from conversation stream - process continues in background
@@ -354,7 +368,16 @@ export function CardModal() {
     } else {
       setTimeout(() => closeModal(), 200);
     }
-  }, [isDraftMode, discardDraft, closeModal, detachConversation]);
+  }, [isDraftMode, hasDraftChanges, discardDraft, closeModal, detachConversation]);
+
+  // Force close (used by discard confirmation dialog)
+  const handleForceClose = useCallback(() => {
+    setShowDiscardDraftDialog(false);
+    setCardHistory([]);
+    setIsVisible(false);
+    detachConversation();
+    setTimeout(() => discardDraft(), 200);
+  }, [discardDraft, detachConversation]);
 
   // Handle export
   const handleExport = useCallback(() => {
@@ -936,6 +959,26 @@ export function CardModal() {
               )}
               Commit & Merge
             </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showDiscardDraftDialog} onOpenChange={setShowDiscardDraftDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to close without saving? Your changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continue Editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleForceClose}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Discard Changes
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

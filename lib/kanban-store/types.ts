@@ -44,6 +44,9 @@ export interface KanbanStore {
   // Completed column filter
   completedFilter: CompletedFilter;
 
+  // Quick entry state
+  isQuickEntryOpen: boolean;
+
   // Skills, MCPs & Plugins state
   skills: string[];
   mcps: string[];
@@ -119,6 +122,11 @@ export interface KanbanStore {
 
   // Completed filter actions
   setCompletedFilter: (filter: CompletedFilter) => void;
+
+  // Quick entry actions
+  openQuickEntry: () => void;
+  closeQuickEntry: () => void;
+  toggleQuickEntry: () => void;
 
   // Skills, MCPs & Plugins actions
   fetchSkills: () => Promise<void>;
