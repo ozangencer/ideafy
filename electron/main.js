@@ -347,7 +347,7 @@ app.on("ready", async () => {
   // Set dock icon to ideafy logo
   if (process.platform === "darwin") {
     const dockIcon = nativeImage.createFromPath(
-      path.join(PROJECT_ROOT, "public", "icon-512.png")
+      path.join(PROJECT_ROOT, "public", "icon-512-dock.png")
     );
     app.dock.setIcon(dockIcon);
   }
