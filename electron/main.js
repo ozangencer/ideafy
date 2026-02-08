@@ -145,6 +145,9 @@ function createMainWindow() {
       [class*="fixed"], [class*="z-["] {
         -webkit-app-region: no-drag;
       }
+      .fixed.inset-0 {
+        top: 40px !important;
+      }
     `);
   });
 
