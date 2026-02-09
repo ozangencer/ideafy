@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { PlatformIcon } from "@/components/icons/platform-icons";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -246,7 +247,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 <SelectContent className="z-[70]">
                   {AI_PLATFORM_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      <span>{option.label}</span>
+                      <span className="flex items-center gap-2">
+                        <PlatformIcon platform={option.value} size={14} />
+                        {option.label}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

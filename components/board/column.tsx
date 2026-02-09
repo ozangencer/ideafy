@@ -35,7 +35,7 @@ export function Column({ id, title, cards }: ColumnProps) {
       <div
         ref={setNodeRef}
         onClick={() => toggleColumnCollapse(id)}
-        className={`flex flex-col items-center w-10 min-w-10 bg-surface rounded-lg cursor-pointer hover:bg-muted transition-all duration-200 ${
+        className={`flex flex-col items-center w-10 min-w-10 bg-surface rounded-lg cursor-pointer hover:bg-muted transition-all duration-200 snap-start ${
           isOver ? "ring-2 ring-primary ring-opacity-50" : ""
         }`}
       >
@@ -65,7 +65,7 @@ export function Column({ id, title, cards }: ColumnProps) {
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col w-72 min-w-72 bg-surface rounded-lg transition-all duration-200 ${
+      className={`flex flex-col w-72 min-w-72 bg-surface rounded-lg transition-all duration-200 snap-start ${
         isOver ? "ring-2 ring-primary ring-opacity-50 scale-[1.02]" : ""
       }`}
     >

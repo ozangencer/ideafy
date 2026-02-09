@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { COLUMNS, Complexity, Priority, Status, AiPlatform } from "@/lib/types";
 import { X, Brain } from "lucide-react";
+import { PlatformIcon } from "@/components/icons/platform-icons";
 
 interface Project {
   id: string;
@@ -737,10 +738,7 @@ export default function QuickEntryPage() {
                     {idx === acIndex && (
                       <span className="text-foreground/60 text-xs">{">"}</span>
                     )}
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: option.color }}
-                    />
+                    <PlatformIcon platform={option.key} size={14} className="shrink-0" />
                     <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
                       {option.label}
                     </span>

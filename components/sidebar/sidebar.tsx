@@ -74,6 +74,23 @@ export function Sidebar() {
     }
   }, [isDragging]);
 
+  // Auto-collapse sidebar on small screens (< 1024px)
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 1024px)');
+
+    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      if (e.matches && !useKanbanStore.getState().isSidebarCollapsed) {
+        toggleSidebar();
+      }
+    };
+
+    // Check on mount
+    handleChange(mql);
+
+    mql.addEventListener('change', handleChange);
+    return () => mql.removeEventListener('change', handleChange);
+  }, [toggleSidebar]);
+
   // Fetch project-specific extensions when project changes
   useEffect(() => {
     fetchProjectExtensions(activeProjectId);
