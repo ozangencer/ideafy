@@ -14,7 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2 } from "lucide-react";
-import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS } from "@/lib/types";
+import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS } from "@/lib/types";
 import { Project } from "@/lib/types";
 
 interface CardModalHeaderProps {
@@ -31,6 +31,8 @@ interface CardModalHeaderProps {
   onComplexityChange: (complexity: Complexity) => void;
   priority: Priority;
   onPriorityChange: (priority: Priority) => void;
+  aiPlatform: AiPlatform | null;
+  onAiPlatformChange: (platform: AiPlatform | null) => void;
   hasHistory: boolean;
   onBack: () => void;
   onExport: () => void;
@@ -54,6 +56,8 @@ export function CardModalHeader({
   onComplexityChange,
   priority,
   onPriorityChange,
+  aiPlatform,
+  onAiPlatformChange,
   hasHistory,
   onBack,
   onExport,
@@ -146,7 +150,7 @@ export function CardModalHeader({
       </div>
 
       {/* Metadata row */}
-      <div className="px-6 pb-4 grid grid-cols-4 gap-3">
+      <div className="px-6 pb-4 grid grid-cols-5 gap-3">
         {/* Status */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Status</label>
@@ -258,6 +262,37 @@ export function CardModalHeader({
                 <SelectItem key={opt.value} value={opt.value}>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
+                    <span>{opt.label}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* AI Platform */}
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1.5">AI Platform</label>
+          <Select
+            value={aiPlatform || "global"}
+            onValueChange={(v) => onAiPlatformChange(v === "global" ? null : v as AiPlatform)}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue>
+                <span className={aiPlatform ? "text-foreground" : "text-muted-foreground"}>
+                  {aiPlatform
+                    ? AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform)?.label || aiPlatform
+                    : "Global Default"}
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="global">
+                <span className="text-muted-foreground">Global Default</span>
+              </SelectItem>
+              {AI_PLATFORM_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <div className="flex flex-col">
                     <span>{opt.label}</span>
                   </div>
                 </SelectItem>

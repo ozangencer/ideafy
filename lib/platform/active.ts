@@ -24,3 +24,14 @@ export function getActiveProvider(): PlatformProvider {
     return getPlatformProvider("claude");
   }
 }
+
+/**
+ * Get the provider for a specific card. Uses card-level override if set,
+ * otherwise falls back to the global setting.
+ */
+export function getProviderForCard(card: { aiPlatform?: string | null }): PlatformProvider {
+  if (card.aiPlatform) {
+    return getPlatformProvider(card.aiPlatform as AiPlatform);
+  }
+  return getActiveProvider();
+}

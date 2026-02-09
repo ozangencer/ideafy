@@ -1,6 +1,9 @@
 import { spawn, ChildProcess } from "child_process";
 import { NextRequest } from "next/server";
-import { getActiveProvider } from "@/lib/platform/active";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { cards } from "@/lib/db/schema";
+import { getProviderForCard } from "@/lib/platform/active";
 
 // Store active processes for cleanup
 const activeProcesses = new Map<string, ChildProcess>();
@@ -19,6 +22,9 @@ export async function POST(
 
   const cwd = projectPath || process.cwd();
 
+  // Fetch card for per-card AI platform override
+  const card = db.select().from(cards).where(eq(cards.id, id)).get();
+
   // Kill any existing process for this card+section
   const processKey = `${id}-${sectionType}`;
   const existing = activeProcesses.get(processKey);
@@ -30,7 +36,7 @@ export async function POST(
   const encoder = new TextEncoder();
   let isClosed = false;
 
-  const provider = getActiveProvider();
+  const provider = getProviderForCard(card || {});
 
   // Check if streaming is supported
   if (!provider.capabilities.supportsStreamJson) {

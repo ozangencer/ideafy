@@ -88,6 +88,7 @@ export async function PUT(
     projectFolder: body.projectFolder ?? existing.projectFolder,
     projectId: newProjectId,
     taskNumber,
+    aiPlatform: body.aiPlatform !== undefined ? (body.aiPlatform || null) : existing.aiPlatform,
     updatedAt: now,
     completedAt,
   };
@@ -120,6 +121,7 @@ export async function PUT(
     rebaseConflict: existing.rebaseConflict ?? null,
     conflictFiles: existing.conflictFiles ? JSON.parse(existing.conflictFiles) : null,
     processingType: (existing.processingType as Card["processingType"]) ?? null,
+    aiPlatform: (updatedCard.aiPlatform as Card["aiPlatform"]) ?? null,
     createdAt: existing.createdAt,
     updatedAt: updatedCard.updatedAt,
     completedAt: updatedCard.completedAt,

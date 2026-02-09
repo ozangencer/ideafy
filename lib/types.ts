@@ -37,6 +37,7 @@ export interface Card {
   rebaseConflict: boolean | null;
   conflictFiles: string[] | null;
   processingType: ProcessingType;
+  aiPlatform: AiPlatform | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;

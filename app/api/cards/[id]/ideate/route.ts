@@ -73,8 +73,8 @@ export async function POST(
   console.log(`[Ideate] Working dir: ${workingDir}`);
 
   try {
-    const { getActiveProvider } = await import("@/lib/platform/active");
-    const provider = getActiveProvider();
+    const { getProviderForCard } = await import("@/lib/platform/active");
+    const provider = getProviderForCard(card);
 
     // Build the terminal command using the active provider
     const permissionMode = provider.capabilities.supportsPermissionModes ? "plan" : null;

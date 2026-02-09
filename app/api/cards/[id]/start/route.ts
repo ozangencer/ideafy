@@ -27,7 +27,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
-import { getActiveProvider } from "@/lib/platform/active";
+import { getProviderForCard } from "@/lib/platform/active";
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
   switch (phase) {
@@ -181,6 +181,7 @@ export async function POST(
       cardId: id,
       cardTitle: card.title,
       displayId,
+      aiPlatform: card.aiPlatform,
     });
 
     // Convert markdown response to HTML for TipTap editor
@@ -287,12 +288,13 @@ interface RunClaudeOptions {
   cardId: string;
   cardTitle: string;
   displayId: string | null;
+  aiPlatform?: string | null;
 }
 
 async function runClaudeCli(
   options: RunClaudeOptions
 ): Promise<{ response: string; cost?: number; duration?: number }> {
-  const { prompt, cwd, phase, processKey, cardId, cardTitle, displayId } = options;
+  const { prompt, cwd, phase, processKey, cardId, cardTitle, displayId, aiPlatform } = options;
 
   // Kill any existing process for this card
   const existing = getProcess(processKey);
@@ -300,7 +302,7 @@ async function runClaudeCli(
     killProcess(processKey);
   }
 
-  const provider = getActiveProvider();
+  const provider = getProviderForCard({ aiPlatform });
   const args = provider.buildAutonomousArgs({ prompt });
 
   console.log(`[${provider.displayName}] Running in ${cwd}:`);

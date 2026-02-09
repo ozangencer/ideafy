@@ -14,7 +14,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
-import { getActiveProvider } from "@/lib/platform/active";
+import { getProviderForCard } from "@/lib/platform/active";
 
 export async function POST(
   request: NextRequest,
@@ -89,7 +89,7 @@ export async function POST(
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 
-    const provider = getActiveProvider();
+    const provider = getProviderForCard(card);
 
     // Run CLI with spawn for process tracking
     const { responseText, cost, duration } = await new Promise<{

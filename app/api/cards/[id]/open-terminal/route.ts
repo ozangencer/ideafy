@@ -281,7 +281,7 @@ export async function POST(
         .run();
     }
 
-    const provider = await import("@/lib/platform/active").then(m => m.getActiveProvider());
+    const provider = await import("@/lib/platform/active").then(m => m.getProviderForCard(card));
 
     // Build the terminal command using the active provider
     const permissionMode = (phase === "planning" && provider.capabilities.supportsPermissionModes) ? "plan" : null;

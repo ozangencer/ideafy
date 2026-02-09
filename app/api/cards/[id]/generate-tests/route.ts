@@ -82,8 +82,8 @@ export async function POST(
   );
 
   try {
-    const { getActiveProvider } = await import("@/lib/platform/active");
-    const provider = getActiveProvider();
+    const { getProviderForCard } = await import("@/lib/platform/active");
+    const provider = getProviderForCard(card);
 
     // Build CLI command using the active provider
     const cliCommand = provider.buildInteractiveCommand(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
-import { COLUMNS, Complexity, Priority, Status } from "@/lib/types";
+import { COLUMNS, Complexity, Priority, Status, AiPlatform } from "@/lib/types";
 import { X, Brain } from "lucide-react";
 
 interface Project {
@@ -46,15 +46,36 @@ const COMPLEXITY_MAP: Record<string, Complexity> = {
   "c:high": "high",
 };
 
-type AutocompleteType = "project" | "status" | null;
+const PLATFORM_MAP: Record<string, AiPlatform> = {
+  "ai:claude": "claude",
+  "ai:gemini": "gemini",
+  "ai:codex": "codex",
+};
+
+const PLATFORM_LABELS: Record<AiPlatform, { label: string; color: string }> = {
+  claude: { label: "Claude", color: "#d97706" },
+  gemini: { label: "Gemini", color: "#4285f4" },
+  codex: { label: "Codex", color: "#10a37f" },
+};
+
+// Platform options for [ autocomplete
+const PLATFORM_OPTIONS = [
+  { key: "claude" as AiPlatform, label: "Claude Code", color: "#d97706", bracket: "[claude" },
+  { key: "gemini" as AiPlatform, label: "Gemini CLI", color: "#4285f4", bracket: "[gemini" },
+  { key: "codex" as AiPlatform, label: "Codex CLI", color: "#10a37f", bracket: "[codex" },
+];
+
+type AutocompleteType = "project" | "status" | "platform" | null;
 
 export default function QuickEntryPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [status, setStatus] = useState<Status>("backlog");
+  const [statusExplicit, setStatusExplicit] = useState(false);
   const [complexity, setComplexity] = useState<Complexity>("medium");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
 
   // Unified autocomplete state
@@ -115,8 +136,10 @@ export default function QuickEntryPage() {
       setDescription("");
       setPriority("medium");
       setStatus("backlog");
+      setStatusExplicit(false);
       setComplexity("medium");
       setSelectedProject(null);
+      setAiPlatform(null);
       setAcType(null);
       setAcQuery("");
       setAcIndex(0);
@@ -149,12 +172,21 @@ export default function QuickEntryPage() {
           s.slash.toLowerCase().includes(`/${q}`)
       );
     }
+    if (acType === "platform") {
+      const q = acQuery.toLowerCase();
+      if (!q) return PLATFORM_OPTIONS;
+      return PLATFORM_OPTIONS.filter(
+        (p) =>
+          p.label.toLowerCase().includes(q) ||
+          p.key.includes(q)
+      );
+    }
     return [];
   }, [acType, acQuery, projects]);
 
   const showAutocomplete = acType !== null && acItems.length > 0;
 
-  // Check for @ or / triggers in a value
+  // Check for @, /, [ triggers in a value
   const detectTrigger = useCallback(
     (value: string, source: "title" | "description") => {
       // Check @ trigger (project)
@@ -171,11 +203,19 @@ export default function QuickEntryPage() {
       // Must not match "word / word" patterns (slash surrounded by spaces)
       const slashMatch = value.match(/(?:^|(?<=\s))\/([\w]+)$|(?:^|\s)\/$/);
       if (slashMatch) {
-        // If it's just "/" at the end (no chars after), show all statuses
-        // If it's "/word", filter by the word
         const query = slashMatch[1] || "";
         setAcType("status");
         setAcQuery(query);
+        setAcIndex(0);
+        setAcSource(source);
+        return true;
+      }
+
+      // Check [ trigger (AI platform)
+      const bracketMatch = value.match(/\[([\w]*)$/);
+      if (bracketMatch) {
+        setAcType("platform");
+        setAcQuery(bracketMatch[1]);
         setAcIndex(0);
         setAcSource(source);
         return true;
@@ -221,6 +261,18 @@ export default function QuickEntryPage() {
         }
       }
 
+      // Consume ai:platform tokens
+      for (const [token, platformValue] of Object.entries(PLATFORM_MAP)) {
+        const regex = new RegExp(
+          `(?:^|\\s)${token.replace(":", "\\:")}(?:\\s|$)`
+        );
+        if (regex.test(processed)) {
+          setAiPlatform(platformValue);
+          processed = processed.replace(regex, " ").trim();
+          break;
+        }
+      }
+
       setTitle(processed);
     },
     [detectTrigger]
@@ -254,12 +306,30 @@ export default function QuickEntryPage() {
   const handleSelectStatus = useCallback(
     (statusOption: (typeof STATUS_OPTIONS)[0]) => {
       setStatus(statusOption.key);
+      setStatusExplicit(true);
       // Remove /query from the source field
       if (acSource === "title") {
         setTitle((prev) => prev.replace(/(?:^|\s)\/[\w]*$/, "").trim());
         titleRef.current?.focus();
       } else {
         setDescription((prev) => prev.replace(/(?:^|\s)\/[\w]*$/, "").trim());
+        descRef.current?.focus();
+      }
+      setAcType(null);
+      setAcIndex(0);
+    },
+    [acSource]
+  );
+
+  const handleSelectPlatform = useCallback(
+    (platformOption: (typeof PLATFORM_OPTIONS)[0]) => {
+      setAiPlatform(platformOption.key);
+      // Remove [query from the source field
+      if (acSource === "title") {
+        setTitle((prev) => prev.replace(/\[[\w]*$/, "").trim());
+        titleRef.current?.focus();
+      } else {
+        setDescription((prev) => prev.replace(/\[[\w]*$/, "").trim());
         descRef.current?.focus();
       }
       setAcType(null);
@@ -276,13 +346,18 @@ export default function QuickEntryPage() {
         handleSelectProject(item as Project);
       } else if (acType === "status") {
         handleSelectStatus(item as (typeof STATUS_OPTIONS)[0]);
+      } else if (acType === "platform") {
+        handleSelectPlatform(item as (typeof PLATFORM_OPTIONS)[0]);
       }
     },
-    [acType, acItems, handleSelectProject, handleSelectStatus]
+    [acType, acItems, handleSelectProject, handleSelectStatus, handleSelectPlatform]
   );
 
   const dismissAutocomplete = useCallback(() => {
-    const removePattern = acType === "project" ? /@[\w\-.]*$/ : /(?:^|\s)\/[\w]*$/;
+    const removePattern =
+      acType === "project" ? /@[\w\-.]*$/ :
+      acType === "platform" ? /\[[\w]*$/ :
+      /(?:^|\s)\/[\w]*$/;
     if (acSource === "title") {
       setTitle((prev) => prev.replace(removePattern, "").trim());
     } else {
@@ -291,6 +366,7 @@ export default function QuickEntryPage() {
     setAcType(null);
   }, [acType, acSource]);
 
+  const canSubmit = !!(title.trim() && selectedProject && statusExplicit);
   const canIdeate = !!(title.trim() && description.trim() && selectedProject);
 
   const handleIdeate = useCallback(async () => {
@@ -310,6 +386,7 @@ export default function QuickEntryPage() {
           status: "ideation" as Status,
           complexity,
           priority,
+          aiPlatform,
           projectFolder: selectedProject?.folderPath ?? "",
           projectId: selectedProject?.id ?? null,
           gitBranchName: null,
@@ -332,10 +409,10 @@ export default function QuickEntryPage() {
     }
 
     closeWindow();
-  }, [canIdeate, title, description, complexity, priority, selectedProject, closeWindow]);
+  }, [canIdeate, title, description, complexity, priority, aiPlatform, selectedProject, closeWindow]);
 
   const handleSubmit = useCallback(async () => {
-    if (!title.trim()) return;
+    if (!canSubmit) return;
 
     try {
       await fetch("/api/cards", {
@@ -351,6 +428,7 @@ export default function QuickEntryPage() {
           status,
           complexity,
           priority,
+          aiPlatform,
           projectFolder: selectedProject?.folderPath ?? "",
           projectId: selectedProject?.id ?? null,
           gitBranchName: null,
@@ -370,11 +448,13 @@ export default function QuickEntryPage() {
 
     closeWindow();
   }, [
+    canSubmit,
     title,
     description,
     status,
     complexity,
     priority,
+    aiPlatform,
     selectedProject,
     closeWindow,
   ]);
@@ -433,13 +513,13 @@ export default function QuickEntryPage() {
 
       if (e.key === "Enter" && !showAutocomplete) {
         e.preventDefault();
-        handleSubmit();
+        if (canSubmit) handleSubmit();
       }
 
       // Cmd+Enter always submits
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        handleSubmit();
+        if (canSubmit) handleSubmit();
       }
     },
     [
@@ -448,6 +528,7 @@ export default function QuickEntryPage() {
       dismissAutocomplete,
       handleAcKeyDown,
       showAutocomplete,
+      canSubmit,
       handleSubmit,
       handleIdeate,
     ]
@@ -474,7 +555,7 @@ export default function QuickEntryPage() {
       // Cmd+Enter always submits, even during autocomplete
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        handleSubmit();
+        if (canSubmit) handleSubmit();
         return;
       }
 
@@ -487,15 +568,16 @@ export default function QuickEntryPage() {
         return;
       }
     },
-    [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, handleSubmit, handleIdeate]
+    [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, canSubmit, handleSubmit, handleIdeate]
   );
 
   const statusLabel = COLUMNS.find((c) => c.id === status)?.title;
   const hasBadges =
     selectedProject ||
     priority !== "medium" ||
-    status !== "backlog" ||
-    complexity !== "medium";
+    statusExplicit ||
+    complexity !== "medium" ||
+    aiPlatform !== null;
 
   return (
     <div className="h-screen w-screen bg-transparent flex items-start justify-center">
@@ -547,11 +629,11 @@ export default function QuickEntryPage() {
                 onRemove={() => setPriority("medium")}
               />
             )}
-            {status !== "backlog" && (
+            {statusExplicit && (
               <TokenBadge
                 label={statusLabel ?? status}
                 color="#60a5fa"
-                onRemove={() => setStatus("backlog")}
+                onRemove={() => { setStatus("backlog"); setStatusExplicit(false); }}
               />
             )}
             {complexity !== "medium" && (
@@ -559,6 +641,13 @@ export default function QuickEntryPage() {
                 label={complexity}
                 color="#facc15"
                 onRemove={() => setComplexity("medium")}
+              />
+            )}
+            {aiPlatform && (
+              <TokenBadge
+                label={PLATFORM_LABELS[aiPlatform].label}
+                color={PLATFORM_LABELS[aiPlatform].color}
+                onRemove={() => setAiPlatform(null)}
               />
             )}
           </div>
@@ -629,16 +718,53 @@ export default function QuickEntryPage() {
                   </button>
                 )
               )}
+            {acType === "platform" &&
+              (acItems as (typeof PLATFORM_OPTIONS)[number][]).map(
+                (option, idx) => (
+                  <button
+                    key={option.key}
+                    className={`w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
+                      idx === acIndex
+                        ? "bg-white/[0.08]"
+                        : "hover:bg-white/[0.04]"
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelectPlatform(option);
+                    }}
+                    onMouseEnter={() => setAcIndex(idx)}
+                  >
+                    {idx === acIndex && (
+                      <span className="text-foreground/60 text-xs">{">"}</span>
+                    )}
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: option.color }}
+                    />
+                    <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
+                      {option.label}
+                    </span>
+                    <span className="text-muted-foreground/30 text-xs ml-auto font-mono">
+                      {option.bracket}
+                    </span>
+                  </button>
+                )
+              )}
           </div>
         )}
 
         {/* Footer */}
         <div className="px-5 py-2 border-t border-white/[0.06] flex items-center gap-4 text-[11px] text-muted-foreground/40">
-          <span>
+          <span className={canSubmit ? "text-muted-foreground/60" : ""}>
             <kbd className="font-mono">
               {focusedField === "title" ? "\u21A9" : "\u2318\u21A9"}
             </kbd>{" "}
             Create
+            {!canSubmit && (
+              <span className="ml-1 text-muted-foreground/25">
+                ({!selectedProject && !statusExplicit ? "@project /status" : !selectedProject ? "@project" : "/status"})
+              </span>
+            )}
           </span>
           <span>
             <kbd className="font-mono">Tab</kbd>{" "}

@@ -14,7 +14,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
-import { getActiveProvider } from "@/lib/platform/active";
+import { getProviderForCard } from "@/lib/platform/active";
 
 // Card context info
 interface CardContext {
@@ -282,7 +282,7 @@ export async function POST(
   // Generate assistant message ID for database
   const assistantMessageId = uuidv4();
 
-  const provider = getActiveProvider();
+  const provider = getProviderForCard(card);
 
   // Check if streaming is supported by the active platform
   if (!provider.capabilities.supportsStreamJson) {

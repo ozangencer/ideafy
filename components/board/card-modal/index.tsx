@@ -7,6 +7,7 @@ import {
   getDisplayId,
   Complexity,
   Priority,
+  AiPlatform,
   GitBranchStatus,
   GitWorktreeStatus,
   SectionType,
@@ -90,6 +91,7 @@ export function CardModal() {
   const [complexity, setComplexity] = useState<Complexity>("medium");
   const [priority, setPriority] = useState<Priority>("medium");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
 
   // UI state
   const [isVisible, setIsVisible] = useState(false);
@@ -131,7 +133,8 @@ export function CardModal() {
     status !== selectedCard.status ||
     complexity !== (selectedCard.complexity || "medium") ||
     priority !== (selectedCard.priority || "medium") ||
-    projectId !== selectedCard.projectId
+    projectId !== selectedCard.projectId ||
+    aiPlatform !== (selectedCard.aiPlatform ?? null)
   );
 
   // Check if draft has any user-entered content
@@ -183,6 +186,7 @@ export function CardModal() {
         complexity,
         priority,
         projectId,
+        aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
       });
 
@@ -216,6 +220,7 @@ export function CardModal() {
     complexity,
     priority,
     projectId,
+    aiPlatform,
     projects,
     updateCard,
   ]);
@@ -271,6 +276,7 @@ export function CardModal() {
       setComplexity(selectedCard.complexity || "medium");
       setPriority(selectedCard.priority || "medium");
       setProjectId(selectedCard.projectId);
+      setAiPlatform(selectedCard.aiPlatform ?? null);
       setGitBranchName(selectedCard.gitBranchName);
       setGitBranchStatus(selectedCard.gitBranchStatus);
       setGitWorktreePath(selectedCard.gitWorktreePath);
@@ -403,6 +409,7 @@ export function CardModal() {
           complexity,
           priority,
           projectId,
+          aiPlatform,
           projectFolder: selectedProject?.folderPath || "",
           gitBranchName: null,
           gitBranchStatus: null,
@@ -426,13 +433,14 @@ export function CardModal() {
           complexity,
           priority,
           projectId,
+          aiPlatform,
           projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
         };
         handleClose();
         updateCard(cardId, updates);
       }
     }
-  }, [selectedCard, projects, projectId, isDraftMode, title, description, solutionSummary, testScenarios, aiOpinion, status, complexity, priority, saveDraftCard, updateCard, handleClose]);
+  }, [selectedCard, projects, projectId, isDraftMode, title, description, solutionSummary, testScenarios, aiOpinion, status, complexity, priority, aiPlatform, saveDraftCard, updateCard, handleClose]);
 
   // Handle delete
   const handleDelete = useCallback(() => {
@@ -708,6 +716,8 @@ export function CardModal() {
           onComplexityChange={setComplexity}
           priority={priority}
           onPriorityChange={setPriority}
+          aiPlatform={aiPlatform}
+          onAiPlatformChange={setAiPlatform}
           hasHistory={cardHistory.length > 0}
           onBack={handleBack}
           onExport={handleExport}

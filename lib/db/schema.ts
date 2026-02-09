@@ -43,6 +43,7 @@ export const cards = sqliteTable("cards", {
   rebaseConflict: integer("rebase_conflict", { mode: "boolean" }), // true if conflict detected during merge
   conflictFiles: text("conflict_files"),      // JSON array of conflicting file paths
   processingType: text("processing_type"),    // "autonomous" | "quick-fix" | "evaluate" | null (active Claude process indicator)
+  aiPlatform: text("ai_platform"),           // "claude" | "gemini" | "codex" | null (null = use global setting)
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),  // ISO date string, null if not completed
