@@ -54,12 +54,18 @@ export const createSettingsSlice: StoreSlice<
       const settings = await parseJson<AppSettings>(response);
       set({ settings });
 
-      // Re-fetch extensions when relevant paths change
+      // Re-fetch extensions when relevant paths or platform change
       if (updates.skillsPath || updates.aiPlatform) {
         get().fetchSkills();
       }
       if (updates.mcpConfigPath || updates.aiPlatform) {
         get().fetchMcps();
+      }
+      if (updates.aiPlatform) {
+        const activeProjectId = get().activeProjectId;
+        if (activeProjectId) {
+          get().fetchProjectExtensions(activeProjectId);
+        }
       }
     } catch (error) {
       console.error("Failed to update settings:", error);

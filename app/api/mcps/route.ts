@@ -5,6 +5,7 @@ import { homedir } from "os";
 import { db } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getActiveProvider } from "@/lib/platform/active";
 
 // Expand ~ to home directory
 function expandPath(path: string): string {
@@ -12,6 +13,12 @@ function expandPath(path: string): string {
     return join(homedir(), path.slice(1));
   }
   return path;
+}
+
+// Parse MCP server names from TOML content (Codex format)
+function parseMcpNamesFromToml(content: string): string[] {
+  const matches = content.matchAll(/\[mcp_servers\.(\w+)\]/g);
+  return Array.from(matches, (m) => m[1]);
 }
 
 export async function GET() {
@@ -28,14 +35,19 @@ export async function GET() {
       return NextResponse.json({ mcps: [] });
     }
 
-    const configuredPath = setting?.value || "~/.claude.json";
-    const claudeConfigPath = expandPath(configuredPath);
+    const provider = getActiveProvider();
+    const configuredPath = setting?.value || provider.getDefaultMcpConfigPath();
+    const mcpConfigPath = expandPath(configuredPath);
 
-    const configContent = readFileSync(claudeConfigPath, "utf-8");
-    const config = JSON.parse(configContent);
+    const configContent = readFileSync(mcpConfigPath, "utf-8");
 
-    const mcpServers = config.mcpServers || {};
-    const mcps = Object.keys(mcpServers);
+    let mcps: string[];
+    if (provider.capabilities.mcpConfigFormat === "toml") {
+      mcps = parseMcpNamesFromToml(configContent);
+    } else {
+      const config = JSON.parse(configContent);
+      mcps = Object.keys(config.mcpServers || {});
+    }
 
     // Sort alphabetically
     mcps.sort((a, b) => a.localeCompare(b));

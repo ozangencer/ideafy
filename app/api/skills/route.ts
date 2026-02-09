@@ -5,6 +5,7 @@ import { homedir } from "os";
 import { db } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getActiveProvider } from "@/lib/platform/active";
 
 // Expand ~ to home directory
 function expandPath(path: string): string {
@@ -28,7 +29,8 @@ export async function GET() {
       return NextResponse.json({ skills: [] });
     }
 
-    const configuredPath = setting?.value || "~/.claude/skills";
+    const provider = getActiveProvider();
+    const configuredPath = setting?.value || provider.getDefaultSkillsPath();
     const skillsPath = expandPath(configuredPath);
 
     const entries = readdirSync(skillsPath);
