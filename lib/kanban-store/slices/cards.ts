@@ -95,8 +95,10 @@ export const createCardsSlice: StoreSlice<
       });
       const newCard = await parseJson<Card>(response);
       set((state) => ({ cards: [...state.cards, newCard] }));
+      return newCard;
     } catch (error) {
       console.error("Failed to add card:", error);
+      return null;
     }
   },
 

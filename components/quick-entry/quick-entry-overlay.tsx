@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { toast } from "@/hooks/use-toast";
 import { COLUMNS, Complexity, Priority, Project, Status } from "@/lib/types";
-import { X } from "lucide-react";
+import { X, Brain } from "lucide-react";
 
 const STATUS_MAP: Record<string, Status> = {
   "/idea": "ideation",
@@ -27,6 +27,7 @@ export function QuickEntryOverlay() {
     isQuickEntryOpen,
     closeQuickEntry,
     addCard,
+    evaluateIdea,
     projects,
     activeProjectId,
   } = useKanbanStore();
@@ -196,6 +197,45 @@ export function QuickEntryOverlay() {
     handleClose,
   ]);
 
+  const canIdeate = !!(title.trim() && description.trim() && resolvedProject);
+
+  const handleIdeate = useCallback(async () => {
+    if (!canIdeate) return;
+
+    const createdCard = await addCard({
+      title: title.trim(),
+      description: description.trim(),
+      solutionSummary: "",
+      testScenarios: "",
+      aiOpinion: "",
+      aiVerdict: null,
+      status: "ideation",
+      complexity,
+      priority,
+      projectFolder: resolvedProject?.folderPath ?? "",
+      projectId: resolvedProject?.id ?? null,
+      gitBranchName: null,
+      gitBranchStatus: null,
+      gitWorktreePath: null,
+      gitWorktreeStatus: null,
+      devServerPort: null,
+      devServerPid: null,
+      rebaseConflict: null,
+      conflictFiles: null,
+      processingType: null,
+    });
+
+    if (createdCard) {
+      evaluateIdea(createdCard.id);
+      toast({
+        title: "Idea created & evaluating",
+        description: `"${title.trim()}" added to Ideation`,
+      });
+    }
+
+    handleClose();
+  }, [canIdeate, title, description, complexity, priority, resolvedProject, addCard, evaluateIdea, handleClose]);
+
   const handleTitleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -231,6 +271,12 @@ export function QuickEntryOverlay() {
         }
       }
 
+      if (e.key === "i" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleIdeate();
+        return;
+      }
+
       if (e.key === "Tab" && !e.shiftKey) {
         e.preventDefault();
         setFocusedField("description");
@@ -251,6 +297,7 @@ export function QuickEntryOverlay() {
       autocompleteQuery,
       handleSelectProject,
       handleSubmit,
+      handleIdeate,
     ]
   );
 
@@ -259,6 +306,12 @@ export function QuickEntryOverlay() {
       if (e.key === "Escape") {
         e.preventDefault();
         handleClose();
+        return;
+      }
+
+      if (e.key === "i" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleIdeate();
         return;
       }
 
@@ -274,7 +327,7 @@ export function QuickEntryOverlay() {
         handleSubmit();
       }
     },
-    [handleClose, handleSubmit]
+    [handleClose, handleSubmit, handleIdeate]
   );
 
   if (!isQuickEntryOpen) return null;
@@ -400,6 +453,15 @@ export function QuickEntryOverlay() {
           <span>
             <kbd className="font-mono">Esc</kbd> Close
           </span>
+          <button
+            type="button"
+            onClick={handleIdeate}
+            disabled={!canIdeate}
+            className={`ml-auto flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors ${canIdeate ? "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 hover:text-purple-300 cursor-pointer" : "text-muted-foreground/20 cursor-default"}`}
+          >
+            <Brain className="w-3 h-3" />
+            <span><kbd className="font-mono">{"\u2318"}I</kbd> Ideate</span>
+          </button>
         </div>
       </div>
     </div>

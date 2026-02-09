@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { COLUMNS, Complexity, Priority, Status } from "@/lib/types";
-import { X } from "lucide-react";
+import { X, Brain } from "lucide-react";
 
 interface Project {
   id: string;
@@ -291,6 +291,49 @@ export default function QuickEntryPage() {
     setAcType(null);
   }, [acType, acSource]);
 
+  const canIdeate = !!(title.trim() && description.trim() && selectedProject);
+
+  const handleIdeate = useCallback(async () => {
+    if (!canIdeate) return;
+
+    try {
+      const response = await fetch("/api/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          solutionSummary: "",
+          testScenarios: "",
+          aiOpinion: "",
+          aiVerdict: null,
+          status: "ideation" as Status,
+          complexity,
+          priority,
+          projectFolder: selectedProject?.folderPath ?? "",
+          projectId: selectedProject?.id ?? null,
+          gitBranchName: null,
+          gitBranchStatus: null,
+          gitWorktreePath: null,
+          gitWorktreeStatus: null,
+          devServerPort: null,
+          devServerPid: null,
+          rebaseConflict: null,
+          conflictFiles: null,
+          processingType: null,
+        }),
+      });
+      const createdCard = await response.json();
+      if (createdCard?.id) {
+        fetch(`/api/cards/${createdCard.id}/evaluate`, { method: "POST" });
+      }
+    } catch {
+      // Silently fail - card creation failed
+    }
+
+    closeWindow();
+  }, [canIdeate, title, description, complexity, priority, selectedProject, closeWindow]);
+
   const handleSubmit = useCallback(async () => {
     if (!title.trim()) return;
 
@@ -373,6 +416,12 @@ export default function QuickEntryPage() {
         return;
       }
 
+      if (e.key === "i" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleIdeate();
+        return;
+      }
+
       if (handleAcKeyDown(e)) return;
 
       if (e.key === "Tab" && !e.shiftKey) {
@@ -400,6 +449,7 @@ export default function QuickEntryPage() {
       handleAcKeyDown,
       showAutocomplete,
       handleSubmit,
+      handleIdeate,
     ]
   );
 
@@ -412,6 +462,12 @@ export default function QuickEntryPage() {
         } else {
           closeWindow();
         }
+        return;
+      }
+
+      if (e.key === "i" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleIdeate();
         return;
       }
 
@@ -431,7 +487,7 @@ export default function QuickEntryPage() {
         return;
       }
     },
-    [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, handleSubmit]
+    [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, handleSubmit, handleIdeate]
   );
 
   const statusLabel = COLUMNS.find((c) => c.id === status)?.title;
@@ -587,6 +643,15 @@ export default function QuickEntryPage() {
           <span>
             <kbd className="font-mono">Esc</kbd> Close
           </span>
+          <button
+            type="button"
+            onClick={handleIdeate}
+            disabled={!canIdeate}
+            className={`ml-auto flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors ${canIdeate ? "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 hover:text-purple-300 cursor-pointer" : "text-muted-foreground/20 cursor-default"}`}
+          >
+            <Brain className="w-3 h-3" />
+            <span><kbd className="font-mono">{"\u2318"}I</kbd> Ideate</span>
+          </button>
         </div>
       </div>
     </div>

@@ -78,7 +78,7 @@ export interface KanbanStore {
   setCards: (cards: Card[]) => void;
   addCard: (
     card: Omit<Card, "id" | "createdAt" | "updatedAt" | "taskNumber" | "completedAt">
-  ) => Promise<void>;
+  ) => Promise<Card | null>;
   addCardAndOpen: (
     card: Omit<Card, "id" | "createdAt" | "updatedAt" | "taskNumber" | "completedAt">
   ) => Promise<void>;

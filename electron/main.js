@@ -378,6 +378,7 @@ app.on("ready", async () => {
           },
         ],
       },
+      { role: "editMenu" },
       { role: "viewMenu" },
       { role: "windowMenu" },
     ]);
