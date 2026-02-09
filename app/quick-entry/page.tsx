@@ -500,6 +500,10 @@ export default function QuickEntryPage() {
   return (
     <div className="h-screen w-screen bg-transparent flex items-start justify-center">
       <div ref={containerRef} className="w-full rounded-lg overflow-hidden bg-[hsl(var(--popover))] border border-white/[0.08] shadow-[0_16px_70px_-12px_rgba(0,0,0,0.8)]">
+        {/* Drag handle */}
+        <div className="h-4 w-full cursor-grab active:cursor-grabbing" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+          <div className="mx-auto mt-1.5 w-8 h-1 rounded-full bg-white/[0.12]" />
+        </div>
         {/* Title */}
         <input
           ref={titleRef}
@@ -509,7 +513,7 @@ export default function QuickEntryPage() {
           onKeyDown={handleTitleKeyDown}
           onFocus={() => setFocusedField("title")}
           placeholder="New card"
-          className="block w-full bg-transparent border-0 px-5 pt-4 pb-1 text-[15px] font-medium text-foreground placeholder:text-muted-foreground/50 outline-none ring-0 focus:ring-0"
+          className="block w-full bg-transparent border-0 px-5 pt-1 pb-1 text-[15px] font-medium text-foreground placeholder:text-muted-foreground/50 outline-none ring-0 focus:ring-0"
           autoComplete="off"
           spellCheck={false}
         />
