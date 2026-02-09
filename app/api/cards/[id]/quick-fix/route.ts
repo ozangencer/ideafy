@@ -18,19 +18,9 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
-import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
+import { getActiveProvider } from "@/lib/platform/active";
 
 const execAsync = promisify(exec);
-
-interface ClaudeResponse {
-  result?: string;
-  cost_usd?: number;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  is_error?: boolean;
-  num_turns?: number;
-  session_id?: string;
-}
 
 export async function POST(
   request: NextRequest,
@@ -108,28 +98,25 @@ export async function POST(
 
     console.log(`[Quick Fix] Prompt length: ${prompt.length} chars`);
 
-    // Run Claude CLI with spawn for process tracking
+    const provider = getActiveProvider();
+
+    // Run CLI with spawn for process tracking
     const { responseText, cost, duration } = await new Promise<{
       responseText: string;
       cost?: number;
       duration?: number;
     }>((resolve, reject) => {
-      const claudeProcess = spawn(getClaudePath(), [
-        "-p", prompt,
-        "--dangerously-skip-permissions",
-        "--output-format", "json",
-        "--setting-sources", "user",
-      ], {
+      const cliProcess = spawn(provider.getCliPath(), provider.buildAutonomousArgs({ prompt }), {
         cwd: workingDir,
         stdio: ["pipe", "pipe", "pipe"],
-        env: getClaudeCIEnv(),
+        env: provider.getCIEnv(),
       });
 
       // Close stdin immediately
-      claudeProcess.stdin?.end();
+      cliProcess.stdin?.end();
 
       // Register process for tracking
-      registerProcess(processKey, claudeProcess, {
+      registerProcess(processKey, cliProcess, {
         cardId: id,
         sectionType: null,
         processType: "quick-fix",
@@ -141,21 +128,21 @@ export async function POST(
       let stdout = "";
       let stderr = "";
 
-      claudeProcess.stdout?.on("data", (data: Buffer) => {
+      cliProcess.stdout?.on("data", (data: Buffer) => {
         stdout += data.toString();
       });
 
-      claudeProcess.stderr?.on("data", (data: Buffer) => {
+      cliProcess.stderr?.on("data", (data: Buffer) => {
         stderr += data.toString();
       });
 
       // Set timeout
       const timeout = setTimeout(() => {
-        claudeProcess.kill();
+        cliProcess.kill();
         reject(new Error("Quick fix timed out after 10 minutes"));
       }, 10 * 60 * 1000);
 
-      claudeProcess.on("close", (code) => {
+      cliProcess.on("close", (code) => {
         clearTimeout(timeout);
 
         if (stderr) {
@@ -163,28 +150,23 @@ export async function POST(
         }
 
         if (code !== 0 && !stdout.trim()) {
-          reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+          reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
           return;
         }
 
-        try {
-          const response: ClaudeResponse = JSON.parse(stdout);
-          if (response.is_error) {
-            reject(new Error(response.result || "Claude returned an error"));
-            return;
-          }
-          resolve({
-            responseText: response.result || "",
-            cost: response.cost_usd,
-            duration: response.duration_ms,
-          });
-        } catch {
-          console.log(`[Quick Fix] JSON parse failed, using raw output`);
-          resolve({ responseText: stdout.trim() });
+        const parsed = provider.parseJsonResponse(stdout);
+        if (parsed.isError) {
+          reject(new Error(parsed.result || `${provider.displayName} returned an error`));
+          return;
         }
+        resolve({
+          responseText: parsed.result,
+          cost: parsed.cost,
+          duration: parsed.duration,
+        });
       });
 
-      claudeProcess.on("error", (error) => {
+      cliProcess.on("error", (error) => {
         clearTimeout(timeout);
         reject(error);
       });

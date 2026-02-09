@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from "child_process";
 import { NextRequest } from "next/server";
-import { getClaudePath, getClaudeEnv } from "@/lib/claude-cli";
+import { getActiveProvider } from "@/lib/platform/active";
 
 // Store active processes for cleanup
 const activeProcesses = new Map<string, ChildProcess>();
@@ -30,6 +30,19 @@ export async function POST(
   const encoder = new TextEncoder();
   let isClosed = false;
 
+  const provider = getActiveProvider();
+
+  // Check if streaming is supported
+  if (!provider.capabilities.supportsStreamJson) {
+    return new Response(
+      JSON.stringify({
+        error: `${provider.displayName} does not support streaming`,
+        suggestion: "Use interactive terminal instead",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const stream = new ReadableStream({
     start(controller) {
       const sendEvent = (type: string, data: unknown) => {
@@ -42,23 +55,18 @@ export async function POST(
         }
       };
 
-      const claudeProcess = spawn(getClaudePath(), [
-        "-p", prompt,
-        "--print",
-        "--output-format", "stream-json",
-        "--verbose"
-      ], {
+      const cliProcess = spawn(provider.getCliPath(), provider.buildStreamArgs({ prompt }), {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env: getClaudeEnv(),
+        env: provider.getEnv(),
       });
 
-      activeProcesses.set(processKey, claudeProcess);
-      sendEvent("start", { pid: claudeProcess.pid });
+      activeProcesses.set(processKey, cliProcess);
+      sendEvent("start", { pid: cliProcess.pid });
 
       let stdoutBuffer = "";
 
-      claudeProcess.stdout?.on("data", (data: Buffer) => {
+      cliProcess.stdout?.on("data", (data: Buffer) => {
         stdoutBuffer += data.toString();
         const lines = stdoutBuffer.split('\n');
         stdoutBuffer = lines.pop() || "";
@@ -113,14 +121,14 @@ export async function POST(
         }
       });
 
-      claudeProcess.stderr?.on("data", (data: Buffer) => {
+      cliProcess.stderr?.on("data", (data: Buffer) => {
         const text = data.toString();
         if (text.includes("error") || text.includes("Error")) {
           sendEvent("stderr", text);
         }
       });
 
-      claudeProcess.on("close", (code) => {
+      cliProcess.on("close", (code) => {
         activeProcesses.delete(processKey);
         sendEvent("close", { code });
         if (!isClosed) {
@@ -129,7 +137,7 @@ export async function POST(
         }
       });
 
-      claudeProcess.on("error", (error) => {
+      cliProcess.on("error", (error) => {
         activeProcesses.delete(processKey);
         sendEvent("error", error.message);
         if (!isClosed) {
@@ -140,8 +148,8 @@ export async function POST(
 
       request.signal.addEventListener("abort", () => {
         isClosed = true;
-        if (claudeProcess && !claudeProcess.killed) {
-          claudeProcess.kill();
+        if (cliProcess && !cliProcess.killed) {
+          cliProcess.kill();
           activeProcesses.delete(processKey);
         }
       });

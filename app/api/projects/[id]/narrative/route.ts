@@ -9,21 +9,21 @@ import {
   generateFallbackContent,
   type NarrativeData,
 } from "@/lib/prompts";
-import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
+import { getActiveProvider } from "@/lib/platform/active";
 import { safeResolvePath } from "@/lib/path-utils";
 
 /**
- * Run Claude CLI using spawn (shell-free) and collect output
+ * Run AI CLI using spawn (shell-free) and collect output
  */
-function runClaudeCLI(prompt: string, cwd: string): Promise<string> {
+function runAiCli(prompt: string, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const claudePath = getClaudePath();
-    const claudeProcess = spawn(
-      claudePath,
-      ["-p", prompt, "--permission-mode", "dontAsk", "--output-format", "json"],
+    const provider = getActiveProvider();
+    const cliProcess = spawn(
+      provider.getCliPath(),
+      provider.buildAutonomousArgs({ prompt }),
       {
         cwd,
-        env: getClaudeCIEnv(),
+        env: provider.getCIEnv(),
         stdio: ["pipe", "pipe", "pipe"],
       }
     );
@@ -31,31 +31,31 @@ function runClaudeCLI(prompt: string, cwd: string): Promise<string> {
     let stdout = "";
     let stderr = "";
 
-    claudeProcess.stdout.on("data", (data: Buffer) => {
+    cliProcess.stdout.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    claudeProcess.stderr.on("data", (data: Buffer) => {
+    cliProcess.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
-    claudeProcess.stdin.end();
+    cliProcess.stdin.end();
 
     const timeout = setTimeout(() => {
-      claudeProcess.kill("SIGTERM");
-      reject(new Error("Claude CLI timed out after 10 minutes"));
+      cliProcess.kill("SIGTERM");
+      reject(new Error(`${provider.displayName} timed out after 10 minutes`));
     }, 600000);
 
-    claudeProcess.on("close", (code: number | null) => {
+    cliProcess.on("close", (code: number | null) => {
       clearTimeout(timeout);
       if (code === 0) {
         resolve(stdout);
       } else {
-        reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+        reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
       }
     });
 
-    claudeProcess.on("error", (err: Error) => {
+    cliProcess.on("error", (err: Error) => {
       clearTimeout(timeout);
       reject(err);
     });
@@ -63,21 +63,12 @@ function runClaudeCLI(prompt: string, cwd: string): Promise<string> {
 }
 
 /**
- * Parse Claude CLI JSON output to extract narrative content
+ * Parse AI CLI output to extract narrative content
  */
-function parseClaudeOutput(stdout: string): string {
-  try {
-    const response = JSON.parse(stdout);
-    if (response.result) {
-      return response.result;
-    } else if (Array.isArray(response)) {
-      const textBlocks = response.filter((b: { type: string }) => b.type === "text");
-      return textBlocks.map((b: { text: string }) => b.text).join("\n");
-    }
-    return stdout;
-  } catch {
-    return stdout;
-  }
+function parseCliOutput(stdout: string): string {
+  const provider = getActiveProvider();
+  const parsed = provider.parseJsonResponse(stdout);
+  return parsed.result || stdout;
 }
 
 // GET - Read narrative from project folder
@@ -164,12 +155,12 @@ export async function POST(
     // Build prompt for Claude
     const prompt = buildNarrativePrompt(project.name, body);
 
-    console.log("Running Claude for narrative generation...");
+    console.log("Running AI CLI for narrative generation...");
 
-    const stdout = await runClaudeCLI(prompt, project.folderPath);
+    const stdout = await runAiCli(prompt, project.folderPath);
 
     // Parse Claude's JSON response
-    let narrativeContent = parseClaudeOutput(stdout);
+    let narrativeContent = parseCliOutput(stdout);
 
     // Clean up the content (remove JSON artifacts if any)
     narrativeContent = narrativeContent
@@ -187,7 +178,7 @@ export async function POST(
       aiGenerated: true,
     });
   } catch (error) {
-    console.error("Error creating narrative with Claude:", error);
+    console.error("Error creating narrative with AI CLI:", error);
 
     // Fallback to simple template if Claude fails
     try {
@@ -245,12 +236,12 @@ export async function PUT(
     // Build prompt for Claude
     const prompt = buildNarrativePrompt(project.name, body);
 
-    console.log("Running Claude for narrative update...");
+    console.log("Running AI CLI for narrative update...");
 
-    const stdout = await runClaudeCLI(prompt, project.folderPath);
+    const stdout = await runAiCli(prompt, project.folderPath);
 
     // Parse Claude's JSON response
-    let narrativeContent = parseClaudeOutput(stdout);
+    let narrativeContent = parseCliOutput(stdout);
 
     // Clean up the content
     narrativeContent = narrativeContent
@@ -268,7 +259,7 @@ export async function PUT(
       aiGenerated: true,
     });
   } catch (error) {
-    console.error("Error updating narrative with Claude:", error);
+    console.error("Error updating narrative with AI CLI:", error);
 
     // Fallback to simple template if Claude fails
     try {

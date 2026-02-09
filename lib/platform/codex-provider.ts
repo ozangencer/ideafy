@@ -1,0 +1,173 @@
+import * as fs from "fs";
+import * as path from "path";
+import { join } from "path";
+import type {
+  PlatformProvider,
+  PlatformCapabilities,
+  AutonomousOptions,
+  InteractiveOptions,
+  StreamOptions,
+  CliResponse,
+  StreamEvent,
+  Result,
+} from "./types";
+import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
+
+let cachedCodexPath: string | null = null;
+
+class CodexProvider implements PlatformProvider {
+  id = "codex" as const;
+  displayName = "Codex CLI";
+  installCommand = "npm install -g @openai/codex";
+
+  capabilities: PlatformCapabilities = {
+    supportsAutonomousMode: true,
+    supportsStreamJson: false,
+    supportsPermissionModes: false,
+    supportsHooks: false,
+    supportsSkills: true,
+    supportsMcp: true,
+    mcpConfigFormat: "toml",
+  };
+
+  getCliPath(): string {
+    if (cachedCodexPath) return cachedCodexPath;
+
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    const candidates = [
+      join(home, ".local", "bin", "codex"),
+      "/usr/local/bin/codex",
+      "/opt/homebrew/bin/codex",
+    ];
+
+    cachedCodexPath = findBinary("codex", candidates);
+    return cachedCodexPath;
+  }
+
+  getEnv(): NodeJS.ProcessEnv {
+    return buildEnv();
+  }
+
+  getCIEnv(): NodeJS.ProcessEnv {
+    return buildCIEnv();
+  }
+
+  buildAutonomousArgs(opts: AutonomousOptions): string[] {
+    return ["-q", opts.prompt];
+  }
+
+  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): string {
+    const cleanPrompt = opts.prompt.replace(/\n/g, " ");
+    return `cd "${workingDir}" && codex "${cleanPrompt}"`;
+  }
+
+  buildStreamArgs(_opts: StreamOptions): string[] {
+    // Codex doesn't support stream-json
+    throw new Error("Codex CLI does not support streaming output");
+  }
+
+  parseJsonResponse(stdout: string): CliResponse {
+    // Codex quiet mode just outputs plain text
+    return { result: stdout.trim(), isError: false };
+  }
+
+  parseStreamLine(_line: string): StreamEvent | null {
+    return null; // Codex doesn't support streaming
+  }
+
+  getDefaultSkillsPath(): string {
+    return "~/.codex/skills";
+  }
+
+  getDefaultMcpConfigPath(): string {
+    return "~/.codex/config.toml";
+  }
+
+  getProjectConfigDir(): string {
+    return ".codex";
+  }
+
+  // ── Extension methods (stubs - Codex TOML config) ──
+
+  listProjectMcps(folderPath: string): string[] {
+    try {
+      const configPath = path.join(folderPath, ".codex", "config.toml");
+      if (!fs.existsSync(configPath)) return [];
+      // Basic TOML parsing for MCP server names
+      const content = fs.readFileSync(configPath, "utf-8");
+      const matches = content.matchAll(/\[mcp_servers\.(\w+)\]/g);
+      return Array.from(matches, (m) => m[1]).sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [];
+    }
+  }
+
+  listProjectSkills(): string[] {
+    return []; // Codex doesn't support skills
+  }
+
+  installKanbanMcp(folderPath: string): Result {
+    try {
+      const codexDir = path.join(folderPath, ".codex");
+      const configPath = path.join(codexDir, "config.toml");
+
+      if (!fs.existsSync(codexDir)) {
+        fs.mkdirSync(codexDir, { recursive: true });
+      }
+
+      let content = "";
+      if (fs.existsSync(configPath)) {
+        content = fs.readFileSync(configPath, "utf-8");
+      }
+
+      if (content.includes("[mcp_servers.kanban]")) return { success: true };
+
+      const mcpServerPath = path.resolve(process.cwd(), "mcp-server/index.ts");
+      const tomlBlock = `\n[mcp_servers.kanban]\ncommand = "npx"\nargs = ["tsx", "${mcpServerPath}"]\n`;
+
+      fs.writeFileSync(configPath, content + tomlBlock);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
+  removeKanbanMcp(folderPath: string): Result {
+    try {
+      const configPath = path.join(folderPath, ".codex", "config.toml");
+      if (!fs.existsSync(configPath)) return { success: true };
+
+      let content = fs.readFileSync(configPath, "utf-8");
+      // Remove the [mcp_servers.kanban] block
+      content = content.replace(/\n?\[mcp_servers\.kanban\][^\[]*/g, "");
+      fs.writeFileSync(configPath, content.trim() + "\n");
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
+  hasKanbanMcp(folderPath: string): boolean {
+    try {
+      const configPath = path.join(folderPath, ".codex", "config.toml");
+      if (!fs.existsSync(configPath)) return false;
+      return fs.readFileSync(configPath, "utf-8").includes("[mcp_servers.kanban]");
+    } catch {
+      return false;
+    }
+  }
+
+  installKanbanSkills(): Result {
+    return { success: false, error: "Codex CLI does not support skills" };
+  }
+
+  removeKanbanSkills(): Result {
+    return { success: false, error: "Codex CLI does not support skills" };
+  }
+
+  hasKanbanSkills(): boolean {
+    return false;
+  }
+}
+
+export const codexProvider = new CodexProvider();

@@ -109,8 +109,10 @@ export const STATUS_COLORS: Record<Status, string> = {
 
 // Settings types
 export type TerminalApp = "iterm2" | "ghostty" | "terminal";
+export type AiPlatform = "claude" | "gemini" | "codex";
 
 export interface AppSettings {
+  aiPlatform: AiPlatform;
   skillsPath: string;
   mcpConfigPath: string;
   terminalApp: TerminalApp;
@@ -118,11 +120,18 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  aiPlatform: "claude",
   skillsPath: "~/.claude/skills",
   mcpConfigPath: "~/.claude.json",
   terminalApp: "iterm2",
   detectedTerminal: null,
 };
+
+export const AI_PLATFORM_OPTIONS: { value: AiPlatform; label: string; description: string }[] = [
+  { value: "claude", label: "Claude Code", description: "Anthropic's coding CLI" },
+  { value: "gemini", label: "Gemini CLI", description: "Google's AI coding CLI" },
+  { value: "codex", label: "Codex CLI", description: "OpenAI's coding CLI" },
+];
 
 export const TERMINAL_OPTIONS: { value: TerminalApp; label: string }[] = [
   { value: "iterm2", label: "iTerm2" },

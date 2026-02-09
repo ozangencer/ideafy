@@ -73,11 +73,15 @@ export async function POST(
   console.log(`[Ideate] Working dir: ${workingDir}`);
 
   try {
-    // Replace newlines with spaces (AppleScript strings can't contain raw newlines)
-    const cleanPrompt = prompt.replace(/\n/g, " ");
+    const { getActiveProvider } = await import("@/lib/platform/active");
+    const provider = getActiveProvider();
 
-    // KANBAN_CARD_ID env var is used by hooks to detect kanban sessions
-    const claudeCommand = `cd "${workingDir}" && KANBAN_CARD_ID="${id}" claude "${cleanPrompt}" --permission-mode plan`;
+    // Build the terminal command using the active provider
+    const permissionMode = provider.capabilities.supportsPermissionModes ? "plan" : null;
+    const cliCommand = provider.buildInteractiveCommand(
+      { prompt, cardId: id, permissionMode },
+      workingDir
+    );
 
     console.log(`[Ideate] Terminal app: ${terminal}`);
     console.log(`[Ideate] Prompt length: ${prompt.length} chars`);
@@ -85,7 +89,7 @@ export async function POST(
     if (terminal === "ghostty") {
       // Ghostty doesn't support AppleScript
       // Copy command to clipboard and open Ghostty
-      execSync(`echo "${claudeCommand.replace(/"/g, '\\"')}" | pbcopy`);
+      execSync(`echo "${cliCommand.replace(/"/g, '\\"')}" | pbcopy`);
       exec("open -a Ghostty", (error) => {
         if (error) {
           console.error(`[Ideate] Error opening Ghostty: ${error.message}`);
@@ -105,7 +109,7 @@ export async function POST(
     // Write command to temp script to avoid complex escaping
     const timestamp = Date.now();
     const scriptPath = join(tmpdir(), `ideafy-ideate-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${claudeCommand}\n`, { mode: 0o755 });
+    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
 
     const appName = terminal === "iterm2" ? "iTerm" : "Terminal";
 

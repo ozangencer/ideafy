@@ -281,15 +281,14 @@ export async function POST(
         .run();
     }
 
-    // Replace newlines with spaces (AppleScript strings can't contain raw newlines)
-    // Other escaping (quotes, backslashes) is handled by getAppleScript
-    const cleanPrompt = prompt.replace(/\n/g, " ");
+    const provider = await import("@/lib/platform/active").then(m => m.getActiveProvider());
 
-    // Note: kanban MCP server is globally configured via `claude mcp add`
-    // KANBAN_CARD_ID env var is used by the hook to detect kanban sessions
-    // Planning phase uses --permission-mode plan, others use normal mode
-    const permissionFlag = phase === "planning" ? " --permission-mode plan" : "";
-    const claudeCommand = `cd "${actualWorkingDir}" && KANBAN_CARD_ID="${id}" claude "${cleanPrompt}"${permissionFlag}`;
+    // Build the terminal command using the active provider
+    const permissionMode = (phase === "planning" && provider.capabilities.supportsPermissionModes) ? "plan" : null;
+    const cliCommand = provider.buildInteractiveCommand(
+      { prompt, cardId: id, permissionMode },
+      actualWorkingDir
+    );
 
     console.log(`[Open Terminal] Working dir: ${actualWorkingDir}`);
     console.log(`[Open Terminal] Prompt length: ${prompt.length} chars`);
@@ -298,7 +297,7 @@ export async function POST(
     if (terminal === "ghostty") {
       // Ghostty doesn't support AppleScript
       // Copy command to clipboard and open Ghostty
-      execSync(`echo "${claudeCommand.replace(/"/g, '\\"')}" | pbcopy`);
+      execSync(`echo "${cliCommand.replace(/"/g, '\\"')}" | pbcopy`);
       exec("open -a Ghostty", (error) => {
         if (error) {
           console.error(`[Open Terminal] Error opening Ghostty: ${error.message}`);
@@ -323,7 +322,7 @@ export async function POST(
     // Write command to temp script to avoid complex escaping
     const timestamp = Date.now();
     const scriptPath = join(tmpdir(), `ideafy-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${claudeCommand}\n`, { mode: 0o755 });
+    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
 
     // Note: App is named "iTerm" not "iTerm2" on this system
     const appName = terminal === "iterm2" ? "iTerm" : "Terminal";

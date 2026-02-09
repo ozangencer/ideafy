@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { TERMINAL_OPTIONS, DEFAULT_SETTINGS } from "@/lib/types";
-import type { TerminalApp } from "@/lib/types";
+import { TERMINAL_OPTIONS, DEFAULT_SETTINGS, AI_PLATFORM_OPTIONS } from "@/lib/types";
+import type { TerminalApp, AiPlatform, AppSettings } from "@/lib/types";
+import type { PlatformCapabilities } from "@/lib/platform/types";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Folder, RefreshCw, Check, AlertCircle } from "lucide-react";
+import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -28,6 +29,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { settings, updateSettings, fetchSettings } = useKanbanStore();
+  const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);
   const [mcpConfigPath, setMcpConfigPath] = useState(DEFAULT_SETTINGS.mcpConfigPath);
   const [terminalApp, setTerminalApp] = useState<TerminalApp>(DEFAULT_SETTINGS.terminalApp);
@@ -36,6 +38,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [isPickingMcpFile, setIsPickingMcpFile] = useState(false);
   const [isReinstallingHooks, setIsReinstallingHooks] = useState(false);
   const [hookResult, setHookResult] = useState<{ success: number; failed: number } | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+
+  // Track capabilities based on selected platform
+  const [capabilities, setCapabilities] = useState<PlatformCapabilities | null>(null);
 
   useEffect(() => {
     if (!settings) {
@@ -45,11 +51,97 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (settings) {
+      setAiPlatform(settings.aiPlatform);
       setSkillsPath(settings.skillsPath);
       setMcpConfigPath(settings.mcpConfigPath);
       setTerminalApp(settings.terminalApp);
+      // Sync the ref so the platform-change effect doesn't fire on initial load
+      prevPlatformRef.current = settings.aiPlatform;
+
+      // Get capabilities from the extended settings response
+      const extSettings = settings as AppSettings & { platformCapabilities?: PlatformCapabilities };
+      if (extSettings.platformCapabilities) {
+        setCapabilities(extSettings.platformCapabilities);
+      }
     }
   }, [settings]);
+
+  // Platform defaults for path and capabilities
+  const PLATFORM_DEFAULTS: Record<AiPlatform, {
+    skillsPath: string;
+    mcpConfigPath: string;
+    capabilities: PlatformCapabilities;
+  }> = {
+    claude: {
+      skillsPath: "~/.claude/skills",
+      mcpConfigPath: "~/.claude.json",
+      capabilities: {
+        supportsAutonomousMode: true,
+        supportsStreamJson: true,
+        supportsPermissionModes: true,
+        supportsHooks: true,
+        supportsSkills: true,
+        supportsMcp: true,
+        mcpConfigFormat: "json",
+      },
+    },
+    gemini: {
+      skillsPath: "~/.gemini/skills",
+      mcpConfigPath: "~/.gemini/settings.json",
+      capabilities: {
+        supportsAutonomousMode: true,
+        supportsStreamJson: true,
+        supportsPermissionModes: false,
+        supportsHooks: false,
+        supportsSkills: true,
+        supportsMcp: true,
+        mcpConfigFormat: "json",
+      },
+    },
+    codex: {
+      skillsPath: "~/.codex/skills",
+      mcpConfigPath: "~/.codex/config.toml",
+      capabilities: {
+        supportsAutonomousMode: true,
+        supportsStreamJson: false,
+        supportsPermissionModes: false,
+        supportsHooks: false,
+        supportsSkills: true,
+        supportsMcp: true,
+        mcpConfigFormat: "toml",
+      },
+    },
+  };
+
+  // Collect all known default paths to detect "not customized"
+  const allDefaultSkillsPaths = Object.values(PLATFORM_DEFAULTS).map((d) => d.skillsPath);
+  const allDefaultMcpPaths = Object.values(PLATFORM_DEFAULTS).map((d) => d.mcpConfigPath);
+
+  // Track previous platform to handle multi-hop transitions (Claude → Gemini → Codex)
+  const prevPlatformRef = useRef(aiPlatform);
+
+  // Update capabilities and default paths when platform changes locally
+  useEffect(() => {
+    const prev = prevPlatformRef.current;
+    prevPlatformRef.current = aiPlatform;
+
+    // Skip the initial render (when prev === current)
+    if (prev === aiPlatform) return;
+
+    const newDefaults = PLATFORM_DEFAULTS[aiPlatform];
+    setCapabilities(newDefaults.capabilities);
+
+    // Update paths only if current value is a known default (not user-customized)
+    if (allDefaultSkillsPaths.includes(skillsPath)) {
+      setSkillsPath(newDefaults.skillsPath);
+    }
+    if (allDefaultMcpPaths.includes(mcpConfigPath)) {
+      setMcpConfigPath(newDefaults.mcpConfigPath);
+    }
+
+    // Reset connection status when platform changes
+    setConnectionStatus("idle");
+  }, [aiPlatform]);
 
   const handleFolderPick = async (type: "skills" | "mcp") => {
     if (type === "skills") {
@@ -83,6 +175,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setIsSubmitting(true);
     try {
       await updateSettings({
+        aiPlatform,
         skillsPath,
         mcpConfigPath,
         terminalApp,
@@ -116,6 +209,19 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
+  const handleTestConnection = async () => {
+    setConnectionStatus("testing");
+    try {
+      const response = await fetch(`/api/settings/test-connection?platform=${aiPlatform}`);
+      const data = await response.json();
+      setConnectionStatus(data.found ? "success" : "error");
+    } catch {
+      setConnectionStatus("error");
+    }
+  };
+
+  const platformOption = AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform);
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
@@ -124,63 +230,112 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
-          {/* Skills Path */}
+          {/* AI Platform */}
           <div className="grid gap-2">
-            <label htmlFor="skillsPath" className="text-sm font-medium">
-              Skills Directory
+            <label htmlFor="aiPlatform" className="text-sm font-medium">
+              AI Platform
             </label>
             <div className="flex gap-2">
-              <Input
-                id="skillsPath"
-                value={skillsPath}
-                onChange={(e) => setSkillsPath(e.target.value)}
-                placeholder="~/.claude/skills"
-                className="flex-1"
-              />
+              <Select
+                value={aiPlatform}
+                onValueChange={(value) => setAiPlatform(value as AiPlatform)}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Select platform" />
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  {AI_PLATFORM_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <span>{option.label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => handleFolderPick("skills")}
-                disabled={isPickingSkillsFolder}
-                title="Browse folders"
+                onClick={handleTestConnection}
+                disabled={connectionStatus === "testing"}
+                title="Test connection"
               >
-                <Folder className="h-4 w-4" />
+                {connectionStatus === "testing" ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : connectionStatus === "success" ? (
+                  <Wifi className="h-4 w-4 text-green-500" />
+                ) : connectionStatus === "error" ? (
+                  <WifiOff className="h-4 w-4 text-destructive" />
+                ) : (
+                  <Wifi className="h-4 w-4" />
+                )}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Path to Claude Code skills directory
+              {platformOption?.description || "Select the AI coding CLI to use"}
             </p>
           </div>
 
-          {/* MCP Config Path */}
-          <div className="grid gap-2">
-            <label htmlFor="mcpConfigPath" className="text-sm font-medium">
-              MCP Configuration File
-            </label>
-            <div className="flex gap-2">
-              <Input
-                id="mcpConfigPath"
-                value={mcpConfigPath}
-                onChange={(e) => setMcpConfigPath(e.target.value)}
-                placeholder="~/.claude.json"
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => handleFolderPick("mcp")}
-                disabled={isPickingMcpFile}
-                title="Browse files"
-              >
-                <Folder className="h-4 w-4" />
-              </Button>
+          {/* Skills Path - only if platform supports skills */}
+          {capabilities?.supportsSkills && (
+            <div className="grid gap-2">
+              <label htmlFor="skillsPath" className="text-sm font-medium">
+                Skills Directory
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="skillsPath"
+                  value={skillsPath}
+                  onChange={(e) => setSkillsPath(e.target.value)}
+                  placeholder="~/.claude/skills"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleFolderPick("skills")}
+                  disabled={isPickingSkillsFolder}
+                  title="Browse folders"
+                >
+                  <Folder className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Path to skills directory
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Path to Claude MCP configuration JSON file
-            </p>
-          </div>
+          )}
+
+          {/* MCP Config Path - only if platform supports MCP */}
+          {capabilities?.supportsMcp && (
+            <div className="grid gap-2">
+              <label htmlFor="mcpConfigPath" className="text-sm font-medium">
+                MCP Configuration File
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="mcpConfigPath"
+                  value={mcpConfigPath}
+                  onChange={(e) => setMcpConfigPath(e.target.value)}
+                  placeholder={mcpConfigPath}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleFolderPick("mcp")}
+                  disabled={isPickingMcpFile}
+                  title="Browse files"
+                >
+                  <Folder className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Path to MCP configuration {capabilities.mcpConfigFormat === "toml" ? "TOML" : "JSON"} file
+              </p>
+            </div>
+          )}
 
           {/* Terminal App Selection */}
           <div className="grid gap-2">
@@ -194,7 +349,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               <SelectTrigger>
                 <SelectValue placeholder="Select terminal" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-[70]">
                 {TERMINAL_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
@@ -205,55 +360,59 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <p className="text-xs text-muted-foreground">
               {terminalApp === "ghostty"
                 ? "Ghostty will open and command will be copied to clipboard"
-                : "Terminal to use for opening Claude Code sessions"}
+                : "Terminal to use for opening coding sessions"}
             </p>
           </div>
 
-          {/* Divider */}
-          <div className="border-t border-border" />
+          {/* Divider - only show if hooks are supported */}
+          {capabilities?.supportsHooks && (
+            <>
+              <div className="border-t border-border" />
 
-          {/* Claude Code Hooks */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Claude Code Hooks</label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Reminds you to update kanban cards on every message
-            </p>
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleReinstallHooks}
-                disabled={isReinstallingHooks}
-                className="gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${isReinstallingHooks ? "animate-spin" : ""}`} />
-                {isReinstallingHooks ? "Installing..." : "Install Hooks"}
-              </Button>
-              {hookResult && (
-                <div className="flex items-center gap-2 text-sm">
-                  {hookResult.failed === -1 ? (
-                    <span className="text-destructive flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      Error occurred
-                    </span>
-                  ) : (
-                    <>
-                      <span className="text-green-500 flex items-center gap-1">
-                        <Check className="h-4 w-4" />
-                        {hookResult.success} successful
-                      </span>
-                      {hookResult.failed > 0 && (
+              {/* Hooks */}
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Hooks</label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Reminds you to update kanban cards on every message
+                </p>
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReinstallHooks}
+                    disabled={isReinstallingHooks}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isReinstallingHooks ? "animate-spin" : ""}`} />
+                    {isReinstallingHooks ? "Installing..." : "Install Hooks"}
+                  </Button>
+                  {hookResult && (
+                    <div className="flex items-center gap-2 text-sm">
+                      {hookResult.failed === -1 ? (
                         <span className="text-destructive flex items-center gap-1">
                           <AlertCircle className="h-4 w-4" />
-                          {hookResult.failed} failed
+                          Error occurred
                         </span>
+                      ) : (
+                        <>
+                          <span className="text-green-500 flex items-center gap-1">
+                            <Check className="h-4 w-4" />
+                            {hookResult.success} successful
+                          </span>
+                          {hookResult.failed > 0 && (
+                            <span className="text-destructive flex items-center gap-1">
+                              <AlertCircle className="h-4 w-4" />
+                              {hookResult.failed} failed
+                            </span>
+                          )}
+                        </>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>

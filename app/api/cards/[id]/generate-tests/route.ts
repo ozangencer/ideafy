@@ -82,11 +82,14 @@ export async function POST(
   );
 
   try {
-    // Replace newlines with spaces (AppleScript strings can't contain raw newlines)
-    const cleanPrompt = prompt.replace(/\n/g, " ");
+    const { getActiveProvider } = await import("@/lib/platform/active");
+    const provider = getActiveProvider();
 
-    // Build claude command
-    const claudeCommand = `cd "${actualWorkingDir}" && KANBAN_CARD_ID="${id}" claude "${cleanPrompt}"`;
+    // Build CLI command using the active provider
+    const cliCommand = provider.buildInteractiveCommand(
+      { prompt, cardId: id },
+      actualWorkingDir
+    );
 
     console.log(`[Generate Tests] Working dir: ${actualWorkingDir}`);
     console.log(`[Generate Tests] Prompt length: ${prompt.length} chars`);
@@ -95,7 +98,7 @@ export async function POST(
     if (terminal === "ghostty") {
       // Ghostty doesn't support AppleScript - copy to clipboard
       const { execSync } = await import("child_process");
-      execSync(`echo "${claudeCommand.replace(/"/g, '\\"')}" | pbcopy`);
+      execSync(`echo "${cliCommand.replace(/"/g, '\\"')}" | pbcopy`);
       exec("open -a Ghostty", (error) => {
         if (error) {
           console.error(`[Generate Tests] Error opening Ghostty: ${error.message}`);
@@ -114,7 +117,7 @@ export async function POST(
     // iTerm2 or Terminal.app - use AppleScript
     const timestamp = Date.now();
     const scriptPath = join(tmpdir(), `ideafy-test-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${claudeCommand}\n`, { mode: 0o755 });
+    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
 
     const appName = terminal === "iterm2" ? "iTerm" : "Terminal";
 

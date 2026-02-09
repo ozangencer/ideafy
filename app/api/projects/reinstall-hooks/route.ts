@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
-import { installKanbanHook } from "@/lib/hooks";
+import { getActiveProvider } from "@/lib/platform/active";
 
 export async function POST() {
   try {
+    const provider = getActiveProvider();
+
+    // Check if the active platform supports hooks
+    if (!provider.installKanbanHook) {
+      return NextResponse.json({
+        message: `${provider.displayName} does not support hooks`,
+        results: [],
+      });
+    }
+
     const projects = db.select().from(schema.projects).all();
 
     const results: { projectId: string; name: string; success: boolean; error?: string }[] = [];
 
     for (const project of projects) {
       if (project.folderPath) {
-        const hookResult = installKanbanHook(project.folderPath);
+        const hookResult = provider.installKanbanHook(project.folderPath);
         results.push({
           projectId: project.id,
           name: project.name,

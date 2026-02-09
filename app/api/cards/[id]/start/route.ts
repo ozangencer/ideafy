@@ -27,17 +27,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
-import { getClaudePath, getClaudeCIEnv } from "@/lib/claude-cli";
-
-interface ClaudeResponse {
-  result?: string;
-  cost_usd?: number;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  is_error?: boolean;
-  num_turns?: number;
-  session_id?: string;
-}
+import { getActiveProvider } from "@/lib/platform/active";
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
   switch (phase) {
@@ -310,32 +300,24 @@ async function runClaudeCli(
     killProcess(processKey);
   }
 
-  // All autonomous phases need full permissions since there's no user to approve
-  // Planning prompt already constrains Claude to "plan only, don't implement"
-  const args = [
-    "-p", prompt,
-    "--dangerously-skip-permissions",
-    "--output-format", "json",
-    // Skip project-level hooks (e.g. UserPromptSubmit that injects save_plan instructions)
-    // Autonomous flow handles saving automatically, so project hooks interfere
-    "--setting-sources", "user",
-  ];
+  const provider = getActiveProvider();
+  const args = provider.buildAutonomousArgs({ prompt });
 
-  console.log(`[Claude CLI] Running in ${cwd}:`);
-  console.log(`[Claude CLI] Prompt length: ${prompt.length} chars`);
+  console.log(`[${provider.displayName}] Running in ${cwd}:`);
+  console.log(`[${provider.displayName}] Prompt length: ${prompt.length} chars`);
 
   return new Promise((resolve, reject) => {
-    const claudeProcess = spawn(getClaudePath(), args, {
+    const cliProcess = spawn(provider.getCliPath(), args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      env: getClaudeCIEnv(),
+      env: provider.getCIEnv(),
     });
 
     // Close stdin immediately (equivalent to < /dev/null)
-    claudeProcess.stdin?.end();
+    cliProcess.stdin?.end();
 
     // Register process for tracking
-    registerProcess(processKey, claudeProcess, {
+    registerProcess(processKey, cliProcess, {
       cardId,
       sectionType: null,
       processType: "autonomous",
@@ -347,57 +329,47 @@ async function runClaudeCli(
     let stdout = "";
     let stderr = "";
 
-    claudeProcess.stdout?.on("data", (data: Buffer) => {
+    cliProcess.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    claudeProcess.stderr?.on("data", (data: Buffer) => {
+    cliProcess.stderr?.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
     // Set timeout
     const timeout = setTimeout(() => {
-      claudeProcess.kill();
-      // Don't call completeProcess here - let the route handler do it
-      // after all DB updates are done, so the UI stays in sync
-      reject(new Error("Claude CLI timed out after 10 minutes"));
+      cliProcess.kill();
+      reject(new Error(`${provider.displayName} timed out after 10 minutes`));
     }, 10 * 60 * 1000);
 
-    claudeProcess.on("close", (code) => {
+    cliProcess.on("close", (code) => {
       clearTimeout(timeout);
-      // Don't call completeProcess here - the route handler will call it
-      // after DB updates, so the background icon stays "running" until truly done
 
       if (stderr) {
-        console.log(`[Claude CLI] stderr: ${stderr}`);
+        console.log(`[${provider.displayName}] stderr: ${stderr}`);
       }
-      console.log(`[Claude CLI] stdout length: ${stdout.length}`);
+      console.log(`[${provider.displayName}] stdout length: ${stdout.length}`);
 
       if (code !== 0 && !stdout.trim()) {
-        reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+        reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
         return;
       }
 
-      try {
-        const response: ClaudeResponse = JSON.parse(stdout);
-        if (response.is_error) {
-          reject(new Error(response.result || "Claude returned an error"));
-          return;
-        }
-        resolve({
-          response: response.result || "",
-          cost: response.cost_usd,
-          duration: response.duration_ms,
-        });
-      } catch {
-        console.log(`[Claude CLI] JSON parse failed, using raw output`);
-        resolve({ response: stdout.trim() });
+      const parsed = provider.parseJsonResponse(stdout);
+      if (parsed.isError) {
+        reject(new Error(parsed.result || `${provider.displayName} returned an error`));
+        return;
       }
+      resolve({
+        response: parsed.result,
+        cost: parsed.cost,
+        duration: parsed.duration,
+      });
     });
 
-    claudeProcess.on("error", (error) => {
+    cliProcess.on("error", (error) => {
       clearTimeout(timeout);
-      // Don't call completeProcess here - let the route handler do it
       reject(error);
     });
   });

@@ -4,7 +4,8 @@ import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { homedir } from "os";
 import { join } from "path";
-import type { AppSettings, TerminalApp } from "@/lib/types";
+import type { AppSettings, AiPlatform, TerminalApp } from "@/lib/types";
+import { getPlatformProvider } from "@/lib/platform";
 
 // Expand ~ to home directory
 function expandPath(path: string): string {
@@ -24,6 +25,7 @@ function contractPath(path: string): string {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
+  aiPlatform: "claude",
   skillsPath: "~/.claude/skills",
   mcpConfigPath: "~/.claude.json",
   terminalApp: "iterm2",
@@ -51,6 +53,7 @@ export async function GET() {
     const result: AppSettings = { ...DEFAULT_SETTINGS };
 
     for (const row of rows) {
+      if (row.key === "ai_platform") result.aiPlatform = row.value as AiPlatform;
       if (row.key === "skills_path") result.skillsPath = row.value;
       if (row.key === "mcp_config_path") result.mcpConfigPath = row.value;
       if (row.key === "terminal_app") result.terminalApp = row.value as TerminalApp;
@@ -59,7 +62,9 @@ export async function GET() {
     // Add detected terminal from environment
     result.detectedTerminal = detectTerminal();
 
-    return NextResponse.json(result);
+    // Include platform capabilities in the response
+    const provider = getPlatformProvider(result.aiPlatform);
+    return NextResponse.json({ ...result, platformCapabilities: provider.capabilities });
   } catch (error) {
     console.error("Failed to fetch settings:", error);
     return NextResponse.json({ ...DEFAULT_SETTINGS, detectedTerminal: detectTerminal() });
@@ -74,6 +79,7 @@ export async function PUT(request: Request) {
 
     // Map of incoming field names to database keys
     const keyMap: Record<string, string> = {
+      aiPlatform: "ai_platform",
       skillsPath: "skills_path",
       mcpConfigPath: "mcp_config_path",
       terminalApp: "terminal_app",
@@ -114,4 +120,3 @@ export async function PUT(request: Request) {
     );
   }
 }
-

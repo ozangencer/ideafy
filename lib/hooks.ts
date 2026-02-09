@@ -1,6 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 
+// Note: This module's functions are also called by claude-provider via require().
+// The exported functions remain the canonical hook implementation for Claude.
+
 const KANBAN_HOOK = {
   hooks: {
     UserPromptSubmit: [

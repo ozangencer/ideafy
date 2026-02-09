@@ -14,7 +14,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
-import { getClaudePath, getClaudeEnv } from "@/lib/claude-cli";
+import { getActiveProvider } from "@/lib/platform/active";
 
 // Card context info
 interface CardContext {
@@ -282,6 +282,19 @@ export async function POST(
   // Generate assistant message ID for database
   const assistantMessageId = uuidv4();
 
+  const provider = getActiveProvider();
+
+  // Check if streaming is supported by the active platform
+  if (!provider.capabilities.supportsStreamJson) {
+    return new Response(
+      JSON.stringify({
+        error: `${provider.displayName} does not support streaming chat`,
+        suggestion: "Use interactive terminal instead",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const stream = new ReadableStream({
     start(controller) {
       const sendEvent = (type: string, data: unknown) => {
@@ -294,23 +307,20 @@ export async function POST(
         }
       };
 
-      const claudeArgs = [
-        "-p", fullPrompt,
-        "--print",
-        "--output-format", "stream-json",
-        "--verbose",
-        "--allowedTools", "Read", "Edit", "Write",
-        "--add-dir", IMAGES_TEMP_DIR
-      ];
+      const cliArgs = provider.buildStreamArgs({
+        prompt: fullPrompt,
+        allowedTools: ["Read", "Edit", "Write"],
+        addDirs: [IMAGES_TEMP_DIR],
+      });
 
-      const claudeProcess = spawn(getClaudePath(), claudeArgs, {
+      const cliProcess = spawn(provider.getCliPath(), cliArgs, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env: getClaudeEnv(),
+        env: provider.getEnv(),
       });
 
       // Register process with metadata
-      registerProcess(processKey, claudeProcess, {
+      registerProcess(processKey, cliProcess, {
         cardId,
         sectionType: sectionType as SectionType,
         processType: "chat",
@@ -318,11 +328,11 @@ export async function POST(
         displayId: displayId !== cardId ? displayId : null,
         startedAt: new Date().toISOString(),
       });
-      sendEvent("start", { pid: claudeProcess.pid, messageId: assistantMessageId });
+      sendEvent("start", { pid: cliProcess.pid, messageId: assistantMessageId });
 
       let stdoutBuffer = "";
 
-      claudeProcess.stdout?.on("data", (data: Buffer) => {
+      cliProcess.stdout?.on("data", (data: Buffer) => {
         stdoutBuffer += data.toString();
         const lines = stdoutBuffer.split('\n');
         stdoutBuffer = lines.pop() || "";
@@ -371,14 +381,14 @@ export async function POST(
         }
       });
 
-      claudeProcess.stderr?.on("data", (data: Buffer) => {
+      cliProcess.stderr?.on("data", (data: Buffer) => {
         const text = data.toString();
         if (text.includes("error") || text.includes("Error")) {
           sendEvent("stderr", text);
         }
       });
 
-      claudeProcess.on("close", async (code) => {
+      cliProcess.on("close", async (code) => {
         completeProcess(processKey);
 
         // Save assistant message to database
@@ -406,7 +416,7 @@ export async function POST(
         }
       });
 
-      claudeProcess.on("error", (error) => {
+      cliProcess.on("error", (error) => {
         completeProcess(processKey);
         sendEvent("error", error.message);
         if (!isClosed) {
@@ -417,8 +427,8 @@ export async function POST(
 
       request.signal.addEventListener("abort", () => {
         isClosed = true;
-        if (claudeProcess && !claudeProcess.killed) {
-          claudeProcess.kill();
+        if (cliProcess && !cliProcess.killed) {
+          cliProcess.kill();
           completeProcess(processKey);
         }
       });

@@ -1,6 +1,13 @@
-import { AppSettings } from "../../types";
+import type { AiPlatform, AppSettings } from "../../types";
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
+
+// Client-safe platform defaults (no fs imports)
+const PLATFORM_DEFAULTS: Record<AiPlatform, { skillsPath: string; mcpConfigPath: string }> = {
+  claude: { skillsPath: "~/.claude/skills", mcpConfigPath: "~/.claude.json" },
+  gemini: { skillsPath: "~/.gemini/skills", mcpConfigPath: "~/.gemini/settings.json" },
+  codex: { skillsPath: "~/.codex/skills", mcpConfigPath: "~/.codex/config.toml" },
+};
 
 export const createSettingsSlice: StoreSlice<
   Pick<KanbanStore, "settings" | "isSettingsLoading" | "fetchSettings" | "updateSettings">
@@ -22,6 +29,23 @@ export const createSettingsSlice: StoreSlice<
 
   updateSettings: async (updates) => {
     try {
+      // When platform changes, update default paths
+      if (updates.aiPlatform) {
+        const newDefaults = PLATFORM_DEFAULTS[updates.aiPlatform];
+        const currentSettings = get().settings;
+
+        if (currentSettings) {
+          const oldDefaults = PLATFORM_DEFAULTS[currentSettings.aiPlatform];
+          // Only update paths if they were at the old platform's defaults
+          if (currentSettings.skillsPath === oldDefaults.skillsPath) {
+            updates.skillsPath = newDefaults.skillsPath;
+          }
+          if (currentSettings.mcpConfigPath === oldDefaults.mcpConfigPath) {
+            updates.mcpConfigPath = newDefaults.mcpConfigPath;
+          }
+        }
+      }
+
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -30,10 +54,11 @@ export const createSettingsSlice: StoreSlice<
       const settings = await parseJson<AppSettings>(response);
       set({ settings });
 
-      if (updates.skillsPath) {
+      // Re-fetch extensions when relevant paths change
+      if (updates.skillsPath || updates.aiPlatform) {
         get().fetchSkills();
       }
-      if (updates.mcpConfigPath) {
+      if (updates.mcpConfigPath || updates.aiPlatform) {
         get().fetchMcps();
       }
     } catch (error) {
