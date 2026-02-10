@@ -695,8 +695,10 @@ export function CardModal() {
       className={`fixed inset-0 z-50 flex justify-end transition-colors duration-200 ${
         isVisible ? "bg-black/40" : "bg-transparent"
       }`}
+      onClick={handleClose}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         className={`bg-surface border-l border-border w-full h-full flex flex-col shadow-2xl transition-all duration-200 ease-out ${
           isExpanded ? "max-w-[1400px]" : "max-w-[900px]"
         } ${isVisible ? "translate-x-0" : "translate-x-full"}`}

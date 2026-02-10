@@ -17,6 +17,13 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
+/* Prevent Radix scroll-lock from adding padding-right to body,
+   which causes layout shift when Select dropdowns open inside modals */
+body[data-scroll-locked] {
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
