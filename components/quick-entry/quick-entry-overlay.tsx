@@ -6,6 +6,16 @@ import { toast } from "@/hooks/use-toast";
 import { COLUMNS, Complexity, Priority, Project, Status } from "@/lib/types";
 import { X, Brain } from "lucide-react";
 
+const STATUS_COLOR_MAP: Record<Status, string> = {
+  ideation: "#8b5cf6",
+  backlog: "#6b7280",
+  bugs: "#ef4444",
+  progress: "#facc15",
+  test: "#3b82f6",
+  completed: "#22c55e",
+  withdrawn: "#6b7280",
+};
+
 const STATUS_MAP: Record<string, Status> = {
   "/idea": "ideation",
   "/ideation": "ideation",
@@ -396,7 +406,7 @@ export function QuickEntryOverlay() {
             {status !== "backlog" && (
               <TokenBadge
                 label={statusLabel ?? status}
-                color="#60a5fa"
+                color={STATUS_COLOR_MAP[status]}
                 onRemove={() => setStatus("backlog")}
               />
             )}

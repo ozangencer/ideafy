@@ -633,7 +633,7 @@ export default function QuickEntryPage() {
             {statusExplicit && (
               <TokenBadge
                 label={statusLabel ?? status}
-                color="#60a5fa"
+                color={STATUS_COLORS[status]}
                 onRemove={() => { setStatus("backlog"); setStatusExplicit(false); }}
               />
             )}
