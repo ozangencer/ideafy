@@ -17,11 +17,18 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
-/* Prevent Radix scroll-lock from adding padding-right to body,
-   which causes layout shift when Select dropdowns open inside modals */
-body[data-scroll-locked] {
-  padding-right: 0 !important;
+/* Prevent Radix scroll-lock from causing layout shift when Select dropdowns
+   open inside modals. Uses 'html body' for higher specificity to beat the
+   runtime-injected styles from react-remove-scroll-bar (which also use !important).
+   In Electron, body has margin-top:40px for the titlebar. react-remove-scroll-bar
+   reads this and injects padding-top:40px as "compensation", but can't reset
+   the margin (Electron's !important wins), causing a 40px content shift. */
+html body[data-scroll-locked] {
+  padding: 0 !important;
   margin-right: 0 !important;
+  margin-left: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
 body {

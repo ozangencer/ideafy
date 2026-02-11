@@ -55,6 +55,7 @@ export function QuickEntryOverlay() {
   const [focusedField, setFocusedField] = useState<"title" | "description">(
     "title"
   );
+  const [projectError, setProjectError] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
@@ -100,6 +101,7 @@ export function QuickEntryOverlay() {
       setAutocompleteQuery(null);
       setAutocompleteIndex(0);
       setFocusedField("title");
+      setProjectError(false);
       requestAnimationFrame(() => titleRef.current?.focus());
     }
   }, [isQuickEntryOpen]);
@@ -153,6 +155,7 @@ export function QuickEntryOverlay() {
 
   const handleSelectProject = useCallback((project: Project) => {
     setProjectId(project.id);
+    setProjectError(false);
     setTitle((prev) => prev.replace(/@[\w\-.]*$/, "").trim());
     setAutocompleteQuery(null);
     setAutocompleteIndex(0);
@@ -163,6 +166,11 @@ export function QuickEntryOverlay() {
     if (!title.trim()) return;
 
     const project = resolvedProject;
+
+    if (!project) {
+      setProjectError(true);
+      return;
+    }
 
     await addCard({
       title: title.trim(),
@@ -175,8 +183,8 @@ export function QuickEntryOverlay() {
       complexity,
       priority,
       aiPlatform: null,
-      projectFolder: project?.folderPath ?? "",
-      projectId: project?.id ?? null,
+      projectFolder: project.folderPath ?? "",
+      projectId: project.id,
       gitBranchName: null,
       gitBranchStatus: null,
       gitWorktreePath: null,
@@ -417,6 +425,13 @@ export function QuickEntryOverlay() {
                 onRemove={() => setComplexity("medium")}
               />
             )}
+          </div>
+        )}
+
+        {/* Project required error */}
+        {projectError && (
+          <div className="px-5 pb-2 text-[12px] text-red-400">
+            Project is required. Type <kbd className="font-mono bg-white/[0.06] px-1 rounded">@</kbd> to select a project.
           </div>
         )}
 

@@ -93,6 +93,15 @@ function sortCompletedCards(cards: Card[]): Card[] {
     return dateB - dateA;
   });
 }
+
+// Sort test cards by updatedAt (desc) - most recently updated first
+function sortTestCards(cards: Card[]): Card[] {
+  return [...cards].sort((a, b) => {
+    const dateA = new Date(a.updatedAt).getTime();
+    const dateB = new Date(b.updatedAt).getTime();
+    return dateB - dateA;
+  });
+}
 import { Column } from "./column";
 import { TaskCard } from "./card";
 
@@ -193,10 +202,12 @@ export function KanbanBoard() {
             if (column.id === 'completed') {
               columnCards = filterByCompletedDate(columnCards, completedFilter);
             }
-            // Use different sorting for completed vs other columns
+            // Use different sorting per column type
             const sortedCards = column.id === 'completed'
               ? sortCompletedCards(columnCards)
-              : sortCards(columnCards);
+              : column.id === 'test'
+                ? sortTestCards(columnCards)
+                : sortCards(columnCards);
             return (
               <Column
                 key={column.id}
