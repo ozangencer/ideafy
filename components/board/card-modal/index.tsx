@@ -361,6 +361,7 @@ export function CardModal() {
 
   // Handle close
   const handleClose = useCallback(() => {
+    if (showDiscardDraftDialog) return;
     if (isDraftMode && hasDraftChanges) {
       setShowDiscardDraftDialog(true);
       return;
@@ -374,7 +375,7 @@ export function CardModal() {
     } else {
       setTimeout(() => closeModal(), 200);
     }
-  }, [isDraftMode, hasDraftChanges, discardDraft, closeModal, detachConversation]);
+  }, [isDraftMode, hasDraftChanges, showDiscardDraftDialog, discardDraft, closeModal, detachConversation]);
 
   // Force close (used by discard confirmation dialog)
   const handleForceClose = useCallback(() => {
