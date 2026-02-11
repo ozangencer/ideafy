@@ -47,6 +47,13 @@ const COMPLEXITY_MAP: Record<string, Complexity> = {
   "c:high": "high",
 };
 
+// Complexity options for c: autocomplete
+const COMPLEXITY_OPTIONS = [
+  { key: "low" as Complexity, label: "Low", color: "#22c55e", trigger: "c:low" },
+  { key: "medium" as Complexity, label: "Medium", color: "#facc15", trigger: "c:medium" },
+  { key: "high" as Complexity, label: "High", color: "#f87171", trigger: "c:high" },
+];
+
 const PLATFORM_MAP: Record<string, AiPlatform> = {
   "ai:claude": "claude",
   "ai:gemini": "gemini",
@@ -66,18 +73,19 @@ const PLATFORM_OPTIONS = [
   { key: "codex" as AiPlatform, label: "Codex CLI", color: "#10a37f", bracket: "[codex" },
 ];
 
-type AutocompleteType = "project" | "status" | "platform" | null;
+type AutocompleteType = "project" | "status" | "platform" | "complexity" | null;
 
 export default function QuickEntryPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
-  const [status, setStatus] = useState<Status>("backlog");
+  const [status, setStatus] = useState<Status>("ideation");
   const [statusExplicit, setStatusExplicit] = useState(false);
   const [complexity, setComplexity] = useState<Complexity>("medium");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectError, setProjectError] = useState(false);
 
   // Unified autocomplete state
   const [acType, setAcType] = useState<AutocompleteType>(null);
@@ -92,16 +100,33 @@ export default function QuickEntryPage() {
   const titleRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const projectsRef = useRef<Project[]>([]);
+  const priorityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetch("/api/projects")
       .then((r) => r.json())
-      .then((data) => setProjects(data))
+      .then((data: Project[]) => {
+        setProjects(data);
+        projectsRef.current = data;
+        const lastId = localStorage.getItem("quickEntryLastProjectId");
+        if (lastId) {
+          const match = data.find((p) => p.id === lastId);
+          if (match) setSelectedProject(match);
+        }
+      })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     requestAnimationFrame(() => titleRef.current?.focus());
+  }, []);
+
+  // Cleanup priority debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (priorityTimeoutRef.current) clearTimeout(priorityTimeoutRef.current);
+    };
   }, []);
 
   // Force transparent background for Electron quick entry window
@@ -133,18 +158,26 @@ export default function QuickEntryPage() {
 
   useEffect(() => {
     const handleReset = () => {
+      if (priorityTimeoutRef.current) {
+        clearTimeout(priorityTimeoutRef.current);
+        priorityTimeoutRef.current = null;
+      }
       setTitle("");
       setDescription("");
       setPriority("medium");
-      setStatus("backlog");
+      setStatus("ideation");
       setStatusExplicit(false);
       setComplexity("medium");
-      setSelectedProject(null);
       setAiPlatform(null);
+      setProjectError(false);
       setAcType(null);
       setAcQuery("");
       setAcIndex(0);
       setFocusedField("title");
+      // Restore last-used project from localStorage
+      const lastId = localStorage.getItem("quickEntryLastProjectId");
+      const match = lastId ? projectsRef.current.find((p) => p.id === lastId) : null;
+      setSelectedProject(match ?? null);
       requestAnimationFrame(() => titleRef.current?.focus());
     };
 
@@ -182,6 +215,15 @@ export default function QuickEntryPage() {
           p.key.includes(q)
       );
     }
+    if (acType === "complexity") {
+      const q = acQuery.toLowerCase();
+      if (!q) return COMPLEXITY_OPTIONS;
+      return COMPLEXITY_OPTIONS.filter(
+        (c) =>
+          c.label.toLowerCase().includes(q) ||
+          c.key.includes(q)
+      );
+    }
     return [];
   }, [acType, acQuery, projects]);
 
@@ -207,6 +249,16 @@ export default function QuickEntryPage() {
         const query = slashMatch[1] || "";
         setAcType("status");
         setAcQuery(query);
+        setAcIndex(0);
+        setAcSource(source);
+        return true;
+      }
+
+      // Check c: trigger (complexity)
+      const complexityMatch = value.match(/(?:^|\s)c:([\w]*)$/);
+      if (complexityMatch) {
+        setAcType("complexity");
+        setAcQuery(complexityMatch[1]);
         setAcIndex(0);
         setAcSource(source);
         return true;
@@ -238,28 +290,37 @@ export default function QuickEntryPage() {
         return;
       }
 
-      // Consume !! → high priority
-      if (/(?:^|\s)!!(?:\s|$)/.test(processed)) {
+      // Clear any pending priority debounce
+      if (priorityTimeoutRef.current) {
+        clearTimeout(priorityTimeoutRef.current);
+        priorityTimeoutRef.current = null;
+      }
+
+      // Consume !! → high priority (immediate when followed by space)
+      if (/(?:^|\s)!!\s/.test(processed)) {
         setPriority("high");
-        processed = processed.replace(/(?:^|\s)!!(?:\s|$)/, " ").trim();
+        processed = processed.replace(/(?:^|\s)!!\s/, " ").trim();
       }
-
-      // Consume ! → low priority
-      if (/(?:^|\s)!(?:\s|$)/.test(processed)) {
+      // Consume ! → low priority (immediate when followed by space, excluding !!)
+      else if (/(?:^|\s)!(?!!)\s/.test(processed)) {
         setPriority("low");
-        processed = processed.replace(/(?:^|\s)!(?:\s|$)/, " ").trim();
+        processed = processed.replace(/(?:^|\s)!(?!!)\s/, " ").trim();
       }
-
-      // Consume c:complexity tokens
-      for (const [token, complexityValue] of Object.entries(COMPLEXITY_MAP)) {
-        const regex = new RegExp(
-          `(?:^|\\s)${token.replace(":", "\\:")}(?:\\s|$)`
-        );
-        if (regex.test(processed)) {
-          setComplexity(complexityValue);
-          processed = processed.replace(regex, " ").trim();
-          break;
-        }
+      // Debounced: !! at end of string → wait then set high
+      else if (/(?:^|\s)!!$/.test(processed)) {
+        priorityTimeoutRef.current = setTimeout(() => {
+          setPriority("high");
+          setTitle((prev) => prev.replace(/(?:^|\s)!!$/, "").trim());
+          priorityTimeoutRef.current = null;
+        }, 500);
+      }
+      // Debounced: ! at end of string → wait then set low (gives time for !!)
+      else if (/(?:^|\s)!$/.test(processed)) {
+        priorityTimeoutRef.current = setTimeout(() => {
+          setPriority("low");
+          setTitle((prev) => prev.replace(/(?:^|\s)!$/, "").trim());
+          priorityTimeoutRef.current = null;
+        }, 500);
       }
 
       // Consume ai:platform tokens
@@ -290,6 +351,7 @@ export default function QuickEntryPage() {
   const handleSelectProject = useCallback(
     (project: Project) => {
       setSelectedProject(project);
+      setProjectError(false);
       // Remove @query from the source field
       if (acSource === "title") {
         setTitle((prev) => prev.replace(/@[\w\-.]*$/, "").trim());
@@ -339,6 +401,23 @@ export default function QuickEntryPage() {
     [acSource]
   );
 
+  const handleSelectComplexity = useCallback(
+    (complexityOption: (typeof COMPLEXITY_OPTIONS)[0]) => {
+      setComplexity(complexityOption.key);
+      // Remove c:query from the source field
+      if (acSource === "title") {
+        setTitle((prev) => prev.replace(/(?:^|\s)c:[\w]*$/, "").trim());
+        titleRef.current?.focus();
+      } else {
+        setDescription((prev) => prev.replace(/(?:^|\s)c:[\w]*$/, "").trim());
+        descRef.current?.focus();
+      }
+      setAcType(null);
+      setAcIndex(0);
+    },
+    [acSource]
+  );
+
   const handleAcSelect = useCallback(
     (index: number) => {
       const item = acItems[index];
@@ -349,15 +428,18 @@ export default function QuickEntryPage() {
         handleSelectStatus(item as (typeof STATUS_OPTIONS)[0]);
       } else if (acType === "platform") {
         handleSelectPlatform(item as (typeof PLATFORM_OPTIONS)[0]);
+      } else if (acType === "complexity") {
+        handleSelectComplexity(item as (typeof COMPLEXITY_OPTIONS)[0]);
       }
     },
-    [acType, acItems, handleSelectProject, handleSelectStatus, handleSelectPlatform]
+    [acType, acItems, handleSelectProject, handleSelectStatus, handleSelectPlatform, handleSelectComplexity]
   );
 
   const dismissAutocomplete = useCallback(() => {
     const removePattern =
       acType === "project" ? /@[\w\-.]*$/ :
       acType === "platform" ? /\[[\w]*$/ :
+      acType === "complexity" ? /(?:^|\s)c:[\w]*$/ :
       /(?:^|\s)\/[\w]*$/;
     if (acSource === "title") {
       setTitle((prev) => prev.replace(removePattern, "").trim());
@@ -367,7 +449,7 @@ export default function QuickEntryPage() {
     setAcType(null);
   }, [acType, acSource]);
 
-  const canSubmit = !!(title.trim() && selectedProject && statusExplicit);
+  const canSubmit = !!(title.trim() && selectedProject && status);
   const canIdeate = !!(title.trim() && description.trim() && selectedProject);
 
   const handleIdeate = useCallback(async () => {
@@ -405,6 +487,9 @@ export default function QuickEntryPage() {
       if (createdCard?.id) {
         fetch(`/api/cards/${createdCard.id}/evaluate`, { method: "POST" });
       }
+      if (selectedProject) {
+        localStorage.setItem("quickEntryLastProjectId", selectedProject.id);
+      }
     } catch {
       // Silently fail - card creation failed
     }
@@ -413,7 +498,14 @@ export default function QuickEntryPage() {
   }, [canIdeate, title, description, complexity, priority, aiPlatform, selectedProject, closeWindow]);
 
   const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
+    if (!title.trim()) return;
+
+    if (!selectedProject) {
+      setProjectError(true);
+      return;
+    }
+
+    if (!status) return;
 
     try {
       await fetch("/api/cards", {
@@ -443,13 +535,15 @@ export default function QuickEntryPage() {
           processingType: null,
         }),
       });
+      if (selectedProject) {
+        localStorage.setItem("quickEntryLastProjectId", selectedProject.id);
+      }
     } catch {
       // Silently fail
     }
 
     closeWindow();
   }, [
-    canSubmit,
     title,
     description,
     status,
@@ -514,13 +608,13 @@ export default function QuickEntryPage() {
 
       if (e.key === "Enter" && !showAutocomplete) {
         e.preventDefault();
-        if (canSubmit) handleSubmit();
+        handleSubmit();
       }
 
       // Cmd+Enter always submits
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (canSubmit) handleSubmit();
+        handleSubmit();
       }
     },
     [
@@ -529,7 +623,6 @@ export default function QuickEntryPage() {
       dismissAutocomplete,
       handleAcKeyDown,
       showAutocomplete,
-      canSubmit,
       handleSubmit,
       handleIdeate,
     ]
@@ -556,7 +649,7 @@ export default function QuickEntryPage() {
       // Cmd+Enter always submits, even during autocomplete
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        if (canSubmit) handleSubmit();
+        handleSubmit();
         return;
       }
 
@@ -569,16 +662,11 @@ export default function QuickEntryPage() {
         return;
       }
     },
-    [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, canSubmit, handleSubmit, handleIdeate]
+    [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, handleSubmit, handleIdeate]
   );
 
   const statusLabel = COLUMNS.find((c) => c.id === status)?.title;
-  const hasBadges =
-    selectedProject ||
-    priority !== "medium" ||
-    statusExplicit ||
-    complexity !== "medium" ||
-    aiPlatform !== null;
+  const hasBadges = true; // Always show - at minimum the status badge is visible
 
   return (
     <div className="h-screen w-screen bg-transparent flex items-start justify-center">
@@ -630,13 +718,11 @@ export default function QuickEntryPage() {
                 onRemove={() => setPriority("medium")}
               />
             )}
-            {statusExplicit && (
-              <TokenBadge
-                label={statusLabel ?? status}
-                color={STATUS_COLORS[status]}
-                onRemove={() => { setStatus("backlog"); setStatusExplicit(false); }}
-              />
-            )}
+            <TokenBadge
+              label={statusLabel ?? status}
+              color={STATUS_COLORS[status]}
+              onRemove={() => { setStatus("ideation"); setStatusExplicit(false); }}
+            />
             {complexity !== "medium" && (
               <TokenBadge
                 label={complexity}
@@ -651,6 +737,13 @@ export default function QuickEntryPage() {
                 onRemove={() => setAiPlatform(null)}
               />
             )}
+          </div>
+        )}
+
+        {/* Project required error */}
+        {projectError && (
+          <div className="mx-5 mb-2 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/20 text-[12px] text-red-400">
+            Project is required. Type <kbd className="font-mono bg-red-500/10 px-1 py-0.5 rounded text-red-300">@</kbd> to select a project.
           </div>
         )}
 
@@ -748,19 +841,63 @@ export default function QuickEntryPage() {
                   </button>
                 )
               )}
+            {acType === "complexity" &&
+              (acItems as (typeof COMPLEXITY_OPTIONS)[number][]).map(
+                (option, idx) => (
+                  <button
+                    key={option.key}
+                    className={`w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
+                      idx === acIndex
+                        ? "bg-white/[0.08]"
+                        : "hover:bg-white/[0.04]"
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelectComplexity(option);
+                    }}
+                    onMouseEnter={() => setAcIndex(idx)}
+                  >
+                    {idx === acIndex && (
+                      <span className="text-foreground/60 text-xs">{">"}</span>
+                    )}
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: option.color }}
+                    />
+                    <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
+                      {option.label}
+                    </span>
+                    <span className="text-muted-foreground/30 text-xs ml-auto font-mono">
+                      {option.trigger}
+                    </span>
+                  </button>
+                )
+              )}
+          </div>
+        )}
+
+        {/* Trigger hints - hidden when autocomplete is open */}
+        {!showAutocomplete && (
+          <div className="px-5 py-1.5 border-t border-white/[0.06] flex items-center gap-3 text-[10px] text-muted-foreground/40 font-mono">
+            <span>@ project</span>
+            <span>/ status</span>
+            <span>[ platform</span>
+            <span>c: complexity</span>
+            <span>! low</span>
+            <span>!! high</span>
           </div>
         )}
 
         {/* Footer */}
-        <div className="px-5 py-2 border-t border-white/[0.06] flex items-center gap-4 text-[11px] text-muted-foreground/40">
+        <div className={`px-5 py-2 ${showAutocomplete ? "border-t border-white/[0.06]" : ""} flex items-center gap-4 text-[11px] text-muted-foreground/40`}>
           <span className={canSubmit ? "text-muted-foreground/60" : ""}>
             <kbd className="font-mono">
               {focusedField === "title" ? "\u21A9" : "\u2318\u21A9"}
             </kbd>{" "}
             Create
-            {!canSubmit && (
+            {!selectedProject && (
               <span className="ml-1 text-muted-foreground/25">
-                ({!selectedProject && !statusExplicit ? "@project /status" : !selectedProject ? "@project" : "/status"})
+                (@project)
               </span>
             )}
           </span>

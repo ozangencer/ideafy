@@ -8,7 +8,6 @@ import { DocumentEditor } from "@/components/editor/document-editor";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
-import { QuickEntryOverlay } from "@/components/quick-entry/quick-entry-overlay";
 import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
@@ -166,7 +165,6 @@ export default function Home() {
       {/* Modals */}
       {isModalOpen && <CardModal />}
       {isDocumentEditorOpen && <DocumentEditor />}
-      <QuickEntryOverlay />
     </div>
   );
 }
