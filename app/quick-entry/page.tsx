@@ -4,6 +4,7 @@ import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { COLUMNS, Complexity, Priority, Status, AiPlatform } from "@/lib/types";
 import { X, Brain } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
+import { QuickEntryEditor, QuickEntryEditorRef } from "@/components/quick-entry/quick-entry-editor";
 
 interface Project {
   id: string;
@@ -75,9 +76,15 @@ const PLATFORM_OPTIONS = [
 
 type AutocompleteType = "project" | "status" | "platform" | "complexity" | null;
 
+// Remove trigger text and ensure trailing space for cursor breathing room
+const stripTrigger = (text: string, pattern: RegExp, replacement = ""): string => {
+  const result = text.replace(pattern, replacement).trimStart();
+  return result ? result.trimEnd() + " " : "";
+};
+
 export default function QuickEntryPage() {
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [descHasContent, setDescHasContent] = useState(false);
   const [priority, setPriority] = useState<Priority>("medium");
   const [status, setStatus] = useState<Status>("ideation");
   const [statusExplicit, setStatusExplicit] = useState(false);
@@ -98,10 +105,12 @@ export default function QuickEntryPage() {
   );
 
   const titleRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
+  const descRef = useRef<QuickEntryEditorRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const projectsRef = useRef<Project[]>([]);
   const priorityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const descPlainTextRef = useRef("");
+  const acTriggerLengthRef = useRef(0);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -163,7 +172,9 @@ export default function QuickEntryPage() {
         priorityTimeoutRef.current = null;
       }
       setTitle("");
-      setDescription("");
+      descRef.current?.clear();
+      setDescHasContent(false);
+      descPlainTextRef.current = "";
       setPriority("medium");
       setStatus("ideation");
       setStatusExplicit(false);
@@ -239,6 +250,7 @@ export default function QuickEntryPage() {
         setAcQuery(atMatch[1]);
         setAcIndex(0);
         setAcSource(source);
+        acTriggerLengthRef.current = atMatch[0].length; // @query
         return true;
       }
 
@@ -251,6 +263,7 @@ export default function QuickEntryPage() {
         setAcQuery(query);
         setAcIndex(0);
         setAcSource(source);
+        acTriggerLengthRef.current = 1 + query.length; // /query
         return true;
       }
 
@@ -261,6 +274,7 @@ export default function QuickEntryPage() {
         setAcQuery(complexityMatch[1]);
         setAcIndex(0);
         setAcSource(source);
+        acTriggerLengthRef.current = 2 + complexityMatch[1].length; // c:query
         return true;
       }
 
@@ -271,6 +285,7 @@ export default function QuickEntryPage() {
         setAcQuery(bracketMatch[1]);
         setAcIndex(0);
         setAcSource(source);
+        acTriggerLengthRef.current = bracketMatch[0].length; // [query
         return true;
       }
 
@@ -299,18 +314,18 @@ export default function QuickEntryPage() {
       // Consume !! → high priority (immediate when followed by space)
       if (/(?:^|\s)!!\s/.test(processed)) {
         setPriority("high");
-        processed = processed.replace(/(?:^|\s)!!\s/, " ").trim();
+        processed = stripTrigger(processed, /(?:^|\s)!!\s/, " ");
       }
       // Consume ! → low priority (immediate when followed by space, excluding !!)
       else if (/(?:^|\s)!(?!!)\s/.test(processed)) {
         setPriority("low");
-        processed = processed.replace(/(?:^|\s)!(?!!)\s/, " ").trim();
+        processed = stripTrigger(processed, /(?:^|\s)!(?!!)\s/, " ");
       }
       // Debounced: !! at end of string → wait then set high
       else if (/(?:^|\s)!!$/.test(processed)) {
         priorityTimeoutRef.current = setTimeout(() => {
           setPriority("high");
-          setTitle((prev) => prev.replace(/(?:^|\s)!!$/, "").trim());
+          setTitle((prev) => stripTrigger(prev, /(?:^|\s)!!$/));
           priorityTimeoutRef.current = null;
         }, 500);
       }
@@ -318,7 +333,7 @@ export default function QuickEntryPage() {
       else if (/(?:^|\s)!$/.test(processed)) {
         priorityTimeoutRef.current = setTimeout(() => {
           setPriority("low");
-          setTitle((prev) => prev.replace(/(?:^|\s)!$/, "").trim());
+          setTitle((prev) => stripTrigger(prev, /(?:^|\s)!$/));
           priorityTimeoutRef.current = null;
         }, 500);
       }
@@ -330,7 +345,7 @@ export default function QuickEntryPage() {
         );
         if (regex.test(processed)) {
           setAiPlatform(platformValue);
-          processed = processed.replace(regex, " ").trim();
+          processed = stripTrigger(processed, regex, " ");
           break;
         }
       }
@@ -340,10 +355,11 @@ export default function QuickEntryPage() {
     [detectTrigger]
   );
 
-  const handleDescriptionChange = useCallback(
-    (value: string) => {
-      detectTrigger(value, "description");
-      setDescription(value);
+  const handleDescriptionTextChange = useCallback(
+    (plainText: string) => {
+      descPlainTextRef.current = plainText;
+      setDescHasContent(!!plainText.trim());
+      detectTrigger(plainText, "description");
     },
     [detectTrigger]
   );
@@ -352,12 +368,11 @@ export default function QuickEntryPage() {
     (project: Project) => {
       setSelectedProject(project);
       setProjectError(false);
-      // Remove @query from the source field
       if (acSource === "title") {
-        setTitle((prev) => prev.replace(/@[\w\-.]*$/, "").trim());
+        setTitle((prev) => stripTrigger(prev, /@[\w\-.]*$/));
         titleRef.current?.focus();
       } else {
-        setDescription((prev) => prev.replace(/@[\w\-.]*$/, "").trim());
+        descRef.current?.deleteBackwards(acTriggerLengthRef.current);
         descRef.current?.focus();
       }
       setAcType(null);
@@ -372,10 +387,10 @@ export default function QuickEntryPage() {
       setStatusExplicit(true);
       // Remove /query from the source field
       if (acSource === "title") {
-        setTitle((prev) => prev.replace(/(?:^|\s)\/[\w]*$/, "").trim());
+        setTitle((prev) => stripTrigger(prev, /(?:^|\s)\/[\w]*$/));
         titleRef.current?.focus();
       } else {
-        setDescription((prev) => prev.replace(/(?:^|\s)\/[\w]*$/, "").trim());
+        descRef.current?.deleteBackwards(acTriggerLengthRef.current);
         descRef.current?.focus();
       }
       setAcType(null);
@@ -389,10 +404,10 @@ export default function QuickEntryPage() {
       setAiPlatform(platformOption.key);
       // Remove [query from the source field
       if (acSource === "title") {
-        setTitle((prev) => prev.replace(/\[[\w]*$/, "").trim());
+        setTitle((prev) => stripTrigger(prev, /\[[\w]*$/));
         titleRef.current?.focus();
       } else {
-        setDescription((prev) => prev.replace(/\[[\w]*$/, "").trim());
+        descRef.current?.deleteBackwards(acTriggerLengthRef.current);
         descRef.current?.focus();
       }
       setAcType(null);
@@ -406,10 +421,10 @@ export default function QuickEntryPage() {
       setComplexity(complexityOption.key);
       // Remove c:query from the source field
       if (acSource === "title") {
-        setTitle((prev) => prev.replace(/(?:^|\s)c:[\w]*$/, "").trim());
+        setTitle((prev) => stripTrigger(prev, /(?:^|\s)c:[\w]*$/));
         titleRef.current?.focus();
       } else {
-        setDescription((prev) => prev.replace(/(?:^|\s)c:[\w]*$/, "").trim());
+        descRef.current?.deleteBackwards(acTriggerLengthRef.current);
         descRef.current?.focus();
       }
       setAcType(null);
@@ -436,21 +451,21 @@ export default function QuickEntryPage() {
   );
 
   const dismissAutocomplete = useCallback(() => {
-    const removePattern =
-      acType === "project" ? /@[\w\-.]*$/ :
-      acType === "platform" ? /\[[\w]*$/ :
-      acType === "complexity" ? /(?:^|\s)c:[\w]*$/ :
-      /(?:^|\s)\/[\w]*$/;
     if (acSource === "title") {
-      setTitle((prev) => prev.replace(removePattern, "").trim());
+      const removePattern =
+        acType === "project" ? /@[\w\-.]*$/ :
+        acType === "platform" ? /\[[\w]*$/ :
+        acType === "complexity" ? /(?:^|\s)c:[\w]*$/ :
+        /(?:^|\s)\/[\w]*$/;
+      setTitle((prev) => stripTrigger(prev, removePattern));
     } else {
-      setDescription((prev) => prev.replace(removePattern, "").trim());
+      descRef.current?.deleteBackwards(acTriggerLengthRef.current);
     }
     setAcType(null);
   }, [acType, acSource]);
 
   const canSubmit = !!(title.trim() && selectedProject && status);
-  const canIdeate = !!(title.trim() && description.trim() && selectedProject);
+  const canIdeate = !!(title.trim() && descHasContent && selectedProject);
 
   const handleIdeate = useCallback(async () => {
     if (!canIdeate) return;
@@ -461,7 +476,7 @@ export default function QuickEntryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
-          description: description.trim(),
+          description: descRef.current?.getHTML() ?? "",
           solutionSummary: "",
           testScenarios: "",
           aiOpinion: "",
@@ -495,7 +510,7 @@ export default function QuickEntryPage() {
     }
 
     closeWindow();
-  }, [canIdeate, title, description, complexity, priority, aiPlatform, selectedProject, closeWindow]);
+  }, [canIdeate, title, complexity, priority, aiPlatform, selectedProject, closeWindow]);
 
   const handleSubmit = useCallback(async () => {
     if (!title.trim()) return;
@@ -513,7 +528,7 @@ export default function QuickEntryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
-          description: description.trim(),
+          description: descRef.current?.getHTML() ?? "",
           solutionSummary: "",
           testScenarios: "",
           aiOpinion: "",
@@ -545,7 +560,6 @@ export default function QuickEntryPage() {
     closeWindow();
   }, [
     title,
-    description,
     status,
     complexity,
     priority,
@@ -555,8 +569,9 @@ export default function QuickEntryPage() {
   ]);
 
   // Shared keydown handler for autocomplete navigation
+  // Accepts both React.KeyboardEvent and native KeyboardEvent
   const handleAcKeyDown = useCallback(
-    (e: React.KeyboardEvent): boolean => {
+    (e: { key: string; preventDefault: () => void }): boolean => {
       if (!showAutocomplete) return false;
 
       if (e.key === "ArrowDown") {
@@ -628,39 +643,44 @@ export default function QuickEntryPage() {
     ]
   );
 
-  const handleDescKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
+  // Tiptap handleKeyDown receives native KeyboardEvent, returns boolean
+  const handleEditorKeyDown = useCallback(
+    (event: KeyboardEvent): boolean => {
+      if (event.key === "Escape") {
+        event.preventDefault();
         if (acType !== null) {
           dismissAutocomplete();
         } else {
           closeWindow();
         }
-        return;
+        return true;
       }
 
-      if (e.key === "i" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
+      // Cmd+I → Ideate (takes priority over Tiptap's italic)
+      if (event.key === "i" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
         handleIdeate();
-        return;
+        return true;
       }
 
       // Cmd+Enter always submits, even during autocomplete
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
         handleSubmit();
-        return;
+        return true;
       }
 
-      if (handleAcKeyDown(e)) return;
+      if (handleAcKeyDown(event)) return true;
 
-      if (e.key === "Tab" && e.shiftKey) {
-        e.preventDefault();
+      if (event.key === "Tab" && event.shiftKey) {
+        event.preventDefault();
         setFocusedField("title");
         requestAnimationFrame(() => titleRef.current?.focus());
-        return;
+        return true;
       }
+
+      // Let Tiptap handle everything else (Cmd+B, lists, etc.)
+      return false;
     },
     [closeWindow, acType, dismissAutocomplete, handleAcKeyDown, handleSubmit, handleIdeate]
   );
@@ -690,16 +710,17 @@ export default function QuickEntryPage() {
         />
 
         {/* Description */}
-        <textarea
-          ref={descRef}
-          value={description}
-          onChange={(e) => handleDescriptionChange(e.target.value)}
-          onKeyDown={handleDescKeyDown}
+        <div
+          className="px-5 pb-3 pt-0"
           onFocus={() => setFocusedField("description")}
-          placeholder="Notes"
-          rows={1}
-          className="block w-full bg-transparent border-0 px-5 pb-3 pt-0 text-[13px] text-muted-foreground placeholder:text-muted-foreground/30 outline-none ring-0 focus:ring-0 resize-none leading-relaxed"
-        />
+        >
+          <QuickEntryEditor
+            ref={descRef}
+            placeholder="Notes"
+            onTextChange={handleDescriptionTextChange}
+            onKeyDown={handleEditorKeyDown}
+          />
+        </div>
 
         {/* Badges */}
         {hasBadges && (
@@ -713,7 +734,7 @@ export default function QuickEntryPage() {
             )}
             {priority !== "medium" && (
               <TokenBadge
-                label={priority === "high" ? "High" : "Low"}
+                label={priority === "high" ? "P: High" : "P: Low"}
                 color={priority === "high" ? "#f87171" : "#9ca3af"}
                 onRemove={() => setPriority("medium")}
               />
@@ -723,13 +744,11 @@ export default function QuickEntryPage() {
               color={STATUS_COLORS[status]}
               onRemove={() => { setStatus("ideation"); setStatusExplicit(false); }}
             />
-            {complexity !== "medium" && (
-              <TokenBadge
-                label={complexity}
-                color="#facc15"
-                onRemove={() => setComplexity("medium")}
-              />
-            )}
+            <TokenBadge
+              label={complexity === "high" ? "C: High" : complexity === "low" ? "C: Low" : "C: Medium"}
+              color={complexity === "high" ? "#f87171" : complexity === "low" ? "#22c55e" : "#facc15"}
+              onRemove={() => setComplexity("medium")}
+            />
             {aiPlatform && (
               <TokenBadge
                 label={PLATFORM_LABELS[aiPlatform].label}

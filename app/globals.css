@@ -599,3 +599,99 @@ button:disabled {
   }
 }
 
+/* Quick Entry Editor */
+.quick-entry-editor {
+  min-height: 20px;
+  max-height: 120px;
+  overflow-y: auto;
+  @apply text-[13px] text-muted-foreground leading-relaxed outline-none;
+}
+
+.quick-entry-editor::-webkit-scrollbar {
+  width: 4px;
+}
+
+.quick-entry-editor::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quick-entry-editor::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 2px;
+}
+
+.quick-entry-editor::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+.quick-entry-editor p.is-editor-empty:first-child::before {
+  @apply text-muted-foreground/30 pointer-events-none float-left h-0;
+  content: attr(data-placeholder);
+}
+
+.quick-entry-editor p {
+  @apply m-0;
+}
+
+.quick-entry-editor h1 {
+  @apply text-base font-semibold mt-2 mb-1;
+}
+
+.quick-entry-editor h2 {
+  @apply text-sm font-semibold mt-1.5 mb-0.5;
+}
+
+.quick-entry-editor h3 {
+  @apply text-[13px] font-semibold mt-1 mb-0.5;
+}
+
+.quick-entry-editor > *:first-child {
+  @apply mt-0;
+}
+
+.quick-entry-editor ul,
+.quick-entry-editor ol {
+  @apply pl-4 my-1;
+}
+
+.quick-entry-editor li {
+  @apply my-0;
+}
+
+.quick-entry-editor li p {
+  @apply m-0;
+}
+
+.quick-entry-editor ul[data-type="taskList"] {
+  @apply list-none pl-0;
+}
+
+.quick-entry-editor ul[data-type="taskList"] li {
+  @apply flex items-start gap-1.5 my-0.5;
+}
+
+.quick-entry-editor ul[data-type="taskList"] li > label {
+  @apply flex items-center gap-1.5 mt-[3px];
+}
+
+.quick-entry-editor ul[data-type="taskList"] li input[type="checkbox"] {
+  @apply w-3.5 h-3.5 rounded border border-muted-foreground cursor-pointer;
+  accent-color: #5e6ad2;
+}
+
+.quick-entry-editor ul[data-type="taskList"] li > div {
+  @apply flex-1;
+}
+
+.quick-entry-editor code {
+  @apply bg-surface px-1 py-0.5 rounded text-xs;
+}
+
+.quick-entry-editor pre {
+  @apply bg-surface border border-border rounded text-xs p-2 my-1;
+}
+
+.quick-entry-editor blockquote {
+  @apply border-l-2 border-border pl-3 italic text-muted-foreground my-1;
+}
+
