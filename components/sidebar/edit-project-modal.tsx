@@ -67,6 +67,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
   const [hookInstalled, setHookInstalled] = useState<boolean | null>(null);
   const [isTogglingHook, setIsTogglingHook] = useState(false);
   const [mcpSkillsInstalled, setMcpSkillsInstalled] = useState<boolean | null>(null);
@@ -350,13 +351,45 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
               </label>
               <span className="text-xs text-muted-foreground">(optional)</span>
             </div>
-            <Input
-              id="edit-narrativePath"
-              value={narrativePath}
-              onChange={(e) => setNarrativePath(e.target.value)}
-              placeholder="docs/product-narrative.md"
-              className="font-mono text-sm"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="edit-narrativePath"
+                value={narrativePath}
+                onChange={(e) => setNarrativePath(e.target.value)}
+                placeholder="docs/product-narrative.md"
+                className="flex-1 font-mono text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={isPickingNarrativeFile}
+                title="Browse files"
+                onClick={async () => {
+                  setIsPickingNarrativeFile(true);
+                  try {
+                    const url = folderPath
+                      ? `/api/file-picker?path=${encodeURIComponent(folderPath)}`
+                      : "/api/file-picker";
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.path && folderPath) {
+                      // Make path relative to project folder
+                      const relativePath = data.path.startsWith(folderPath)
+                        ? data.path.slice(folderPath.length + 1)
+                        : data.path;
+                      setNarrativePath(relativePath);
+                    }
+                  } catch (error) {
+                    console.error("Failed to pick file:", error);
+                  } finally {
+                    setIsPickingNarrativeFile(false);
+                  }
+                }}
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
               Relative path to the product narrative file. Leave empty to use default (docs/product-narrative.md).
             </p>

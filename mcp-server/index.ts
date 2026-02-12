@@ -223,7 +223,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             solutionSummary: {
               type: "string",
-              description: "The solution plan or implementation summary",
+              description: "Detailed implementation summary in markdown. Should include: root cause analysis, current code flow, step-by-step changes with file paths and code snippets, changed files table, and notes. Write prose-level detail, not just headings.",
             },
             testScenarios: {
               type: "string",
@@ -301,7 +301,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             solutionSummary: {
               type: "string",
-              description: "Solution plan in markdown format",
+              description: "Detailed implementation summary in markdown. MUST include: (1) Root cause / problem analysis, (2) Current architecture understanding with relevant code flow, (3) Step-by-step changes with specific file paths and code snippets showing before/after, (4) Changed files table (| File | Change |), (5) Important notes or caveats. Write prose-level detail, not just headings.",
             },
             status: {
               type: "string",
@@ -338,7 +338,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             solutionSummary: {
               type: "string",
-              description: "The solution plan in markdown format",
+              description: "Detailed implementation plan in markdown. MUST include: (1) Brief summary of the approach, (2) Current architecture understanding with relevant code flow (e.g. `Settings UI → POST /api/... → provider.method()`), (3) Step-by-step implementation with specific file paths, function names, and code snippets showing the planned changes, (4) Changed files table (| File | Change |), (5) Important notes or caveats. Write prose-level detail with code examples, not just headings or bullet points.",
             },
           },
           required: ["id", "solutionSummary"],

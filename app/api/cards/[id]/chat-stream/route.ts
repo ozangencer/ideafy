@@ -24,6 +24,20 @@ interface CardContext {
   projectName: string;
   sectionContent: string;
   narrativeContent?: string; // Product narrative for opinion context
+  status: string;
+  description?: string;
+  solutionSummary?: string;
+  testScenarios?: string;
+}
+
+// Get allowed tools based on card status
+function getAllowedTools(status: string): string[] {
+  // Cards in active development stages get full tool access
+  if (["progress", "test", "completed"].includes(status)) {
+    return ["Read", "Edit", "Write", "Bash", "Grep", "Glob"];
+  }
+  // Backlog/ideation cards stay advisory
+  return ["Read", "Edit", "Write"];
 }
 
 // Build card context string
@@ -39,13 +53,41 @@ IMPORTANT: When updating this card, use the UUID "${ctx.uuid}" directly. Do NOT 
 `;
 }
 
+// Build action-mode context for cards in active statuses
+function buildActionModeContext(ctx: CardContext): string {
+  const isActive = ["progress", "test", "completed"].includes(ctx.status);
+  if (!isActive) return "";
+
+  let actionContext = `
+
+## Action Mode
+This card is currently in "${ctx.status}" status. The user expects you to TAKE ACTION, not just suggest or plan.
+- If the user asks you to fix something, fix it directly
+- If the user asks you to implement something, implement it
+- Only ask clarifying questions if the request is genuinely ambiguous
+- Do NOT respond with "here's a plan" — actually do the work
+- You have access to Bash, Grep, and Glob tools in addition to Read, Edit, and Write`;
+
+  if (ctx.description) {
+    actionContext += `\n\nCard Description: ${ctx.description}`;
+  }
+  if (ctx.solutionSummary) {
+    actionContext += `\nImplementation Plan: ${ctx.solutionSummary}`;
+  }
+  if (ctx.testScenarios) {
+    actionContext += `\nTest Scenarios: ${ctx.testScenarios}`;
+  }
+
+  return actionContext;
+}
+
 // Section-specific system prompts
 const SECTION_SYSTEM_PROMPTS: Record<SectionType, (ctx: CardContext) => string> = {
   detail: (ctx) => `You are helping improve a development task description.
 ${buildCardContext(ctx)}
 Current description: ${ctx.sectionContent || "(empty)"}
 
-Provide helpful suggestions, clarifications, or improvements. Be concise and practical.`,
+Provide helpful suggestions, clarifications, or improvements. Be concise and practical.${buildActionModeContext(ctx)}`,
 
   opinion: (ctx) => {
     let prompt = `You are a senior software architect evaluating a development task.
@@ -66,7 +108,7 @@ ${ctx.narrativeContent}
 
     prompt += `
 
-Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.`;
+Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.${buildActionModeContext(ctx)}`;
     return prompt;
   },
 
@@ -74,13 +116,13 @@ Provide technical analysis, identify potential challenges, suggest approaches, a
 ${buildCardContext(ctx)}
 Current solution plan: ${ctx.sectionContent || "(none)"}
 
-Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.`,
+Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.${buildActionModeContext(ctx)}`,
 
   tests: (ctx) => `You are a QA engineer helping write test scenarios for a development task.
 ${buildCardContext(ctx)}
 Current test scenarios: ${ctx.sectionContent || "(none)"}
 
-Suggest test cases covering happy paths, edge cases, and error conditions. Use checkbox format: - [ ] Test description`,
+Suggest test cases covering happy paths, edge cases, and error conditions. Use checkbox format: - [ ] Test description${buildActionModeContext(ctx)}`,
 };
 
 // Strip HTML tags for cleaner prompts
@@ -252,6 +294,10 @@ export async function POST(
     projectName,
     sectionContent: stripHtml(currentSectionContent || ""),
     narrativeContent, // Include narrative for opinion section
+    status: card.status,
+    description: stripHtml(card.description || ""),
+    solutionSummary: stripHtml(card.solutionSummary || ""),
+    testScenarios: stripHtml(card.testScenarios || ""),
   };
   const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
   const conversationContext = buildConversationContext(parsedHistory);
@@ -309,7 +355,7 @@ export async function POST(
 
       const cliArgs = provider.buildStreamArgs({
         prompt: fullPrompt,
-        allowedTools: ["Read", "Edit", "Write"],
+        allowedTools: getAllowedTools(card.status),
         addDirs: [IMAGES_TEMP_DIR],
       });
 
@@ -375,6 +421,15 @@ export async function POST(
             if (json.type === 'tool_result') {
               sendEvent("tool_result", { name: json.name, output: json.output?.slice?.(0, 200) });
             }
+
+            // Handle final result - captures response text after tool use
+            if (json.type === 'result' && json.result) {
+              const resultText = String(json.result);
+              if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
+                fullResponse += (fullResponse ? '\n' : '') + resultText;
+                sendEvent("text", resultText);
+              }
+            }
           } catch {
             // Invalid JSON, skip
           }
@@ -389,6 +444,35 @@ export async function POST(
       });
 
       cliProcess.on("close", async (code) => {
+        // Process any remaining data in stdout buffer
+        if (stdoutBuffer.trim()) {
+          try {
+            const json = JSON.parse(stdoutBuffer);
+            if (json.type === 'assistant' && json.message?.content) {
+              for (const block of json.message.content) {
+                if (block.type === 'text' && block.text) {
+                  fullResponse += block.text;
+                  sendEvent("text", block.text);
+                }
+                if (block.type === 'tool_use') {
+                  toolCalls.push({ name: block.name, input: block.input });
+                  sendEvent("tool_use", { name: block.name, input: block.input });
+                }
+              }
+            }
+            if (json.type === 'result' && json.result) {
+              const resultText = String(json.result);
+              if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
+                fullResponse += (fullResponse ? '\n' : '') + resultText;
+                sendEvent("text", resultText);
+              }
+            }
+          } catch {
+            // Invalid JSON, skip
+          }
+          stdoutBuffer = "";
+        }
+
         completeProcess(processKey);
 
         // Save assistant message to database

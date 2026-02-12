@@ -185,10 +185,22 @@ export default function QuickEntryPage() {
       setAcQuery("");
       setAcIndex(0);
       setFocusedField("title");
-      // Restore last-used project from localStorage
-      const lastId = localStorage.getItem("quickEntryLastProjectId");
-      const match = lastId ? projectsRef.current.find((p) => p.id === lastId) : null;
-      setSelectedProject(match ?? null);
+      // Re-fetch projects to pick up any color/name changes
+      fetch("/api/projects")
+        .then((r) => r.json())
+        .then((data: Project[]) => {
+          setProjects(data);
+          projectsRef.current = data;
+          const lastId = localStorage.getItem("quickEntryLastProjectId");
+          const match = lastId ? data.find((p) => p.id === lastId) : null;
+          setSelectedProject(match ?? null);
+        })
+        .catch(() => {
+          // Fallback to cached data
+          const lastId = localStorage.getItem("quickEntryLastProjectId");
+          const match = lastId ? projectsRef.current.find((p) => p.id === lastId) : null;
+          setSelectedProject(match ?? null);
+        });
       requestAnimationFrame(() => titleRef.current?.focus());
     };
 

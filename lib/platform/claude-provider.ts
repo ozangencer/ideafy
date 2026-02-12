@@ -245,6 +245,11 @@ class ClaudeProvider implements PlatformProvider {
         return { type: "tool_result", data: { name: json.name, output: json.output?.slice?.(0, 200) } };
       }
 
+      // Handle final result - captures response text after tool use
+      if (json.type === "result" && json.result) {
+        return { type: "text", data: String(json.result) };
+      }
+
       // Handle system messages
       if (json.type === "system" && json.subtype && json.subtype !== "init") {
         return { type: "system", data: { subtype: json.subtype, message: json.message } };
