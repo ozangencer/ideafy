@@ -12,6 +12,7 @@ import type {
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
+import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
 
 let cachedGeminiPath: string | null = null;
 
@@ -58,7 +59,9 @@ class GeminiProvider implements PlatformProvider {
 
   buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): string {
     const cleanPrompt = opts.prompt.replace(/\n/g, " ");
-    return `cd "${workingDir}" && gemini -p "${cleanPrompt}"`;
+    // Use single quotes to prevent shell interpretation of special chars ([], $, ", etc.)
+    const escaped = cleanPrompt.replace(/'/g, "'\\''");
+    return `cd "${workingDir}" && gemini -p '${escaped}'`;
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
@@ -118,8 +121,20 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  listProjectSkills(): string[] {
-    return []; // Gemini doesn't support skills
+  listProjectSkills(folderPath: string): string[] {
+    try {
+      const skillsDir = path.join(folderPath, ".gemini", "skills");
+      if (!fs.existsSync(skillsDir)) return [];
+      return fs.readdirSync(skillsDir)
+        .filter((entry) => {
+          const entryPath = path.join(skillsDir, entry);
+          if (!fs.statSync(entryPath).isDirectory()) return false;
+          return fs.existsSync(path.join(entryPath, "SKILL.md"));
+        })
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [];
+    }
   }
 
   installKanbanMcp(folderPath: string): Result {
@@ -190,16 +205,62 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  installKanbanSkills(): Result {
-    return { success: false, error: "Gemini CLI does not support skills" };
+  installKanbanSkills(folderPath: string): Result {
+    try {
+      const skillsDir = path.join(folderPath, ".gemini", "skills");
+
+      for (const file of SKILL_FILES) {
+        const skillName = file.replace(/\.md$/, "");
+        const skillDir = path.join(skillsDir, skillName);
+        const skillMdPath = path.join(skillDir, "SKILL.md");
+
+        if (!fs.existsSync(skillMdPath)) {
+          fs.mkdirSync(skillDir, { recursive: true });
+          fs.writeFileSync(skillMdPath, convertSkillToSkillMd(skillName));
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
   }
 
-  removeKanbanSkills(): Result {
-    return { success: false, error: "Gemini CLI does not support skills" };
+  removeKanbanSkills(folderPath: string): Result {
+    try {
+      const skillsDir = path.join(folderPath, ".gemini", "skills");
+
+      for (const file of SKILL_FILES) {
+        const skillName = file.replace(/\.md$/, "");
+        const skillDir = path.join(skillsDir, skillName);
+        if (fs.existsSync(skillDir)) {
+          fs.rmSync(skillDir, { recursive: true, force: true });
+        }
+      }
+
+      // Clean up empty skills dir
+      try {
+        if (fs.existsSync(skillsDir) && fs.readdirSync(skillsDir).length === 0) {
+          fs.rmdirSync(skillsDir);
+        }
+      } catch { /* ignore cleanup */ }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
   }
 
-  hasKanbanSkills(): boolean {
-    return false;
+  hasKanbanSkills(folderPath: string): boolean {
+    try {
+      const skillsDir = path.join(folderPath, ".gemini", "skills");
+      return SKILL_FILES.every((file) => {
+        const skillName = file.replace(/\.md$/, "");
+        return fs.existsSync(path.join(skillsDir, skillName, "SKILL.md"));
+      });
+    } catch {
+      return false;
+    }
   }
 }
 
