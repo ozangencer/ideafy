@@ -157,6 +157,8 @@ export function CardModal() {
   // Auto-save debounce ref
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track when MCP tool updates arrive to prevent auto-save overwriting them
+  const lastMcpUpdateRef = useRef<number>(0);
 
   // Auto-save effect for edit mode
   useEffect(() => {
@@ -172,6 +174,12 @@ export function CardModal() {
 
     // Debounced save after 500ms
     saveTimeoutRef.current = setTimeout(() => {
+      // Skip auto-save if an MCP tool update arrived recently (within 1000ms)
+      // This prevents overwriting values set by save_plan, save_tests, etc.
+      if (Date.now() - lastMcpUpdateRef.current < 1000) {
+        return;
+      }
+
       setSaveStatus("saving");
 
       const selectedProject = projects.find((p) => p.id === projectId);
@@ -266,6 +274,8 @@ export function CardModal() {
         saveTimeoutRef.current = null;
         setSaveStatus("idle");
       }
+      // Mark this as an external update (possibly from MCP tool calls)
+      lastMcpUpdateRef.current = Date.now();
 
       setTitle(selectedCard.title);
       setDescription(selectedCard.description);
