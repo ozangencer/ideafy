@@ -30,14 +30,14 @@ interface CardContext {
   testScenarios?: string;
 }
 
-// Get allowed tools based on card status
-function getAllowedTools(status: string): string[] {
-  // Cards in active development stages get full tool access
-  if (["progress", "test", "completed"].includes(status)) {
+// Get allowed tools based on card status AND section type
+function getAllowedTools(status: string, sectionType: string): string[] {
+  // Only "tests" section on active cards gets full code execution tools
+  if (sectionType === "tests" && ["progress", "test", "completed"].includes(status)) {
     return ["Read", "Edit", "Write", "Bash", "Grep", "Glob"];
   }
-  // Backlog/ideation cards stay advisory
-  return ["Read", "Edit", "Write"];
+  // All other sections: read-only (card field updates happen via MCP tools)
+  return ["Read"];
 }
 
 // Build card context string
@@ -53,12 +53,11 @@ IMPORTANT: When updating this card, use the UUID "${ctx.uuid}" directly. Do NOT 
 `;
 }
 
-// Build action-mode context for cards in active statuses
-function buildActionModeContext(ctx: CardContext): string {
-  const isActive = ["progress", "test", "completed"].includes(ctx.status);
-  if (!isActive) return "";
-
-  let actionContext = `
+// Build section behavior context based on section type and card status
+function buildSectionBehaviorContext(ctx: CardContext, sectionType: string): string {
+  // Tests section on active cards: action mode (can edit code)
+  if (sectionType === "tests" && ["progress", "test", "completed"].includes(ctx.status)) {
+    let actionContext = `
 
 ## Action Mode
 This card is currently in "${ctx.status}" status. The user expects you to TAKE ACTION, not just suggest or plan.
@@ -66,19 +65,67 @@ This card is currently in "${ctx.status}" status. The user expects you to TAKE A
 - If the user asks you to implement something, implement it
 - Only ask clarifying questions if the request is genuinely ambiguous
 - Do NOT respond with "here's a plan" — actually do the work
-- You have access to Bash, Grep, and Glob tools in addition to Read, Edit, and Write`;
+- You have access to Bash, Grep, and Glob tools in addition to Read, Edit, and Write
 
-  if (ctx.description) {
-    actionContext += `\n\nCard Description: ${ctx.description}`;
-  }
-  if (ctx.solutionSummary) {
-    actionContext += `\nImplementation Plan: ${ctx.solutionSummary}`;
-  }
-  if (ctx.testScenarios) {
-    actionContext += `\nTest Scenarios: ${ctx.testScenarios}`;
+## IMPORTANT: Test Scenarios - Append Only
+When you make code changes and need to update test scenarios, you MUST only APPEND new test scenarios to the existing ones.
+- NEVER remove or overwrite existing test scenarios unless the user explicitly asks you to
+- Preserve the EXACT markdown format of existing test scenarios (headings, checkbox syntax, grouping)
+- Preserve the checked state of completed items: items marked as [x] MUST remain [x], do NOT reset them to [ ]
+- Add new test cases at the end of the existing list
+- If you call save_tests, include ALL existing test scenarios plus your new additions`;
+
+    if (ctx.description) {
+      actionContext += `\n\nCard Description: ${ctx.description}`;
+    }
+    if (ctx.solutionSummary) {
+      actionContext += `\nImplementation Plan: ${ctx.solutionSummary}`;
+    }
+    if (ctx.testScenarios) {
+      actionContext += `\nTest Scenarios: ${ctx.testScenarios}`;
+    }
+
+    return actionContext;
   }
 
-  return actionContext;
+  // All other sections: advisory only, no code changes
+  return `
+
+## IMPORTANT: No Code Changes Allowed
+You are in the "${sectionType}" section. In this section you can ONLY:
+- Discuss, analyze, and help improve the ${sectionType === "detail" ? "description" : sectionType === "opinion" ? "AI opinion/evaluation" : "solution plan"} for this card
+- Update the card field using the appropriate MCP tool (update_card, save_plan, save_opinion)
+- Read files for context if needed
+
+You MUST NOT edit, write, or modify any code files. If the user asks you to make code changes, politely explain that code changes can only be made from the "Tests" tab chat. Redirect them there.`;
+}
+
+// Shared MCP tool usage instructions
+function buildToolUsageContext(section: SectionType): string {
+  return `
+
+## Available MCP Tools
+You have access to these MCP tools for updating this card:
+- save_plan: Save solution plan (markdown) and move card to In Progress
+- save_tests: Save test scenarios (markdown with checkboxes) and move card to Human Test
+- save_opinion: Save AI opinion with verdict (positive/negative)
+- update_card: Update any card field (title, description, status, complexity, priority, solutionSummary, testScenarios)
+
+## CRITICAL: Persisting Content
+When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
+Do NOT just respond with text — persist it to the card so it appears in the UI.
+Only call save tools when you've produced a complete or substantially improved version of the field content, not for general discussion or clarifying questions.
+${section === "solution" ? `
+After saving a solution plan via save_plan, you MUST also generate test scenarios and save them via save_tests.
+Test scenarios should cover:
+- Happy path tests for each implementation step
+- Edge cases and error conditions
+- Regression tests for existing functionality
+Format: Use markdown checkboxes (- [ ] Test description)` : ""}${section === "detail" ? `
+When you refine or improve the description, call update_card with the updated description field.` : ""}${section === "opinion" ? `
+When you produce a complete evaluation/opinion, call save_opinion with the opinion content and verdict.` : ""}${section === "tests" ? `
+When you produce test scenarios, call save_tests with the test content in markdown checkbox format.
+IMPORTANT: Always APPEND new test scenarios to the existing ones. Never remove existing test scenarios unless the user explicitly asks. Preserve the EXACT markdown format and checked state ([x]) of existing items. Include all existing scenarios plus new additions when calling save_tests.` : ""}`;
 }
 
 // Section-specific system prompts
@@ -87,7 +134,7 @@ const SECTION_SYSTEM_PROMPTS: Record<SectionType, (ctx: CardContext) => string> 
 ${buildCardContext(ctx)}
 Current description: ${ctx.sectionContent || "(empty)"}
 
-Provide helpful suggestions, clarifications, or improvements. Be concise and practical.${buildActionModeContext(ctx)}`,
+Provide helpful suggestions, clarifications, or improvements. Be concise and practical.${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail")}`,
 
   opinion: (ctx) => {
     let prompt = `You are a senior software architect evaluating a development task.
@@ -108,7 +155,7 @@ ${ctx.narrativeContent}
 
     prompt += `
 
-Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.${buildActionModeContext(ctx)}`;
+Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion")}`;
     return prompt;
   },
 
@@ -116,13 +163,13 @@ Provide technical analysis, identify potential challenges, suggest approaches, a
 ${buildCardContext(ctx)}
 Current solution plan: ${ctx.sectionContent || "(none)"}
 
-Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.${buildActionModeContext(ctx)}`,
+Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution")}`,
 
   tests: (ctx) => `You are a QA engineer helping write test scenarios for a development task.
 ${buildCardContext(ctx)}
 Current test scenarios: ${ctx.sectionContent || "(none)"}
 
-Suggest test cases covering happy paths, edge cases, and error conditions. Use checkbox format: - [ ] Test description${buildActionModeContext(ctx)}`,
+Suggest test cases covering happy paths, edge cases, and error conditions. Use checkbox format: - [ ] Test description${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests")}`,
 };
 
 // Strip HTML tags for cleaner prompts
@@ -355,7 +402,7 @@ export async function POST(
 
       const cliArgs = provider.buildStreamArgs({
         prompt: fullPrompt,
-        allowedTools: getAllowedTools(card.status),
+        allowedTools: getAllowedTools(card.status, sectionType),
         addDirs: [IMAGES_TEMP_DIR],
       });
 
