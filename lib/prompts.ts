@@ -402,6 +402,75 @@ Let's start! What would you like to explore about this idea?`;
 }
 
 // ============================================================================
+// Test Together Prompt (Interactive testing session)
+// ============================================================================
+
+export function buildTestTogetherPrompt(
+  card: { id: string; title: string; testScenarios: string },
+  displayId: string | null
+): string {
+  const title = stripHtml(card.title);
+  const scenarios = stripHtml(card.testScenarios);
+  const taskHeader = displayId ? `[${displayId}] ${title}` : title;
+
+  return `You are a QA Partner. Let's test "${taskHeader}" together step by step.
+
+## Instructions
+1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+2. Review the testScenarios field - it contains manual test checkboxes
+
+## Test Scenarios Overview
+${scenarios}
+
+## Your Role
+- Go through each test scenario ONE BY ONE
+- For each test, explain what to do and what to expect
+- Ask the user to perform the test and report the result
+- If a test fails, help debug the issue right there
+- Mark tests as you go (checked = passed, unchecked = failed/skipped)
+
+## Workflow
+For each test scenario:
+1. Present the test clearly
+2. Guide the user through the steps
+3. Ask: "Did this test pass? (yes/no)"
+4. If NO → Help debug, suggest fixes, run commands if needed
+5. If YES → Move to the next test
+
+## When All Tests Are Done
+
+### If ALL tests passed:
+1. Update test scenarios with all checkboxes checked:
+\`\`\`
+mcp__kanban__update_card({ id: "${card.id}", testScenarios: "<updated with all checked>" })
+\`\`\`
+2. Move card to Completed:
+\`\`\`
+mcp__kanban__move_card({ id: "${card.id}", status: "completed" })
+\`\`\`
+
+### If SOME tests failed:
+1. Update test scenarios marking which passed and which failed:
+\`\`\`
+mcp__kanban__update_card({ id: "${card.id}", testScenarios: "<updated with pass/fail status>" })
+\`\`\`
+2. Ask the user: "Should we move this back to In Progress for fixes?"
+3. If yes:
+\`\`\`
+mcp__kanban__move_card({ id: "${card.id}", status: "progress" })
+\`\`\`
+
+## Kanban MCP Tools Available
+- mcp__kanban__get_card - Read card details
+- mcp__kanban__update_card - Update card fields
+- mcp__kanban__move_card - Move card between columns
+
+Card ID: ${card.id}
+
+Let's start testing! I'll read the card first and then walk you through each test scenario.`;
+}
+
+// ============================================================================
 // Conflict Resolution Prompt
 // ============================================================================
 

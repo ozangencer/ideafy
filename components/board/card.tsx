@@ -146,12 +146,13 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
   const [showIdeationConfirm, setShowIdeationConfirm] = useState(false);
   const [showAutonomousConfirm, setShowAutonomousConfirm] = useState(false);
+  const [showTestTogetherConfirm, setShowTestTogetherConfirm] = useState(false);
   const [isServerLoading, setIsServerLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isBeingDragged } = useDraggable({
     id: card.id,
@@ -167,6 +168,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "test" && card.status !== "ideation");
   const canQuickFix = card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
   const canEvaluate = card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
+  const canTestTogether = card.status === "test" && !!(card.testScenarios && stripHtml(card.testScenarios) !== "" && (card.projectId || card.projectFolder));
   const hasAiOpinion = !!stripHtml(card.aiOpinion);
 
   // Detect current phase for dynamic tooltips
@@ -294,6 +296,28 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
     const result = await openIdeationTerminal(card.id);
     if (!result.success) {
       console.error("Failed to open ideation terminal:", result.error);
+    }
+  };
+
+  const handleTestTogetherClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isLocked || !canTestTogether) return;
+
+    // Check if Ghostty - show confirmation dialog
+    const isGhostty = settings?.detectedTerminal === "ghostty" || settings?.terminalApp === "ghostty";
+    if (isGhostty) {
+      setShowTestTogetherConfirm(true);
+    } else {
+      handleOpenTestTerminal();
+    }
+  };
+
+  const handleOpenTestTerminal = async () => {
+    setShowTestTogetherConfirm(false);
+
+    const result = await openTestTerminal(card.id);
+    if (!result.success) {
+      console.error("Failed to open test terminal:", result.error);
     }
   };
 
@@ -536,6 +560,20 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     <TooltipContent side="top">
                       {isStarting ? "Running..." : phaseLabels.play}
                     </TooltipContent>
+                  </Tooltip>
+                )}
+                {/* Test Together button - hidden when locked */}
+                {canTestTogether && !isLocked && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleTestTogetherClick}
+                        className="p-1 rounded transition-colors bg-emerald-500/10 text-emerald-500/70 hover:bg-emerald-500/20 hover:text-emerald-500"
+                      >
+                        <FlaskConical className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Test Together (Interactive)</TooltipContent>
                   </Tooltip>
                 )}
                 {card.status === "test" && card.gitWorktreeStatus === "active" && !isLocked && (
@@ -782,6 +820,31 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
               className="bg-cyan-500 hover:bg-cyan-600"
             >
               Start Discussion
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showTestTogetherConfirm} onOpenChange={setShowTestTogetherConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Test Together</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Start an interactive test session with Claude as your QA partner.</p>
+                <p>
+                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in Ghostty terminal.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleOpenTestTerminal}
+              className="bg-emerald-500 hover:bg-emerald-600"
+            >
+              Start Testing
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

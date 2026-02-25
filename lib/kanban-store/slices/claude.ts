@@ -18,6 +18,7 @@ export const createClaudeSlice: StoreSlice<
     | "startTask"
     | "openTerminal"
     | "openIdeationTerminal"
+    | "openTestTerminal"
     | "quickFixTask"
     | "evaluateIdea"
     | "lockCard"
@@ -184,6 +185,41 @@ export const createClaudeSlice: StoreSlice<
       return { success: true, message: data.message };
     } catch (error) {
       console.error("Failed to open ideation terminal:", error);
+      set((state) => ({
+        lockedCardIds: removeId(state.lockedCardIds, cardId),
+      }));
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+
+  openTestTerminal: async (cardId) => {
+    set((state) => ({
+      lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
+    }));
+
+    try {
+      const response = await fetch(`/api/cards/${cardId}/test-together`, {
+        method: "POST",
+      });
+
+      const data = await parseJson<{ message?: string; error?: string }>(response);
+
+      if (!response.ok) {
+        set((state) => ({
+          lockedCardIds: removeId(state.lockedCardIds, cardId),
+        }));
+        return {
+          success: false,
+          error: data.error || "Failed to open test terminal",
+        };
+      }
+
+      return { success: true, message: data.message };
+    } catch (error) {
+      console.error("Failed to open test terminal:", error);
       set((state) => ({
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));

@@ -139,6 +139,7 @@ export interface KanbanStore {
   startTask: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openIdeationTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
+  openTestTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   quickFixTask: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   evaluateIdea: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   lockCard: (cardId: string) => void;
