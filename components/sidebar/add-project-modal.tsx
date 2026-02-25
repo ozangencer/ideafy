@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Folder, ArrowLeft, ArrowRight, AlertTriangle, Info, FileText } from "lucide-react";
+import { Folder, ArrowLeft, ArrowRight, AlertTriangle, Info, FileText, Terminal } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -51,7 +51,7 @@ interface NarrativeData {
   successMetrics: string;
 }
 
-type NarrativeMode = "create" | "existing" | "skip";
+type NarrativeMode = "create" | "existing" | "skip" | "skill";
 
 export function AddProjectModal({ onClose }: AddProjectModalProps) {
   const { addProject } = useKanbanStore();
@@ -146,6 +146,13 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(narrative),
+        });
+      }
+
+      // Launch skill terminal if mode is "skill"
+      if (narrativeMode === "skill") {
+        await fetch(`/api/projects/${newProject.id}/narrative-skill`, {
+          method: "POST",
         });
       }
 
@@ -382,7 +389,26 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                 </div>
               </label>
 
-              {/* Option 3: Skip */}
+              {/* Option 3: Create with Skill (Interactive) */}
+              <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors">
+                <input
+                  type="radio"
+                  name="narrativeMode"
+                  value="skill"
+                  checked={narrativeMode === "skill"}
+                  onChange={() => setNarrativeMode("skill")}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">Create with Skill (Interactive)</span>
+                    <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                  <div className="text-xs text-muted-foreground">Opens terminal with /product-narrative skill for guided interview</div>
+                </div>
+              </label>
+
+              {/* Option 4: Skip */}
               <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors">
                 <input
                   type="radio"
@@ -523,7 +549,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
               >
                 {isSubmitting
                   ? (narrativeMode === "create" && hasNarrativeContent() ? "AI generating narrative..." : "Creating...")
-                  : "Create Project"}
+                  : (narrativeMode === "skill" ? "Create & Open Terminal" : "Create Project")}
               </Button>
             </>
           )}

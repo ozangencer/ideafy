@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Folder, Loader2, FileText, GitBranch, Plug } from "lucide-react";
+import { Folder, Loader2, FileText, GitBranch, Plug, Terminal } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Popover,
@@ -68,10 +68,9 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
-  const [hookInstalled, setHookInstalled] = useState<boolean | null>(null);
-  const [isTogglingHook, setIsTogglingHook] = useState(false);
-  const [mcpSkillsInstalled, setMcpSkillsInstalled] = useState<boolean | null>(null);
-  const [isTogglingMcpSkills, setIsTogglingMcpSkills] = useState(false);
+  const [isLaunchingSkill, setIsLaunchingSkill] = useState(false);
+  const [kanbanInstalled, setKanbanInstalled] = useState<boolean | null>(null);
+  const [isTogglingKanban, setIsTogglingKanban] = useState(false);
 
   // Check hook and MCP/Skills status on mount
   useEffect(() => {
@@ -89,59 +88,39 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
           skillsRes.json(),
         ]);
 
-        setHookInstalled(hookData.installed ?? false);
-        // MCP & Skills are considered installed if both are installed
-        const bothInstalled = (mcpData.installed ?? false) && (skillsData.installed ?? false);
-        setMcpSkillsInstalled(bothInstalled);
+        const allInstalled = (hookData.installed ?? false) && (mcpData.installed ?? false) && (skillsData.installed ?? false);
+        setKanbanInstalled(allInstalled);
       } catch (error) {
         console.error("Failed to check statuses:", error);
-        setHookInstalled(false);
-        setMcpSkillsInstalled(false);
+        setKanbanInstalled(false);
       }
     };
     checkStatuses();
   }, [project.id]);
 
-  const handleToggleHook = async (enabled: boolean) => {
-    setIsTogglingHook(true);
+  const handleToggleKanban = async (enabled: boolean) => {
+    setIsTogglingKanban(true);
     try {
-      const response = await fetch(`/api/projects/${project.id}/hook`, {
-        method: enabled ? "POST" : "DELETE",
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setHookInstalled(data.installed);
-      }
-    } catch (error) {
-      console.error("Failed to toggle hook:", error);
-    } finally {
-      setIsTogglingHook(false);
-    }
-  };
-
-  const handleToggleMcpSkills = async (enabled: boolean) => {
-    setIsTogglingMcpSkills(true);
-    try {
-      // Install or remove both MCP and Skills together
-      const [mcpRes, skillsRes] = await Promise.all([
-        fetch(`/api/projects/${project.id}/mcp`, {
-          method: enabled ? "POST" : "DELETE",
-        }),
-        fetch(`/api/projects/${project.id}/skills`, {
-          method: enabled ? "POST" : "DELETE",
-        }),
+      const method = enabled ? "POST" : "DELETE";
+      const [hookRes, mcpRes, skillsRes] = await Promise.all([
+        fetch(`/api/projects/${project.id}/hook`, { method }),
+        fetch(`/api/projects/${project.id}/mcp`, { method }),
+        fetch(`/api/projects/${project.id}/skills`, { method }),
       ]);
 
-      const mcpData = await mcpRes.json();
-      const skillsData = await skillsRes.json();
+      const [hookData, mcpData, skillsData] = await Promise.all([
+        hookRes.json(),
+        mcpRes.json(),
+        skillsRes.json(),
+      ]);
 
-      if (mcpRes.ok && skillsRes.ok) {
-        setMcpSkillsInstalled(mcpData.installed && skillsData.installed);
+      if (hookRes.ok && mcpRes.ok && skillsRes.ok) {
+        setKanbanInstalled(hookData.installed && mcpData.installed && skillsData.installed);
       }
     } catch (error) {
-      console.error("Failed to toggle MCP & Skills:", error);
+      console.error("Failed to toggle kanban:", error);
     } finally {
-      setIsTogglingMcpSkills(false);
+      setIsTogglingKanban(false);
     }
   };
 
@@ -390,33 +369,45 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                 <FileText className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Relative path to the product narrative file. Leave empty to use default (docs/product-narrative.md).
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground flex-1">
+                Relative path to the product narrative file. Leave empty to use default (docs/product-narrative.md).
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 text-xs"
+                disabled={isLaunchingSkill}
+                onClick={async () => {
+                  setIsLaunchingSkill(true);
+                  try {
+                    const res = await fetch(`/api/projects/${project.id}/narrative-skill`, {
+                      method: "POST",
+                    });
+                    if (!res.ok) {
+                      const data = await res.json();
+                      console.error("Failed to launch skill:", data.error);
+                    }
+                  } catch (error) {
+                    console.error("Failed to launch skill:", error);
+                  } finally {
+                    setIsLaunchingSkill(false);
+                  }
+                }}
+              >
+                {isLaunchingSkill ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Terminal className="h-3 w-3" />
+                )}
+                Generate with Skill
+              </Button>
+            </div>
           </div>
 
           {/* Divider */}
           <div className="border-t border-border" />
-
-          {/* Claude Code Hook */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <label className="text-sm font-medium">Kanban Hook</label>
-              <p className="text-xs text-muted-foreground">
-                Reminds you to update kanban card on every message
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isTogglingHook && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-              <Switch
-                checked={hookInstalled ?? false}
-                onCheckedChange={handleToggleHook}
-                disabled={isTogglingHook || hookInstalled === null}
-              />
-            </div>
-          </div>
 
           {/* Kanban MCP & Skills */}
           <div className="flex items-center justify-between">
@@ -426,17 +417,17 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                 <label className="text-sm font-medium">Kanban MCP & Skills</label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Install kanban tools and /human-test command to this project
+                Install kanban tools, hook, and slash commands to this project
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {isTogglingMcpSkills && (
+              {isTogglingKanban && (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
               <Switch
-                checked={mcpSkillsInstalled ?? false}
-                onCheckedChange={handleToggleMcpSkills}
-                disabled={isTogglingMcpSkills || mcpSkillsInstalled === null}
+                checked={kanbanInstalled ?? false}
+                onCheckedChange={handleToggleKanban}
+                disabled={isTogglingKanban || kanbanInstalled === null}
               />
             </div>
           </div>
