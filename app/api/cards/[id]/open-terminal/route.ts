@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { exec, execSync, spawn } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import type { TerminalApp, Status } from "@/lib/types";
+import type { Status } from "@/lib/types";
 import {
   generateBranchName,
   isGitRepo,
@@ -13,6 +9,7 @@ import {
   worktreeExists,
   getWorktreePath,
 } from "@/lib/git";
+import { launchTerminal, getTerminalPreference } from "@/lib/terminal-launcher";
 
 type Phase = "planning" | "implementation" | "retest";
 
@@ -100,32 +97,6 @@ function getNewStatus(phase: Phase, currentStatus: Status): Status {
   }
 }
 
-function getAppleScript(terminal: "iterm2" | "terminal", command: string): string {
-  // For AppleScript double-quoted strings:
-  // 1. Escape backslashes first: \ → \\
-  // 2. Then escape double quotes: " → \"
-  const escapedCommand = command
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"');
-
-  if (terminal === "iterm2") {
-    return `
-tell application "iTerm2"
-    create window with default profile
-    tell current session of current window
-        write text "${escapedCommand}"
-    end tell
-end tell`;
-  }
-
-  // Terminal.app
-  return `
-tell application "Terminal"
-    do script "${escapedCommand}"
-    activate
-end tell`;
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -152,14 +123,7 @@ export async function POST(
         .get()
     : null;
 
-  // Get terminal preference from settings
-  const terminalSetting = db
-    .select()
-    .from(schema.settings)
-    .where(eq(schema.settings.key, "terminal_app"))
-    .get();
-
-  const terminal = (terminalSetting?.value || "iterm2") as TerminalApp;
+  const terminal = getTerminalPreference();
 
   const workingDir = project?.folderPath || card.projectFolder || process.cwd();
 
@@ -294,58 +258,7 @@ export async function POST(
     console.log(`[Open Terminal] Prompt length: ${prompt.length} chars`);
     console.log(`[Open Terminal] Terminal app: ${terminal}`);
 
-    if (terminal === "ghostty") {
-      // Ghostty doesn't support AppleScript
-      // Copy command to clipboard and open Ghostty
-      execSync(`echo "${cliCommand.replace(/"/g, '\\"')}" | pbcopy`);
-      exec("open -a Ghostty", (error) => {
-        if (error) {
-          console.error(`[Open Terminal] Error opening Ghostty: ${error.message}`);
-        }
-      });
-
-      return NextResponse.json({
-        success: true,
-        cardId: id,
-        phase,
-        newStatus,
-        workingDir: actualWorkingDir,
-        terminal,
-        gitBranchName,
-        gitWorktreePath,
-        gitWorktreeStatus,
-        message: "Ghostty opened. Command copied to clipboard - press Cmd+V to paste.",
-      });
-    }
-
-    // iTerm2 or Terminal.app - use AppleScript
-    // Write command to temp script to avoid complex escaping
-    const timestamp = Date.now();
-    const scriptPath = join(tmpdir(), `ideafy-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
-
-    // Note: App is named "iTerm" not "iTerm2" on this system
-    const appName = terminal === "iterm2" ? "iTerm" : "Terminal";
-
-    const appleScript = terminal === "iterm2"
-      ? `tell application "${appName}"
-    create window with default profile
-    tell current session of current window
-        write text "${scriptPath}"
-    end tell
-end tell`
-      : `tell application "${appName}"
-    do script "${scriptPath}"
-    activate
-end tell`;
-
-    const osascriptProcess = spawn("osascript", []);
-    osascriptProcess.stdin.write(appleScript);
-    osascriptProcess.stdin.end();
-    osascriptProcess.on("error", (error) => {
-      console.error(`[Open Terminal] Error: ${error.message}`);
-      try { unlinkSync(scriptPath); } catch {}
-    });
+    const launchResult = launchTerminal({ command: cliCommand, terminal });
 
     return NextResponse.json({
       success: true,
@@ -357,6 +270,7 @@ end tell`;
       gitBranchName,
       gitWorktreePath,
       gitWorktreeStatus,
+      message: launchResult.message,
     });
   } catch (error) {
     console.error("Open terminal error:", error);
