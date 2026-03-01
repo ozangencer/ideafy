@@ -201,7 +201,16 @@ export function ConversationPanel({
           </div>
         ) : (
           allMessages.map((message) => (
-            <ConversationMessage key={message.id} message={message} />
+            <ConversationMessage
+              key={message.id}
+              message={message}
+              cardId={cardId}
+              sectionType={sectionType}
+              onApplied={() => {
+                // Refresh cards to pick up the updated field
+                useKanbanStore.getState().fetchCards();
+              }}
+            />
           ))
         )}
       </div>

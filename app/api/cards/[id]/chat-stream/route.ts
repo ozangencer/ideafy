@@ -114,14 +114,10 @@ You have access to these MCP tools for updating this card:
 ## CRITICAL: Persisting Content
 When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
 Do NOT just respond with text — persist it to the card so it appears in the UI.
-Only call save tools when you've produced a complete or substantially improved version of the field content, not for general discussion or clarifying questions.
+This includes when you agree with, refine, or expand on the user's ideas — always save the resulting content.
+Only skip saving for pure clarifying questions or very brief acknowledgments without new content.
 ${section === "solution" ? `
-After saving a solution plan via save_plan, you MUST also generate test scenarios and save them via save_tests.
-Test scenarios should cover:
-- Happy path tests for each implementation step
-- Edge cases and error conditions
-- Regression tests for existing functionality
-Format: Use markdown checkboxes (- [ ] Test description)` : ""}${section === "detail" ? `
+Do NOT automatically generate test scenarios when saving a solution plan. Only generate tests if the user explicitly asks for it.` : ""}${section === "detail" ? `
 When you refine or improve the description, call update_card with the updated description field.` : ""}${section === "opinion" ? `
 When you produce a complete evaluation/opinion, call save_opinion with the opinion content and verdict.` : ""}${section === "tests" ? `
 When you produce test scenarios, call save_tests with the test content in markdown checkbox format.
