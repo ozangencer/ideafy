@@ -35,10 +35,14 @@ class GeminiProvider implements PlatformProvider {
     if (cachedGeminiPath) return cachedGeminiPath;
 
     const home = process.env.HOME || process.env.USERPROFILE || "";
+    // Check NVM path first (user's active Node version), then common locations
+    const nvmDir = process.env.NVM_DIR || join(home, ".nvm");
+    const nodeVersion = process.version;
     const candidates = [
+      join(nvmDir, "versions", "node", nodeVersion, "bin", "gemini"),
       join(home, ".local", "bin", "gemini"),
-      "/usr/local/bin/gemini",
       "/opt/homebrew/bin/gemini",
+      "/usr/local/bin/gemini",
     ];
 
     cachedGeminiPath = findBinary("gemini", candidates);
@@ -65,6 +69,7 @@ class GeminiProvider implements PlatformProvider {
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
+    // Gemini CLI doesn't support allowedTools or addDirs flags
     return ["-p", opts.prompt, "--output-format", "stream-json"];
   }
 
@@ -82,16 +87,39 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  parseStreamLine(line: string): StreamEvent | null {
-    if (!line.trim()) return null;
+  parseStreamLine(line: string): StreamEvent[] {
+    if (!line.trim()) return [];
     try {
       const json = JSON.parse(line);
-      if (json.type === "text" || json.text) {
-        return { type: "text", data: json.text || json.data };
+      const events: StreamEvent[] = [];
+
+      // Skip init and user message events
+      if (json.type === "init") return [];
+      if (json.type === "message" && json.role === "user") return [];
+
+      // Handle assistant message events - content is a string
+      if (json.type === "message" && json.role === "assistant" && json.content) {
+        events.push({ type: "text", data: String(json.content) });
       }
-      return null;
+
+      // Handle tool use events
+      if (json.type === "tool_use") {
+        events.push({ type: "tool_use", data: { name: json.tool_name || json.name, input: json.parameters || json.input } });
+      }
+
+      // Handle tool result events
+      if (json.type === "tool_result") {
+        events.push({ type: "tool_result", data: { name: json.tool_id || "", output: String(json.output || "").slice(0, 200) } });
+      }
+
+      // Handle result event (final stats/status)
+      if (json.type === "result") {
+        // Result event in Gemini contains stats, not text - skip
+      }
+
+      return events;
     } catch {
-      return null;
+      return [];
     }
   }
 

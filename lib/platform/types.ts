@@ -34,7 +34,7 @@ export interface CliResponse {
 }
 
 export interface StreamEvent {
-  type: "text" | "thinking" | "tool_use" | "tool_result" | "system";
+  type: "text" | "thinking" | "tool_use" | "tool_result" | "result" | "system";
   data: unknown;
 }
 
@@ -58,7 +58,7 @@ export interface PlatformProvider {
 
   // Response parsing
   parseJsonResponse(stdout: string): CliResponse;
-  parseStreamLine(line: string): StreamEvent | null;
+  parseStreamLine(line: string): StreamEvent[];
 
   // Config paths
   getDefaultSkillsPath(): string;

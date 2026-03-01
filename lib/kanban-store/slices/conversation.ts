@@ -9,6 +9,7 @@ export const createConversationSlice: StoreSlice<
     | "streamingMessage"
     | "isConversationLoading"
     | "conversationAbortController"
+    | "conversationError"
     | "fetchConversation"
     | "sendMessage"
     | "cancelConversation"
@@ -16,12 +17,14 @@ export const createConversationSlice: StoreSlice<
     | "clearConversation"
     | "setStreamingMessage"
     | "appendToStreamingMessage"
+    | "setConversationError"
   >
 > = (set, get) => ({
   conversations: {},
   streamingMessage: null,
   isConversationLoading: false,
   conversationAbortController: null,
+  conversationError: null,
 
   fetchConversation: async (cardId, sectionType) => {
     const key = `${cardId}-${sectionType}`;
@@ -101,7 +104,17 @@ export const createConversationSlice: StoreSlice<
       });
 
       if (!response.ok || !response.body) {
-        throw new Error("Failed to start chat stream");
+        let errorMessage = "Failed to start chat stream";
+        try {
+          const errorBody = await response.json();
+          errorMessage = errorBody.error || errorBody.message || errorMessage;
+          if (errorBody.suggestion) {
+            errorMessage += ` — ${errorBody.suggestion}`;
+          }
+        } catch {
+          // Could not parse error body
+        }
+        throw new Error(errorMessage);
       }
 
       const reader = response.body.getReader();
@@ -187,6 +200,7 @@ export const createConversationSlice: StoreSlice<
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError") {
         console.error("Failed to send message:", error);
+        set({ conversationError: error.message });
       }
     } finally {
       set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
@@ -236,4 +250,6 @@ export const createConversationSlice: StoreSlice<
       };
     });
   },
+
+  setConversationError: (error) => set({ conversationError: error }),
 });

@@ -87,6 +87,7 @@ function createMainWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
+    icon: path.join(PROJECT_ROOT, "public", "icon-512-dock.png"),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 12 },
     backgroundColor: "#0a0a0b",

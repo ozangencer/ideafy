@@ -69,6 +69,7 @@ export interface KanbanStore {
   streamingMessage: ConversationMessage | null;
   isConversationLoading: boolean;
   conversationAbortController: AbortController | null;
+  conversationError: string | null;
 
   // Background processes state
   backgroundProcesses: BackgroundProcess[];
@@ -169,6 +170,7 @@ export interface KanbanStore {
   clearConversation: (cardId: string, sectionType: SectionType) => Promise<void>;
   setStreamingMessage: (message: ConversationMessage | null) => void;
   appendToStreamingMessage: (text: string) => void;
+  setConversationError: (error: string | null) => void;
 
   // Background processes actions
   fetchBackgroundProcesses: () => Promise<void>;

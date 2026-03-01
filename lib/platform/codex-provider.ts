@@ -23,7 +23,7 @@ class CodexProvider implements PlatformProvider {
 
   capabilities: PlatformCapabilities = {
     supportsAutonomousMode: true,
-    supportsStreamJson: false,
+    supportsStreamJson: true,
     supportsPermissionModes: false,
     supportsHooks: false,
     supportsSkills: true,
@@ -35,10 +35,14 @@ class CodexProvider implements PlatformProvider {
     if (cachedCodexPath) return cachedCodexPath;
 
     const home = process.env.HOME || process.env.USERPROFILE || "";
+    // Check NVM path first (user's active Node version), then common locations
+    const nvmDir = process.env.NVM_DIR || join(home, ".nvm");
+    const nodeVersion = process.version; // e.g. "v22.12.0"
     const candidates = [
+      join(nvmDir, "versions", "node", nodeVersion, "bin", "codex"),
       join(home, ".local", "bin", "codex"),
-      "/usr/local/bin/codex",
       "/opt/homebrew/bin/codex",
+      "/usr/local/bin/codex",
     ];
 
     cachedCodexPath = findBinary("codex", candidates);
@@ -64,9 +68,8 @@ class CodexProvider implements PlatformProvider {
     return `cd "${workingDir}" && codex '${escaped}'`;
   }
 
-  buildStreamArgs(_opts: StreamOptions): string[] {
-    // Codex doesn't support stream-json
-    throw new Error("Codex CLI does not support streaming output");
+  buildStreamArgs(opts: StreamOptions): string[] {
+    return ["exec", "--json", "--full-auto", opts.prompt];
   }
 
   parseJsonResponse(stdout: string): CliResponse {
@@ -74,8 +77,62 @@ class CodexProvider implements PlatformProvider {
     return { result: stdout.trim(), isError: false };
   }
 
-  parseStreamLine(_line: string): StreamEvent | null {
-    return null; // Codex doesn't support streaming
+  parseStreamLine(line: string): StreamEvent[] {
+    if (!line.trim()) return [];
+    try {
+      const json = JSON.parse(line);
+      const events: StreamEvent[] = [];
+
+      // Skip lifecycle events
+      if (json.type === "thread.started" || json.type === "turn.started") {
+        return [];
+      }
+
+      // Handle item.started - command execution starting (tool use indicator)
+      if (json.type === "item.started" && json.item) {
+        const item = json.item;
+        if (item.type === "command_execution" && item.command) {
+          events.push({ type: "tool_use", data: { name: "command", input: item.command } });
+        }
+      }
+
+      // Handle item.completed events
+      if (json.type === "item.completed" && json.item) {
+        const item = json.item;
+
+        // Reasoning (thinking)
+        if (item.type === "reasoning" && item.text) {
+          events.push({ type: "thinking", data: item.text });
+        }
+
+        // Agent message with text response
+        if (item.type === "agent_message" && item.text) {
+          events.push({ type: "text", data: item.text });
+        }
+
+        // Command execution completed (tool result)
+        if (item.type === "command_execution" && item.status === "completed") {
+          events.push({ type: "tool_result", data: {
+            name: "command",
+            output: (item.aggregated_output || "").slice(0, 200),
+          }});
+        }
+
+        // Function call (tool use)
+        if (item.type === "function_call") {
+          events.push({ type: "tool_use", data: { name: item.name || "", input: item.arguments || "" } });
+        }
+
+        // Function call output (tool result)
+        if (item.type === "function_call_output") {
+          events.push({ type: "tool_result", data: { name: item.name || "", output: (item.output || "").slice(0, 200) } });
+        }
+      }
+
+      return events;
+    } catch {
+      return [];
+    }
   }
 
   getDefaultSkillsPath(): string {

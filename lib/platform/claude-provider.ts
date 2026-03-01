@@ -115,23 +115,24 @@ class ClaudeProvider implements PlatformProvider {
     }
   }
 
-  parseStreamLine(line: string): StreamEvent | null {
-    if (!line.trim()) return null;
+  parseStreamLine(line: string): StreamEvent[] {
+    if (!line.trim()) return [];
 
     try {
       const json = JSON.parse(line);
+      const events: StreamEvent[] = [];
 
-      // Handle assistant message with content
+      // Handle assistant message with content (may have multiple blocks)
       if (json.type === "assistant" && json.message?.content) {
         for (const block of json.message.content) {
           if (block.type === "text" && block.text) {
-            return { type: "text", data: block.text };
+            events.push({ type: "text", data: block.text });
           }
           if (block.type === "thinking" && block.thinking) {
-            return { type: "thinking", data: block.thinking };
+            events.push({ type: "thinking", data: block.thinking });
           }
           if (block.type === "tool_use") {
-            return { type: "tool_use", data: { name: block.name, input: block.input } };
+            events.push({ type: "tool_use", data: { name: block.name, input: block.input } });
           }
         }
       }
@@ -139,31 +140,31 @@ class ClaudeProvider implements PlatformProvider {
       // Handle streaming content
       if (json.type === "content_block_delta") {
         if (json.delta?.text) {
-          return { type: "text", data: json.delta.text };
+          events.push({ type: "text", data: json.delta.text });
         }
         if (json.delta?.thinking) {
-          return { type: "thinking", data: json.delta.thinking };
+          events.push({ type: "thinking", data: json.delta.thinking });
         }
       }
 
       // Handle tool results
       if (json.type === "tool_result") {
-        return { type: "tool_result", data: { name: json.name, output: json.output?.slice?.(0, 200) } };
+        events.push({ type: "tool_result", data: { name: json.name, output: json.output?.slice?.(0, 200) } });
       }
 
       // Handle final result - captures response text after tool use
       if (json.type === "result" && json.result) {
-        return { type: "text", data: String(json.result) };
+        events.push({ type: "result", data: String(json.result) });
       }
 
       // Handle system messages
       if (json.type === "system" && json.subtype && json.subtype !== "init") {
-        return { type: "system", data: { subtype: json.subtype, message: json.message } };
+        events.push({ type: "system", data: { subtype: json.subtype, message: json.message } });
       }
 
-      return null;
+      return events;
     } catch {
-      return null;
+      return [];
     }
   }
 

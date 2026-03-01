@@ -7,6 +7,7 @@ import { ConversationInput } from "./conversation-input";
 import { MessageSquare, Trash2, Terminal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useKanbanStore } from "@/lib/store";
 
 interface ConversationPanelProps {
   cardId: string;
@@ -43,6 +44,20 @@ export function ConversationPanel({
   const config = SECTION_CONFIG[sectionType];
   const { toast } = useToast();
   const [isGeneratingTests, setIsGeneratingTests] = useState(false);
+  const conversationError = useKanbanStore((s) => s.conversationError);
+  const setConversationError = useKanbanStore((s) => s.setConversationError);
+
+  // Show toast when conversation error occurs
+  useEffect(() => {
+    if (conversationError) {
+      toast({
+        variant: "destructive",
+        title: "Chat Error",
+        description: conversationError,
+      });
+      setConversationError(null);
+    }
+  }, [conversationError, toast, setConversationError]);
 
   // Check if testScenarios has content (strip HTML tags)
   const hasTestScenarios = testScenarios && testScenarios.replace(/<[^>]*>/g, "").trim().length > 0;

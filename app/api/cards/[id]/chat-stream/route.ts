@@ -406,10 +406,13 @@ export async function POST(
         addDirs: [IMAGES_TEMP_DIR],
       });
 
+      const spawnEnv = provider.getEnv();
+      console.log(`[chat-stream] spawning ${provider.id}:`, provider.getCliPath(), JSON.stringify(cliArgs.slice(0, 3)), `(${cliArgs.length} args, cwd: ${cwd}, HOME: ${spawnEnv.HOME}, OPENAI_API_KEY: ${spawnEnv.OPENAI_API_KEY ? 'SET' : 'unset'})`);
+
       const cliProcess = spawn(provider.getCliPath(), cliArgs, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env: provider.getEnv(),
+        env: spawnEnv,
       });
 
       // Register process with metadata
@@ -426,96 +429,81 @@ export async function POST(
       let stdoutBuffer = "";
 
       cliProcess.stdout?.on("data", (data: Buffer) => {
-        stdoutBuffer += data.toString();
+        const raw = data.toString();
+        console.log(`[chat-stream] stdout (${provider.id}):`, raw.slice(0, 300));
+        stdoutBuffer += raw;
         const lines = stdoutBuffer.split('\n');
         stdoutBuffer = lines.pop() || "";
 
         for (const line of lines) {
           if (!line.trim()) continue;
 
-          try {
-            const json = JSON.parse(line);
-
-            // Handle assistant message with content
-            if (json.type === 'assistant' && json.message?.content) {
-              for (const block of json.message.content) {
-                if (block.type === 'text' && block.text) {
-                  fullResponse += block.text;
-                  sendEvent("text", block.text);
+          const events = provider.parseStreamLine(line);
+          console.log(`[chat-stream] parsed ${events.length} events from line:`, line.slice(0, 100));
+          for (const event of events) {
+            switch (event.type) {
+              case "text":
+                fullResponse += event.data as string;
+                sendEvent("text", event.data);
+                break;
+              case "thinking":
+                sendEvent("thinking", event.data);
+                break;
+              case "tool_use":
+                toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
+                sendEvent("tool_use", event.data);
+                break;
+              case "tool_result":
+                sendEvent("tool_result", event.data);
+                break;
+              case "result": {
+                const resultText = String(event.data);
+                if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
+                  fullResponse += (fullResponse ? '\n' : '') + resultText;
+                  sendEvent("text", resultText);
                 }
-                if (block.type === 'thinking' && block.thinking) {
-                  sendEvent("thinking", block.thinking);
-                }
-                if (block.type === 'tool_use') {
-                  toolCalls.push({ name: block.name, input: block.input });
-                  sendEvent("tool_use", { name: block.name, input: block.input });
-                }
+                break;
               }
+              case "system":
+                sendEvent("system", event.data);
+                break;
             }
-
-            // Handle streaming content
-            if (json.type === 'content_block_delta') {
-              if (json.delta?.text) {
-                fullResponse += json.delta.text;
-                sendEvent("text", json.delta.text);
-              }
-              if (json.delta?.thinking) {
-                sendEvent("thinking", json.delta.thinking);
-              }
-            }
-
-            // Handle tool results
-            if (json.type === 'tool_result') {
-              sendEvent("tool_result", { name: json.name, output: json.output?.slice?.(0, 200) });
-            }
-
-            // Handle final result - captures response text after tool use
-            if (json.type === 'result' && json.result) {
-              const resultText = String(json.result);
-              if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
-                fullResponse += (fullResponse ? '\n' : '') + resultText;
-                sendEvent("text", resultText);
-              }
-            }
-          } catch {
-            // Invalid JSON, skip
           }
         }
       });
 
       cliProcess.stderr?.on("data", (data: Buffer) => {
         const text = data.toString();
+        console.log(`[chat-stream] stderr (${provider.id}):`, text.slice(0, 500));
         if (text.includes("error") || text.includes("Error")) {
           sendEvent("stderr", text);
         }
       });
 
       cliProcess.on("close", async (code) => {
+        console.log(`[chat-stream] ${provider.id} closed with code ${code}, fullResponse length: ${fullResponse.length}`);
         // Process any remaining data in stdout buffer
         if (stdoutBuffer.trim()) {
-          try {
-            const json = JSON.parse(stdoutBuffer);
-            if (json.type === 'assistant' && json.message?.content) {
-              for (const block of json.message.content) {
-                if (block.type === 'text' && block.text) {
-                  fullResponse += block.text;
-                  sendEvent("text", block.text);
+          const events = provider.parseStreamLine(stdoutBuffer);
+          for (const event of events) {
+            switch (event.type) {
+              case "text":
+                fullResponse += event.data as string;
+                sendEvent("text", event.data);
+                break;
+              case "tool_use":
+                toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
+                sendEvent("tool_use", event.data);
+                break;
+              case "result": {
+                const resultText = String(event.data);
+                if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
+                  fullResponse += (fullResponse ? '\n' : '') + resultText;
+                  sendEvent("text", resultText);
                 }
-                if (block.type === 'tool_use') {
-                  toolCalls.push({ name: block.name, input: block.input });
-                  sendEvent("tool_use", { name: block.name, input: block.input });
-                }
+                break;
               }
             }
-            if (json.type === 'result' && json.result) {
-              const resultText = String(json.result);
-              if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
-                fullResponse += (fullResponse ? '\n' : '') + resultText;
-                sendEvent("text", resultText);
-              }
-            }
-          } catch {
-            // Invalid JSON, skip
           }
           stdoutBuffer = "";
         }
