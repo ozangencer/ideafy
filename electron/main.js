@@ -2,13 +2,13 @@ const {
   app,
   BrowserWindow,
   globalShortcut,
-  Tray,
   Menu,
   ipcMain,
   nativeImage,
   screen,
 } = require("electron");
 const { spawn, execSync } = require("child_process");
+const { shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
@@ -19,7 +19,7 @@ const DEV_URL = `http://localhost:${PORT}`;
 
 let mainWindow = null;
 let quickEntryWindow = null;
-let tray = null;
+
 let nextProcess = null;
 
 // ── Server lifecycle ──────────────────────────────────────────────────
@@ -101,6 +101,21 @@ function createMainWindow() {
 
   mainWindow.loadURL(DEV_URL);
 
+  // Intercept OAuth - open in system browser for passkey support
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.includes("supabase.co") || url.includes("accounts.google.com") || url.includes("github.com/login")) {
+      shell.openExternal(url);
+      return { action: "deny" };
+    }
+    return { action: "allow" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (url.includes("supabase.co/auth")) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   mainWindow.webContents.on("dom-ready", () => {
     mainWindow.webContents.setZoomFactor(0.9);
   });
@@ -156,11 +171,9 @@ function createMainWindow() {
     mainWindow.show();
   });
 
-  mainWindow.on("close", (e) => {
-    if (!app.isQuitting) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
+  mainWindow.on("close", () => {
+    app.isQuitting = true;
+    app.quit();
   });
 }
 
@@ -268,50 +281,6 @@ ipcMain.on("resize-quick-entry", (_event, height) => {
   }
 });
 
-// ── Tray ──────────────────────────────────────────────────────────────
-
-function createTray() {
-  const iconPath = path.join(__dirname, "icons", "tray-iconTemplate.png");
-
-  let trayIcon;
-  if (fs.existsSync(iconPath)) {
-    trayIcon = nativeImage.createFromPath(iconPath);
-    trayIcon.setTemplateImage(true);
-  } else {
-    trayIcon = nativeImage.createEmpty();
-  }
-
-  tray = new Tray(trayIcon);
-  tray.setToolTip("ideafy");
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: "Show ideafy",
-      click: () => showAndFocusMainWindow(),
-    },
-    {
-      label: "Quick Entry",
-      accelerator: "CommandOrControl+Shift+K",
-      click: () => showQuickEntry(),
-    },
-    { type: "separator" },
-    {
-      label: "Quit",
-      accelerator: "CommandOrControl+Q",
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
-
-  tray.on("click", () => {
-    showAndFocusMainWindow();
-  });
-}
-
 // ── Global Shortcut ───────────────────────────────────────────────────
 
 function registerGlobalShortcut() {
@@ -392,7 +361,6 @@ app.on("ready", async () => {
 
   createMainWindow();
   createQuickEntryWindow();
-  createTray();
   registerGlobalShortcut();
 });
 

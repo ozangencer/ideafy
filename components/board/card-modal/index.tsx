@@ -431,6 +431,7 @@ export function CardModal() {
           rebaseConflict: null,
           conflictFiles: null,
           processingType: null,
+          poolCardId: null,
         });
       } else {
         const cardId = selectedCard.id;
@@ -906,6 +907,8 @@ export function CardModal() {
         {/* Footer */}
         <CardModalFooter
           title={title}
+          cardId={selectedCard?.id}
+          poolCardId={selectedCard?.poolCardId}
           status={status}
           isDraftMode={isDraftMode}
           canSave={canSave}

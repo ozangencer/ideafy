@@ -6,6 +6,7 @@ import { ProjectList } from "./project-list";
 import { SkillList } from "./skill-list";
 import { McpList } from "./mcp-list";
 import { DocumentList } from "./document-list";
+import { MyQueue } from "./my-queue";
 import { SettingsModal } from "./settings-modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +31,8 @@ export function Sidebar() {
     setSidebarWidth,
     activeProjectId,
     fetchProjectExtensions,
+    teamMode,
+    currentUser,
   } = useKanbanStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -222,6 +225,14 @@ export function Sidebar() {
         {/* Scrollable Content */}
         <ScrollArea className="flex-1">
           <div className="py-2">
+            {/* My Queue - team mode only */}
+            {teamMode && currentUser && (
+              <>
+                <MyQueue />
+                <Separator className="my-3 mx-4" />
+              </>
+            )}
+
             {/* Skills Section */}
             <SkillList />
 

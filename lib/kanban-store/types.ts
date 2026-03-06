@@ -12,6 +12,7 @@ import {
   Status,
   UnifiedItem,
 } from "../types";
+import type { TeamUser, Team, TeamMember, PoolCard } from "../team/types";
 
 export interface KanbanStore {
   // Cards state
@@ -176,6 +177,31 @@ export interface KanbanStore {
   fetchBackgroundProcesses: () => Promise<void>;
   killBackgroundProcess: (processKey: string) => Promise<void>;
   clearCompletedProcesses: () => Promise<void>;
+
+  // Team state
+  teamMode: boolean;
+  supabaseConfigured: boolean;
+  currentUser: TeamUser | null;
+  currentTeam: Team | null;
+  teamMembers: TeamMember[];
+  poolCards: PoolCard[];
+  isTeamLoading: boolean;
+
+  // Team actions
+  initTeam: () => Promise<void>;
+  signUp: (email: string, password: string, displayName: string) => Promise<{ user: TeamUser | null; error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ user: TeamUser | null; error: string | null }>;
+  signInOAuth: (provider: "google" | "github") => Promise<{ error: string | null }>;
+  signOutUser: () => Promise<{ error: string | null }>;
+  createTeam: (name: string) => Promise<{ error: string | null }>;
+  joinTeam: (inviteCode: string) => Promise<{ error: string | null }>;
+  leaveTeam: () => Promise<{ error: string | null }>;
+  fetchTeam: () => Promise<void>;
+  fetchTeamMembers: () => Promise<void>;
+  fetchPoolCards: () => Promise<void>;
+  sendToPool: (cardId: string, assignedTo?: string) => Promise<{ error: string | null; poolCardId?: string }>;
+  pullFromPool: (poolCardId: string) => Promise<{ error: string | null; cardId?: string }>;
+  pushUpdate: (cardId: string) => Promise<{ error: string | null }>;
 }
 
 // Custom slice creator type that makes the store parameter optional

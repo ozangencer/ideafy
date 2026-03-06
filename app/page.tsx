@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { KanbanBoard } from "@/components/board/kanban-board";
+import { PoolView } from "@/components/board/pool-view";
 import { CardModal } from "@/components/board/card-modal";
 import { DocumentEditor } from "@/components/editor/document-editor";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -11,7 +12,10 @@ import { BackgroundProcesses } from "@/components/background-processes";
 import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Search, LayoutGrid, Table2 } from "lucide-react";
+
+type ViewMode = "board" | "pool";
 
 export default function Home() {
   const {
@@ -29,7 +33,11 @@ export default function Home() {
     isDocumentEditorOpen,
     activeProjectId,
     projects,
+    teamMode,
+    initTeam,
   } = useKanbanStore();
+
+  const [viewMode, setViewMode] = useState<ViewMode>("board");
 
   useKeyboardShortcuts();
 
@@ -58,7 +66,8 @@ export default function Home() {
     fetchSettings();
     fetchSkills();
     fetchMcps();
-  }, [fetchCards, fetchProjects, fetchSettings, fetchSkills, fetchMcps]);
+    initTeam();
+  }, [fetchCards, fetchProjects, fetchSettings, fetchSkills, fetchMcps, initTeam]);
 
   // Polling: Refresh data every 10 seconds (skip when modal/editor is open to prevent form reset)
   useEffect(() => {
@@ -116,6 +125,30 @@ export default function Home() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              {/* Board/Pool Toggle - only when team mode is on */}
+              {teamMode && (
+                <div className="flex border border-border rounded-md overflow-hidden">
+                  <Button
+                    variant={viewMode === "board" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-none gap-1.5 h-8 px-3"
+                    onClick={() => setViewMode("board")}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Board
+                  </Button>
+                  <Button
+                    variant={viewMode === "pool" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="rounded-none gap-1.5 h-8 px-3"
+                    onClick={() => setViewMode("pool")}
+                  >
+                    <Table2 className="h-3.5 w-3.5" />
+                    Pool
+                  </Button>
+                </div>
+              )}
+
               {/* Search */}
               <div className="relative">
                 <Input
@@ -152,11 +185,13 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Board - only show loading on initial fetch, not on polling */}
+        {/* Board / Pool - only show loading on initial fetch, not on polling */}
         {isLoading && cards.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-muted-foreground">Loading...</p>
           </div>
+        ) : viewMode === "pool" && teamMode ? (
+          <PoolView />
         ) : (
           <KanbanBoard />
         )}

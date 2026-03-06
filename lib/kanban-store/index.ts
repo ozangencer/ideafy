@@ -10,6 +10,7 @@ import { createDocumentsSlice } from "./slices/documents";
 import { createProjectsSlice } from "./slices/projects";
 import { createSettingsSlice } from "./slices/settings";
 import { createSkillsSlice } from "./slices/skills";
+import { createTeamSlice } from "./slices/team";
 import { createUiSlice } from "./slices/ui";
 import { KanbanStore } from "./types";
 import { CompletedFilter } from "../types";
@@ -29,6 +30,7 @@ export const useKanbanStore = create<KanbanStore>()(
       ...createDevServerSlice(set, get),
       ...createSettingsSlice(set, get),
       ...createConversationSlice(set, get),
+      ...createTeamSlice(set, get),
     }),
     {
       name: "kanban-preferences",

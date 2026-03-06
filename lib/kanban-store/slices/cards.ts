@@ -26,6 +26,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   conflictFiles: null,
   processingType: null,
   aiPlatform: null,
+  poolCardId: null,
   createdAt: nowIso(),
   updatedAt: nowIso(),
   completedAt: null,

@@ -38,6 +38,7 @@ export interface Card {
   conflictFiles: string[] | null;
   processingType: ProcessingType;
   aiPlatform: AiPlatform | null;
+  poolCardId: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
