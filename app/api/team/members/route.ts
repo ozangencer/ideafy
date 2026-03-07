@@ -1,30 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabaseServer(authHeader: string | null) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
-  return createClient(url, anonKey, {
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-}
+import { getSupabaseAdmin, getAuthenticatedUser } from "@/lib/team/server";
 
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
-  }
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
-  // Find user's team
+  const supabase = getSupabaseAdmin()!;
+
   const { data: membership } = await supabase
     .from("team_members")
     .select("team_id")
@@ -35,7 +19,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ members: [] });
   }
 
-  // Get all team members
   const { data: members, error: membersError } = await supabase
     .from("team_members")
     .select("*")
@@ -58,18 +41,28 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// DELETE: Leave team
 export async function DELETE(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
-  }
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
+  const supabase = getSupabaseAdmin()!;
+
+  // Find user's current membership
+  const { data: membership } = await supabase
+    .from("team_members")
+    .select("team_id, role")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) {
+    return NextResponse.json({ error: "Not a member of any team" }, { status: 404 });
+  }
+
+  const { team_id, role } = membership;
+
+  // Remove the user from the team
   const { error } = await supabase
     .from("team_members")
     .delete()
@@ -77,6 +70,31 @@ export async function DELETE(request: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Check remaining members
+  const { data: remaining, error: countError } = await supabase
+    .from("team_members")
+    .select("id, user_id, joined_at")
+    .eq("team_id", team_id)
+    .order("joined_at", { ascending: true });
+
+  if (countError) {
+    return NextResponse.json({ error: countError.message }, { status: 500 });
+  }
+
+  if (!remaining || remaining.length === 0) {
+    // No members left — delete the team (pool_cards cascade-deleted)
+    await supabase.from("teams").delete().eq("id", team_id);
+    return NextResponse.json({ success: true, teamDeleted: true });
+  }
+
+  // If owner left, transfer ownership to earliest member
+  if (role === "owner") {
+    await supabase
+      .from("team_members")
+      .update({ role: "owner" })
+      .eq("id", remaining[0].id);
   }
 
   return NextResponse.json({ success: true });

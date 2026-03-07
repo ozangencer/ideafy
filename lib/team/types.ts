@@ -39,6 +39,8 @@ export interface PoolCard {
   assignedToName?: string;
   pushedBy: string;
   pushedByName?: string;
+  pulledBy?: string;
+  pulledByName?: string;
   sourceCardId?: string;
   lastSyncedAt: string;
   createdAt: string;

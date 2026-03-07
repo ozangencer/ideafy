@@ -58,6 +58,7 @@ export const createTeamSlice: StoreSlice<
     | "sendToPool"
     | "pullFromPool"
     | "pushUpdate"
+    | "removeFromPool"
   >
 > = (set, get) => ({
   teamMode: false,
@@ -298,8 +299,9 @@ export const createTeamSlice: StoreSlice<
       const data = await response.json();
       if (data.error) return { error: data.error };
 
-      // Refresh local cards
+      // Refresh local cards and pool cards
       await get().fetchCards();
+      await get().fetchPoolCards();
       return { error: null, cardId: data.cardId };
     } catch (error) {
       return { error: "Failed to pull from pool" };
@@ -319,6 +321,27 @@ export const createTeamSlice: StoreSlice<
       return { error: null };
     } catch (error) {
       return { error: "Failed to push update" };
+    }
+  },
+
+  removeFromPool: async (poolCardId: string, localCardId?: string) => {
+    try {
+      const response = await fetchWithAuth("/api/team/pool", {
+        method: "DELETE",
+        body: JSON.stringify({ poolCardId }),
+      });
+      const data = await response.json();
+      if (data.error) return { error: data.error };
+
+      // Clear pool link on local card if provided
+      if (localCardId) {
+        await get().updateCard(localCardId, { poolCardId: null } as never);
+      }
+
+      await get().fetchPoolCards();
+      return { error: null };
+    } catch (error) {
+      return { error: "Failed to remove from pool" };
     }
   },
 });

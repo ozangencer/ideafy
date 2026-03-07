@@ -90,7 +90,7 @@ export interface KanbanStore {
   ) => Promise<void>;
   discardDraft: () => void;
   updateCard: (id: string, updates: Partial<Card>) => Promise<void>;
-  deleteCard: (id: string) => Promise<void>;
+  deleteCard: (id: string, options?: { removeFromPool?: boolean }) => Promise<void>;
   moveCard: (id: string, newStatus: Status) => Promise<void>;
   selectCard: (card: Card | null) => void;
   openModal: () => void;
@@ -202,6 +202,7 @@ export interface KanbanStore {
   sendToPool: (cardId: string, assignedTo?: string) => Promise<{ error: string | null; poolCardId?: string }>;
   pullFromPool: (poolCardId: string) => Promise<{ error: string | null; cardId?: string }>;
   pushUpdate: (cardId: string) => Promise<{ error: string | null }>;
+  removeFromPool: (poolCardId: string, localCardId?: string) => Promise<{ error: string | null }>;
 }
 
 // Custom slice creator type that makes the store parameter optional

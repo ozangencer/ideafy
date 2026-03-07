@@ -39,7 +39,8 @@ CREATE TABLE pool_cards (
   source_card_id text,
   last_synced_at timestamptz DEFAULT now(),
   created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
+  updated_at timestamptz DEFAULT now(),
+  pulled_by uuid REFERENCES auth.users(id)
 );
 
 -- Indexes
@@ -47,6 +48,7 @@ CREATE INDEX idx_team_members_user_id ON team_members(user_id);
 CREATE INDEX idx_team_members_team_id ON team_members(team_id);
 CREATE INDEX idx_pool_cards_team_id ON pool_cards(team_id);
 CREATE INDEX idx_pool_cards_assigned_to ON pool_cards(assigned_to);
+CREATE INDEX idx_pool_cards_pulled_by ON pool_cards(pulled_by);
 CREATE INDEX idx_pool_cards_source_card_id ON pool_cards(source_card_id);
 CREATE INDEX idx_teams_invite_code ON teams(invite_code);
 
@@ -96,3 +98,9 @@ CREATE POLICY "Users can update team pool cards" ON pool_cards
   FOR UPDATE USING (
     team_id IN (SELECT team_id FROM team_members WHERE user_id = auth.uid())
   );
+
+-- ============================================
+-- Migration: Add pulled_by column (run this if pool_cards table already exists)
+-- ============================================
+-- ALTER TABLE pool_cards ADD COLUMN pulled_by uuid REFERENCES auth.users(id);
+-- CREATE INDEX idx_pool_cards_pulled_by ON pool_cards(pulled_by);

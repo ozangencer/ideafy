@@ -98,14 +98,18 @@ export async function sendTeamInviteEmail(
   `;
 
   try {
-    const { error } = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: `Join ${teamName} on Ideafy`,
+      subject: `${inviterName} invited you to ${teamName}`,
       html: baseTemplate(content),
     });
 
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      console.error("Resend invite error:", error);
+      return { success: false, error: error.message };
+    }
+    console.log("Resend invite sent:", data);
     return { success: true };
   } catch (err) {
     console.error("Failed to send invite email:", err);

@@ -35,7 +35,22 @@ export function Sidebar() {
     currentUser,
   } = useKanbanStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsDefaultTab, setSettingsDefaultTab] = useState<"general" | "team">();
+  const [pendingInviteCode, setPendingInviteCode] = useState<string>();
   const [isDragging, setIsDragging] = useState(false);
+
+  // Deep link: ?join=CODE opens Settings > Team with invite code pre-filled
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get("join");
+    if (joinCode) {
+      setPendingInviteCode(joinCode.toUpperCase());
+      setSettingsDefaultTab("team");
+      setIsSettingsOpen(true);
+      // Clean URL without reload
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Handle drag resize
@@ -160,7 +175,11 @@ export function Sidebar() {
         </div>
 
         {isSettingsOpen && (
-          <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+          <SettingsModal
+            onClose={() => { setIsSettingsOpen(false); setSettingsDefaultTab(undefined); setPendingInviteCode(undefined); }}
+            defaultTab={settingsDefaultTab}
+            defaultInviteCode={pendingInviteCode}
+          />
         )}
       </TooltipProvider>
     );

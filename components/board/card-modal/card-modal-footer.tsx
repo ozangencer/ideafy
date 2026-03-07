@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Archive, Loader2, Check, CloudUpload } from "lucide-react";
+import { Archive, Loader2, Check, CloudUpload, CloudOff } from "lucide-react";
 import { Status } from "@/lib/types";
 import { useKanbanStore } from "@/lib/store";
 import { toast } from "sonner";
@@ -28,7 +28,8 @@ interface CardModalFooterProps {
   isDraftMode: boolean;
   canSave: boolean;
   saveStatus: SaveStatus;
-  onDelete: () => void;
+  onDelete: (removeFromPool?: boolean) => void;
+  onRemoveFromPool?: () => void;
   onWithdraw: () => void;
   onCancel: () => void;
   onSave: () => void;
@@ -43,12 +44,16 @@ export function CardModalFooter({
   canSave,
   saveStatus,
   onDelete,
+  onRemoveFromPool,
   onWithdraw,
   onCancel,
   onSave,
 }: CardModalFooterProps) {
   const { teamMode, currentTeam, sendToPool, pushUpdate } = useKanbanStore();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [showPoolDeleteDialog, setShowPoolDeleteDialog] = useState(false);
+  const [showRemoveFromPoolDialog, setShowRemoveFromPoolDialog] = useState(false);
 
   const handlePoolAction = async () => {
     if (!cardId) return;
@@ -68,39 +73,98 @@ export function CardModalFooter({
     setIsSyncing(false);
   };
 
+  const handleRemoveFromPool = async () => {
+    setShowRemoveFromPoolDialog(false);
+    if (!onRemoveFromPool) return;
+    setIsRemoving(true);
+    onRemoveFromPool();
+    setIsRemoving(false);
+  };
+
   const showPoolButton = teamMode && currentTeam && !isDraftMode && cardId;
+  const isLinkedToPool = !!poolCardId;
 
   return (
     <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
       <div className="flex gap-2">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
+        {/* Delete button - pool-aware when linked */}
+        {isLinkedToPool && teamMode ? (
+          <>
             <Button
               variant="ghost"
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setShowPoolDeleteDialog(true)}
             >
               Delete
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete task?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the
-                task &quot;{title}&quot;.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={onDelete}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            <AlertDialog open={showPoolDeleteDialog} onOpenChange={setShowPoolDeleteDialog}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete task?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This card is linked to the team pool. How would you like to delete it?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-2 space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => {
+                      setShowPoolDeleteDialog(false);
+                      onDelete(false);
+                    }}
+                  >
+                    Delete locally only
+                    <span className="ml-auto text-xs text-muted-foreground">Pool card remains</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-destructive hover:text-destructive"
+                    onClick={() => {
+                      setShowPoolDeleteDialog(false);
+                      onDelete(true);
+                    }}
+                  >
+                    Delete and remove from pool
+                    <span className="ml-auto text-xs text-muted-foreground">Both deleted</span>
+                  </Button>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        ) : (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete task?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the
+                  task &quot;{title}&quot;.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => onDelete()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
         {!isDraftMode && status !== "withdrawn" && (
           <Button
             variant="ghost"
@@ -114,20 +178,56 @@ export function CardModalFooter({
       </div>
       <div className="flex gap-2 items-center">
         {showPoolButton && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={handlePoolAction}
-            disabled={isSyncing}
-          >
-            {isSyncing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <CloudUpload className="h-3.5 w-3.5" />
+          <>
+            {isLinkedToPool && onRemoveFromPool && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/50"
+                  onClick={() => setShowRemoveFromPoolDialog(true)}
+                  disabled={isRemoving}
+                >
+                  {isRemoving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CloudOff className="h-3.5 w-3.5" />
+                  )}
+                  Remove from Pool
+                </Button>
+                <AlertDialog open={showRemoveFromPoolDialog} onOpenChange={setShowRemoveFromPoolDialog}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remove from pool?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will remove the card from the team pool. Your local card will remain intact.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleRemoveFromPool}>
+                        Remove from Pool
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
             )}
-            {poolCardId ? "Update Pool" : "Send to Pool"}
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={handlePoolAction}
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CloudUpload className="h-3.5 w-3.5" />
+              )}
+              {poolCardId ? "Update Pool" : "Send to Pool"}
+            </Button>
+          </>
         )}
         {isDraftMode ? (
           <>

@@ -1,31 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-
-function getSupabaseServer(authHeader: string | null) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
-  return createClient(url, anonKey, {
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-}
+import { getSupabaseAdmin, getAuthenticatedUser } from "@/lib/team/server";
 
 // POST: Push local card updates to pool
 export async function POST(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
+  if (authError || !user) {
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const supabase = getSupabaseAdmin()!;
 
   const body = await request.json();
   const { cardId } = body;
@@ -34,7 +19,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "cardId is required" }, { status: 400 });
   }
 
-  // Read local card
   const localCard = db
     .select()
     .from(schema.cards)
@@ -51,7 +35,6 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString();
 
-  // Update pool card in Supabase
   const { error: updateError } = await supabase
     .from("pool_cards")
     .update({

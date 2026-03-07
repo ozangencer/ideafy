@@ -22,15 +22,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff, Copy, LogOut, Users } from "lucide-react";
+import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff, Copy, LogOut, Users, Share2, Mail, Send } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
 import { toast } from "sonner";
 
 interface SettingsModalProps {
   onClose: () => void;
+  defaultTab?: "general" | "team";
+  defaultInviteCode?: string;
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: SettingsModalProps) {
   const {
     settings, updateSettings, fetchSettings,
     supabaseConfigured, currentUser, currentTeam, teamMembers,
@@ -236,8 +238,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(defaultInviteCode || "");
   const [teamLoading, setTeamLoading] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSending, setInviteSending] = useState(false);
 
   const handleAuthSubmit = async () => {
     setAuthLoading(true);
@@ -281,6 +285,39 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setTeamLoading(false);
   };
 
+  const handleSendInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviteSending(true);
+    try {
+      const { getSupabaseClient } = await import("@/lib/team/supabase");
+      const supabase = getSupabaseClient();
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+      if (!session?.access_token) {
+        toast.error("Not authenticated");
+        return;
+      }
+      const res = await fetch("/api/team/invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ email: inviteEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send invite");
+      } else {
+        toast.success(`Invite sent to ${inviteEmail.trim()}`);
+        setInviteEmail("");
+      }
+    } catch {
+      toast.error("Failed to send invite");
+    } finally {
+      setInviteSending(false);
+    }
+  };
+
   const platformOption = AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform);
 
   return (
@@ -290,7 +327,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="general">
+        <Tabs defaultValue={defaultTab || "general"}>
           <TabsList className="w-full">
             <TabsTrigger value="general" className="flex-1">General</TabsTrigger>
             {supabaseConfigured && (
@@ -710,6 +747,53 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                           }}
                         >
                           <Copy className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => {
+                            const joinUrl = `${window.location.origin}?join=${currentTeam.inviteCode}`;
+                            const message = `Join my team "${currentTeam.name}" on Ideafy!\n\nInvite code: ${currentTeam.inviteCode}\n\nOr open this link:\n${joinUrl}`;
+                            if (navigator.share) {
+                              navigator.share({ title: `Join ${currentTeam.name} on Ideafy`, text: message, url: joinUrl });
+                            } else {
+                              navigator.clipboard.writeText(message);
+                              toast.success("Invite message copied to clipboard");
+                            }
+                          }}
+                        >
+                          <Share2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium flex items-center gap-1.5">
+                        <Mail className="h-3.5 w-3.5" />
+                        Invite by Email
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="email"
+                          placeholder="colleague@example.com"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleSendInvite()}
+                          className="flex-1"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleSendInvite}
+                          disabled={inviteSending || !inviteEmail.trim()}
+                          className="gap-1.5"
+                        >
+                          {inviteSending ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          Send
                         </Button>
                       </div>
                     </div>

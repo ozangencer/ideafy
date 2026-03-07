@@ -156,12 +156,15 @@ export const createCardsSlice: StoreSlice<
 
   updateCard: async (id, updates) => {
     const previousCards = get().cards;
-    set((state) => ({
-      cards: updateCardById(state.cards, id, {
-        ...updates,
-        updatedAt: nowIso(),
-      }),
-    }));
+    set((state) => {
+      const optimistic = { ...updates, updatedAt: nowIso() };
+      return {
+        cards: updateCardById(state.cards, id, optimistic),
+        selectedCard: state.selectedCard?.id === id
+          ? { ...state.selectedCard, ...optimistic }
+          : state.selectedCard,
+      };
+    });
 
     try {
       const response = await fetch(`/api/cards/${id}`, {
@@ -172,6 +175,9 @@ export const createCardsSlice: StoreSlice<
       const updatedCard = await parseJson<Card>(response);
       set((state) => ({
         cards: replaceCardById(state.cards, id, updatedCard),
+        selectedCard: state.selectedCard?.id === id
+          ? updatedCard
+          : state.selectedCard,
       }));
     } catch (error) {
       console.error("Failed to update card:", error);
@@ -179,11 +185,18 @@ export const createCardsSlice: StoreSlice<
     }
   },
 
-  deleteCard: async (id) => {
+  deleteCard: async (id, options) => {
     try {
+      const card = get().cards.find((c) => c.id === id);
+
+      // Remove from pool first if requested and card is linked
+      if (options?.removeFromPool && card?.poolCardId) {
+        await get().removeFromPool(card.poolCardId);
+      }
+
       await fetch(`/api/cards/${id}`, { method: "DELETE" });
       set((state) => ({
-        cards: state.cards.filter((card) => card.id !== id),
+        cards: state.cards.filter((c) => c.id !== id),
         selectedCard: state.selectedCard?.id === id ? null : state.selectedCard,
         isModalOpen: state.selectedCard?.id === id ? false : state.isModalOpen,
       }));

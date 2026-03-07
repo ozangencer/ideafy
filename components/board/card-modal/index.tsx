@@ -54,6 +54,7 @@ export function CardModal() {
     closeModal,
     updateCard,
     deleteCard,
+    removeFromPool,
     projects,
     cards,
     selectCard,
@@ -454,12 +455,24 @@ export function CardModal() {
     }
   }, [selectedCard, projects, projectId, isDraftMode, title, description, solutionSummary, testScenarios, aiOpinion, status, complexity, priority, aiPlatform, saveDraftCard, updateCard, handleClose]);
 
-  // Handle delete
-  const handleDelete = useCallback(() => {
+  // Handle delete (pool-aware)
+  const handleDelete = useCallback((removeFromPoolFlag?: boolean) => {
     if (selectedCard) {
-      deleteCard(selectedCard.id);
+      deleteCard(selectedCard.id, { removeFromPool: removeFromPoolFlag });
     }
   }, [selectedCard, deleteCard]);
+
+  // Handle remove from pool (keep local card)
+  const handleRemoveFromPool = useCallback(async () => {
+    if (selectedCard?.poolCardId) {
+      const result = await removeFromPool(selectedCard.poolCardId, selectedCard.id);
+      if (result.error) {
+        toast({ variant: "destructive", title: "Error", description: result.error });
+      } else {
+        toast({ title: "Removed from pool", description: "Local card remains intact" });
+      }
+    }
+  }, [selectedCard, removeFromPool, toast]);
 
   // Handle withdraw
   const handleWithdraw = useCallback(() => {
@@ -914,6 +927,7 @@ export function CardModal() {
           canSave={canSave}
           saveStatus={saveStatus}
           onDelete={handleDelete}
+          onRemoveFromPool={handleRemoveFromPool}
           onWithdraw={handleWithdraw}
           onCancel={handleClose}
           onSave={handleSave}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { BackupScheduler } from "@/components/backup-scheduler";
 import "./globals.css";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
             <BackupScheduler />
             {children}
             <Toaster />
+            <SonnerToaster position="top-center" />
           </TooltipProvider>
         </ThemeProvider>
       </body>

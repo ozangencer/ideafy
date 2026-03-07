@@ -1,31 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabaseServer(authHeader: string | null) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
-  return createClient(url, anonKey, {
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-}
+import { getSupabaseAdmin, getAuthenticatedUser } from "@/lib/team/server";
 
 // GET: Fetch all pool cards for user's team
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
-  }
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
-  // Find user's team
+  const supabase = getSupabaseAdmin()!;
+
   const { data: membership } = await supabase
     .from("team_members")
     .select("team_id")
@@ -36,19 +20,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ cards: [] });
   }
 
-  // Get all pool cards + member names
   const { data: cards, error: cardsError } = await supabase
     .from("pool_cards")
     .select(`
       *,
       assignee:team_members!pool_cards_assigned_to_fkey(display_name),
-      pusher:team_members!pool_cards_pushed_by_fkey(display_name)
+      pusher:team_members!pool_cards_pushed_by_fkey(display_name),
+      puller:team_members!pool_cards_pulled_by_fkey(display_name)
     `)
     .eq("team_id", membership.team_id)
     .order("updated_at", { ascending: false });
 
   if (cardsError) {
-    // Fallback: query without joins if foreign key names don't match
+    // Fallback without joins
     const { data: fallbackCards, error: fallbackError } = await supabase
       .from("pool_cards")
       .select("*")
@@ -74,6 +58,7 @@ export async function GET(request: NextRequest) {
         priority: c.priority,
         assignedTo: c.assigned_to,
         pushedBy: c.pushed_by,
+        pulledBy: c.pulled_by,
         sourceCardId: c.source_card_id,
         lastSyncedAt: c.last_synced_at,
         createdAt: c.created_at,
@@ -99,6 +84,8 @@ export async function GET(request: NextRequest) {
       assignedToName: c.assignee?.[0]?.display_name,
       pushedBy: c.pushed_by,
       pushedByName: c.pusher?.[0]?.display_name,
+      pulledBy: c.pulled_by,
+      pulledByName: c.puller?.[0]?.display_name,
       sourceCardId: c.source_card_id,
       lastSyncedAt: c.last_synced_at,
       createdAt: c.created_at,
@@ -107,19 +94,70 @@ export async function GET(request: NextRequest) {
   });
 }
 
+// DELETE: Remove card from pool
+export async function DELETE(request: NextRequest) {
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
+  if (authError || !user) {
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+  }
+
+  const supabase = getSupabaseAdmin()!;
+  const body = await request.json();
+  const { poolCardId } = body;
+
+  if (!poolCardId) {
+    return NextResponse.json({ error: "poolCardId is required" }, { status: 400 });
+  }
+
+  // Check if card exists
+  const { data: poolCard } = await supabase
+    .from("pool_cards")
+    .select("id, pushed_by, team_id")
+    .eq("id", poolCardId)
+    .single();
+
+  // Idempotent: already deleted → success
+  if (!poolCard) {
+    return NextResponse.json({ success: true });
+  }
+
+  // Authorization: only the pusher or team owner can delete
+  const { data: membership } = await supabase
+    .from("team_members")
+    .select("team_id, role")
+    .eq("user_id", user.id)
+    .eq("team_id", poolCard.team_id)
+    .single();
+
+  if (!membership) {
+    return NextResponse.json({ error: "Not in this team" }, { status: 403 });
+  }
+
+  if (poolCard.pushed_by !== user.id && membership.role !== "owner") {
+    return NextResponse.json({ error: "Only the pusher or team owner can remove this card" }, { status: 403 });
+  }
+
+  const { error: deleteError } = await supabase
+    .from("pool_cards")
+    .delete()
+    .eq("id", poolCardId);
+
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
 // POST: Send card to pool (upsert)
 export async function POST(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
-  }
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
-  // Find user's team
+  const supabase = getSupabaseAdmin()!;
+
   const { data: membership } = await supabase
     .from("team_members")
     .select("team_id")
@@ -139,7 +177,6 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString();
 
-  // Check if pool card already exists for this source card
   let existingPoolCard = null;
   if (cardData.sourceCardId) {
     const { data } = await supabase
@@ -170,7 +207,6 @@ export async function POST(request: NextRequest) {
   };
 
   if (existingPoolCard) {
-    // Update existing
     const { data: updated, error } = await supabase
       .from("pool_cards")
       .update(poolCardData)
@@ -183,7 +219,6 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ poolCardId: updated.id });
   } else {
-    // Create new
     const { data: created, error } = await supabase
       .from("pool_cards")
       .insert({ ...poolCardData, created_at: now })

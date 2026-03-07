@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabaseServer(authHeader: string | null) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-
-  const client = createClient(url, anonKey, {
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-  return client;
-}
+import { getSupabaseAdmin, getAuthenticatedUser } from "@/lib/team/server";
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -25,35 +12,30 @@ function generateInviteCode(): string {
 
 // GET: Get current user's team
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
-  }
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
-  // Find user's team membership
-  const { data: membership, error: memberError } = await supabase
+  const supabase = getSupabaseAdmin()!;
+
+  const { data: membership } = await supabase
     .from("team_members")
     .select("team_id, role")
     .eq("user_id", user.id)
     .single();
 
-  if (memberError || !membership) {
+  if (!membership) {
     return NextResponse.json({ team: null });
   }
 
-  // Get team details
-  const { data: team, error: teamError } = await supabase
+  const { data: team } = await supabase
     .from("teams")
     .select("*")
     .eq("id", membership.team_id)
     .single();
 
-  if (teamError || !team) {
+  if (!team) {
     return NextResponse.json({ team: null });
   }
 
@@ -71,15 +53,12 @@ export async function GET(request: NextRequest) {
 
 // POST: Create a new team
 export async function POST(request: NextRequest) {
-  const supabase = getSupabaseServer(request.headers.get("Authorization"));
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
+  if (authError || !user) {
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
   }
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const supabase = getSupabaseAdmin()!;
 
   const body = await request.json();
   const name = body.name?.trim();
@@ -100,7 +79,6 @@ export async function POST(request: NextRequest) {
 
   const inviteCode = generateInviteCode();
 
-  // Create team
   const { data: team, error: teamError } = await supabase
     .from("teams")
     .insert({ name, invite_code: inviteCode, created_by: user.id })
@@ -111,7 +89,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: teamError?.message || "Failed to create team" }, { status: 500 });
   }
 
-  // Add creator as owner
   const displayName =
     user.user_metadata?.display_name ||
     user.user_metadata?.full_name ||
