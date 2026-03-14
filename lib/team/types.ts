@@ -19,13 +19,14 @@ export interface TeamMember {
   teamId: string;
   userId: string;
   displayName: string;
-  role: "owner" | "member";
+  role: "owner" | "admin" | "member";
   joinedAt: string;
 }
 
 export interface PoolCard {
   id: string;
   teamId: string;
+  teamName?: string;
   title: string;
   description?: string;
   solutionSummary?: string;
@@ -45,4 +46,18 @@ export interface PoolCard {
   lastSyncedAt: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Notification {
+  id: string;
+  recipientUserId: string;
+  teamId: string;
+  type: string;
+  title: string;
+  message?: string;
+  referenceId?: string;
+  actorUserId?: string;
+  actorName?: string;
+  isRead: boolean;
+  createdAt: string;
 }

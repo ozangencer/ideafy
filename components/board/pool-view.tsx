@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,8 @@ import {
   RefreshCw,
   Trash2,
   User,
+  UserCheck,
+  UserPlus,
   X,
   FileText,
   Brain,
@@ -57,16 +59,28 @@ export function PoolView() {
     poolCards,
     currentUser,
     teamMembers,
+    teams,
+    activeTeamId,
     fetchPoolCards,
     pullFromPool,
     removeFromPool,
+    claimPoolCard,
     cards,
   } = useKanbanStore();
   const [filter, setFilter] = useState<PoolFilter>("all");
+  const [poolTeamFilter, setPoolTeamFilter] = useState<string>(activeTeamId || "all");
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Fetch pool cards for the selected team filter on mount
+  useEffect(() => {
+    fetchPoolCards(poolTeamFilter);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [pullingId, setPullingId] = useState<string | null>(null);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [confirmClaimId, setConfirmClaimId] = useState<string | null>(null);
+  const [confirmUnclaimId, setConfirmUnclaimId] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<PoolCard | null>(null);
 
   const filteredCards = poolCards.filter((card) => {
@@ -75,9 +89,16 @@ export function PoolView() {
     return true;
   });
 
+  const handleTeamFilterChange = async (value: string) => {
+    setPoolTeamFilter(value);
+    setIsRefreshing(true);
+    await fetchPoolCards(value);
+    setIsRefreshing(false);
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchPoolCards();
+    await fetchPoolCards(poolTeamFilter);
     setIsRefreshing(false);
   };
 
@@ -96,6 +117,45 @@ export function PoolView() {
       toast.error(result.error);
     } else {
       toast.success("Card pulled from pool");
+    }
+  };
+
+  // Check if current user is admin/owner in any relevant team
+  const isAdminOrOwner = teamMembers.some(
+    (m) => m.userId === currentUser?.id && (m.role === "owner" || m.role === "admin")
+  );
+
+  const requestClaim = (poolCardId: string, action: "claim" | "unclaim") => {
+    if (action === "unclaim") {
+      setConfirmUnclaimId(poolCardId);
+      return;
+    }
+    // Check if already assigned to someone else
+    const card = poolCards.find((c) => c.id === poolCardId);
+    if (card?.assignedTo && card.assignedTo !== currentUser?.id) {
+      if (isAdminOrOwner) {
+        // Admin/Owner can reassign with confirmation
+        setConfirmClaimId(poolCardId);
+      } else {
+        // Normal members cannot claim cards assigned to others
+        toast.error(`This card is assigned to ${card.assignedToName || "someone else"}. Ask them to unclaim first.`);
+      }
+      return;
+    }
+    handleClaim(poolCardId, action);
+  };
+
+  const handleClaim = async (poolCardId: string, action: "claim" | "unclaim") => {
+    setConfirmClaimId(null);
+    setConfirmUnclaimId(null);
+    setClaimingId(poolCardId);
+    const result = await claimPoolCard(poolCardId, action);
+    setClaimingId(null);
+
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success(action === "claim" ? "Card claimed" : "Card unassigned");
     }
   };
 
@@ -141,6 +201,23 @@ export function PoolView() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
+          {teams.length > 0 && (
+            <Select value={poolTeamFilter} onValueChange={handleTeamFilterChange}>
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.length > 1 && (
+                  <SelectItem value="all">All Teams</SelectItem>
+                )}
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={filter} onValueChange={(v) => setFilter(v as PoolFilter)}>
             <SelectTrigger className="w-[140px] h-8 text-xs">
               <SelectValue />
@@ -179,12 +256,16 @@ export function PoolView() {
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left font-medium text-muted-foreground px-4 py-2.5">Title</th>
+                {poolTeamFilter === "all" && (
+                  <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-32">Team</th>
+                )}
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-24">Status</th>
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-24">Priority</th>
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-32">Assigned</th>
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-32">Pushed By</th>
                 <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-36">Last Synced</th>
-                <th className="text-right font-medium text-muted-foreground px-4 py-2.5 w-36">Action</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-36">Pulled By</th>
+                <th className="text-right font-medium text-muted-foreground px-4 py-2.5 w-20">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -200,11 +281,15 @@ export function PoolView() {
                     isPulling={pullingId === card.id}
                     isRemoving={removingId === card.id}
                     canRemove={card.pushedBy === currentUser?.id}
+                    isMine={card.assignedTo === currentUser?.id}
+                    isClaiming={claimingId === card.id}
                     onPull={handlePull}
+                    onClaim={requestClaim}
                     onRemove={(id) => setConfirmRemoveId(id)}
                     onRowClick={setSelectedCard}
                     priorityColors={priorityColors}
                     statusColors={statusColors}
+                    showTeamColumn={poolTeamFilter === "all"}
                   />
                 );
               })}
@@ -226,6 +311,49 @@ export function PoolView() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => confirmRemoveId && handleRemove(confirmRemoveId)}>
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Claim confirmation dialog (when already assigned to someone else) */}
+      <AlertDialog open={!!confirmClaimId} onOpenChange={() => setConfirmClaimId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reassign card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This card is currently assigned to{" "}
+              <strong>
+                {(() => {
+                  const card = poolCards.find((c) => c.id === confirmClaimId);
+                  return card?.assignedToName || getMemberName(card?.assignedTo) || "someone else";
+                })()}
+              </strong>
+              . Do you want to reassign it to yourself?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmClaimId && handleClaim(confirmClaimId, "claim")}>
+              Reassign to me
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unclaim confirmation dialog */}
+      <AlertDialog open={!!confirmUnclaimId} onOpenChange={() => setConfirmUnclaimId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unassign card?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove you from this card. Other team members will be able to claim it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmUnclaimId && handleClaim(confirmUnclaimId, "unclaim")}>
+              Unassign
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -255,11 +383,15 @@ function PoolCardRow({
   isPulling,
   isRemoving,
   canRemove,
+  isMine,
+  isClaiming,
   onPull,
+  onClaim,
   onRemove,
   onRowClick,
   priorityColors,
   statusColors,
+  showTeamColumn,
 }: {
   card: PoolCard;
   getMemberName: (userId: string | undefined) => string | null;
@@ -268,11 +400,15 @@ function PoolCardRow({
   isPulling: boolean;
   isRemoving: boolean;
   canRemove: boolean;
+  isMine: boolean;
+  isClaiming: boolean;
   onPull: (id: string) => void;
+  onClaim: (id: string, action: "claim" | "unclaim") => void;
   onRemove: (id: string) => void;
   onRowClick: (card: PoolCard) => void;
   priorityColors: Record<string, string>;
   statusColors: Record<string, string>;
+  showTeamColumn?: boolean;
 }) {
   const assignedName = card.assignedToName || getMemberName(card.assignedTo);
   const pushedName = card.pushedByName || getMemberName(card.pushedBy);
@@ -300,6 +436,11 @@ function PoolCardRow({
       <td className="px-4 py-2.5">
         <span className="font-medium">{card.title}</span>
       </td>
+      {showTeamColumn && (
+        <td className="px-3 py-2.5">
+          <span className="text-xs text-muted-foreground">{card.teamName || "Unknown"}</span>
+        </td>
+      )}
       <td className="px-3 py-2.5">
         <span className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full shrink-0 ${statusColors[card.status] || "bg-gray-400"}`} />
@@ -327,13 +468,37 @@ function PoolCardRow({
       <td className="px-3 py-2.5 text-xs text-muted-foreground">
         {formatDate(card.lastSyncedAt || card.updatedAt)}
       </td>
+      <td className="px-3 py-2.5">
+        {isPulled ? (
+          <span className="text-xs text-green-500">
+            {pulledByName || "Pulled"}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </td>
       <td className="px-4 py-2.5 text-right">
         <div className="flex items-center justify-end gap-1">
-          {isPulled ? (
-            <span className="text-xs text-green-500">
-              {pulledByName ? `Pulled by ${pulledByName}` : "Pulled"}
-            </span>
-          ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-7 w-7 ${isMine ? "text-primary" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClaim(card.id, isMine ? "unclaim" : "claim");
+            }}
+            disabled={isClaiming}
+            title={isMine ? "Unclaim" : "Claim"}
+          >
+            {isClaiming ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            ) : isMine ? (
+              <UserCheck className="h-3.5 w-3.5" />
+            ) : (
+              <UserPlus className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          {!isPulled && (
             <Button
               variant="ghost"
               size="icon"

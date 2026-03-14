@@ -13,9 +13,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2 } from "lucide-react";
+import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2, User } from "lucide-react";
 import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS } from "@/lib/types";
 import { Project } from "@/lib/types";
+import type { TeamMember } from "@/lib/team/types";
 
 interface CardModalHeaderProps {
   title: string;
@@ -33,6 +34,11 @@ interface CardModalHeaderProps {
   onPriorityChange: (priority: Priority) => void;
   aiPlatform: AiPlatform | null;
   onAiPlatformChange: (platform: AiPlatform | null) => void;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  onAssigneeChange: (userId: string | null, displayName: string | null) => void;
+  teamMembers: TeamMember[];
+  hasTeam: boolean;
   hasHistory: boolean;
   onBack: () => void;
   onExport: () => void;
@@ -40,6 +46,7 @@ interface CardModalHeaderProps {
   onToggleExpand: () => void;
   onClose: () => void;
   isTitleValid: boolean;
+  isReadOnly?: boolean;
 }
 
 export function CardModalHeader({
@@ -58,6 +65,11 @@ export function CardModalHeader({
   onPriorityChange,
   aiPlatform,
   onAiPlatformChange,
+  assignedTo,
+  assignedToName,
+  onAssigneeChange,
+  teamMembers,
+  hasTeam,
   hasHistory,
   onBack,
   onExport,
@@ -65,6 +77,7 @@ export function CardModalHeader({
   onToggleExpand,
   onClose,
   isTitleValid,
+  isReadOnly,
 }: CardModalHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border">
@@ -102,9 +115,10 @@ export function CardModalHeader({
             type="text"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
+            readOnly={isReadOnly}
             className={`bg-transparent border-none outline-none w-full text-foreground p-0 ${
               !isTitleValid ? "placeholder:text-muted-foreground/50" : ""
-            }`}
+            } ${isReadOnly ? "cursor-default" : ""}`}
             style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.2 }}
             placeholder="New Title"
           />
@@ -150,11 +164,11 @@ export function CardModalHeader({
       </div>
 
       {/* Metadata row */}
-      <div className="px-6 pb-4 grid grid-cols-5 gap-3">
+      <div className={`px-6 pb-4 grid gap-3 ${hasTeam ? "grid-cols-6" : "grid-cols-5"}`}>
         {/* Status */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Status</label>
-          <Select value={status} onValueChange={(v) => onStatusChange(v as Status)}>
+          <Select value={status} onValueChange={(v) => onStatusChange(v as Status)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
@@ -176,6 +190,7 @@ export function CardModalHeader({
           <Select
             value={projectId || "none"}
             onValueChange={(v) => onProjectChange(v === "none" ? null : v)}
+            disabled={isReadOnly}
           >
             <SelectTrigger className={`h-8 text-sm ${!projectId ? "border-destructive" : ""}`}>
               <SelectValue placeholder="Select project">
@@ -213,7 +228,7 @@ export function CardModalHeader({
         {/* Complexity */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Complexity</label>
-          <Select value={complexity} onValueChange={(v) => onComplexityChange(v as Complexity)}>
+          <Select value={complexity} onValueChange={(v) => onComplexityChange(v as Complexity)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
                 <div className="flex items-center gap-2">
@@ -243,7 +258,7 @@ export function CardModalHeader({
         {/* Priority */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Priority</label>
-          <Select value={priority} onValueChange={(v) => onPriorityChange(v as Priority)}>
+          <Select value={priority} onValueChange={(v) => onPriorityChange(v as Priority)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
                 <div className="flex items-center gap-2">
@@ -276,6 +291,7 @@ export function CardModalHeader({
           <Select
             value={aiPlatform || "global"}
             onValueChange={(v) => onAiPlatformChange(v === "global" ? null : v as AiPlatform)}
+            disabled={isReadOnly}
           >
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
@@ -300,6 +316,51 @@ export function CardModalHeader({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Assignee - only visible when project has a team */}
+        {hasTeam && (
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1.5">Assignee</label>
+            <Select
+              value={assignedTo || "unassigned"}
+              disabled={isReadOnly}
+              onValueChange={(v) => {
+                if (v === "unassigned") {
+                  onAssigneeChange(null, null);
+                } else {
+                  const member = teamMembers.find((m) => m.userId === v);
+                  onAssigneeChange(v, member?.displayName || null);
+                }
+              }}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue>
+                  {assignedTo ? (
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span className="truncate">{assignedToName || "Unknown"}</span>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Unassigned</span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">
+                  <span className="text-muted-foreground">Unassigned</span>
+                </SelectItem>
+                {teamMembers.map((m) => (
+                  <SelectItem key={m.userId} value={m.userId}>
+                    <div className="flex items-center gap-2">
+                      <User className="h-3 w-3" />
+                      <span>{m.displayName}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     </div>
   );

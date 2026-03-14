@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getAuthenticatedUser } from "@/lib/team/server";
 
-// GET: Fetch all pool cards for user's team
+// GET: Fetch all pool cards for a specific team
 export async function GET(request: NextRequest) {
   const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
@@ -9,15 +9,104 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin()!;
+  const teamId = request.nextUrl.searchParams.get("teamId");
 
+  if (!teamId) {
+    return NextResponse.json({ cards: [] });
+  }
+
+  // Helper to map a raw DB row to the API response shape
+  const mapCard = (c: Record<string, unknown>, withJoins = false) => ({
+    id: c.id,
+    teamId: c.team_id,
+    teamName: withJoins ? (c as Record<string, unknown>)._teamName : undefined,
+    title: c.title,
+    description: c.description,
+    solutionSummary: c.solution_summary,
+    testScenarios: c.test_scenarios,
+    aiOpinion: c.ai_opinion,
+    aiVerdict: c.ai_verdict,
+    status: c.status,
+    complexity: c.complexity,
+    priority: c.priority,
+    assignedTo: c.assigned_to,
+    assignedToName: withJoins ? (c.assignee as Array<{ display_name: string }>)?.[0]?.display_name : undefined,
+    pushedBy: c.pushed_by,
+    pushedByName: withJoins ? (c.pusher as Array<{ display_name: string }>)?.[0]?.display_name : undefined,
+    pulledBy: c.pulled_by,
+    pulledByName: withJoins ? (c.puller as Array<{ display_name: string }>)?.[0]?.display_name : undefined,
+    sourceCardId: c.source_card_id,
+    lastSyncedAt: c.last_synced_at,
+    createdAt: c.created_at,
+    updatedAt: c.updated_at,
+  });
+
+  // "all" → fetch pool cards from all teams the user is a member of
+  if (teamId === "all") {
+    const { data: memberships } = await supabase
+      .from("team_members")
+      .select("team_id, teams(name)")
+      .eq("user_id", user.id);
+
+    if (!memberships || memberships.length === 0) {
+      return NextResponse.json({ cards: [] });
+    }
+
+    const teamIds = memberships.map((m) => m.team_id);
+    const teamNameMap: Record<string, string> = {};
+    for (const m of memberships) {
+      const team = m.teams as unknown as { name: string } | null;
+      teamNameMap[m.team_id] = team?.name || "Unknown";
+    }
+
+    const { data: cards, error: cardsError } = await supabase
+      .from("pool_cards")
+      .select(`
+        *,
+        assignee:team_members!pool_cards_assigned_to_fkey(display_name),
+        pusher:team_members!pool_cards_pushed_by_fkey(display_name),
+        puller:team_members!pool_cards_pulled_by_fkey(display_name)
+      `)
+      .in("team_id", teamIds)
+      .order("updated_at", { ascending: false });
+
+    if (cardsError) {
+      const { data: fallbackCards, error: fallbackError } = await supabase
+        .from("pool_cards")
+        .select("*")
+        .in("team_id", teamIds)
+        .order("updated_at", { ascending: false });
+
+      if (fallbackError) {
+        return NextResponse.json({ error: fallbackError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        cards: (fallbackCards || []).map((c) => ({
+          ...mapCard(c),
+          teamName: teamNameMap[c.team_id as string],
+        })),
+      });
+    }
+
+    return NextResponse.json({
+      cards: (cards || []).map((c) => ({
+        ...mapCard(c, true),
+        teamName: teamNameMap[c.team_id as string],
+      })),
+    });
+  }
+
+  // Single team: verify membership
   const { data: membership } = await supabase
     .from("team_members")
-    .select("team_id")
+    .select("id")
     .eq("user_id", user.id)
+    .eq("team_id", teamId)
     .single();
 
   if (!membership) {
-    return NextResponse.json({ cards: [] });
+    return NextResponse.json({ error: "Not a member of this team" }, { status: 403 });
   }
 
   const { data: cards, error: cardsError } = await supabase
@@ -28,15 +117,14 @@ export async function GET(request: NextRequest) {
       pusher:team_members!pool_cards_pushed_by_fkey(display_name),
       puller:team_members!pool_cards_pulled_by_fkey(display_name)
     `)
-    .eq("team_id", membership.team_id)
+    .eq("team_id", teamId)
     .order("updated_at", { ascending: false });
 
   if (cardsError) {
-    // Fallback without joins
     const { data: fallbackCards, error: fallbackError } = await supabase
       .from("pool_cards")
       .select("*")
-      .eq("team_id", membership.team_id)
+      .eq("team_id", teamId)
       .order("updated_at", { ascending: false });
 
     if (fallbackError) {
@@ -44,53 +132,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      cards: (fallbackCards || []).map((c) => ({
-        id: c.id,
-        teamId: c.team_id,
-        title: c.title,
-        description: c.description,
-        solutionSummary: c.solution_summary,
-        testScenarios: c.test_scenarios,
-        aiOpinion: c.ai_opinion,
-        aiVerdict: c.ai_verdict,
-        status: c.status,
-        complexity: c.complexity,
-        priority: c.priority,
-        assignedTo: c.assigned_to,
-        pushedBy: c.pushed_by,
-        pulledBy: c.pulled_by,
-        sourceCardId: c.source_card_id,
-        lastSyncedAt: c.last_synced_at,
-        createdAt: c.created_at,
-        updatedAt: c.updated_at,
-      })),
+      cards: (fallbackCards || []).map((c) => mapCard(c)),
     });
   }
 
   return NextResponse.json({
-    cards: (cards || []).map((c) => ({
-      id: c.id,
-      teamId: c.team_id,
-      title: c.title,
-      description: c.description,
-      solutionSummary: c.solution_summary,
-      testScenarios: c.test_scenarios,
-      aiOpinion: c.ai_opinion,
-      aiVerdict: c.ai_verdict,
-      status: c.status,
-      complexity: c.complexity,
-      priority: c.priority,
-      assignedTo: c.assigned_to,
-      assignedToName: c.assignee?.[0]?.display_name,
-      pushedBy: c.pushed_by,
-      pushedByName: c.pusher?.[0]?.display_name,
-      pulledBy: c.pulled_by,
-      pulledByName: c.puller?.[0]?.display_name,
-      sourceCardId: c.source_card_id,
-      lastSyncedAt: c.last_synced_at,
-      createdAt: c.created_at,
-      updatedAt: c.updated_at,
-    })),
+    cards: (cards || []).map((c) => mapCard(c, true)),
   });
 }
 
@@ -133,8 +180,8 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Not in this team" }, { status: 403 });
   }
 
-  if (poolCard.pushed_by !== user.id && membership.role !== "owner") {
-    return NextResponse.json({ error: "Only the pusher or team owner can remove this card" }, { status: 403 });
+  if (poolCard.pushed_by !== user.id && membership.role !== "owner" && membership.role !== "admin") {
+    return NextResponse.json({ error: "Only the pusher, team owner, or admin can remove this card" }, { status: 403 });
   }
 
   const { error: deleteError } = await supabase
@@ -158,18 +205,24 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdmin()!;
 
+  const body = await request.json();
+  const { cardData, assignedTo, teamId } = body;
+
+  if (!teamId) {
+    return NextResponse.json({ error: "teamId is required" }, { status: 400 });
+  }
+
+  // Verify membership in this team
   const { data: membership } = await supabase
     .from("team_members")
     .select("team_id")
     .eq("user_id", user.id)
+    .eq("team_id", teamId)
     .single();
 
   if (!membership) {
-    return NextResponse.json({ error: "Not in a team" }, { status: 400 });
+    return NextResponse.json({ error: "Not a member of this team" }, { status: 403 });
   }
-
-  const body = await request.json();
-  const { cardData, assignedTo } = body;
 
   if (!cardData?.title) {
     return NextResponse.json({ error: "Card title is required" }, { status: 400 });
@@ -230,4 +283,70 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ poolCardId: created.id }, { status: 201 });
   }
+}
+
+// PATCH: Claim/unclaim a pool card (assign to self or unassign)
+export async function PATCH(request: NextRequest) {
+  const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
+  if (authError || !user) {
+    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+  }
+
+  const supabase = getSupabaseAdmin()!;
+  const body = await request.json();
+  const { poolCardId, action } = body;
+
+  if (!poolCardId) {
+    return NextResponse.json({ error: "poolCardId is required" }, { status: 400 });
+  }
+
+  // Get the pool card to verify team membership
+  const { data: poolCard } = await supabase
+    .from("pool_cards")
+    .select("id, team_id, assigned_to")
+    .eq("id", poolCardId)
+    .single();
+
+  if (!poolCard) {
+    return NextResponse.json({ error: "Pool card not found" }, { status: 404 });
+  }
+
+  // Verify membership and get role
+  const { data: membership } = await supabase
+    .from("team_members")
+    .select("id, role")
+    .eq("user_id", user.id)
+    .eq("team_id", poolCard.team_id)
+    .single();
+
+  if (!membership) {
+    return NextResponse.json({ error: "Not a member of this team" }, { status: 403 });
+  }
+
+  // Block normal members from claiming cards assigned to others
+  if (
+    action === "claim" &&
+    poolCard.assigned_to &&
+    poolCard.assigned_to !== user.id &&
+    membership.role !== "owner" &&
+    membership.role !== "admin"
+  ) {
+    return NextResponse.json(
+      { error: "Card is assigned to another member. Only admins can reassign." },
+      { status: 403 }
+    );
+  }
+
+  const assignedTo = action === "unclaim" ? null : user.id;
+
+  const { error: updateError } = await supabase
+    .from("pool_cards")
+    .update({ assigned_to: assignedTo, updated_at: new Date().toISOString() })
+    .eq("id", poolCardId);
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
 }

@@ -10,6 +10,8 @@ import {
 } from "../../team/auth";
 import { KanbanStore, StoreSlice } from "../types";
 
+const ACTIVE_TEAM_KEY = "ideafy-active-team-id";
+
 // Helper to get auth header from Supabase session
 async function getAuthHeader(): Promise<string | null> {
   // Dynamic import to avoid SSR issues
@@ -40,7 +42,8 @@ export const createTeamSlice: StoreSlice<
     | "teamMode"
     | "supabaseConfigured"
     | "currentUser"
-    | "currentTeam"
+    | "teams"
+    | "activeTeamId"
     | "teamMembers"
     | "poolCards"
     | "isTeamLoading"
@@ -52,20 +55,27 @@ export const createTeamSlice: StoreSlice<
     | "createTeam"
     | "joinTeam"
     | "leaveTeam"
+    | "setActiveTeam"
     | "fetchTeam"
     | "fetchTeamMembers"
+    | "fetchMembersForTeam"
+    | "teamMembersByTeamId"
     | "fetchPoolCards"
     | "sendToPool"
     | "pullFromPool"
     | "pushUpdate"
     | "removeFromPool"
+    | "claimPoolCard"
+    | "updateMemberRole"
   >
 > = (set, get) => ({
   teamMode: false,
   supabaseConfigured: isSupabaseConfigured(),
   currentUser: null,
-  currentTeam: null,
+  teams: [],
+  activeTeamId: null,
   teamMembers: [],
+  teamMembersByTeamId: {},
   poolCards: [],
   isTeamLoading: false,
 
@@ -79,8 +89,8 @@ export const createTeamSlice: StoreSlice<
 
       if (user) {
         set({ teamMode: true });
-        // Fetch team data
         await get().fetchTeam();
+        // fetchTeam sets activeTeamId which triggers members/pool fetch
         await get().fetchTeamMembers();
         await get().fetchPoolCards();
       }
@@ -90,14 +100,17 @@ export const createTeamSlice: StoreSlice<
         set({ currentUser: user });
         if (user) {
           set({ teamMode: true });
-          get().fetchTeam();
-          get().fetchTeamMembers();
-          get().fetchPoolCards();
+          get().fetchTeam().then(() => {
+            get().fetchTeamMembers();
+            get().fetchPoolCards();
+          });
         } else {
           set({
             teamMode: false,
-            currentTeam: null,
+            teams: [],
+            activeTeamId: null,
             teamMembers: [],
+            teamMembersByTeamId: {},
             poolCards: [],
           });
         }
@@ -107,6 +120,18 @@ export const createTeamSlice: StoreSlice<
     } finally {
       set({ isTeamLoading: false });
     }
+  },
+
+  setActiveTeam: (teamId: string | null) => {
+    set({ activeTeamId: teamId });
+    if (teamId) {
+      try { localStorage.setItem(ACTIVE_TEAM_KEY, teamId); } catch {}
+    } else {
+      try { localStorage.removeItem(ACTIVE_TEAM_KEY); } catch {}
+    }
+    // Refresh members and pool for the new active team
+    get().fetchTeamMembers();
+    get().fetchPoolCards();
   },
 
   signUp: async (email: string, password: string, displayName: string) => {
@@ -172,8 +197,10 @@ export const createTeamSlice: StoreSlice<
     if (!result.error) {
       set({
         currentUser: null,
-        currentTeam: null,
+        teams: [],
+        activeTeamId: null,
         teamMembers: [],
+        teamMembersByTeamId: {},
         poolCards: [],
         teamMode: false,
       });
@@ -185,7 +212,27 @@ export const createTeamSlice: StoreSlice<
     try {
       const response = await fetchWithAuth("/api/team");
       const data = await response.json();
-      set({ currentTeam: data.team || null });
+      const teams: Team[] = data.teams || [];
+      set({ teams });
+
+      // Resolve activeTeamId
+      const currentActiveId = get().activeTeamId;
+      let savedId: string | null = null;
+      try { savedId = localStorage.getItem(ACTIVE_TEAM_KEY); } catch {}
+
+      const teamIds = teams.map((t) => t.id);
+
+      if (currentActiveId && teamIds.includes(currentActiveId)) {
+        // Current active is still valid
+      } else if (savedId && teamIds.includes(savedId)) {
+        set({ activeTeamId: savedId });
+      } else if (teams.length > 0) {
+        const newId = teams[0].id;
+        set({ activeTeamId: newId });
+        try { localStorage.setItem(ACTIVE_TEAM_KEY, newId); } catch {}
+      } else {
+        set({ activeTeamId: null });
+      }
     } catch (error) {
       console.error("Failed to fetch team:", error);
     }
@@ -199,7 +246,11 @@ export const createTeamSlice: StoreSlice<
       });
       const data = await response.json();
       if (data.error) return { error: data.error };
-      set({ currentTeam: data.team });
+
+      const newTeam: Team = data.team;
+      const currentTeams = get().teams;
+      set({ teams: [...currentTeams, newTeam], activeTeamId: newTeam.id });
+      try { localStorage.setItem(ACTIVE_TEAM_KEY, newTeam.id); } catch {}
       await get().fetchTeamMembers();
       return { error: null };
     } catch (error) {
@@ -215,7 +266,14 @@ export const createTeamSlice: StoreSlice<
       });
       const data = await response.json();
       if (data.error) return { error: data.error };
-      set({ currentTeam: data.team });
+
+      const newTeam: Team = data.team;
+      const currentTeams = get().teams;
+      // Avoid duplicates (in case of race)
+      const exists = currentTeams.some((t) => t.id === newTeam.id);
+      const updatedTeams = exists ? currentTeams : [...currentTeams, newTeam];
+      set({ teams: updatedTeams, activeTeamId: newTeam.id });
+      try { localStorage.setItem(ACTIVE_TEAM_KEY, newTeam.id); } catch {}
       await get().fetchTeamMembers();
       await get().fetchPoolCards();
       return { error: null };
@@ -224,10 +282,29 @@ export const createTeamSlice: StoreSlice<
     }
   },
 
-  leaveTeam: async () => {
+  leaveTeam: async (teamId: string) => {
     try {
-      await fetchWithAuth("/api/team/members", { method: "DELETE" });
-      set({ currentTeam: null, teamMembers: [], poolCards: [] });
+      await fetchWithAuth("/api/team/members", {
+        method: "DELETE",
+        body: JSON.stringify({ teamId }),
+      });
+      const currentTeams = get().teams.filter((t) => t.id !== teamId);
+      const wasActive = get().activeTeamId === teamId;
+      const newActiveId = wasActive ? (currentTeams[0]?.id || null) : get().activeTeamId;
+
+      set({ teams: currentTeams, activeTeamId: newActiveId });
+      if (newActiveId) {
+        try { localStorage.setItem(ACTIVE_TEAM_KEY, newActiveId); } catch {}
+      } else {
+        try { localStorage.removeItem(ACTIVE_TEAM_KEY); } catch {}
+        set({ teamMembers: [], poolCards: [] });
+      }
+
+      if (wasActive && newActiveId) {
+        await get().fetchTeamMembers();
+        await get().fetchPoolCards();
+      }
+
       return { error: null };
     } catch (error) {
       return { error: "Failed to leave team" };
@@ -235,20 +312,69 @@ export const createTeamSlice: StoreSlice<
   },
 
   fetchTeamMembers: async () => {
+    const activeTeamId = get().activeTeamId;
+    if (!activeTeamId) {
+      set({ teamMembers: [] });
+      return;
+    }
     try {
-      const response = await fetchWithAuth("/api/team/members");
+      const response = await fetchWithAuth(`/api/team/members?teamId=${activeTeamId}`);
       const data = await response.json();
-      set({ teamMembers: data.members || [] });
+      const members = data.members || [];
+      set({
+        teamMembers: members,
+        teamMembersByTeamId: { ...get().teamMembersByTeamId, [activeTeamId]: members },
+      });
     } catch (error) {
       console.error("Failed to fetch team members:", error);
     }
   },
 
-  fetchPoolCards: async () => {
+  fetchMembersForTeam: async (teamId: string) => {
+    // Return from cache if available
+    const cached = get().teamMembersByTeamId[teamId];
+    if (cached) return cached;
+
     try {
-      const response = await fetchWithAuth("/api/team/pool");
+      const response = await fetchWithAuth(`/api/team/members?teamId=${teamId}`);
       const data = await response.json();
-      set({ poolCards: data.cards || [] });
+      const members: TeamMember[] = data.members || [];
+      set({
+        teamMembersByTeamId: { ...get().teamMembersByTeamId, [teamId]: members },
+      });
+      return members;
+    } catch (error) {
+      console.error("Failed to fetch members for team:", error);
+      return [];
+    }
+  },
+
+  fetchPoolCards: async (teamId?: string) => {
+    const resolvedTeamId = teamId || get().activeTeamId;
+    if (!resolvedTeamId) {
+      set({ poolCards: [] });
+      return;
+    }
+    try {
+      const response = await fetchWithAuth(`/api/team/pool?teamId=${resolvedTeamId}`);
+      const data = await response.json();
+      const fetchedPoolCards = data.cards || [];
+      set({ poolCards: fetchedPoolCards });
+
+      // Clean up orphaned poolCardIds on local cards
+      // Only check cards whose project belongs to the fetched team scope
+      const poolCardIds = new Set(fetchedPoolCards.map((pc: { id: string }) => pc.id));
+      const projects = get().projects;
+      const orphanedCards = get().cards.filter((c) => {
+        if (!c.poolCardId || poolCardIds.has(c.poolCardId)) return false;
+        if (resolvedTeamId === "all") return true;
+        // Only clean up if the card's project belongs to the fetched team
+        const proj = projects.find((p) => p.id === c.projectId);
+        return proj?.teamId === resolvedTeamId;
+      });
+      for (const card of orphanedCards) {
+        await get().updateCard(card.id, { poolCardId: null } as never);
+      }
     } catch (error) {
       console.error("Failed to fetch pool cards:", error);
     }
@@ -258,10 +384,16 @@ export const createTeamSlice: StoreSlice<
     const card = get().cards.find((c) => c.id === cardId);
     if (!card) return { error: "Card not found" };
 
+    // Use the card's project teamId first, fallback to activeTeamId
+    const project = get().projects.find((p) => p.id === card.projectId);
+    const teamId = project?.teamId || get().activeTeamId;
+    if (!teamId) return { error: "No team linked to project or active" };
+
     try {
       const response = await fetchWithAuth("/api/team/pool", {
         method: "POST",
         body: JSON.stringify({
+          teamId,
           cardData: {
             title: card.title,
             description: card.description,
@@ -274,7 +406,7 @@ export const createTeamSlice: StoreSlice<
             priority: card.priority,
             sourceCardId: card.id,
           },
-          assignedTo,
+          assignedTo: assignedTo || card.assignedTo || undefined,
         }),
       });
 
@@ -342,6 +474,66 @@ export const createTeamSlice: StoreSlice<
       return { error: null };
     } catch (error) {
       return { error: "Failed to remove from pool" };
+    }
+  },
+
+  claimPoolCard: async (poolCardId: string, action: "claim" | "unclaim" = "claim") => {
+    try {
+      const response = await fetchWithAuth("/api/team/pool", {
+        method: "PATCH",
+        body: JSON.stringify({ poolCardId, action }),
+      });
+      const data = await response.json();
+      if (data.error) return { error: data.error };
+
+      // Optimistic: update the poolCard in-place instead of refetching
+      const currentUser = get().currentUser;
+      set({
+        poolCards: get().poolCards.map((c) =>
+          c.id === poolCardId
+            ? {
+                ...c,
+                assignedTo: action === "claim" ? currentUser?.id : undefined,
+                assignedToName: action === "claim" ? currentUser?.displayName : undefined,
+              }
+            : c
+        ),
+      });
+
+      return { error: null };
+    } catch (error) {
+      return { error: "Failed to update assignment" };
+    }
+  },
+
+  updateMemberRole: async (targetUserId: string, newRole: "admin" | "member") => {
+    const activeTeamId = get().activeTeamId;
+    if (!activeTeamId) return { error: "No active team" };
+
+    // Optimistic update
+    const previousMembers = get().teamMembers;
+    set({
+      teamMembers: previousMembers.map(m =>
+        m.userId === targetUserId ? { ...m, role: newRole } : m
+      ),
+    });
+
+    try {
+      const response = await fetchWithAuth("/api/team/members", {
+        method: "PATCH",
+        body: JSON.stringify({ teamId: activeTeamId, targetUserId, newRole }),
+      });
+      const data = await response.json();
+      if (data.error) {
+        // Rollback on error
+        set({ teamMembers: previousMembers });
+        return { error: data.error };
+      }
+
+      return { error: null };
+    } catch {
+      set({ teamMembers: previousMembers });
+      return { error: "Failed to update member role" };
     }
   },
 });

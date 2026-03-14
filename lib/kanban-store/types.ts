@@ -182,8 +182,10 @@ export interface KanbanStore {
   teamMode: boolean;
   supabaseConfigured: boolean;
   currentUser: TeamUser | null;
-  currentTeam: Team | null;
+  teams: Team[];
+  activeTeamId: string | null;
   teamMembers: TeamMember[];
+  teamMembersByTeamId: Record<string, TeamMember[]>;
   poolCards: PoolCard[];
   isTeamLoading: boolean;
 
@@ -195,14 +197,18 @@ export interface KanbanStore {
   signOutUser: () => Promise<{ error: string | null }>;
   createTeam: (name: string) => Promise<{ error: string | null }>;
   joinTeam: (inviteCode: string) => Promise<{ error: string | null }>;
-  leaveTeam: () => Promise<{ error: string | null }>;
+  leaveTeam: (teamId: string) => Promise<{ error: string | null }>;
+  setActiveTeam: (teamId: string | null) => void;
   fetchTeam: () => Promise<void>;
   fetchTeamMembers: () => Promise<void>;
-  fetchPoolCards: () => Promise<void>;
+  fetchMembersForTeam: (teamId: string) => Promise<TeamMember[]>;
+  fetchPoolCards: (teamId?: string) => Promise<void>;
   sendToPool: (cardId: string, assignedTo?: string) => Promise<{ error: string | null; poolCardId?: string }>;
   pullFromPool: (poolCardId: string) => Promise<{ error: string | null; cardId?: string }>;
   pushUpdate: (cardId: string) => Promise<{ error: string | null }>;
   removeFromPool: (poolCardId: string, localCardId?: string) => Promise<{ error: string | null }>;
+  claimPoolCard: (poolCardId: string, action?: "claim" | "unclaim") => Promise<{ error: string | null }>;
+  updateMemberRole: (targetUserId: string, newRole: "admin" | "member") => Promise<{ error: string | null }>;
 }
 
 // Custom slice creator type that makes the store parameter optional

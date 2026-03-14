@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, getDisplayId, COLUMNS } from "@/lib/types";
 import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
-import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X, Cloud } from "lucide-react";
+import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X, Cloud, CloudUpload } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
@@ -146,7 +146,7 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer, supabaseConfigured, activeTeamId, sendToPool, poolCards, currentUser } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -162,7 +162,10 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   const isStarting = startingCardId === card.id || card.processingType === "autonomous";
   const isQuickFixing = quickFixingCardId === card.id || card.processingType === "quick-fix";
   const isEvaluating = evaluatingCardIds.includes(card.id) || card.processingType === "evaluate";
-  const isLocked = lockedCardIds.includes(card.id) || !!card.processingType;
+  // Pool lock: card is in pool but not claimed by current user
+  const poolCard = card.poolCardId ? poolCards.find((pc) => pc.id === card.poolCardId) : null;
+  const isPoolLocked = !!card.poolCardId && (!poolCard || poolCard.assignedTo !== currentUser?.id);
+  const isLocked = lockedCardIds.includes(card.id) || !!card.processingType || isPoolLocked;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
   const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "test" && card.status !== "ideation");
@@ -201,7 +204,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   };
 
   const handleClick = () => {
-    if (!isDragging && !isBeingDragged && !isLocked) {
+    if (!isDragging && !isBeingDragged && (!isLocked || isPoolLocked)) {
       selectCard(card);
       openModal();
     }
@@ -326,6 +329,16 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
     downloadCardAsMarkdown(card, project);
   };
 
+  const handleSendToPool = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const result = await sendToPool(card.id);
+    if (result.error) {
+      console.error("Failed to send to pool:", result.error);
+    }
+  };
+
+  const canSendToPool = supabaseConfigured && !!activeTeamId && !card.poolCardId;
+
   const handleDevServerToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isServerLoading || isLocked) return;
@@ -379,8 +392,8 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                 : "hover:border-primary/50"
             }`}
           >
-            {/* Unlock button - only for interactive locks (terminal), not background processing */}
-            {isLocked && !isBackgroundProcessing && (
+            {/* Unlock button - only for interactive locks (terminal), not background processing or pool locks */}
+            {isLocked && !isBackgroundProcessing && !isPoolLocked && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -624,6 +637,18 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     </TooltipContent>
                   </Tooltip>
                 )}
+                {card.assignedTo && !isBackgroundProcessing && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/15 text-primary text-[9px] font-medium uppercase shrink-0">
+                        {(card.assignedToName || "?").slice(0, 2)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      Assigned to {card.assignedToName || "Unknown"}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 {card.poolCardId && !isBackgroundProcessing && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -631,7 +656,13 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                         <Cloud className="w-3 h-3" />
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent side="top">Synced to pool</TooltipContent>
+                    <TooltipContent side="top">
+                      {isPoolLocked
+                        ? poolCard?.assignedToName
+                          ? `Assigned to ${poolCard.assignedToName} - claim from pool to edit`
+                          : "In pool - claim from pool to edit"
+                        : "Synced to pool"}
+                    </TooltipContent>
                   </Tooltip>
                 )}
                 {card.gitWorktreeStatus === "active" && !isBackgroundProcessing && (
@@ -723,6 +754,15 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
             <FileDown className="w-4 h-4 mr-2" />
             Export as Markdown
           </ContextMenuItem>
+          {supabaseConfigured && activeTeamId && (
+            <ContextMenuItem
+              onClick={handleSendToPool}
+              disabled={!!card.poolCardId}
+            >
+              <CloudUpload className="w-4 h-4 mr-2" />
+              {card.poolCardId ? "Already in Pool" : "Send to Pool"}
+            </ContextMenuItem>
+          )}
           <ContextMenuSeparator />
           <ContextMenuItem
             onClick={() => setShowDeleteConfirm(true)}

@@ -106,7 +106,7 @@ import { Column } from "./column";
 import { TaskCard } from "./card";
 
 export function KanbanBoard() {
-  const { cards, activeProjectId, searchQuery, moveCard, completedFilter } = useKanbanStore();
+  const { cards, activeProjectId, searchQuery, moveCard, completedFilter, activeTeamId, projects } = useKanbanStore();
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showRightFade, setShowRightFade] = useState(false);
@@ -149,12 +149,17 @@ export function KanbanBoard() {
   const filteredCards = cards.filter((card) => {
     // Filter by active project
     const matchesProject = !activeProjectId || card.projectId === activeProjectId;
+    // Filter by active team (via project's teamId)
+    const matchesTeam = !activeTeamId || (() => {
+      const project = projects.find((p) => p.id === card.projectId);
+      return project?.teamId === activeTeamId;
+    })();
     // Filter by search query
     const matchesSearch =
       !searchQuery ||
       card.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       card.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesProject && matchesSearch;
+    return matchesProject && matchesTeam && matchesSearch;
   });
 
   const handleDragStart = (event: DragStartEvent) => {

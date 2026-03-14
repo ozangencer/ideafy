@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import type { TeamMember } from "@/lib/team/types";
 import { useKanbanStore } from "@/lib/store";
 import {
   Status,
@@ -47,6 +48,7 @@ import { CardModalFooter } from "./card-modal-footer";
 import { SplitPanel } from "./split-panel";
 import { SectionEditor } from "./sections/section-editor";
 import { ConversationPanel } from "./sections/conversation-panel";
+import { sendAssignmentNotification } from "@/lib/team/notifications-client";
 
 export function CardModal() {
   const {
@@ -76,11 +78,21 @@ export function CardModal() {
     // Background processes
     backgroundProcesses,
     fetchBackgroundProcesses,
+    // Team
+    teamMembers,
+    teamMembersByTeamId,
+    fetchMembersForTeam,
+    poolCards,
+    currentUser,
   } = useKanbanStore();
   const { toast } = useToast();
 
   // Check if we're in draft mode (creating a new card)
   const isDraftMode = selectedCard?.id.startsWith("draft-") ?? false;
+
+  // Pool lock: card is in pool but not claimed by current user → read-only
+  const poolCard = selectedCard?.poolCardId ? poolCards.find((pc) => pc.id === selectedCard.poolCardId) : null;
+  const isReadOnly = !!selectedCard?.poolCardId && (!poolCard || poolCard.assignedTo !== currentUser?.id);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -93,6 +105,8 @@ export function CardModal() {
   const [priority, setPriority] = useState<Priority>("medium");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [assignedToName, setAssignedToName] = useState<string | null>(null);
 
   // UI state
   const [isVisible, setIsVisible] = useState(false);
@@ -124,6 +138,9 @@ export function CardModal() {
   const [devServerPid, setDevServerPid] = useState<number | null>(null);
   const [isServerLoading, setIsServerLoading] = useState(false);
 
+  // Track previous assignee for notification
+  const prevAssignedToRef = useRef<string | null>(null);
+
   // Track unsaved changes
   const hasUnsavedChanges = selectedCard && (
     title !== selectedCard.title ||
@@ -135,7 +152,9 @@ export function CardModal() {
     complexity !== (selectedCard.complexity || "medium") ||
     priority !== (selectedCard.priority || "medium") ||
     projectId !== selectedCard.projectId ||
-    aiPlatform !== (selectedCard.aiPlatform ?? null)
+    aiPlatform !== (selectedCard.aiPlatform ?? null) ||
+    assignedTo !== (selectedCard.assignedTo ?? null) ||
+    assignedToName !== (selectedCard.assignedToName ?? null)
   );
 
   // Check if draft has any user-entered content
@@ -155,6 +174,41 @@ export function CardModal() {
   const isTitleValid = (title || "").trim().length > 0;
   const canSave = projectId !== null && isTitleValid;
 
+  // Check if the selected project has a team linked
+  const hasTeam = !!(project?.teamId);
+
+  // Resolve team members for the project's team (not necessarily the active team)
+  const projectTeamMembers: TeamMember[] = useMemo(() => {
+    if (!project?.teamId) return [];
+    return teamMembersByTeamId[project.teamId] || [];
+  }, [project?.teamId, teamMembersByTeamId]);
+
+  // Fetch members for the project's team when modal opens or project changes
+  useEffect(() => {
+    if (project?.teamId) {
+      fetchMembersForTeam(project.teamId);
+    }
+  }, [project?.teamId, fetchMembersForTeam]);
+
+  // Send notification when assignee changes to someone else
+  useEffect(() => {
+    if (!selectedCard || isDraftMode || !hasTeam || !project?.teamId) return;
+    if (prevAssignedToRef.current === null && assignedTo === null) return;
+    if (prevAssignedToRef.current === assignedTo) return;
+
+    // Only send notification if assigned to a new person (not unassign, not self)
+    if (assignedTo && assignedTo !== prevAssignedToRef.current) {
+      sendAssignmentNotification({
+        recipientUserId: assignedTo,
+        teamId: project.teamId,
+        cardTitle: title || selectedCard.title,
+        referenceId: selectedCard.id,
+      });
+    }
+
+    prevAssignedToRef.current = assignedTo;
+  }, [assignedTo, selectedCard, isDraftMode, hasTeam, project?.teamId, title]);
+
   // Auto-save debounce ref
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -163,8 +217,8 @@ export function CardModal() {
 
   // Auto-save effect for edit mode
   useEffect(() => {
-    // Only auto-save for existing cards (not drafts) with valid data
-    if (!selectedCard || isDraftMode || !canSave || !hasUnsavedChanges) {
+    // Only auto-save for existing cards (not drafts) with valid data, not read-only
+    if (!selectedCard || isDraftMode || isReadOnly || !canSave || !hasUnsavedChanges) {
       return;
     }
 
@@ -196,6 +250,8 @@ export function CardModal() {
         priority,
         projectId,
         aiPlatform,
+        assignedTo,
+        assignedToName,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
       });
 
@@ -230,6 +286,8 @@ export function CardModal() {
     priority,
     projectId,
     aiPlatform,
+    assignedTo,
+    assignedToName,
     projects,
     updateCard,
   ]);
@@ -288,6 +346,9 @@ export function CardModal() {
       setPriority(selectedCard.priority || "medium");
       setProjectId(selectedCard.projectId);
       setAiPlatform(selectedCard.aiPlatform ?? null);
+      setAssignedTo(selectedCard.assignedTo ?? null);
+      setAssignedToName(selectedCard.assignedToName ?? null);
+      prevAssignedToRef.current = selectedCard.assignedTo ?? null;
       setGitBranchName(selectedCard.gitBranchName);
       setGitBranchStatus(selectedCard.gitBranchStatus);
       setGitWorktreePath(selectedCard.gitWorktreePath);
@@ -433,6 +494,8 @@ export function CardModal() {
           conflictFiles: null,
           processingType: null,
           poolCardId: null,
+          assignedTo,
+          assignedToName,
         });
       } else {
         const cardId = selectedCard.id;
@@ -447,6 +510,8 @@ export function CardModal() {
           priority,
           projectId,
           aiPlatform,
+          assignedTo,
+          assignedToName,
           projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
         };
         handleClose();
@@ -745,6 +810,14 @@ export function CardModal() {
           onPriorityChange={setPriority}
           aiPlatform={aiPlatform}
           onAiPlatformChange={setAiPlatform}
+          assignedTo={assignedTo}
+          assignedToName={assignedToName}
+          onAssigneeChange={(userId, displayName) => {
+            setAssignedTo(userId);
+            setAssignedToName(displayName);
+          }}
+          teamMembers={projectTeamMembers}
+          hasTeam={hasTeam}
           hasHistory={cardHistory.length > 0}
           onBack={handleBack}
           onExport={handleExport}
@@ -752,6 +825,7 @@ export function CardModal() {
           onToggleExpand={() => setIsExpanded(!isExpanded)}
           onClose={handleClose}
           isTitleValid={isTitleValid}
+          isReadOnly={isReadOnly}
         />
 
         {/* Git Branch Actions for Human Test cards */}
@@ -884,13 +958,18 @@ export function CardModal() {
               <SectionEditor
                 sectionType={activeTab}
                 value={sectionValues[activeTab]}
-                onChange={sectionSetters[activeTab]}
+                onChange={isReadOnly ? () => {} : sectionSetters[activeTab]}
                 onCardClick={handleCardClick}
                 projectId={projectId}
+                readOnly={isReadOnly}
               />
             }
             rightPanel={
-              !isDraftMode && project?.folderPath ? (
+              isReadOnly ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  Claim from pool to enable chat
+                </div>
+              ) : !isDraftMode && project?.folderPath ? (
                 <ConversationPanel
                   cardId={selectedCard.id}
                   sectionType={activeTab}
@@ -918,20 +997,22 @@ export function CardModal() {
         </div>
 
         {/* Footer */}
-        <CardModalFooter
-          title={title}
-          cardId={selectedCard?.id}
-          poolCardId={selectedCard?.poolCardId}
-          status={status}
-          isDraftMode={isDraftMode}
-          canSave={canSave}
-          saveStatus={saveStatus}
-          onDelete={handleDelete}
-          onRemoveFromPool={handleRemoveFromPool}
-          onWithdraw={handleWithdraw}
-          onCancel={handleClose}
-          onSave={handleSave}
-        />
+        {!isReadOnly && (
+          <CardModalFooter
+            title={title}
+            cardId={selectedCard?.id}
+            poolCardId={selectedCard?.poolCardId}
+            status={status}
+            isDraftMode={isDraftMode}
+            canSave={canSave}
+            saveStatus={saveStatus}
+            onDelete={handleDelete}
+            onRemoveFromPool={handleRemoveFromPool}
+            onWithdraw={handleWithdraw}
+            onCancel={handleClose}
+            onSave={handleSave}
+          />
+        )}
       </div>
 
       {/* Dialogs */}

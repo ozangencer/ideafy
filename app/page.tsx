@@ -13,7 +13,16 @@ import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search, LayoutGrid, Table2 } from "lucide-react";
+import { NotificationBell } from "@/components/notification-bell";
+import { AccountMenu } from "@/components/account-menu";
 
 type ViewMode = "board" | "pool";
 
@@ -35,6 +44,9 @@ export default function Home() {
     projects,
     teamMode,
     initTeam,
+    teams,
+    activeTeamId,
+    setActiveTeam,
   } = useKanbanStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>("board");
@@ -127,25 +139,51 @@ export default function Home() {
             <div className="flex items-center gap-3">
               {/* Board/Pool Toggle - only when team mode is on */}
               {teamMode && (
-                <div className="flex border border-border rounded-md overflow-hidden">
-                  <Button
-                    variant={viewMode === "board" ? "secondary" : "ghost"}
-                    size="sm"
-                    className="rounded-none gap-1.5 h-8 px-3"
-                    onClick={() => setViewMode("board")}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Board
-                  </Button>
-                  <Button
-                    variant={viewMode === "pool" ? "secondary" : "ghost"}
-                    size="sm"
-                    className="rounded-none gap-1.5 h-8 px-3"
-                    onClick={() => setViewMode("pool")}
-                  >
-                    <Table2 className="h-3.5 w-3.5" />
-                    Pool
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <div className="flex border border-border rounded-md overflow-hidden">
+                    <Button
+                      variant={viewMode === "board" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="rounded-none gap-1.5 h-8 px-3"
+                      onClick={() => setViewMode("board")}
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      Board
+                    </Button>
+                    <Button
+                      variant={viewMode === "pool" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="rounded-none gap-1.5 h-8 px-3"
+                      onClick={() => setViewMode("pool")}
+                    >
+                      <Table2 className="h-3.5 w-3.5" />
+                      Pool
+                    </Button>
+                  </div>
+
+                  {/* Team Switcher - hidden in pool view (pool has its own team filter) */}
+                  {viewMode !== "pool" && (
+                    teams.length > 1 ? (
+                      <Select
+                        value={activeTeamId || "all"}
+                        onValueChange={(v) => setActiveTeam(v === "all" ? null : v)}
+                      >
+                        <SelectTrigger className="w-[160px] h-8 text-xs">
+                          <SelectValue placeholder="Select team" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Teams</SelectItem>
+                          {teams.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : teams.length === 1 ? (
+                      <span className="text-xs text-muted-foreground">{teams[0].name}</span>
+                    ) : null
+                  )}
                 </div>
               )}
 
@@ -160,6 +198,12 @@ export default function Home() {
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               </div>
+
+              {/* Notifications */}
+              <NotificationBell />
+
+              {/* Account Menu */}
+              <AccountMenu />
 
               {/* Background Processes */}
               <BackgroundProcesses />

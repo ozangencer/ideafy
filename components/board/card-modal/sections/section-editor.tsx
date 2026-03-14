@@ -9,6 +9,7 @@ interface SectionEditorProps {
   onChange: (value: string) => void;
   onCardClick?: (cardId: string) => void;
   projectId: string | null;
+  readOnly?: boolean;
 }
 
 export function SectionEditor({
@@ -17,8 +18,23 @@ export function SectionEditor({
   onChange,
   onCardClick,
   projectId,
+  readOnly,
 }: SectionEditorProps) {
   const config = SECTION_CONFIG[sectionType];
+
+  if (readOnly) {
+    return (
+      <div className="h-full flex flex-col p-4 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto prose-kanban">
+          {value ? (
+            <div dangerouslySetInnerHTML={{ __html: value }} />
+          ) : (
+            <p className="text-muted-foreground text-sm">No content</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col p-4 overflow-hidden">
