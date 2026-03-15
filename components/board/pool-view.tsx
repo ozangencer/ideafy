@@ -51,7 +51,9 @@ export function PoolView() {
   } = useKanbanStore();
 
   // Filter states
-  const [poolTeamFilter, setPoolTeamFilter] = useState<string>(activeTeamId || "all");
+  const [poolTeamFilter, setPoolTeamFilter] = useState<string>(
+    activeTeamId || (teams.length === 1 ? teams[0].id : "all")
+  );
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -61,10 +63,19 @@ export function PoolView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Fetch pool cards for the selected team filter on mount
+  // Sync poolTeamFilter when teams/activeTeamId load async
+  useEffect(() => {
+    if (poolTeamFilter === "all" && activeTeamId && activeTeamId !== "all") {
+      setPoolTeamFilter(activeTeamId);
+    } else if (poolTeamFilter === "all" && !activeTeamId && teams.length === 1) {
+      setPoolTeamFilter(teams[0].id);
+    }
+  }, [teams, activeTeamId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch pool cards for the selected team filter on mount and when filter changes
   useEffect(() => {
     fetchPoolCards(poolTeamFilter);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [poolTeamFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [pullingId, setPullingId] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);

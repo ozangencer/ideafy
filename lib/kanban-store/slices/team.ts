@@ -222,11 +222,16 @@ export const createTeamSlice: StoreSlice<
 
       const teamIds = teams.map((t) => t.id);
 
-      if (currentActiveId && (currentActiveId === "all" || teamIds.includes(currentActiveId))) {
+      // "all" is only valid when there are multiple teams
+      const isAllValid = teams.length > 1;
+      if (currentActiveId && ((currentActiveId === "all" && isAllValid) || teamIds.includes(currentActiveId))) {
         // Current active is still valid
-      } else if (savedId && (savedId === "all" || teamIds.includes(savedId))) {
+      } else if (savedId && ((savedId === "all" && isAllValid) || teamIds.includes(savedId))) {
         set({ activeTeamId: savedId });
-      } else if (teams.length > 0) {
+      } else if (teams.length === 1) {
+        set({ activeTeamId: teams[0].id });
+        try { localStorage.setItem(ACTIVE_TEAM_KEY, teams[0].id); } catch {}
+      } else if (teams.length > 1) {
         set({ activeTeamId: "all" });
         try { localStorage.setItem(ACTIVE_TEAM_KEY, "all"); } catch {}
       } else {
@@ -296,10 +301,21 @@ export const createTeamSlice: StoreSlice<
         try { localStorage.setItem(ACTIVE_TEAM_KEY, newActiveId); } catch {}
       } else {
         try { localStorage.removeItem(ACTIVE_TEAM_KEY); } catch {}
-        set({ teamMembers: [], poolCards: [] });
+        set({ teamMembers: [], teamMembersByTeamId: {}, poolCards: [] });
+      }
+
+      // No teams left — exit team mode so board shows all local cards unfiltered
+      if (currentTeams.length === 0) {
+        set({ teamMode: false });
       }
 
       if (wasActive && newActiveId) {
+        // Apply single-team logic: don't use "all" for single team
+        if (newActiveId === "all" && currentTeams.length === 1) {
+          const singleId = currentTeams[0].id;
+          set({ activeTeamId: singleId });
+          try { localStorage.setItem(ACTIVE_TEAM_KEY, singleId); } catch {}
+        }
         await get().fetchTeamMembers();
         await get().fetchPoolCards();
       }
