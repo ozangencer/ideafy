@@ -129,7 +129,8 @@ async function callPoolApi(method: string, path: string, body?: unknown): Promis
   }
 
   try {
-    const response = await fetch(`http://localhost:3000${path}`, {
+    const port = process.env.PORT || "3030";
+    const response = await fetch(`http://localhost:${port}${path}`, {
       method,
       headers: {
         "Content-Type": "application/json",
@@ -527,6 +528,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             status, complexity, priority,
             project_folder as projectFolder,
             project_id as projectId,
+            pool_card_id as poolCardId,
+            assigned_to as assignedTo,
             task_number as taskNumber,
             created_at as createdAt,
             updated_at as updatedAt
@@ -986,11 +989,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Get teamId from the card's project
+        // Get teamId and project name from the card's project
         let teamId: string | null = null;
+        let projectName: string | null = null;
         if (card.projectId) {
-          const proj = db.prepare("SELECT team_id FROM projects WHERE id = ?").get(card.projectId as string) as { team_id: string } | undefined;
+          const proj = db.prepare("SELECT team_id, name FROM projects WHERE id = ?").get(card.projectId as string) as { team_id: string; name: string } | undefined;
           teamId = proj?.team_id || null;
+          projectName = proj?.name || null;
         }
 
         if (!teamId) {
@@ -998,6 +1003,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: [{ type: "text", text: "This card's project is not linked to a team. Link the project to a team in the Ideafy UI first." }],
             isError: true,
           };
+        }
+
+        // Resolve assignedTo: if not a UUID, look up by email/name
+        let resolvedAssignedTo = assignedTo || card.assignedTo as string || undefined;
+        if (resolvedAssignedTo && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedAssignedTo)) {
+          const resolveResult = await callPoolApi("GET", `/api/team/members/resolve?q=${encodeURIComponent(resolvedAssignedTo)}&teamId=${teamId}`);
+          if (resolveResult.error) {
+            return {
+              content: [{ type: "text", text: `Failed to resolve assignee: ${resolveResult.error}` }],
+              isError: true,
+            };
+          }
+          const matches = (resolveResult.data as Record<string, unknown>)?.matches as Array<{ userId: string; displayName: string; email: string }> || [];
+          if (matches.length === 0) {
+            return {
+              content: [{ type: "text", text: `No team member found matching "${resolvedAssignedTo}". Check the name/email and try again.` }],
+              isError: true,
+            };
+          }
+          if (matches.length > 1) {
+            const list = matches.map((m, i) => `  ${i + 1}. ${m.displayName} (${m.email}) → ${m.userId}`).join("\n");
+            return {
+              content: [{ type: "text", text: `Multiple matches found for "${resolvedAssignedTo}":\n${list}\n\nPlease provide the exact email or user ID to assign.` }],
+              isError: true,
+            };
+          }
+          resolvedAssignedTo = matches[0].userId;
         }
 
         const result = await callPoolApi("POST", "/api/team/pool", {
@@ -1013,8 +1045,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             complexity: card.complexity,
             priority: card.priority,
             sourceCardId: card.id,
+            projectName,
           },
-          assignedTo: assignedTo || card.assignedTo || undefined,
+          assignedTo: resolvedAssignedTo,
         });
 
         if (result.error) {

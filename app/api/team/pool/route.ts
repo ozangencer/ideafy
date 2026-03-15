@@ -221,6 +221,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Card title is required" }, { status: 400 });
   }
 
+  if (!cardData.projectName) {
+    return NextResponse.json({ error: "Project name is required. Cards without a project cannot be pushed to pool." }, { status: 400 });
+  }
+
   const now = new Date().toISOString();
 
   let existingPoolCard = null;

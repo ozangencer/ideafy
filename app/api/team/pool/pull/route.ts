@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
   // Try to match pool card's project_name to a local project
   let matchedProjectId: string | null = null;
   let matchedProjectFolder = "";
+  let taskNumber: number | null = null;
   if (poolCard.project_name) {
     const localProject = db
       .select()
@@ -44,6 +45,16 @@ export async function POST(request: NextRequest) {
     if (localProject) {
       matchedProjectId = localProject.id;
       matchedProjectFolder = localProject.folderPath || "";
+      taskNumber = localProject.nextTaskNumber;
+
+      // Increment project's nextTaskNumber
+      db.update(schema.projects)
+        .set({
+          nextTaskNumber: localProject.nextTaskNumber + 1,
+          updatedAt: now,
+        })
+        .where(sql`id = ${localProject.id}`)
+        .run();
     }
   }
 
@@ -60,7 +71,7 @@ export async function POST(request: NextRequest) {
     priority: poolCard.priority || "medium",
     projectFolder: matchedProjectFolder,
     projectId: matchedProjectId,
-    taskNumber: null,
+    taskNumber,
     gitBranchName: null,
     gitBranchStatus: null,
     gitWorktreePath: null,
