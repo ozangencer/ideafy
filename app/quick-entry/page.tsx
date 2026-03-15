@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { COLUMNS, Complexity, Priority, Status, AiPlatform } from "@/lib/types";
-import { X, Brain } from "lucide-react";
+import { X, Brain, UserPlus } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
 import { QuickEntryEditor, QuickEntryEditorRef } from "@/components/quick-entry/quick-entry-editor";
 
@@ -12,6 +12,12 @@ interface Project {
   idPrefix: string;
   color: string;
   folderPath: string;
+  teamId?: string | null;
+}
+
+interface TeamMemberInfo {
+  userId: string;
+  displayName: string;
 }
 
 const STATUS_COLORS: Record<Status, string> = {
@@ -93,6 +99,10 @@ export default function QuickEntryPage() {
   const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectError, setProjectError] = useState(false);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [assignedToName, setAssignedToName] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberInfo[]>([]);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
 
   // Unified autocomplete state
   const [acType, setAcType] = useState<AutocompleteType>(null);
@@ -126,6 +136,40 @@ export default function QuickEntryPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Fetch team members when selected project has a teamId
+  useEffect(() => {
+    const teamId = selectedProject?.teamId;
+    if (!teamId) {
+      setTeamMembers([]);
+      setAssignedTo(null);
+      setAssignedToName(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const { getSupabaseClient } = await import("@/lib/team/supabase");
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const res = await fetch(`/api/team/members?teamId=${teamId}`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = await res.json();
+        setTeamMembers(
+          (data.members || []).map((m: { userId: string; displayName: string }) => ({
+            userId: m.userId,
+            displayName: m.displayName,
+          }))
+        );
+      } catch {
+        setTeamMembers([]);
+      }
+    })();
+  }, [selectedProject?.teamId]);
 
   useEffect(() => {
     requestAnimationFrame(() => titleRef.current?.focus());
@@ -180,6 +224,9 @@ export default function QuickEntryPage() {
       setStatusExplicit(false);
       setComplexity("medium");
       setAiPlatform(null);
+      setAssignedTo(null);
+      setAssignedToName(null);
+      setShowAssigneeDropdown(false);
       setProjectError(false);
       setAcType(null);
       setAcQuery("");
@@ -497,6 +544,8 @@ export default function QuickEntryPage() {
           complexity,
           priority,
           aiPlatform,
+          assignedTo,
+          assignedToName,
           projectFolder: selectedProject?.folderPath ?? "",
           projectId: selectedProject?.id ?? null,
           gitBranchName: null,
@@ -549,6 +598,8 @@ export default function QuickEntryPage() {
           complexity,
           priority,
           aiPlatform,
+          assignedTo,
+          assignedToName,
           projectFolder: selectedProject?.folderPath ?? "",
           projectId: selectedProject?.id ?? null,
           gitBranchName: null,
@@ -576,6 +627,8 @@ export default function QuickEntryPage() {
     complexity,
     priority,
     aiPlatform,
+    assignedTo,
+    assignedToName,
     selectedProject,
     closeWindow,
   ]);
@@ -767,6 +820,43 @@ export default function QuickEntryPage() {
                 color={PLATFORM_LABELS[aiPlatform].color}
                 onRemove={() => setAiPlatform(null)}
               />
+            )}
+            {assignedToName && (
+              <TokenBadge
+                label={assignedToName}
+                color="#6366f1"
+                onRemove={() => { setAssignedTo(null); setAssignedToName(null); }}
+              />
+            )}
+            {selectedProject?.teamId && teamMembers.length > 0 && !assignedTo && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
+                  className="inline-flex items-center gap-1 pl-1.5 pr-1.5 py-0.5 rounded-md bg-white/[0.06] text-[11px] text-foreground/50 hover:text-foreground/70 transition-colors"
+                >
+                  <UserPlus className="w-3 h-3" />
+                  Assign
+                </button>
+                {showAssigneeDropdown && (
+                  <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-md shadow-lg z-50 min-w-[160px] py-1">
+                    {teamMembers.map((m) => (
+                      <button
+                        key={m.userId}
+                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted transition-colors"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setAssignedTo(m.userId);
+                          setAssignedToName(m.displayName);
+                          setShowAssigneeDropdown(false);
+                        }}
+                      >
+                        {m.displayName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

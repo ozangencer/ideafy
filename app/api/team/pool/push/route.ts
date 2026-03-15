@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       status: localCard.status,
       complexity: localCard.complexity,
       priority: localCard.priority,
+      assigned_to: localCard.assignedTo || null,
       last_synced_at: now,
       updated_at: now,
     })

@@ -39,6 +39,12 @@ export async function PUT(
       useWorktrees = body.useWorktrees;
     }
 
+    // Handle teamId
+    let teamId = existing.teamId;
+    if (body.teamId !== undefined) {
+      teamId = body.teamId || null;
+    }
+
     const updatedProject = {
       name: body.name ?? existing.name,
       folderPath: body.folderPath ?? existing.folderPath,
@@ -48,6 +54,7 @@ export async function PUT(
       documentPaths,
       narrativePath,
       useWorktrees,
+      teamId,
       updatedAt: new Date().toISOString(),
     };
 
@@ -65,6 +72,7 @@ export async function PUT(
         : null,
       narrativePath: updatedProject.narrativePath,
       useWorktrees: updatedProject.useWorktrees,
+      teamId: updatedProject.teamId,
     });
   } catch (error) {
     console.error("Failed to update project:", error);

@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
   const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
     type: "signup",
     email,
+    password,
   });
 
   if (linkError || !linkData) {

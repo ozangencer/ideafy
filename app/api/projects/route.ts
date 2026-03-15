@@ -20,6 +20,7 @@ export async function GET() {
         documentPaths: row.documentPaths ? JSON.parse(row.documentPaths) : null,
         narrativePath: row.narrativePath,
         useWorktrees: row.useWorktrees ?? true,
+        teamId: row.teamId ?? null,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       }))
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
       documentPaths: body.documentPaths ? JSON.stringify(body.documentPaths) : null,
       narrativePath: body.narrativePath || null,
       useWorktrees: body.useWorktrees ?? true,
+      teamId: body.teamId || null,
       createdAt: now,
       updatedAt: now,
     };
@@ -82,6 +84,7 @@ export async function POST(request: NextRequest) {
       documentPaths: body.documentPaths || null,
       narrativePath: body.narrativePath || null,
       useWorktrees: newProject.useWorktrees,
+      teamId: newProject.teamId,
     };
     return NextResponse.json(responseProject, { status: 201 });
   } catch (error) {

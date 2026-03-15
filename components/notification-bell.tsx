@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { useKanbanStore } from "@/lib/store";
 import type { Notification } from "@/lib/team/types";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 function getAuthHeader(): Promise<string | null> {
   return (async () => {
@@ -50,6 +51,23 @@ function formatRelativeTime(iso: string): string {
   return `${diffDays}d ago`;
 }
 
+/** Map Supabase row (snake_case) to client Notification (camelCase) */
+function mapNotification(row: Record<string, unknown>): Notification {
+  return {
+    id: row.id as string,
+    recipientUserId: row.recipient_user_id as string,
+    teamId: row.team_id as string,
+    type: row.type as string,
+    title: row.title as string,
+    message: (row.message as string) || undefined,
+    referenceId: (row.reference_id as string) || undefined,
+    actorUserId: (row.actor_user_id as string) || undefined,
+    actorName: (row.actor_name as string) || undefined,
+    isRead: row.is_read as boolean,
+    createdAt: row.created_at as string,
+  };
+}
+
 export function NotificationBell() {
   const { teamMode } = useKanbanStore();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -57,6 +75,13 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const isOpenRef = useRef(false);
+
+  // Keep ref in sync with state for realtime callbacks
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   const fetchUnreadCount = useCallback(async () => {
     if (!teamMode) return;
@@ -71,18 +96,138 @@ export function NotificationBell() {
     }
   }, [teamMode]);
 
-  // Poll unread count every 30 seconds
+  // Supabase Realtime subscription with polling fallback
   useEffect(() => {
     if (!teamMode) {
       setUnreadCount(0);
       return;
     }
 
+    // Initial fetch
     fetchUnreadCount();
-    intervalRef.current = setInterval(fetchUnreadCount, 30000);
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { getSupabaseClient } = await import("@/lib/team/supabase");
+        const supabase = getSupabaseClient();
+        if (!supabase || cancelled) {
+          // No Supabase — fall back to polling
+          if (!cancelled) {
+            intervalRef.current = setInterval(fetchUnreadCount, 30000);
+          }
+          return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (!userId || cancelled) {
+          if (!cancelled) {
+            intervalRef.current = setInterval(fetchUnreadCount, 30000);
+          }
+          return;
+        }
+
+        const channel = supabase
+          .channel("notifications-realtime")
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "notifications",
+              filter: `recipient_user_id=eq.${userId}`,
+            },
+            (payload) => {
+              const mapped = mapNotification(payload.new);
+              setNotifications((prev) => [mapped, ...prev]);
+              setUnreadCount((prev) => prev + 1);
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "notifications",
+              filter: `recipient_user_id=eq.${userId}`,
+            },
+            (payload) => {
+              const mapped = mapNotification(payload.new);
+              setNotifications((prev) =>
+                prev.map((n) => (n.id === mapped.id ? mapped : n))
+              );
+              // If marked as read, decrement
+              if (payload.old && !(payload.old as Record<string, unknown>).is_read && mapped.isRead) {
+                setUnreadCount((prev) => Math.max(0, prev - 1));
+              }
+            }
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "DELETE",
+              schema: "public",
+              table: "notifications",
+              filter: `recipient_user_id=eq.${userId}`,
+            },
+            (payload) => {
+              const oldId = (payload.old as Record<string, unknown>).id as string;
+              setNotifications((prev) => {
+                const deleted = prev.find((n) => n.id === oldId);
+                if (deleted && !deleted.isRead) {
+                  setUnreadCount((c) => Math.max(0, c - 1));
+                }
+                return prev.filter((n) => n.id !== oldId);
+              });
+            }
+          )
+          .subscribe((status) => {
+            if (status === "SUBSCRIBED") {
+              console.log("Notification realtime connected");
+              // Stop polling fallback if running
+              if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+              }
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              console.warn("Notification realtime failed, falling back to polling");
+              if (!intervalRef.current && !cancelled) {
+                intervalRef.current = setInterval(fetchUnreadCount, 30000);
+              }
+            }
+          });
+
+        channelRef.current = channel;
+      } catch {
+        // Realtime setup failed — fall back to polling
+        if (!cancelled && !intervalRef.current) {
+          intervalRef.current = setInterval(fetchUnreadCount, 30000);
+        }
+      }
+    })();
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      cancelled = true;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      if (channelRef.current) {
+        (async () => {
+          try {
+            const { getSupabaseClient } = await import("@/lib/team/supabase");
+            const supabase = getSupabaseClient();
+            if (supabase && channelRef.current) {
+              supabase.removeChannel(channelRef.current);
+            }
+          } catch {
+            // Ignore cleanup errors
+          }
+          channelRef.current = null;
+        })();
+      }
     };
   }, [teamMode, fetchUnreadCount]);
 

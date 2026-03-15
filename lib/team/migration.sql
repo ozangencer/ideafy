@@ -104,3 +104,66 @@ CREATE POLICY "Users can update team pool cards" ON pool_cards
 -- ============================================
 -- ALTER TABLE pool_cards ADD COLUMN pulled_by uuid REFERENCES auth.users(id);
 -- CREATE INDEX idx_pool_cards_pulled_by ON pool_cards(pulled_by);
+
+-- ============================================
+-- Notifications table
+-- ============================================
+CREATE TABLE notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_user_id uuid NOT NULL REFERENCES auth.users(id),
+  team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  type text NOT NULL DEFAULT 'assignment',
+  title text NOT NULL,
+  message text,
+  reference_id text,
+  actor_user_id uuid REFERENCES auth.users(id),
+  actor_name text,
+  is_read boolean NOT NULL DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_notifications_recipient ON notifications(recipient_user_id);
+CREATE INDEX idx_notifications_team ON notifications(team_id);
+CREATE INDEX idx_notifications_is_read ON notifications(recipient_user_id, is_read);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Users can only see their own notifications
+CREATE POLICY "Users can view own notifications" ON notifications
+  FOR SELECT USING (auth.uid() = recipient_user_id);
+
+-- Users can update (mark as read) their own notifications
+CREATE POLICY "Users can update own notifications" ON notifications
+  FOR UPDATE USING (auth.uid() = recipient_user_id);
+
+-- Team members can insert notifications for others in their team
+CREATE POLICY "Team members can create notifications" ON notifications
+  FOR INSERT WITH CHECK (
+    team_id IN (SELECT team_id FROM team_members WHERE user_id = auth.uid())
+  );
+
+-- Pool cards: users can delete pool cards they pushed or as team owner/admin
+CREATE POLICY "Users can delete own pool cards" ON pool_cards
+  FOR DELETE USING (
+    pushed_by = auth.uid() OR
+    team_id IN (SELECT team_id FROM team_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin'))
+  );
+
+-- ============================================
+-- Migration: Update pool_cards DELETE policy for admin role
+-- Run this if the policy already exists:
+-- ============================================
+-- DROP POLICY IF EXISTS "Users can delete own pool cards" ON pool_cards;
+-- CREATE POLICY "Users can delete own pool cards" ON pool_cards
+--   FOR DELETE USING (
+--     pushed_by = auth.uid() OR
+--     team_id IN (SELECT team_id FROM team_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin'))
+--   );
+
+-- ============================================
+-- Migration: Allow team owners to update member roles
+-- ============================================
+-- CREATE POLICY "Owners can update team members" ON team_members
+--   FOR UPDATE USING (
+--     team_id IN (SELECT tm.team_id FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.role = 'owner')
+--   );

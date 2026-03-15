@@ -39,6 +39,8 @@ export interface Card {
   processingType: ProcessingType;
   aiPlatform: AiPlatform | null;
   poolCardId: string | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -55,6 +57,7 @@ export interface Project {
   documentPaths: string[] | null; // Custom document paths, null = smart discovery
   narrativePath: string | null; // Relative path to narrative file, null = docs/product-narrative.md
   useWorktrees: boolean; // Whether to use git worktrees for isolation (default: true)
+  teamId: string | null; // UUID from Supabase teams table
   createdAt: string;
   updatedAt: string;
 }

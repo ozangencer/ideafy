@@ -35,10 +35,15 @@ interface SettingsModalProps {
 export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: SettingsModalProps) {
   const {
     settings, updateSettings, fetchSettings,
-    supabaseConfigured, currentUser, currentTeam, teamMembers,
+    supabaseConfigured, currentUser, teams, activeTeamId, teamMembers,
     signUp, signIn, signInOAuth, signOutUser,
-    createTeam, joinTeam, leaveTeam,
+    createTeam, joinTeam, leaveTeam, setActiveTeam,
+    updateMemberRole,
   } = useKanbanStore();
+  const activeTeam = teams.find((t) => t.id === activeTeamId) || null;
+  const currentUserRole = teamMembers.find(m => m.userId === currentUser?.id)?.role;
+  const isOwnerOrAdmin = currentUserRole === "owner" || currentUserRole === "admin";
+  const isOwner = currentUserRole === "owner";
   const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);
   const [mcpConfigPath, setMcpConfigPath] = useState(DEFAULT_SETTINGS.mcpConfigPath);
@@ -277,9 +282,9 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
     setInviteCode("");
   };
 
-  const handleLeaveTeam = async () => {
+  const handleLeaveTeam = async (teamId: string) => {
     setTeamLoading(true);
-    const result = await leaveTeam();
+    const result = await leaveTeam(teamId);
     if (result.error) toast.error(result.error);
     else toast.success("Left team");
     setTeamLoading(false);
@@ -302,7 +307,7 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ email: inviteEmail.trim() }),
+        body: JSON.stringify({ email: inviteEmail.trim(), teamId: activeTeamId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -657,8 +662,8 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
                       I confirmed my email
                     </Button>
                   </div>
-                ) : !currentTeam ? (
-                  /* Logged in, no team */
+                ) : (
+                  /* Logged in - teams management */
                   <div className="grid gap-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -677,6 +682,159 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
 
                     <div className="border-t border-border" />
 
+                    {/* Active team details */}
+                    {activeTeam && (
+                      <>
+                        {/* Team selector if multiple teams */}
+                        {teams.length > 1 && (
+                          <div className="grid gap-2">
+                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                              Your Teams ({teams.length})
+                            </label>
+                            <div className="space-y-1">
+                              {teams.map((t) => (
+                                <button
+                                  key={t.id}
+                                  className={`w-full text-left text-sm px-3 py-1.5 rounded-md transition-colors ${
+                                    t.id === activeTeamId
+                                      ? "bg-primary/10 text-primary font-medium"
+                                      : "text-muted-foreground hover:bg-muted"
+                                  }`}
+                                  onClick={() => setActiveTeam(t.id)}
+                                >
+                                  {t.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {isOwnerOrAdmin && (
+                          <>
+                            <div className="grid gap-2">
+                              <label className="text-sm font-medium">{activeTeam.name}</label>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Invite code:</span>
+                                <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
+                                  {activeTeam.inviteCode}
+                                </code>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(activeTeam.inviteCode);
+                                    toast.success("Invite code copied");
+                                  }}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    const joinUrl = `${window.location.origin}?join=${activeTeam.inviteCode}`;
+                                    const message = `Join my team "${activeTeam.name}" on Ideafy!\n\nInvite code: ${activeTeam.inviteCode}\n\nOr open this link:\n${joinUrl}`;
+                                    if (navigator.share) {
+                                      navigator.share({ title: `Join ${activeTeam.name} on Ideafy`, text: message, url: joinUrl });
+                                    } else {
+                                      navigator.clipboard.writeText(message);
+                                      toast.success("Invite message copied to clipboard");
+                                    }
+                                  }}
+                                >
+                                  <Share2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="grid gap-2">
+                              <label className="text-sm font-medium flex items-center gap-1.5">
+                                <Mail className="h-3.5 w-3.5" />
+                                Invite by Email
+                              </label>
+                              <div className="flex gap-2">
+                                <Input
+                                  type="email"
+                                  placeholder="colleague@example.com"
+                                  value={inviteEmail}
+                                  onChange={(e) => setInviteEmail(e.target.value)}
+                                  onKeyDown={(e) => e.key === "Enter" && handleSendInvite()}
+                                  className="flex-1"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={handleSendInvite}
+                                  disabled={inviteSending || !inviteEmail.trim()}
+                                  className="gap-1.5"
+                                >
+                                  {inviteSending ? (
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Send className="h-3.5 w-3.5" />
+                                  )}
+                                  Send
+                                </Button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {!isOwnerOrAdmin && activeTeam && (
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium">{activeTeam.name}</label>
+                          </div>
+                        )}
+
+                        <div className="grid gap-2">
+                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Members ({teamMembers.length})
+                          </label>
+                          <div className="space-y-1.5">
+                            {teamMembers.map((m) => (
+                              <div key={m.id} className="flex items-center justify-between text-sm">
+                                <span>{m.displayName}</span>
+                                {isOwner && m.role !== "owner" ? (
+                                  <Select
+                                    value={m.role}
+                                    onValueChange={async (value) => {
+                                      const newRole = value as "admin" | "member";
+                                      const result = await updateMemberRole(m.userId, newRole);
+                                      if (result.error) toast.error(result.error);
+                                      else toast.success(`${m.displayName} is now ${newRole}`);
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-7 w-[100px] text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="z-[70]">
+                                      <SelectItem value="admin">Admin</SelectItem>
+                                      <SelectItem value="member">Member</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => handleLeaveTeam(activeTeam.id)}
+                          disabled={teamLoading}
+                        >
+                          Leave Team
+                        </Button>
+
+                        <div className="border-t border-border" />
+                      </>
+                    )}
+
+                    {/* Create / Join - always available */}
                     <div className="grid gap-2">
                       <label className="text-sm font-medium">Create Team</label>
                       <div className="flex gap-2">
@@ -709,117 +867,6 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
                         </Button>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  /* In team */
-                  <div className="grid gap-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{currentUser.displayName}</p>
-                        <p className="text-xs text-muted-foreground">{currentUser.email}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={async () => { await signOutUser(); }}
-                        title="Sign out"
-                      >
-                        <LogOut className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="border-t border-border" />
-
-                    <div className="grid gap-2">
-                      <label className="text-sm font-medium">{currentTeam.name}</label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Invite code:</span>
-                        <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
-                          {currentTeam.inviteCode}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => {
-                            navigator.clipboard.writeText(currentTeam.inviteCode);
-                            toast.success("Invite code copied");
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => {
-                            const joinUrl = `${window.location.origin}?join=${currentTeam.inviteCode}`;
-                            const message = `Join my team "${currentTeam.name}" on Ideafy!\n\nInvite code: ${currentTeam.inviteCode}\n\nOr open this link:\n${joinUrl}`;
-                            if (navigator.share) {
-                              navigator.share({ title: `Join ${currentTeam.name} on Ideafy`, text: message, url: joinUrl });
-                            } else {
-                              navigator.clipboard.writeText(message);
-                              toast.success("Invite message copied to clipboard");
-                            }
-                          }}
-                        >
-                          <Share2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <label className="text-sm font-medium flex items-center gap-1.5">
-                        <Mail className="h-3.5 w-3.5" />
-                        Invite by Email
-                      </label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="email"
-                          placeholder="colleague@example.com"
-                          value={inviteEmail}
-                          onChange={(e) => setInviteEmail(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleSendInvite()}
-                          className="flex-1"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={handleSendInvite}
-                          disabled={inviteSending || !inviteEmail.trim()}
-                          className="gap-1.5"
-                        >
-                          {inviteSending ? (
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Send className="h-3.5 w-3.5" />
-                          )}
-                          Send
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Members ({teamMembers.length})
-                      </label>
-                      <div className="space-y-1.5">
-                        {teamMembers.map((m) => (
-                          <div key={m.id} className="flex items-center justify-between text-sm">
-                            <span>{m.displayName}</span>
-                            <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      className="text-destructive hover:bg-destructive/10"
-                      onClick={handleLeaveTeam}
-                      disabled={teamLoading}
-                    >
-                      Leave Team
-                    </Button>
                   </div>
                 )}
               </div>

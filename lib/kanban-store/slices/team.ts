@@ -222,14 +222,13 @@ export const createTeamSlice: StoreSlice<
 
       const teamIds = teams.map((t) => t.id);
 
-      if (currentActiveId && teamIds.includes(currentActiveId)) {
+      if (currentActiveId && (currentActiveId === "all" || teamIds.includes(currentActiveId))) {
         // Current active is still valid
-      } else if (savedId && teamIds.includes(savedId)) {
+      } else if (savedId && (savedId === "all" || teamIds.includes(savedId))) {
         set({ activeTeamId: savedId });
       } else if (teams.length > 0) {
-        const newId = teams[0].id;
-        set({ activeTeamId: newId });
-        try { localStorage.setItem(ACTIVE_TEAM_KEY, newId); } catch {}
+        set({ activeTeamId: "all" });
+        try { localStorage.setItem(ACTIVE_TEAM_KEY, "all"); } catch {}
       } else {
         set({ activeTeamId: null });
       }
@@ -290,7 +289,7 @@ export const createTeamSlice: StoreSlice<
       });
       const currentTeams = get().teams.filter((t) => t.id !== teamId);
       const wasActive = get().activeTeamId === teamId;
-      const newActiveId = wasActive ? (currentTeams[0]?.id || null) : get().activeTeamId;
+      const newActiveId = wasActive ? (currentTeams.length > 0 ? "all" : null) : get().activeTeamId;
 
       set({ teams: currentTeams, activeTeamId: newActiveId });
       if (newActiveId) {
@@ -313,7 +312,7 @@ export const createTeamSlice: StoreSlice<
 
   fetchTeamMembers: async () => {
     const activeTeamId = get().activeTeamId;
-    if (!activeTeamId) {
+    if (!activeTeamId || activeTeamId === "all") {
       set({ teamMembers: [] });
       return;
     }
@@ -384,9 +383,10 @@ export const createTeamSlice: StoreSlice<
     const card = get().cards.find((c) => c.id === cardId);
     if (!card) return { error: "Card not found" };
 
-    // Use the card's project teamId first, fallback to activeTeamId
+    // Use the card's project teamId first, fallback to activeTeamId (but not "all")
     const project = get().projects.find((p) => p.id === card.projectId);
-    const teamId = project?.teamId || get().activeTeamId;
+    const currentActiveTeam = get().activeTeamId;
+    const teamId = project?.teamId || (currentActiveTeam && currentActiveTeam !== "all" ? currentActiveTeam : null);
     if (!teamId) return { error: "No team linked to project or active" };
 
     try {
@@ -508,7 +508,7 @@ export const createTeamSlice: StoreSlice<
 
   updateMemberRole: async (targetUserId: string, newRole: "admin" | "member") => {
     const activeTeamId = get().activeTeamId;
-    if (!activeTeamId) return { error: "No active team" };
+    if (!activeTeamId || activeTeamId === "all") return { error: "No active team" };
 
     // Optimistic update
     const previousMembers = get().teamMembers;

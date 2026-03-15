@@ -15,16 +15,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invite code is required" }, { status: 400 });
   }
 
-  const { data: existing } = await supabase
-    .from("team_members")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ error: "Already in a team. Leave first." }, { status: 409 });
-  }
-
   const { data: team, error: teamError } = await supabase
     .from("teams")
     .select("*")
@@ -49,6 +39,10 @@ export async function POST(request: NextRequest) {
   });
 
   if (joinError) {
+    // UNIQUE(team_id, user_id) constraint catches duplicate joins
+    if (joinError.code === "23505") {
+      return NextResponse.json({ error: "Already a member of this team" }, { status: 409 });
+    }
     return NextResponse.json({ error: joinError.message }, { status: 500 });
   }
 

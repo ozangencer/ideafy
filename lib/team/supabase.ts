@@ -18,6 +18,27 @@ export function getSupabaseClient(): SupabaseClient | null {
     },
   });
 
+  // Persist auth token to SQLite for MCP server access
+  supabaseInstance.auth.onAuthStateChange(async (event, session) => {
+    try {
+      if (session?.access_token) {
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ supabaseAuthToken: session.access_token }),
+        });
+      } else if (event === "SIGNED_OUT") {
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ supabaseAuthToken: "" }),
+        });
+      }
+    } catch (e) {
+      console.error("Failed to persist auth token for MCP:", e);
+    }
+  });
+
   return supabaseInstance;
 }
 

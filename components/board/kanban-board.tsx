@@ -150,7 +150,7 @@ export function KanbanBoard() {
     // Filter by active project
     const matchesProject = !activeProjectId || card.projectId === activeProjectId;
     // Filter by active team (via project's teamId)
-    const matchesTeam = !activeTeamId || (() => {
+    const matchesTeam = !activeTeamId || activeTeamId === "all" || (() => {
       const project = projects.find((p) => p.id === card.projectId);
       return project?.teamId === activeTeamId;
     })();

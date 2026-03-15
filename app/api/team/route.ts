@@ -10,7 +10,7 @@ function generateInviteCode(): string {
   return code;
 }
 
-// GET: Get current user's team
+// GET: Get current user's teams
 export async function GET(request: NextRequest) {
   const { user, error: authError } = await getAuthenticatedUser(request.headers.get("Authorization"));
   if (authError || !user) {
@@ -19,35 +19,33 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabaseAdmin()!;
 
-  const { data: membership } = await supabase
+  const { data: memberships } = await supabase
     .from("team_members")
     .select("team_id, role")
-    .eq("user_id", user.id)
-    .single();
+    .eq("user_id", user.id);
 
-  if (!membership) {
-    return NextResponse.json({ team: null });
+  if (!memberships || memberships.length === 0) {
+    return NextResponse.json({ teams: [] });
   }
 
-  const { data: team } = await supabase
+  const teamIds = memberships.map((m) => m.team_id);
+  const { data: teams } = await supabase
     .from("teams")
     .select("*")
-    .eq("id", membership.team_id)
-    .single();
+    .in("id", teamIds);
 
-  if (!team) {
-    return NextResponse.json({ team: null });
+  if (!teams || teams.length === 0) {
+    return NextResponse.json({ teams: [] });
   }
 
   return NextResponse.json({
-    team: {
+    teams: teams.map((team) => ({
       id: team.id,
       name: team.name,
       inviteCode: team.invite_code,
       createdBy: team.created_by,
       createdAt: team.created_at,
-    },
-    role: membership.role,
+    })),
   });
 }
 
@@ -64,17 +62,6 @@ export async function POST(request: NextRequest) {
   const name = body.name?.trim();
   if (!name) {
     return NextResponse.json({ error: "Team name is required" }, { status: 400 });
-  }
-
-  // Check if user is already in a team
-  const { data: existing } = await supabase
-    .from("team_members")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ error: "Already in a team. Leave first." }, { status: 409 });
   }
 
   const inviteCode = generateInviteCode();

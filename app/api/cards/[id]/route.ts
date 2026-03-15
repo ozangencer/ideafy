@@ -90,6 +90,8 @@ export async function PUT(
     taskNumber,
     aiPlatform: body.aiPlatform !== undefined ? (body.aiPlatform || null) : existing.aiPlatform,
     poolCardId: body.poolCardId !== undefined ? (body.poolCardId || null) : existing.poolCardId,
+    assignedTo: body.assignedTo !== undefined ? (body.assignedTo || null) : existing.assignedTo,
+    assignedToName: body.assignedToName !== undefined ? (body.assignedToName || null) : existing.assignedToName,
     updatedAt: now,
     completedAt,
   };
@@ -124,6 +126,8 @@ export async function PUT(
     processingType: (existing.processingType as Card["processingType"]) ?? null,
     aiPlatform: (updatedCard.aiPlatform as Card["aiPlatform"]) ?? null,
     poolCardId: updatedCard.poolCardId ?? null,
+    assignedTo: updatedCard.assignedTo ?? null,
+    assignedToName: updatedCard.assignedToName ?? null,
     createdAt: existing.createdAt,
     updatedAt: updatedCard.updatedAt,
     completedAt: updatedCard.completedAt,

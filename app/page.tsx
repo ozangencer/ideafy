@@ -166,7 +166,7 @@ export default function Home() {
                     teams.length > 1 ? (
                       <Select
                         value={activeTeamId || "all"}
-                        onValueChange={(v) => setActiveTeam(v === "all" ? null : v)}
+                        onValueChange={(v) => setActiveTeam(v)}
                       >
                         <SelectTrigger className="w-[160px] h-8 text-xs">
                           <SelectValue placeholder="Select team" />

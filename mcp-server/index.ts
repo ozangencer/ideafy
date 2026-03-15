@@ -113,6 +113,42 @@ function extractCardImages(card: Card): {
 const db = new Database(DB_PATH);
 
 // ============================================================================
+// Pool API Helpers (for MCP → Next.js API bridge)
+// ============================================================================
+
+function getAuthToken(): string | null {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get("supabase_auth_token") as { value: string } | undefined;
+  if (!row || !row.value) return null;
+  return row.value;
+}
+
+async function callPoolApi(method: string, path: string, body?: unknown): Promise<{ data?: Record<string, unknown>; error?: string }> {
+  const token = getAuthToken();
+  if (!token) {
+    return { error: "Not logged in. Sign in via the Ideafy UI first." };
+  }
+
+  try {
+    const response = await fetch(`http://localhost:3000${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return { error: data.error || `HTTP ${response.status}` };
+    }
+    return { data };
+  } catch (e) {
+    return { error: `Failed to connect to Ideafy server. Is it running? (${e instanceof Error ? e.message : String(e)})` };
+  }
+}
+
+// ============================================================================
 // Card ID Resolution Helper
 // ============================================================================
 
@@ -397,6 +433,70 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["folderPath"],
+        },
+      },
+      {
+        name: "pool_list",
+        description: "List pool cards from the team cloud pool. Requires being signed in via the Ideafy UI.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            teamId: {
+              type: "string",
+              description: "Team ID to filter by (optional, defaults to 'all' which shows cards from all your teams)",
+            },
+          },
+        },
+      },
+      {
+        name: "pool_push",
+        description: "Send a local kanban card to the team cloud pool. The card's project must be linked to a team.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cardId: {
+              type: "string",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
+            },
+            assignedTo: {
+              type: "string",
+              description: "User ID to assign the pool card to (optional)",
+            },
+          },
+          required: ["cardId"],
+        },
+      },
+      {
+        name: "pool_pull",
+        description: "Pull a card from the team cloud pool into local kanban. Creates a new local card linked to the pool card.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            poolCardId: {
+              type: "string",
+              description: "Pool card UUID to pull",
+            },
+          },
+          required: ["poolCardId"],
+        },
+      },
+      {
+        name: "pool_claim",
+        description: "Claim or unclaim a pool card (assign/unassign yourself).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            poolCardId: {
+              type: "string",
+              description: "Pool card UUID to claim/unclaim",
+            },
+            action: {
+              type: "string",
+              enum: ["claim", "unclaim"],
+              description: "Action to perform (default: claim)",
+            },
+          },
+          required: ["poolCardId"],
         },
       },
     ],
@@ -817,6 +917,155 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             type: "text",
             text: JSON.stringify({ found: true, project })
           }],
+        };
+      }
+
+      // ====================================================================
+      // Pool Tools (Cloud Team Pool via Next.js API)
+      // ====================================================================
+
+      case "pool_list": {
+        const { teamId = "all" } = args as { teamId?: string };
+
+        const result = await callPoolApi("GET", `/api/team/pool?teamId=${encodeURIComponent(teamId)}`);
+        if (result.error) {
+          return {
+            content: [{ type: "text", text: result.error }],
+            isError: true,
+          };
+        }
+
+        const cards = (result.data?.cards || []) as Array<Record<string, unknown>>;
+        if (cards.length === 0) {
+          return {
+            content: [{ type: "text", text: "No pool cards found." }],
+          };
+        }
+
+        // Format as a readable table
+        const lines = cards.map((c) => {
+          const assigned = c.assignedToName || c.assignedTo || "unassigned";
+          const team = c.teamName || "";
+          return `- [${c.priority || "medium"}] ${c.title} (${c.status}) — ${assigned}${team ? ` [${team}]` : ""} — ID: ${c.id}`;
+        });
+
+        return {
+          content: [{ type: "text", text: `Pool cards (${cards.length}):\n${lines.join("\n")}` }],
+        };
+      }
+
+      case "pool_push": {
+        const { cardId: rawCardId, assignedTo } = args as { cardId: string; assignedTo?: string };
+        const cardId = resolveCardId(rawCardId);
+        if (!cardId) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawCardId}` }],
+            isError: true,
+          };
+        }
+
+        // Get the local card
+        const card = db.prepare(`
+          SELECT
+            id, title, description,
+            solution_summary as solutionSummary,
+            test_scenarios as testScenarios,
+            ai_opinion as aiOpinion,
+            ai_verdict as aiVerdict,
+            status, complexity, priority,
+            project_id as projectId,
+            pool_card_id as poolCardId,
+            assigned_to as assignedTo
+          FROM cards WHERE id = ?
+        `).get(cardId) as Record<string, unknown> | undefined;
+
+        if (!card) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${cardId}` }],
+            isError: true,
+          };
+        }
+
+        // Get teamId from the card's project
+        let teamId: string | null = null;
+        if (card.projectId) {
+          const proj = db.prepare("SELECT team_id FROM projects WHERE id = ?").get(card.projectId as string) as { team_id: string } | undefined;
+          teamId = proj?.team_id || null;
+        }
+
+        if (!teamId) {
+          return {
+            content: [{ type: "text", text: "This card's project is not linked to a team. Link the project to a team in the Ideafy UI first." }],
+            isError: true,
+          };
+        }
+
+        const result = await callPoolApi("POST", "/api/team/pool", {
+          teamId,
+          cardData: {
+            title: card.title,
+            description: card.description,
+            solutionSummary: card.solutionSummary,
+            testScenarios: card.testScenarios,
+            aiOpinion: card.aiOpinion,
+            aiVerdict: card.aiVerdict,
+            status: card.status,
+            complexity: card.complexity,
+            priority: card.priority,
+            sourceCardId: card.id,
+          },
+          assignedTo: assignedTo || card.assignedTo || undefined,
+        });
+
+        if (result.error) {
+          return {
+            content: [{ type: "text", text: result.error }],
+            isError: true,
+          };
+        }
+
+        // Update local card with pool link
+        const poolCardId = (result.data as Record<string, unknown>)?.poolCardId as string;
+        if (poolCardId) {
+          db.prepare("UPDATE cards SET pool_card_id = ?, updated_at = ? WHERE id = ?")
+            .run(poolCardId, new Date().toISOString(), cardId);
+        }
+
+        return {
+          content: [{ type: "text", text: `Card pushed to pool. Pool card ID: ${poolCardId}` }],
+        };
+      }
+
+      case "pool_pull": {
+        const { poolCardId } = args as { poolCardId: string };
+
+        const result = await callPoolApi("POST", "/api/team/pool/pull", { poolCardId });
+        if (result.error) {
+          return {
+            content: [{ type: "text", text: result.error }],
+            isError: true,
+          };
+        }
+
+        const newCardId = (result.data as Record<string, unknown>)?.cardId as string;
+        return {
+          content: [{ type: "text", text: `Card pulled from pool. New local card ID: ${newCardId}` }],
+        };
+      }
+
+      case "pool_claim": {
+        const { poolCardId, action = "claim" } = args as { poolCardId: string; action?: "claim" | "unclaim" };
+
+        const result = await callPoolApi("PATCH", "/api/team/pool", { poolCardId, action });
+        if (result.error) {
+          return {
+            content: [{ type: "text", text: result.error }],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: `Pool card ${action === "claim" ? "claimed" : "unclaimed"} successfully.` }],
         };
       }
 

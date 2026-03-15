@@ -5,6 +5,14 @@ import { useKanbanStore } from "@/lib/store";
 import { Project } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Users } from "lucide-react";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -51,7 +59,7 @@ const PRESET_COLORS = [
 ];
 
 export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
-  const { updateProject, deleteProject, cards } = useKanbanStore();
+  const { updateProject, deleteProject, cards, teamMode, teams } = useKanbanStore();
 
   // Form state initialized from project
   const [name, setName] = useState(project.name);
@@ -65,6 +73,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
     project.narrativePath || ""
   );
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
+  const [teamId, setTeamId] = useState<string | null>(project.teamId ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
@@ -161,6 +170,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
         documentPaths: documentPaths.length > 0 ? documentPaths : null,
         narrativePath: narrativePath.trim() || null,
         useWorktrees,
+        teamId,
       });
       onClose();
     } catch (error) {
@@ -180,7 +190,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()} modal={false}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
@@ -298,6 +308,40 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
           <p className="text-xs text-muted-foreground -mt-2">
             Task IDs: {idPrefix || "PRJ"}-1, {idPrefix || "PRJ"}-2...
           </p>
+
+          {/* Team Assignment */}
+          {teamMode && teams.length > 0 && (
+            <div className="grid gap-2">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <label className="text-sm font-medium">Team</label>
+                <span className="text-xs text-muted-foreground">(optional)</span>
+              </div>
+              <Select
+                value={teamId || "none"}
+                onValueChange={(v) => setTeamId(v === "none" ? null : v)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="No team">
+                    {teamId
+                      ? teams.find((t) => t.id === teamId)?.name || "Select team"
+                      : "No team"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  <SelectItem value="none">No team</SelectItem>
+                  {teams.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Link to a team to enable assignee on cards
+              </p>
+            </div>
+          )}
 
           {/* Document Paths */}
           <div className="grid gap-2">

@@ -12,6 +12,7 @@ export const projects = sqliteTable("projects", {
   documentPaths: text("document_paths"), // JSON array of custom document paths, null = smart discovery
   narrativePath: text("narrative_path"), // Relative path to narrative file, null = use default (docs/product-narrative.md)
   useWorktrees: integer("use_worktrees", { mode: "boolean" }).notNull().default(true), // Whether to use git worktrees for isolation
+  teamId: text("team_id"), // UUID from Supabase teams table, nullable
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -45,6 +46,8 @@ export const cards = sqliteTable("cards", {
   processingType: text("processing_type"),    // "autonomous" | "quick-fix" | "evaluate" | null (active Claude process indicator)
   aiPlatform: text("ai_platform"),           // "claude" | "gemini" | "codex" | null (null = use global setting)
   poolCardId: text("pool_card_id"),          // UUID from Supabase pool_cards table, null if not synced
+  assignedTo: text("assigned_to"),           // User ID from Supabase, null if unassigned
+  assignedToName: text("assigned_to_name"),  // Display name cache, null if unassigned
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),  // ISO date string, null if not completed

@@ -10,21 +10,30 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const email = body.email?.trim();
+  const teamId = body.teamId;
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+  }
+  if (!teamId) {
+    return NextResponse.json({ error: "Team ID is required" }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin()!;
 
-  // Get user's team membership
+  // Get user's membership for the specific team
   const { data: membership } = await supabase
     .from("team_members")
-    .select("team_id, display_name")
+    .select("team_id, display_name, role")
     .eq("user_id", user.id)
+    .eq("team_id", teamId)
     .single();
 
   if (!membership) {
     return NextResponse.json({ error: "You are not a member of any team" }, { status: 404 });
+  }
+
+  if (membership.role === "member") {
+    return NextResponse.json({ error: "Only owners and admins can invite members" }, { status: 403 });
   }
 
   // Get team details

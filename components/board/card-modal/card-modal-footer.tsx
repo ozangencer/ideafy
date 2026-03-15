@@ -49,7 +49,8 @@ export function CardModalFooter({
   onCancel,
   onSave,
 }: CardModalFooterProps) {
-  const { teamMode, currentTeam, sendToPool, pushUpdate } = useKanbanStore();
+  const { teamMode, teams, activeTeamId, sendToPool, pushUpdate } = useKanbanStore();
+  const activeTeam = teams.find((t) => t.id === activeTeamId) || null;
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [showPoolDeleteDialog, setShowPoolDeleteDialog] = useState(false);
@@ -81,7 +82,7 @@ export function CardModalFooter({
     setIsRemoving(false);
   };
 
-  const showPoolButton = teamMode && currentTeam && !isDraftMode && cardId;
+  const showPoolButton = teamMode && activeTeam && !isDraftMode && cardId;
   const isLinkedToPool = !!poolCardId;
 
   return (

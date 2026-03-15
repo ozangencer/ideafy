@@ -83,6 +83,7 @@ export async function PUT(request: Request) {
       skillsPath: "skills_path",
       mcpConfigPath: "mcp_config_path",
       terminalApp: "terminal_app",
+      supabaseAuthToken: "supabase_auth_token",
     };
 
     for (const [field, value] of Object.entries(body)) {

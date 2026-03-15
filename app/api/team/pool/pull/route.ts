@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
     processingType: null,
     aiPlatform: null,
     poolCardId: poolCardId,
+    assignedTo: poolCard.assigned_to || null,
+    assignedToName: null, // Will be resolved via team members
     createdAt: now,
     updatedAt: now,
     completedAt: null,
