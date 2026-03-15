@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -10,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,42 +23,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   CloudDownload,
-  CloudOff,
   RefreshCw,
   Trash2,
   User,
   UserCheck,
+  UserMinus,
   UserPlus,
   X,
-  FileText,
-  Brain,
-  Lightbulb,
-  TestTube2,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { PoolCard } from "@/lib/team/types";
-import { SectionType, SECTION_CONFIG } from "@/lib/types";
-
-type PoolFilter = "all" | "unassigned" | "mine";
-
-const SECTION_ICONS: Record<SectionType, typeof FileText> = {
-  detail: FileText,
-  opinion: Brain,
-  solution: Lightbulb,
-  tests: TestTube2,
-};
-
-function hasContent(html: string | undefined): boolean {
-  if (!html) return false;
-  const text = html.replace(/<[^>]*>/g, "").trim();
-  return text.length > 0;
-}
+import { PoolCardSlideOver } from "./pool-card-slide-over";
 
 export function PoolView() {
   const {
     poolCards,
     currentUser,
     teamMembers,
+    teamMembersByTeamId,
     teams,
     activeTeamId,
     fetchPoolCards,
@@ -67,14 +49,23 @@ export function PoolView() {
     claimPoolCard,
     cards,
   } = useKanbanStore();
-  const [filter, setFilter] = useState<PoolFilter>("all");
+
+  // Filter states
   const [poolTeamFilter, setPoolTeamFilter] = useState<string>(activeTeamId || "all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [assignedToFilter, setAssignedToFilter] = useState("all");
+  const [pulledByFilter, setPulledByFilter] = useState("all");
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Fetch pool cards for the selected team filter on mount
   useEffect(() => {
     fetchPoolCards(poolTeamFilter);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [pullingId, setPullingId] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -83,11 +74,65 @@ export function PoolView() {
   const [confirmUnclaimId, setConfirmUnclaimId] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<PoolCard | null>(null);
 
-  const filteredCards = poolCards.filter((card) => {
-    if (filter === "unassigned") return !card.assignedTo;
-    if (filter === "mine") return card.assignedTo === currentUser?.id;
-    return true;
-  });
+  // Bulk action states
+  const [bulkAction, setBulkAction] = useState<"claim" | "unclaim" | "delete" | null>(null);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  // Unique filter values derived from poolCards
+  const uniqueStatuses = useMemo(
+    () => Array.from(new Set(poolCards.map((c) => c.status))).sort(),
+    [poolCards]
+  );
+  const uniquePriorities = useMemo(
+    () => Array.from(new Set(poolCards.map((c) => c.priority))).sort(),
+    [poolCards]
+  );
+  const uniqueProjects = useMemo(
+    () => Array.from(new Set(poolCards.map((c) => c.projectName).filter(Boolean))).sort() as string[],
+    [poolCards]
+  );
+  const uniqueAssignees = useMemo(
+    () => Array.from(new Set(poolCards.map((c) => c.assignedToName).filter(Boolean))).sort() as string[],
+    [poolCards]
+  );
+  const uniquePullers = useMemo(
+    () => Array.from(new Set(poolCards.map((c) => c.pulledByName).filter(Boolean))).sort() as string[],
+    [poolCards]
+  );
+
+  const filteredCards = useMemo(() => {
+    return poolCards.filter((card) => {
+      // Assigned To filter
+      if (assignedToFilter === "unassigned" && card.assignedTo) return false;
+      if (assignedToFilter === "mine" && card.assignedTo !== currentUser?.id) return false;
+      if (
+        assignedToFilter !== "all" &&
+        assignedToFilter !== "unassigned" &&
+        assignedToFilter !== "mine" &&
+        card.assignedToName !== assignedToFilter
+      )
+        return false;
+      // Pulled By filter
+      if (pulledByFilter === "not_pulled" && card.pulledBy) return false;
+      if (
+        pulledByFilter !== "all" &&
+        pulledByFilter !== "not_pulled" &&
+        card.pulledByName !== pulledByFilter
+      )
+        return false;
+      // Column filters
+      if (statusFilter !== "all" && card.status !== statusFilter) return false;
+      if (priorityFilter !== "all" && card.priority !== priorityFilter) return false;
+      if (projectFilter !== "all" && (card.projectName || "") !== projectFilter) return false;
+      return true;
+    });
+  }, [poolCards, assignedToFilter, pulledByFilter, statusFilter, priorityFilter, projectFilter, currentUser?.id]);
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [poolTeamFilter, statusFilter, priorityFilter, projectFilter, assignedToFilter, pulledByFilter]);
 
   const handleTeamFilterChange = async (value: string) => {
     setPoolTeamFilter(value);
@@ -120,24 +165,29 @@ export function PoolView() {
     }
   };
 
-  // Check if current user is admin/owner in any relevant team
-  const isAdminOrOwner = teamMembers.some(
-    (m) => m.userId === currentUser?.id && (m.role === "owner" || m.role === "admin")
-  );
+  // Check if current user is admin/owner in any team
+  const isAdminOrOwner = (() => {
+    if (teamMembers.some((m) => m.userId === currentUser?.id && (m.role === "owner" || m.role === "admin"))) {
+      return true;
+    }
+    if (Object.values(teamMembersByTeamId).some((members) =>
+      members.some((m) => m.userId === currentUser?.id && (m.role === "owner" || m.role === "admin"))
+    )) {
+      return true;
+    }
+    return teams.some((t) => t.createdBy === currentUser?.id);
+  })();
 
   const requestClaim = (poolCardId: string, action: "claim" | "unclaim") => {
     if (action === "unclaim") {
       setConfirmUnclaimId(poolCardId);
       return;
     }
-    // Check if already assigned to someone else
     const card = poolCards.find((c) => c.id === poolCardId);
     if (card?.assignedTo && card.assignedTo !== currentUser?.id) {
       if (isAdminOrOwner) {
-        // Admin/Owner can reassign with confirmation
         setConfirmClaimId(poolCardId);
       } else {
-        // Normal members cannot claim cards assigned to others
         toast.error(`This card is assigned to ${card.assignedToName || "someone else"}. Ask them to unclaim first.`);
       }
       return;
@@ -162,7 +212,6 @@ export function PoolView() {
   const handleRemove = async (poolCardId: string) => {
     setConfirmRemoveId(null);
     setRemovingId(poolCardId);
-    // Also clear pool link on any local card linked to this pool card
     const localCard = cards.find((c) => c.poolCardId === poolCardId);
     const result = await removeFromPool(poolCardId, localCard?.id);
     setRemovingId(null);
@@ -173,6 +222,88 @@ export function PoolView() {
       if (selectedCard?.id === poolCardId) setSelectedCard(null);
     }
   };
+
+  // Bulk actions
+  const handleBulkClaim = useCallback(async () => {
+    setIsBulkProcessing(true);
+    let success = 0;
+    let skipped = 0;
+    for (const id of Array.from(selectedIds)) {
+      const card = poolCards.find((c) => c.id === id);
+      if (card?.assignedTo === currentUser?.id) {
+        skipped++;
+        continue;
+      }
+      if (card?.assignedTo && !isAdminOrOwner) {
+        skipped++;
+        continue;
+      }
+      const result = await claimPoolCard(id, "claim");
+      if (!result.error) success++;
+      else skipped++;
+    }
+    setIsBulkProcessing(false);
+    setSelectedIds(new Set());
+    if (success > 0) toast.success(`Claimed ${success} card${success !== 1 ? "s" : ""}`);
+    if (skipped > 0) toast.info(`Skipped ${skipped} card${skipped !== 1 ? "s" : ""}`);
+  }, [selectedIds, poolCards, currentUser?.id, isAdminOrOwner, claimPoolCard]);
+
+  const handleBulkUnclaim = useCallback(async () => {
+    setIsBulkProcessing(true);
+    let success = 0;
+    let skipped = 0;
+    for (const id of Array.from(selectedIds)) {
+      const card = poolCards.find((c) => c.id === id);
+      if (card?.assignedTo !== currentUser?.id) {
+        skipped++;
+        continue;
+      }
+      const result = await claimPoolCard(id, "unclaim");
+      if (!result.error) success++;
+      else skipped++;
+    }
+    setIsBulkProcessing(false);
+    setSelectedIds(new Set());
+    if (success > 0) toast.success(`Unclaimed ${success} card${success !== 1 ? "s" : ""}`);
+    if (skipped > 0) toast.info(`Skipped ${skipped} card${skipped !== 1 ? "s" : ""} (not assigned to you)`);
+  }, [selectedIds, poolCards, currentUser?.id, claimPoolCard]);
+
+  const handleBulkDelete = useCallback(async () => {
+    setConfirmBulkDelete(false);
+    setIsBulkProcessing(true);
+    let success = 0;
+    let failed = 0;
+    for (const id of Array.from(selectedIds)) {
+      const localCard = cards.find((c) => c.poolCardId === id);
+      const result = await removeFromPool(id, localCard?.id);
+      if (!result.error) success++;
+      else failed++;
+    }
+    setIsBulkProcessing(false);
+    setSelectedIds(new Set());
+    if (success > 0) toast.success(`Removed ${success} card${success !== 1 ? "s" : ""} from pool`);
+    if (failed > 0) toast.error(`Failed to remove ${failed} card${failed !== 1 ? "s" : ""}`);
+  }, [selectedIds, cards, removeFromPool]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === filteredCards.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCards.map((c) => c.id)));
+    }
+  }, [selectedIds.size, filteredCards]);
+
+  const isAllSelected = filteredCards.length > 0 && selectedIds.size === filteredCards.length;
+  const isIndeterminate = selectedIds.size > 0 && selectedIds.size < filteredCards.length;
 
   const priorityColors: Record<string, string> = {
     high: "text-red-500 bg-red-500/10",
@@ -200,10 +331,10 @@ export function PoolView() {
     <div className="flex-1 overflow-auto p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           {teams.length > 0 && (
             <Select value={poolTeamFilter} onValueChange={handleTeamFilterChange}>
-              <SelectTrigger className="w-[160px] h-8 text-xs">
+              <SelectTrigger className="w-[140px] h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -218,17 +349,79 @@ export function PoolView() {
               </SelectContent>
             </Select>
           )}
-          <Select value={filter} onValueChange={(v) => setFilter(v as PoolFilter)}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
+          <Select value={assignedToFilter} onValueChange={setAssignedToFilter}>
+            <SelectTrigger className="w-[120px] h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Tasks</SelectItem>
+              <SelectItem value="all">All Assigned</SelectItem>
               <SelectItem value="unassigned">Unassigned</SelectItem>
               <SelectItem value="mine">My Tasks</SelectItem>
+              {uniqueAssignees.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <span className="text-xs text-muted-foreground">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              {uniqueStatuses.map((s) => (
+                <SelectItem key={s} value={s}>
+                  <span className="capitalize">{s}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priority</SelectItem>
+              {uniquePriorities.map((p) => (
+                <SelectItem key={p} value={p}>
+                  <span className="capitalize">{p}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {uniqueProjects.length > 0 && (
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {uniqueProjects.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {uniquePullers.length > 0 && (
+            <Select value={pulledByFilter} onValueChange={setPulledByFilter}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Pulled</SelectItem>
+                <SelectItem value="not_pulled">Not Pulled</SelectItem>
+                {uniquePullers.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <span className="text-xs text-muted-foreground ml-1">
             {filteredCards.length} card{filteredCards.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -255,7 +448,25 @@ export function PoolView() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
+                <th className="px-3 py-2.5 w-10">
+                  <Checkbox
+                    checked={isAllSelected}
+                    ref={(el) => {
+                      if (el) {
+                        (el as unknown as HTMLButtonElement).dataset.state = isIndeterminate
+                          ? "indeterminate"
+                          : isAllSelected
+                            ? "checked"
+                            : "unchecked";
+                      }
+                    }}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                    className="h-3.5 w-3.5"
+                  />
+                </th>
                 <th className="text-left font-medium text-muted-foreground px-4 py-2.5">Title</th>
+                <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-32">Project</th>
                 {poolTeamFilter === "all" && (
                   <th className="text-left font-medium text-muted-foreground px-3 py-2.5 w-32">Team</th>
                 )}
@@ -280,9 +491,11 @@ export function PoolView() {
                     pulledByName={pulledByName || undefined}
                     isPulling={pullingId === card.id}
                     isRemoving={removingId === card.id}
-                    canRemove={card.pushedBy === currentUser?.id}
+                    canRemove={card.pushedBy === currentUser?.id || isAdminOrOwner || card.assignedTo === currentUser?.id}
                     isMine={card.assignedTo === currentUser?.id}
                     isClaiming={claimingId === card.id}
+                    isSelected={selectedIds.has(card.id)}
+                    onToggleSelect={toggleSelect}
                     onPull={handlePull}
                     onClaim={requestClaim}
                     onRemove={(id) => setConfirmRemoveId(id)}
@@ -298,6 +511,59 @@ export function PoolView() {
         </div>
       )}
 
+      {/* Bulk Action Bar (Linear-style floating pill) */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-1 bg-background border border-border rounded-full shadow-lg px-4 py-2">
+            <span className="text-xs font-medium text-muted-foreground mr-2">
+              {selectedIds.size} selected
+            </span>
+            <div className="w-px h-4 bg-border" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              onClick={handleBulkClaim}
+              disabled={isBulkProcessing}
+            >
+              <UserPlus className="h-3 w-3" />
+              Claim
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              onClick={handleBulkUnclaim}
+              disabled={isBulkProcessing}
+            >
+              <UserMinus className="h-3 w-3" />
+              Unclaim
+            </Button>
+            {isAdminOrOwner && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                onClick={() => setConfirmBulkDelete(true)}
+                disabled={isBulkProcessing}
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete
+              </Button>
+            )}
+            <div className="w-px h-4 bg-border" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Remove confirmation dialog */}
       <AlertDialog open={!!confirmRemoveId} onOpenChange={() => setConfirmRemoveId(null)}>
         <AlertDialogContent>
@@ -310,6 +576,24 @@ export function PoolView() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => confirmRemoveId && handleRemove(confirmRemoveId)}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirmation dialog */}
+      <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {selectedIds.size} card{selectedIds.size !== 1 ? "s" : ""} from pool?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Local copies will remain intact.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete}>
               Remove
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -385,6 +669,8 @@ function PoolCardRow({
   canRemove,
   isMine,
   isClaiming,
+  isSelected,
+  onToggleSelect,
   onPull,
   onClaim,
   onRemove,
@@ -402,6 +688,8 @@ function PoolCardRow({
   canRemove: boolean;
   isMine: boolean;
   isClaiming: boolean;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
   onPull: (id: string) => void;
   onClaim: (id: string, action: "claim" | "unclaim") => void;
   onRemove: (id: string) => void;
@@ -430,11 +718,22 @@ function PoolCardRow({
 
   return (
     <tr
-      className="border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors cursor-pointer"
+      className={`border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors cursor-pointer ${isSelected ? "bg-muted/30" : ""}`}
       onClick={() => onRowClick(card)}
     >
+      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelect(card.id)}
+          aria-label={`Select ${card.title}`}
+          className="h-3.5 w-3.5"
+        />
+      </td>
       <td className="px-4 py-2.5">
         <span className="font-medium">{card.title}</span>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-xs text-muted-foreground">{card.projectName || "-"}</span>
       </td>
       {showTeamColumn && (
         <td className="px-3 py-2.5">
@@ -537,174 +836,5 @@ function PoolCardRow({
         </div>
       </td>
     </tr>
-  );
-}
-
-// Slide-over panel matching the local card modal design
-function PoolCardSlideOver({
-  card,
-  onClose,
-  onRemove,
-  isRemoving,
-  getMemberName,
-  statusColors,
-  priorityColors,
-}: {
-  card: PoolCard;
-  onClose: () => void;
-  onRemove?: () => void;
-  isRemoving?: boolean;
-  getMemberName: (userId: string | undefined) => string | null;
-  statusColors: Record<string, string>;
-  priorityColors: Record<string, string>;
-}) {
-  const [activeTab, setActiveTab] = useState<SectionType>("detail");
-
-  const pushedName = card.pushedByName || getMemberName(card.pushedBy) || "Unknown";
-  const assignedName = card.assignedToName || getMemberName(card.assignedTo);
-  const pulledName = card.pulledByName || getMemberName(card.pulledBy);
-
-  const sectionValues: Record<SectionType, string> = {
-    detail: card.description || "",
-    opinion: card.aiOpinion || "",
-    solution: card.solutionSummary || "",
-    tests: card.testScenarios || "",
-  };
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    },
-    [onClose]
-  );
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/40"
-      onClick={onClose}
-      onKeyDown={handleKeyDown}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-surface border-l border-border w-full max-w-[900px] h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200"
-      >
-        {/* Header */}
-        <div className="shrink-0 border-b border-border px-6 py-4">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0 pr-4">
-              <h2 className="text-lg font-semibold truncate">{card.title}</h2>
-              <div className="flex items-center gap-3 mt-2 flex-wrap">
-                <span className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${statusColors[card.status] || "bg-gray-400"}`} />
-                  <span className="text-xs text-muted-foreground capitalize">
-                    Status: <span className="text-foreground">{card.status}</span>
-                  </span>
-                </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded capitalize ${priorityColors[card.priority] || ""}`}>
-                  Priority: {card.priority}
-                </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded capitalize ${
-                  card.complexity === "hard" ? "text-red-500 bg-red-500/10" :
-                  card.complexity === "medium" ? "text-yellow-500 bg-yellow-500/10" :
-                  "text-green-500 bg-green-500/10"
-                }`}>
-                  Complexity: {card.complexity}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
-                <span>Pushed by {pushedName}</span>
-                {assignedName && <span>Assigned to {assignedName}</span>}
-                {pulledName && <span>Pulled by {pulledName}</span>}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {onRemove && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 text-muted-foreground hover:text-destructive"
-                  onClick={onRemove}
-                  disabled={isRemoving}
-                >
-                  <CloudOff className="h-3.5 w-3.5" />
-                  <span className="text-xs">Remove from Pool</span>
-                </Button>
-              )}
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Section Tabs */}
-        <div className="shrink-0 border-b border-border px-4">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SectionType)}>
-            <TabsList className="h-10 bg-transparent gap-1 p-0">
-              {(Object.keys(SECTION_CONFIG) as SectionType[]).map((section) => {
-                const config = SECTION_CONFIG[section];
-                const Icon = SECTION_ICONS[section];
-                const isActive = activeTab === section;
-                const isFilled = hasContent(sectionValues[section]);
-
-                return (
-                  <TabsTrigger
-                    key={section}
-                    value={section}
-                    className={`
-                      h-9 px-3 gap-2 rounded-md text-sm font-medium transition-colors
-                      data-[state=active]:bg-muted data-[state=active]:text-foreground
-                      data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-muted/50
-                    `}
-                  >
-                    <Icon
-                      className="w-4 h-4"
-                      style={{ color: isActive ? config.color : undefined }}
-                    />
-                    <span>{config.label}</span>
-                    {isFilled && !isActive && (
-                      <span
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: config.color }}
-                      />
-                    )}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </Tabs>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {hasContent(sectionValues[activeTab]) ? (
-            <div className="prose-kanban">
-              <div
-                dangerouslySetInnerHTML={{ __html: sectionValues[activeTab] }}
-              />
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              No {SECTION_CONFIG[activeTab].label.toLowerCase()} content
-            </div>
-          )}
-
-          {/* AI Verdict badge for opinion tab */}
-          {activeTab === "opinion" && card.aiVerdict && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <span className={`text-xs font-medium px-2 py-1 rounded ${
-                card.aiVerdict === "pass"
-                  ? "text-green-500 bg-green-500/10"
-                  : card.aiVerdict === "fail"
-                    ? "text-red-500 bg-red-500/10"
-                    : "text-yellow-500 bg-yellow-500/10"
-              }`}>
-                Verdict: {card.aiVerdict}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

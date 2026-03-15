@@ -15,11 +15,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ cards: [] });
   }
 
+  // Resolve display names for a set of pool cards by querying team_members
+  async function resolveNames(cards: Record<string, unknown>[]) {
+    // Collect all unique user IDs from assigned_to, pushed_by, pulled_by
+    const userIds = new Set<string>();
+    for (const c of cards) {
+      if (c.assigned_to) userIds.add(c.assigned_to as string);
+      if (c.pushed_by) userIds.add(c.pushed_by as string);
+      if (c.pulled_by) userIds.add(c.pulled_by as string);
+    }
+
+    if (userIds.size === 0) return new Map<string, string>();
+
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id, display_name")
+      .in("user_id", Array.from(userIds));
+
+    const nameMap = new Map<string, string>();
+    for (const m of members || []) {
+      if (!nameMap.has(m.user_id)) {
+        nameMap.set(m.user_id, m.display_name);
+      }
+    }
+    return nameMap;
+  }
+
   // Helper to map a raw DB row to the API response shape
-  const mapCard = (c: Record<string, unknown>, withJoins = false) => ({
+  const mapCard = (c: Record<string, unknown>, nameMap: Map<string, string>) => ({
     id: c.id,
     teamId: c.team_id,
-    teamName: withJoins ? (c as Record<string, unknown>)._teamName : undefined,
     title: c.title,
     description: c.description,
     solutionSummary: c.solution_summary,
@@ -30,11 +55,12 @@ export async function GET(request: NextRequest) {
     complexity: c.complexity,
     priority: c.priority,
     assignedTo: c.assigned_to,
-    assignedToName: withJoins ? (c.assignee as Array<{ display_name: string }>)?.[0]?.display_name : undefined,
+    assignedToName: c.assigned_to ? nameMap.get(c.assigned_to as string) : undefined,
     pushedBy: c.pushed_by,
-    pushedByName: withJoins ? (c.pusher as Array<{ display_name: string }>)?.[0]?.display_name : undefined,
+    pushedByName: c.pushed_by ? nameMap.get(c.pushed_by as string) : undefined,
     pulledBy: c.pulled_by,
-    pulledByName: withJoins ? (c.puller as Array<{ display_name: string }>)?.[0]?.display_name : undefined,
+    pulledByName: c.pulled_by ? nameMap.get(c.pulled_by as string) : undefined,
+    projectName: c.project_name,
     sourceCardId: c.source_card_id,
     lastSyncedAt: c.last_synced_at,
     createdAt: c.created_at,
@@ -61,37 +87,19 @@ export async function GET(request: NextRequest) {
 
     const { data: cards, error: cardsError } = await supabase
       .from("pool_cards")
-      .select(`
-        *,
-        assignee:team_members!pool_cards_assigned_to_fkey(display_name),
-        pusher:team_members!pool_cards_pushed_by_fkey(display_name),
-        puller:team_members!pool_cards_pulled_by_fkey(display_name)
-      `)
+      .select("*")
       .in("team_id", teamIds)
       .order("updated_at", { ascending: false });
 
     if (cardsError) {
-      const { data: fallbackCards, error: fallbackError } = await supabase
-        .from("pool_cards")
-        .select("*")
-        .in("team_id", teamIds)
-        .order("updated_at", { ascending: false });
-
-      if (fallbackError) {
-        return NextResponse.json({ error: fallbackError.message }, { status: 500 });
-      }
-
-      return NextResponse.json({
-        cards: (fallbackCards || []).map((c) => ({
-          ...mapCard(c),
-          teamName: teamNameMap[c.team_id as string],
-        })),
-      });
+      return NextResponse.json({ error: cardsError.message }, { status: 500 });
     }
+
+    const nameMap = await resolveNames(cards || []);
 
     return NextResponse.json({
       cards: (cards || []).map((c) => ({
-        ...mapCard(c, true),
+        ...mapCard(c, nameMap),
         teamName: teamNameMap[c.team_id as string],
       })),
     });
@@ -111,33 +119,18 @@ export async function GET(request: NextRequest) {
 
   const { data: cards, error: cardsError } = await supabase
     .from("pool_cards")
-    .select(`
-      *,
-      assignee:team_members!pool_cards_assigned_to_fkey(display_name),
-      pusher:team_members!pool_cards_pushed_by_fkey(display_name),
-      puller:team_members!pool_cards_pulled_by_fkey(display_name)
-    `)
+    .select("*")
     .eq("team_id", teamId)
     .order("updated_at", { ascending: false });
 
   if (cardsError) {
-    const { data: fallbackCards, error: fallbackError } = await supabase
-      .from("pool_cards")
-      .select("*")
-      .eq("team_id", teamId)
-      .order("updated_at", { ascending: false });
-
-    if (fallbackError) {
-      return NextResponse.json({ error: fallbackError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      cards: (fallbackCards || []).map((c) => mapCard(c)),
-    });
+    return NextResponse.json({ error: cardsError.message }, { status: 500 });
   }
 
+  const nameMap = await resolveNames(cards || []);
+
   return NextResponse.json({
-    cards: (cards || []).map((c) => mapCard(c, true)),
+    cards: (cards || []).map((c) => mapCard(c, nameMap)),
   });
 }
 
@@ -254,6 +247,7 @@ export async function POST(request: NextRequest) {
     priority: cardData.priority || "medium",
     assigned_to: assignedTo || null,
     pushed_by: user.id,
+    project_name: cardData.projectName || null,
     source_card_id: cardData.sourceCardId || null,
     last_synced_at: now,
     updated_at: now,

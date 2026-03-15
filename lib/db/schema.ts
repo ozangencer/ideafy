@@ -46,6 +46,7 @@ export const cards = sqliteTable("cards", {
   processingType: text("processing_type"),    // "autonomous" | "quick-fix" | "evaluate" | null (active Claude process indicator)
   aiPlatform: text("ai_platform"),           // "claude" | "gemini" | "codex" | null (null = use global setting)
   poolCardId: text("pool_card_id"),          // UUID from Supabase pool_cards table, null if not synced
+  poolOrigin: text("pool_origin"),           // "pushed" | "pulled" | null — how the pool link was created
   assignedTo: text("assigned_to"),           // User ID from Supabase, null if unassigned
   assignedToName: text("assigned_to_name"),  // Display name cache, null if unassigned
   createdAt: text("created_at").notNull(),

@@ -38,10 +38,26 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
     supabaseConfigured, currentUser, teams, activeTeamId, teamMembers,
     signUp, signIn, signInOAuth, signOutUser,
     createTeam, joinTeam, leaveTeam, setActiveTeam,
-    updateMemberRole,
+    updateMemberRole, fetchMembersForTeam,
   } = useKanbanStore();
-  const activeTeam = teams.find((t) => t.id === activeTeamId) || null;
-  const currentUserRole = teamMembers.find(m => m.userId === currentUser?.id)?.role;
+
+  // When activeTeamId is "all", resolve to the first team for settings display
+  const resolvedTeamId = activeTeamId === "all" && teams.length > 0 ? teams[0].id : activeTeamId;
+  const activeTeam = teams.find((t) => t.id === resolvedTeamId) || null;
+
+  // Fetch members for the resolved team when "all" is active
+  const [settingsTeamMembers, setSettingsTeamMembers] = useState<typeof teamMembers>([]);
+  const displayMembers = activeTeamId === "all" ? settingsTeamMembers : teamMembers;
+
+  useEffect(() => {
+    if (activeTeamId === "all" && activeTeam) {
+      fetchMembersForTeam(activeTeam.id).then((members) => {
+        if (members) setSettingsTeamMembers(members);
+      });
+    }
+  }, [activeTeamId, activeTeam?.id, fetchMembersForTeam]);
+
+  const currentUserRole = displayMembers.find(m => m.userId === currentUser?.id)?.role;
   const isOwnerOrAdmin = currentUserRole === "owner" || currentUserRole === "admin";
   const isOwner = currentUserRole === "owner";
   const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
@@ -696,7 +712,7 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
                                 <button
                                   key={t.id}
                                   className={`w-full text-left text-sm px-3 py-1.5 rounded-md transition-colors ${
-                                    t.id === activeTeamId
+                                    t.id === resolvedTeamId
                                       ? "bg-primary/10 text-primary font-medium"
                                       : "text-muted-foreground hover:bg-muted"
                                   }`}
@@ -789,10 +805,10 @@ export function SettingsModal({ onClose, defaultTab, defaultInviteCode }: Settin
 
                         <div className="grid gap-2">
                           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                            Members ({teamMembers.length})
+                            Members ({displayMembers.length})
                           </label>
                           <div className="space-y-1.5">
-                            {teamMembers.map((m) => (
+                            {displayMembers.map((m) => (
                               <div key={m.id} className="flex items-center justify-between text-sm">
                                 <span>{m.displayName}</span>
                                 {isOwner && m.role !== "owner" ? (

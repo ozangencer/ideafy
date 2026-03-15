@@ -48,6 +48,9 @@ export interface KanbanStore {
   // Quick entry state
   isQuickEntryOpen: boolean;
 
+  // Pool filter state
+  hidePooledCards: boolean;
+
   // Skills, MCPs & Plugins state
   skills: string[];
   mcps: string[];
@@ -129,6 +132,9 @@ export interface KanbanStore {
   openQuickEntry: () => void;
   closeQuickEntry: () => void;
   toggleQuickEntry: () => void;
+
+  // Pool filter actions
+  toggleHidePooledCards: () => void;
 
   // Skills, MCPs & Plugins actions
   fetchSkills: () => Promise<void>;

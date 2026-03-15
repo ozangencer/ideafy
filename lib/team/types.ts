@@ -42,6 +42,7 @@ export interface PoolCard {
   pushedByName?: string;
   pulledBy?: string;
   pulledByName?: string;
+  projectName?: string;
   sourceCardId?: string;
   lastSyncedAt: string;
   createdAt: string;

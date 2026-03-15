@@ -9,6 +9,7 @@ export const createUiSlice: StoreSlice<
     | "collapsedColumns"
     | "completedFilter"
     | "isQuickEntryOpen"
+    | "hidePooledCards"
     | "toggleSidebar"
     | "setSidebarWidth"
     | "toggleColumnCollapse"
@@ -16,6 +17,7 @@ export const createUiSlice: StoreSlice<
     | "openQuickEntry"
     | "closeQuickEntry"
     | "toggleQuickEntry"
+    | "toggleHidePooledCards"
   >
 > = (set) => ({
   isSidebarCollapsed: false,
@@ -23,6 +25,7 @@ export const createUiSlice: StoreSlice<
   collapsedColumns: ["withdrawn"] as Status[],
   completedFilter: "this_week",
   isQuickEntryOpen: false,
+  hidePooledCards: true,
 
   toggleSidebar: () =>
     set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
@@ -42,4 +45,7 @@ export const createUiSlice: StoreSlice<
   closeQuickEntry: () => set({ isQuickEntryOpen: false }),
   toggleQuickEntry: () =>
     set((state) => ({ isQuickEntryOpen: !state.isQuickEntryOpen })),
+
+  toggleHidePooledCards: () =>
+    set((state) => ({ hidePooledCards: !state.hidePooledCards })),
 });

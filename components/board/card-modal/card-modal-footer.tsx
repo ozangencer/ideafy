@@ -82,7 +82,7 @@ export function CardModalFooter({
     setIsRemoving(false);
   };
 
-  const showPoolButton = teamMode && activeTeam && !isDraftMode && cardId;
+  const showPoolButton = teamMode && (activeTeam || activeTeamId === "all") && !isDraftMode && cardId;
   const isLinkedToPool = !!poolCardId;
 
   return (

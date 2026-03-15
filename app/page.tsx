@@ -20,7 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, LayoutGrid, Table2 } from "lucide-react";
+import { Search, LayoutGrid, Table2, Cloud, CloudOff } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { NotificationBell } from "@/components/notification-bell";
 import { AccountMenu } from "@/components/account-menu";
 
@@ -47,6 +52,8 @@ export default function Home() {
     teams,
     activeTeamId,
     setActiveTeam,
+    hidePooledCards,
+    toggleHidePooledCards,
   } = useKanbanStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>("board");
@@ -160,6 +167,29 @@ export default function Home() {
                       Pool
                     </Button>
                   </div>
+
+                  {/* Hide pooled cards toggle - only in board view */}
+                  {viewMode === "board" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-primary/10"
+                          onClick={toggleHidePooledCards}
+                        >
+                          {hidePooledCards ? (
+                            <CloudOff className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <Cloud className="h-3.5 w-3.5 text-primary" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {hidePooledCards ? "Show pooled cards" : "Hide pooled cards"}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
 
                   {/* Team Switcher - hidden in pool view (pool has its own team filter) */}
                   {viewMode !== "pool" && (

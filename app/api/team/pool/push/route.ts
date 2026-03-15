@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
       complexity: localCard.complexity,
       priority: localCard.priority,
       assigned_to: localCard.assignedTo || null,
+      project_name: (() => {
+        const project = db.select().from(schema.projects).where(eq(schema.projects.id, localCard.projectId || "")).get();
+        return project?.name || null;
+      })(),
       last_synced_at: now,
       updated_at: now,
     })

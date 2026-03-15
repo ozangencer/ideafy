@@ -39,7 +39,7 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   },
   // General API — broad limit
   "/api": {
-    maxRequests: 100,
+    maxRequests: 600,
     windowMs: 60000, // 1 minute
     message: "Too many requests. Please slow down.",
   },

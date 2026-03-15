@@ -88,7 +88,7 @@ export function CardModal() {
   const { toast } = useToast();
 
   // Check if we're in draft mode (creating a new card)
-  const isDraftMode = selectedCard?.id.startsWith("draft-") ?? false;
+  const isDraftMode = selectedCard?.id?.startsWith("draft-") ?? false;
 
   // Pool lock: card is in pool but not claimed by current user → read-only
   const poolCard = selectedCard?.poolCardId ? poolCards.find((pc) => pc.id === selectedCard.poolCardId) : null;
@@ -140,6 +140,9 @@ export function CardModal() {
 
   // Track previous assignee for notification
   const prevAssignedToRef = useRef<string | null>(null);
+
+  // Track auto-save in flight to prevent selectedCard sync from resetting form
+  const autoSaveInFlightRef = useRef(false);
 
   // Track unsaved changes
   const hasUnsavedChanges = selectedCard && (
@@ -239,6 +242,7 @@ export function CardModal() {
 
       const selectedProject = projects.find((p) => p.id === projectId);
 
+      autoSaveInFlightRef.current = true;
       updateCard(selectedCard.id, {
         title,
         description,
@@ -253,6 +257,9 @@ export function CardModal() {
         assignedTo,
         assignedToName,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+      }).finally(() => {
+        // Reset after both optimistic update and API response have been processed
+        setTimeout(() => { autoSaveInFlightRef.current = false; }, 200);
       });
 
       setSaveStatus("saved");
@@ -324,8 +331,19 @@ export function CardModal() {
     }
   }, [selectedCard]);
 
+  const prevSelectedCardIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (selectedCard) {
+      const isNewCard = selectedCard.id !== prevSelectedCardIdRef.current;
+      prevSelectedCardIdRef.current = selectedCard.id;
+
+      // Skip form resync when auto-save triggered this selectedCard change
+      // Form state is already correct since auto-save reads from form state
+      if (!isNewCard && autoSaveInFlightRef.current) {
+        return;
+      }
+
       // Cancel any pending auto-save when selectedCard changes externally
       // This prevents auto-save from overwriting MCP tool updates
       if (saveTimeoutRef.current) {
@@ -365,6 +383,8 @@ export function CardModal() {
       if (!isDraftMode) {
         fetchConversation(selectedCard.id, activeTab);
       }
+    } else {
+      prevSelectedCardIdRef.current = null;
     }
   }, [selectedCard, isDraftMode, fetchConversation]);
 
@@ -518,7 +538,7 @@ export function CardModal() {
         updateCard(cardId, updates);
       }
     }
-  }, [selectedCard, projects, projectId, isDraftMode, title, description, solutionSummary, testScenarios, aiOpinion, status, complexity, priority, aiPlatform, saveDraftCard, updateCard, handleClose]);
+  }, [selectedCard, projects, projectId, isDraftMode, title, description, solutionSummary, testScenarios, aiOpinion, status, complexity, priority, aiPlatform, assignedTo, assignedToName, saveDraftCard, updateCard, handleClose]);
 
   // Handle delete (pool-aware)
   const handleDelete = useCallback((removeFromPoolFlag?: boolean) => {

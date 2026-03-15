@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, getDisplayId, COLUMNS } from "@/lib/types";
 import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
-import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X, Cloud, CloudUpload } from "lucide-react";
+import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X, Cloud, CloudDownload, CloudUpload } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
@@ -146,7 +146,7 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer, supabaseConfigured, activeTeamId, sendToPool, poolCards, currentUser } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer, supabaseConfigured, activeTeamId, sendToPool, poolCards, currentUser, hidePooledCards } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -389,6 +389,8 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
             } ${isBeingDragged ? "z-50" : ""} ${
               isLocked
                 ? "opacity-50 cursor-not-allowed"
+                : !hidePooledCards && card.poolCardId && card.poolOrigin === "pushed"
+                ? "opacity-60 hover:opacity-100 hover:border-primary/50"
                 : "hover:border-primary/50"
             }`}
           >
@@ -649,22 +651,46 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     </TooltipContent>
                   </Tooltip>
                 )}
-                {card.poolCardId && !isBackgroundProcessing && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="p-1 rounded bg-sky-500/15 text-sky-500">
-                        <Cloud className="w-3 h-3" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      {isPoolLocked
-                        ? poolCard?.assignedToName
-                          ? `Assigned to ${poolCard.assignedToName} - claim from pool to edit`
-                          : "In pool - claim from pool to edit"
-                        : "Synced to pool"}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+                {card.poolCardId && !isBackgroundProcessing && (() => {
+                  if (isPoolLocked) {
+                    return (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="p-1 rounded bg-sky-500/15 text-sky-500">
+                            <Cloud className="w-3 h-3" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {poolCard?.assignedToName
+                            ? `Assigned to ${poolCard.assignedToName} - claim from pool to edit`
+                            : "In pool - claim from pool to edit"}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+                  const isOutOfSync = poolCard && new Date(card.updatedAt) > new Date(poolCard.lastSyncedAt);
+                  const isPulled = card.poolOrigin === "pulled";
+                  const IconComponent = isPulled ? CloudDownload : Cloud;
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={`p-1 rounded relative ${isOutOfSync ? "bg-orange-500/15 text-orange-500" : "bg-sky-500/15 text-sky-500"}`}>
+                          <IconComponent className="w-3 h-3" />
+                          {isOutOfSync && (
+                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-orange-500" />
+                          )}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {isOutOfSync
+                          ? "Changes not synced"
+                          : isPulled
+                            ? "Pulled from pool"
+                            : "Synced to pool"}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })()}
                 {card.gitWorktreeStatus === "active" && !isBackgroundProcessing && (
                   <Tooltip>
                     <TooltipTrigger asChild>

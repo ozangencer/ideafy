@@ -40,6 +40,7 @@ export const useKanbanStore = create<KanbanStore>()(
         sidebarWidth: state.sidebarWidth,
         completedFilter: state.completedFilter,
         expandedDocFolders: state.expandedDocFolders,
+        hidePooledCards: state.hidePooledCards,
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<KanbanStore>;
@@ -61,6 +62,10 @@ export const useKanbanStore = create<KanbanStore>()(
         const expandedDocFolders = Array.isArray(persisted.expandedDocFolders)
           ? persisted.expandedDocFolders
           : currentState.expandedDocFolders;
+        // Validate hidePooledCards - ensure it's a boolean
+        const hidePooledCards = typeof persisted.hidePooledCards === "boolean"
+          ? persisted.hidePooledCards
+          : currentState.hidePooledCards;
         return {
           ...currentState,
           ...persisted,
@@ -68,6 +73,7 @@ export const useKanbanStore = create<KanbanStore>()(
           completedFilter,
           sidebarWidth,
           expandedDocFolders,
+          hidePooledCards,
         };
       },
     }

@@ -39,6 +39,7 @@ export interface Card {
   processingType: ProcessingType;
   aiPlatform: AiPlatform | null;
   poolCardId: string | null;
+  poolOrigin?: "pushed" | "pulled" | null;
   assignedTo: string | null;
   assignedToName: string | null;
   createdAt: string;

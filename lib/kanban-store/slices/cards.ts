@@ -158,6 +158,7 @@ export const createCardsSlice: StoreSlice<
 
   updateCard: async (id, updates) => {
     const previousCards = get().cards;
+    const previousSelectedCard = get().selectedCard;
     set((state) => {
       const optimistic = { ...updates, updatedAt: nowIso() };
       return {
@@ -174,6 +175,11 @@ export const createCardsSlice: StoreSlice<
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
+      if (!response.ok) {
+        console.error("Failed to update card: API returned", response.status);
+        set({ cards: previousCards, selectedCard: previousSelectedCard });
+        return;
+      }
       const updatedCard = await parseJson<Card>(response);
       set((state) => ({
         cards: replaceCardById(state.cards, id, updatedCard),
@@ -183,7 +189,7 @@ export const createCardsSlice: StoreSlice<
       }));
     } catch (error) {
       console.error("Failed to update card:", error);
-      set({ cards: previousCards });
+      set({ cards: previousCards, selectedCard: previousSelectedCard });
     }
   },
 
@@ -194,6 +200,27 @@ export const createCardsSlice: StoreSlice<
       // Remove from pool first if requested and card is linked
       if (options?.removeFromPool && card?.poolCardId) {
         await get().removeFromPool(card.poolCardId);
+      }
+
+      // Clear pulled_by on pool card when deleting local copy (unless removing from pool entirely)
+      if (!options?.removeFromPool && card?.poolCardId && get().supabaseConfigured) {
+        try {
+          const { getSupabaseClient } = await import("@/lib/team/supabase");
+          const supabase = getSupabaseClient();
+          const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+          if (session?.access_token) {
+            await fetch("/api/team/pool/unpull", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ poolCardId: card.poolCardId }),
+            });
+          }
+        } catch {
+          // Non-critical — pool card stays pulled but local is gone
+        }
       }
 
       await fetch(`/api/cards/${id}`, { method: "DELETE" });

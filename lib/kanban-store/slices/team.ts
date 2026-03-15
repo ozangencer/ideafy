@@ -330,12 +330,16 @@ export const createTeamSlice: StoreSlice<
   },
 
   fetchMembersForTeam: async (teamId: string) => {
-    // Return from cache if available
-    const cached = get().teamMembersByTeamId[teamId];
-    if (cached) return cached;
+    // Return from cache if available (check key existence, not truthiness — [] is truthy)
+    const cache = get().teamMembersByTeamId;
+    if (teamId in cache && cache[teamId].length > 0) return cache[teamId];
 
     try {
       const response = await fetchWithAuth(`/api/team/members?teamId=${teamId}`);
+      if (!response.ok) {
+        console.error("Failed to fetch members for team:", response.status);
+        return [];
+      }
       const data = await response.json();
       const members: TeamMember[] = data.members || [];
       set({
@@ -404,6 +408,7 @@ export const createTeamSlice: StoreSlice<
             status: card.status,
             complexity: card.complexity,
             priority: card.priority,
+            projectName: project?.name || undefined,
             sourceCardId: card.id,
           },
           assignedTo: assignedTo || card.assignedTo || undefined,
@@ -414,7 +419,7 @@ export const createTeamSlice: StoreSlice<
       if (data.error) return { error: data.error };
 
       // Update local card with pool link
-      await get().updateCard(cardId, { poolCardId: data.poolCardId } as never);
+      await get().updateCard(cardId, { poolCardId: data.poolCardId, poolOrigin: "pushed" } as never);
       await get().fetchPoolCards();
       return { error: null, poolCardId: data.poolCardId };
     } catch (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
+import { sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { getSupabaseAdmin, getAuthenticatedUser } from "@/lib/team/server";
 
@@ -31,6 +32,21 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString();
 
+  // Try to match pool card's project_name to a local project
+  let matchedProjectId: string | null = null;
+  let matchedProjectFolder = "";
+  if (poolCard.project_name) {
+    const localProject = db
+      .select()
+      .from(schema.projects)
+      .where(sql`lower(${schema.projects.name}) = lower(${poolCard.project_name})`)
+      .get();
+    if (localProject) {
+      matchedProjectId = localProject.id;
+      matchedProjectFolder = localProject.folderPath || "";
+    }
+  }
+
   const newCard = {
     id: uuidv4(),
     title: poolCard.title,
@@ -42,8 +58,8 @@ export async function POST(request: NextRequest) {
     status: poolCard.status || "backlog",
     complexity: poolCard.complexity || "medium",
     priority: poolCard.priority || "medium",
-    projectFolder: "",
-    projectId: null,
+    projectFolder: matchedProjectFolder,
+    projectId: matchedProjectId,
     taskNumber: null,
     gitBranchName: null,
     gitBranchStatus: null,
@@ -56,8 +72,18 @@ export async function POST(request: NextRequest) {
     processingType: null,
     aiPlatform: null,
     poolCardId: poolCardId,
+    poolOrigin: "pulled",
     assignedTo: poolCard.assigned_to || null,
-    assignedToName: null, // Will be resolved via team members
+    assignedToName: await (async () => {
+      if (!poolCard.assigned_to) return null;
+      const { data: member } = await supabase
+        .from("team_members")
+        .select("display_name")
+        .eq("user_id", poolCard.assigned_to)
+        .limit(1)
+        .single();
+      return member?.display_name || null;
+    })(),
     createdAt: now,
     updatedAt: now,
     completedAt: null,

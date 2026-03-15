@@ -106,7 +106,7 @@ import { Column } from "./column";
 import { TaskCard } from "./card";
 
 export function KanbanBoard() {
-  const { cards, activeProjectId, searchQuery, moveCard, completedFilter, activeTeamId, projects } = useKanbanStore();
+  const { cards, activeProjectId, searchQuery, moveCard, completedFilter, activeTeamId, projects, hidePooledCards, poolCards, currentUser } = useKanbanStore();
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showRightFade, setShowRightFade] = useState(false);
@@ -159,7 +159,16 @@ export function KanbanBoard() {
       !searchQuery ||
       card.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       card.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesProject && matchesTeam && matchesSearch;
+    // Filter pooled cards — hide pushed cards, and pulled cards that are pool-locked (assigned to someone else)
+    const matchesPoolFilter = (() => {
+      if (!hidePooledCards || !card.poolCardId) return true;
+      if (card.poolOrigin === "pushed") return false; // Always hide pushed cards
+      // Pulled card: hide only if pool-locked (assigned to someone else)
+      const pc = poolCards.find((p) => p.id === card.poolCardId);
+      const isMyCard = !pc || !pc.assignedTo || pc.assignedTo === currentUser?.id;
+      return isMyCard; // Show if mine or unassigned, hide if assigned to someone else
+    })();
+    return matchesProject && matchesTeam && matchesSearch && matchesPoolFilter;
   });
 
   const handleDragStart = (event: DragStartEvent) => {

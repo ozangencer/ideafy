@@ -49,6 +49,7 @@ export async function GET() {
     processingType: (row.processingType as Card["processingType"]) ?? null,
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
     poolCardId: row.poolCardId ?? null,
+    poolOrigin: (row.poolOrigin as Card["poolOrigin"]) ?? null,
     assignedTo: row.assignedTo ?? null,
     assignedToName: row.assignedToName ?? null,
     createdAt: row.createdAt,
