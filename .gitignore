@@ -47,6 +47,9 @@ mcp-server/mcp-config.json
 # Electron
 electron/node_modules/
 
+# Internal docs
+docs/
+
 # Misc
 *.log
 sqlite.db
