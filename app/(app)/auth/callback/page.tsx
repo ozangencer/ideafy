@@ -59,7 +59,7 @@ export default function AuthCallback() {
         }
 
         setStatus("success");
-        setTimeout(() => { window.location.href = "/"; }, 1000);
+        setTimeout(() => { window.location.href = "/app"; }, 1000);
         return;
       }
 
@@ -89,7 +89,7 @@ export default function AuthCallback() {
           <>
             <p className="text-destructive font-medium">Sign in failed</p>
             <p className="text-muted-foreground text-sm">{errorMessage}</p>
-            <a href="/" className="text-sm text-primary hover:underline">
+            <a href="/app" className="text-sm text-primary hover:underline">
               Go back
             </a>
           </>

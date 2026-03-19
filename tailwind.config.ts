@@ -85,6 +85,27 @@ const config: Config = {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
+  		},
+  		keyframes: {
+  			float: {
+  				'0%, 100%': { transform: 'translateY(0)' },
+  				'50%': { transform: 'translateY(-10px)' },
+  			},
+  			'pulse-glow': {
+  				'0%, 100%': { opacity: '0.4' },
+  				'50%': { opacity: '1' },
+  			},
+  			'flow-dot': {
+  				'0%': { top: '0%', opacity: '0' },
+  				'20%': { opacity: '1' },
+  				'80%': { opacity: '1' },
+  				'100%': { top: '100%', opacity: '0' },
+  			},
+  		},
+  		animation: {
+  			float: 'float 6s ease-in-out infinite',
+  			'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+  			'flow-dot': 'flow-dot 3s linear infinite',
   		}
   	}
   },

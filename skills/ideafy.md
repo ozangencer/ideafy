@@ -1,7 +1,7 @@
 ---
-allowed-tools: mcp__kanban__get_card, mcp__kanban__update_card, mcp__kanban__move_card, mcp__kanban__list_cards, mcp__kanban__create_card, mcp__kanban__save_plan, mcp__kanban__save_tests, mcp__kanban__save_opinion, mcp__kanban__get_project_by_folder
+allowed-tools: mcp__kanban__get_card, mcp__kanban__update_card, mcp__kanban__move_card, mcp__kanban__list_cards, mcp__kanban__create_card, mcp__kanban__save_plan, mcp__kanban__save_tests, mcp__kanban__save_opinion, mcp__kanban__get_project_by_folder, mcp__kanban__pool_list, mcp__kanban__pool_push, mcp__kanban__pool_pull, mcp__kanban__pool_claim
 argument-hint: [action or query]
-description: Manage kanban cards - list, create, update, move cards and save plans/tests
+description: Manage kanban cards - list, create, update, move cards, save plans/tests, and team pool operations (push, pull, claim)
 ---
 
 # Ideafy - Kanban Management
@@ -83,6 +83,31 @@ Keywords: test, senaryo, scenario
 Keywords: opinion, fikir, degerlendirme, evaluate
 - Use `mcp__kanban__save_opinion`
 - Requires card ID and AI opinion text
+
+#### Pool List
+Keywords: pool, havuz, team cards, takım kartları
+- Use `mcp__kanban__pool_list`
+- Optional: filter by `teamId`
+- Display as a compact table with: ID, Title, Status, Assignee
+
+#### Pool Push
+Keywords: push, gonder, pool'a gonder, send to pool
+- Use `mcp__kanban__pool_push`
+- Requires local card ID
+- Optional: `assignedTo` (user email or name)
+- Sends local card to the team cloud pool
+
+#### Pool Pull
+Keywords: pull, cek, pool'dan cek, get from pool
+- Use `mcp__kanban__pool_pull`
+- Requires pool card ID
+- Creates a new local card from pool card
+
+#### Pool Claim
+Keywords: claim, unclaim, sahiplen, bırak, al, assign
+- Use `mcp__kanban__pool_claim`
+- Requires pool card ID
+- Claims or unclaims a pool card (assigns/unassigns yourself)
 
 ### Step 3: Execute and Report
 

@@ -99,7 +99,7 @@ function createMainWindow() {
     show: false,
   });
 
-  mainWindow.loadURL(DEV_URL);
+  mainWindow.loadURL(`${DEV_URL}/app`);
 
   // Intercept OAuth - open in system browser for passkey support
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as SonnerToaster } from "@/components/ui/sonner";
-import { BackupScheduler } from "@/components/backup-scheduler";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ideafy",
-  description: "Development workflow management for solo founders",
+  description: "Your ideas, executed. AI-powered task management for builders.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "48x48" },
@@ -31,12 +27,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider>
-          <TooltipProvider delayDuration={100} skipDelayDuration={0}>
-            <BackupScheduler />
-            {children}
-            <Toaster />
-            <SonnerToaster position="top-center" />
-          </TooltipProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>

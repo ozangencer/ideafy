@@ -13,8 +13,10 @@ import type {
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 
-const MCP_SERVER_PATH = path.resolve(process.cwd(), "mcp-server/index.ts");
-const SKILLS_DIR = path.resolve(process.cwd(), "skills");
+// Use IDEAFY_ROOT env var override, or process.cwd() (always project root in dev/Next.js)
+const PROJECT_ROOT = process.env.IDEAFY_ROOT || process.cwd();
+const MCP_SERVER_PATH = path.join(PROJECT_ROOT, "mcp-server", "index.ts");
+const SKILLS_DIR = path.join(PROJECT_ROOT, "skills");
 const SKILL_FILES = ["human-test.md", "product-narrative.md", "ideafy.md"];
 
 function readSkill(name: string): string {

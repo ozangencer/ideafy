@@ -695,3 +695,22 @@ button:disabled {
   @apply border-l-2 border-border pl-3 italic text-muted-foreground my-1;
 }
 
+/* Landing page utilities */
+@layer utilities {
+  .gradient-border {
+    position: relative;
+  }
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(94,106,210,0.4), rgba(94,106,210,0));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
