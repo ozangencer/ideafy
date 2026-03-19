@@ -64,3 +64,27 @@ npm run db:studio    # DB GUI
 - Schema değişikliği: `lib/db/schema.ts` → `npm run db:push`
 - Types: `lib/types.ts`
 - UI tema: Linear-inspired, emoji yok, minimal
+
+## Tier Kuralları (Solo - Open Source)
+
+Bu repo Ideafy'nin open source solo versiyonudur. Cloud/team özellikleri BURAYA GIRMEZ.
+
+### Yasak kodlar (bu repoda OLMAMALI):
+- Supabase import veya referansları (`@supabase/supabase-js`, `lib/team/`)
+- Pool/queue özellikleri (poolCardId, poolOrigin, pool_list, pool_push vb.)
+- Team/auth özellikleri (team CRUD, OAuth, signup, notifications)
+- `resend` veya `framer-motion` bağımlılıkları
+- `app/api/team/` altında herhangi bir route
+- `middleware.ts` (rate limiting, auth redirect)
+- `app/(marketing)/` veya `components/landing/`
+
+### Bu repoya girmesi gereken kodlar:
+- Lokal kanban özellikleri (sütunlar, kartlar, projeler)
+- MCP lokal tools (list_cards, get_card, save_plan, save_tests, move_card, update_card)
+- Platform provider abstraction (Claude, Gemini, Codex)
+- Electron desteği
+- UI iyileştirmeleri (tema, dark mode, drag-drop vb.)
+
+### Pre-commit guard:
+- `scripts/check-no-cloud-code.sh` cloud kodun bu repoya girmesini engeller
+- Hook `.git/hooks/pre-commit` olarak kurulu

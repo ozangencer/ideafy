@@ -1,6 +1,8 @@
 # ideafy
 
-A kanban board for solo founders working with Claude Code.
+A Linear-inspired kanban board for solo founders working with Claude Code.
+
+Local-first, SQLite-powered, zero cloud dependencies.
 
 ## Features
 
@@ -13,18 +15,30 @@ A kanban board for solo founders working with Claude Code.
 - **Document Management**: Link and manage project documents
 - **AI Integration**: Ideation flow, AI opinion, and quick fix features
 - **MCP Server**: Claude Code integration for automated workflows
+- **Platform Providers**: Claude, Gemini, Codex CLI support
+- **Electron**: Optional desktop app
 
-## Backup System
+## Quick Start
 
-Automatic and manual backup options to protect your data:
+```bash
+npm install
+npm run db:push     # Initialize database
+npm run dev         # Start dev server (port 3030)
+```
 
-- **Automatic Backups**: Every hour while the app is running
-- **3-Day Retention**: Old backups are automatically cleaned up
-- **Manual Backup**: Create backup on demand via menu
-- **JSON Export**: Download all data (cards, projects, settings) as JSON
-- **JSON Import**: Restore from exported JSON with automatic pre-import backup
+## MCP Integration
 
-Access backup options from the three-dot menu (⋮) in the header.
+ideafy ships with an MCP server for Claude Code. Available tools:
+
+| Tool | Description |
+|------|-------------|
+| `list_cards` | List cards with optional filters |
+| `get_card` | Get card details by ID |
+| `create_card` | Create a new card |
+| `update_card` | Update card fields |
+| `move_card` | Move card between columns |
+| `save_plan` | Save solution plan, move to In Progress |
+| `save_tests` | Save test scenarios, move to Test |
 
 ## Tech Stack
 
@@ -33,22 +47,6 @@ Access backup options from the three-dot menu (⋮) in the header.
 - **State**: Zustand
 - **Database**: SQLite (better-sqlite3) + Drizzle ORM
 - **Language**: TypeScript
-
-## Getting Started
-
-```bash
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
 
 ## Database Commands
 
@@ -62,7 +60,7 @@ npm run db:studio    # Open Drizzle Studio (DB GUI)
 ## Project Structure
 
 ```
-claude-kanban/
+ideafy/
 ├── app/                    # Next.js App Router
 │   ├── api/               # API routes
 │   │   ├── backup/        # Backup endpoints
@@ -75,12 +73,30 @@ claude-kanban/
 │   └── ui/                # shadcn/ui components
 ├── lib/
 │   ├── db/                # Database (Drizzle + SQLite)
-│   ├── store.ts           # Zustand state
+│   ├── platform/          # AI platform providers
+│   ├── kanban-store/      # Zustand store slices
 │   └── types.ts           # TypeScript types
-├── data/                   # SQLite database
+├── mcp-server/            # MCP server for Claude Code
+├── electron/              # Electron desktop wrapper
+├── data/                  # SQLite database (gitignored)
 └── backups/               # Automatic backups (gitignored)
 ```
 
+## Backup System
+
+- **Automatic Backups**: Every hour while the app is running
+- **3-Day Retention**: Old backups are automatically cleaned up
+- **Manual Backup**: Create backup on demand via menu
+- **JSON Export/Import**: Download and restore all data
+
+## Cloud Features
+
+Looking for team collaboration, shared pool, and real-time sync? Check out [ideafy-cloud](https://github.com/ozangencer/ideafy-cloud) (private).
+
+## Contributing
+
+Contributions are welcome! Please open an issue first to discuss what you'd like to change.
+
 ## License
 
-Private project for personal use.
+[MIT](LICENSE)
