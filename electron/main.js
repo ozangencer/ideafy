@@ -7,11 +7,70 @@ const {
   ipcMain,
   nativeImage,
   screen,
+  safeStorage,
 } = require("electron");
 const { spawn, execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+
+// ── Secure Token Storage (OS Keychain via safeStorage) ──────────────
+
+const AUTH_TOKEN_PATH = path.join(
+  app.getPath("userData"),
+  "auth-token.encrypted"
+);
+
+function saveTokenSecurely(tokens) {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn("[auth] safeStorage encryption not available");
+      return;
+    }
+    const encrypted = safeStorage.encryptString(JSON.stringify(tokens));
+    fs.writeFileSync(AUTH_TOKEN_PATH, encrypted);
+    console.log("[auth] Tokens saved securely");
+  } catch (err) {
+    console.error("[auth] Failed to save tokens:", err.message);
+  }
+}
+
+function loadTokenSecurely() {
+  try {
+    if (!fs.existsSync(AUTH_TOKEN_PATH)) return null;
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    const encrypted = fs.readFileSync(AUTH_TOKEN_PATH);
+    const decrypted = safeStorage.decryptString(encrypted);
+    return JSON.parse(decrypted);
+  } catch (err) {
+    console.error("[auth] Failed to load tokens:", err.message);
+    // Corrupted file — remove it
+    try { fs.unlinkSync(AUTH_TOKEN_PATH); } catch {}
+    return null;
+  }
+}
+
+function clearTokenStorage() {
+  try {
+    if (fs.existsSync(AUTH_TOKEN_PATH)) {
+      fs.unlinkSync(AUTH_TOKEN_PATH);
+      console.log("[auth] Tokens cleared");
+    }
+  } catch (err) {
+    console.error("[auth] Failed to clear tokens:", err.message);
+  }
+}
+
+// IPC: renderer reports auth state changes
+ipcMain.on("auth-token-update", (_event, tokens) => {
+  if (tokens && tokens.access_token && tokens.refresh_token) {
+    saveTokenSecurely(tokens);
+  }
+});
+
+ipcMain.on("auth-sign-out", () => {
+  clearTokenStorage();
+});
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const PORT = process.env.PORT || "3030";
@@ -154,6 +213,13 @@ function createMainWindow() {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
+
+    // Restore saved auth tokens from OS keychain
+    const savedTokens = loadTokenSecurely();
+    if (savedTokens) {
+      console.log("[auth] Restoring saved session...");
+      mainWindow.webContents.send("auth-restore-tokens", savedTokens);
+    }
   });
 
   mainWindow.on("close", (e) => {
