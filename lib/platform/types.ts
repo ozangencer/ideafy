@@ -68,14 +68,14 @@ export interface PlatformProvider {
   // Extensions
   listProjectMcps(folderPath: string): string[];
   listProjectSkills(folderPath: string): string[];
-  installKanbanMcp(folderPath: string): Result;
-  removeKanbanMcp(folderPath: string): Result;
-  hasKanbanMcp(folderPath: string): boolean;
-  installKanbanSkills(folderPath: string): Result;
-  removeKanbanSkills(folderPath: string): Result;
-  hasKanbanSkills(folderPath: string): boolean;
+  installIdeafyMcp(folderPath: string): Result;
+  removeIdeafyMcp(folderPath: string): Result;
+  hasIdeafyMcp(folderPath: string): boolean;
+  installIdeafySkills(folderPath: string): Result;
+  removeIdeafySkills(folderPath: string): Result;
+  hasIdeafySkills(folderPath: string): boolean;
 
   // Hooks (only Claude supports this)
-  installKanbanHook?(folderPath: string): Result;
-  removeKanbanHook?(folderPath: string): Result;
+  installIdeafyHook?(folderPath: string): Result;
+  removeIdeafyHook?(folderPath: string): Result;
 }

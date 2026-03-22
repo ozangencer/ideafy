@@ -40,7 +40,7 @@ export async function POST(
   }
 
   // Ensure skills are installed
-  provider.installKanbanSkills(project.folderPath);
+  provider.installIdeafySkills(project.folderPath);
 
   // Build the interactive command: cd to project folder and run /product-narrative skill
   // Pass the project's narrative path as argument so the skill writes to the correct location

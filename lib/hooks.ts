@@ -20,10 +20,10 @@ const KANBAN_HOOK = {
 };
 
 /**
- * Install kanban hook to a project's .claude/settings.json
+ * Install ideafy hook to a project's .claude/settings.json
  * Merges with existing settings if present
  */
-export function installKanbanHook(folderPath: string): { success: boolean; error?: string } {
+export function installIdeafyHook(folderPath: string): { success: boolean; error?: string } {
   try {
     const claudeDir = path.join(folderPath, ".claude");
     const settingsPath = path.join(claudeDir, "settings.json");
@@ -50,8 +50,8 @@ export function installKanbanHook(folderPath: string): { success: boolean; error
     const existingHooks = (existingSettings.hooks as Record<string, unknown[]>) || {};
     const existingUserPromptSubmit = existingHooks.UserPromptSubmit || [];
 
-    // Check if kanban hook already exists (look inside nested hooks array)
-    const hasKanbanHook = existingUserPromptSubmit.some((hookGroup: unknown) => {
+    // Check if ideafy hook already exists (look inside nested hooks array)
+    const hasIdeafyHook = existingUserPromptSubmit.some((hookGroup: unknown) => {
       if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
         return false;
       }
@@ -66,11 +66,11 @@ export function installKanbanHook(folderPath: string): { success: boolean; error
       );
     });
 
-    if (hasKanbanHook) {
+    if (hasIdeafyHook) {
       return { success: true }; // Already installed
     }
 
-    // Add kanban hook
+    // Add ideafy hook
     const mergedSettings = {
       ...existingSettings,
       hooks: {
@@ -83,7 +83,7 @@ export function installKanbanHook(folderPath: string): { success: boolean; error
 
     return { success: true };
   } catch (error) {
-    console.error("Failed to install kanban hook:", error);
+    console.error("Failed to install ideafy hook:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -92,9 +92,9 @@ export function installKanbanHook(folderPath: string): { success: boolean; error
 }
 
 /**
- * Remove kanban hook from a project's .claude/settings.json
+ * Remove ideafy hook from a project's .claude/settings.json
  */
-export function removeKanbanHook(folderPath: string): { success: boolean; error?: string } {
+export function removeIdeafyHook(folderPath: string): { success: boolean; error?: string } {
   try {
     const settingsPath = path.join(folderPath, ".claude", "settings.json");
 
@@ -109,14 +109,14 @@ export function removeKanbanHook(folderPath: string): { success: boolean; error?
       return { success: true }; // No hooks to remove
     }
 
-    // Filter out kanban hook (look inside nested hooks array)
+    // Filter out ideafy hook (look inside nested hooks array)
     settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit.filter(
       (hookGroup: unknown) => {
         if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
           return true; // Keep non-standard entries
         }
         const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
-        const hasKanbanHook = innerHooks.some(
+        const hasIdeafyHook = innerHooks.some(
           (hook: unknown) =>
             typeof hook === "object" &&
             hook !== null &&
@@ -124,7 +124,7 @@ export function removeKanbanHook(folderPath: string): { success: boolean; error?
             typeof (hook as { command: string }).command === "string" &&
             (hook as { command: string }).command.includes("KANBAN_CARD_ID")
         );
-        return !hasKanbanHook;
+        return !hasIdeafyHook;
       }
     );
 
@@ -145,7 +145,7 @@ export function removeKanbanHook(folderPath: string): { success: boolean; error?
 
     return { success: true };
   } catch (error) {
-    console.error("Failed to remove kanban hook:", error);
+    console.error("Failed to remove ideafy hook:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

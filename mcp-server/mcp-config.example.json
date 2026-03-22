@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "kanban": {
+    "ideafy": {
       "command": "npx",
       "args": ["tsx", "/ABSOLUTE/PATH/TO/ideafy/mcp-server/index.ts"]
     }

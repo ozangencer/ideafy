@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { installKanbanMcp, removeKanbanMcp, hasKanbanMcp } from "@/lib/mcp-skills-installer";
+import { installIdeafyMcp, removeIdeafyMcp, hasIdeafyMcp } from "@/lib/mcp-skills-installer";
 
-// Check if kanban MCP is installed
+// Check if ideafy MCP is installed
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,7 +25,7 @@ export async function GET(
       return NextResponse.json({ installed: false, reason: "no_folder" });
     }
 
-    const installed = hasKanbanMcp(project.folderPath);
+    const installed = hasIdeafyMcp(project.folderPath);
     return NextResponse.json({ installed });
   } catch (error) {
     console.error("Failed to check MCP status:", error);
@@ -36,7 +36,7 @@ export async function GET(
   }
 }
 
-// Install kanban MCP
+// Install ideafy MCP
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,7 +61,7 @@ export async function POST(
       );
     }
 
-    const result = installKanbanMcp(project.folderPath);
+    const result = installIdeafyMcp(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: true });
@@ -80,7 +80,7 @@ export async function POST(
   }
 }
 
-// Remove kanban MCP
+// Remove ideafy MCP
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -105,7 +105,7 @@ export async function DELETE(
       );
     }
 
-    const result = removeKanbanMcp(project.folderPath);
+    const result = removeIdeafyMcp(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: false });

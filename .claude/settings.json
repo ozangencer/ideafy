@@ -1,4 +1,10 @@
 {
+  "mcpServers": {
+    "ideafy": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/index.ts"]
+    }
+  },
   "hooks": {
     "UserPromptSubmit": [
       {

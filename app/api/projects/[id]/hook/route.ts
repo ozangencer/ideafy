@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { installKanbanHook, removeKanbanHook } from "@/lib/hooks";
+import { installIdeafyHook, removeIdeafyHook } from "@/lib/hooks";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -37,7 +37,7 @@ export async function GET(
       const content = fs.readFileSync(settingsPath, "utf-8");
       const settings = JSON.parse(content);
 
-      // Check UserPromptSubmit hooks for kanban hook (nested hooks structure)
+      // Check UserPromptSubmit hooks for ideafy hook (nested hooks structure)
       const hasHook = settings.hooks?.UserPromptSubmit?.some(
         (hookGroup: unknown) => {
           if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
@@ -93,7 +93,7 @@ export async function POST(
       );
     }
 
-    const result = installKanbanHook(project.folderPath);
+    const result = installIdeafyHook(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: true });
@@ -137,7 +137,7 @@ export async function DELETE(
       );
     }
 
-    const result = removeKanbanHook(project.folderPath);
+    const result = removeIdeafyHook(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: false });

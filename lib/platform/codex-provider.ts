@@ -178,7 +178,7 @@ class CodexProvider implements PlatformProvider {
     }
   }
 
-  installKanbanMcp(folderPath: string): Result {
+  installIdeafyMcp(folderPath: string): Result {
     try {
       const codexDir = path.join(folderPath, ".codex");
       const configPath = path.join(codexDir, "config.toml");
@@ -192,10 +192,10 @@ class CodexProvider implements PlatformProvider {
         content = fs.readFileSync(configPath, "utf-8");
       }
 
-      if (content.includes("[mcp_servers.kanban]")) return { success: true };
+      if (content.includes("[mcp_servers.ideafy]")) return { success: true };
 
       const mcpServerPath = path.resolve(process.cwd(), "mcp-server/index.ts");
-      const tomlBlock = `\n[mcp_servers.kanban]\ncommand = "npx"\nargs = ["tsx", "${mcpServerPath}"]\n`;
+      const tomlBlock = `\n[mcp_servers.ideafy]\ncommand = "npx"\nargs = ["tsx", "${mcpServerPath}"]\n`;
 
       fs.writeFileSync(configPath, content + tomlBlock);
       return { success: true };
@@ -204,14 +204,14 @@ class CodexProvider implements PlatformProvider {
     }
   }
 
-  removeKanbanMcp(folderPath: string): Result {
+  removeIdeafyMcp(folderPath: string): Result {
     try {
       const configPath = path.join(folderPath, ".codex", "config.toml");
       if (!fs.existsSync(configPath)) return { success: true };
 
       let content = fs.readFileSync(configPath, "utf-8");
-      // Remove the [mcp_servers.kanban] block
-      content = content.replace(/\n?\[mcp_servers\.kanban\][^\[]*/g, "");
+      // Remove the [mcp_servers.ideafy] block
+      content = content.replace(/\n?\[mcp_servers\.ideafy\][^\[]*/g, "");
       fs.writeFileSync(configPath, content.trim() + "\n");
       return { success: true };
     } catch (error) {
@@ -219,17 +219,17 @@ class CodexProvider implements PlatformProvider {
     }
   }
 
-  hasKanbanMcp(folderPath: string): boolean {
+  hasIdeafyMcp(folderPath: string): boolean {
     try {
       const configPath = path.join(folderPath, ".codex", "config.toml");
       if (!fs.existsSync(configPath)) return false;
-      return fs.readFileSync(configPath, "utf-8").includes("[mcp_servers.kanban]");
+      return fs.readFileSync(configPath, "utf-8").includes("[mcp_servers.ideafy]");
     } catch {
       return false;
     }
   }
 
-  installKanbanSkills(folderPath: string): Result {
+  installIdeafySkills(folderPath: string): Result {
     try {
       const skillsDir = path.join(folderPath, ".agents", "skills");
 
@@ -250,7 +250,7 @@ class CodexProvider implements PlatformProvider {
     }
   }
 
-  removeKanbanSkills(folderPath: string): Result {
+  removeIdeafySkills(folderPath: string): Result {
     try {
       const skillsDir = path.join(folderPath, ".agents", "skills");
 
@@ -279,7 +279,7 @@ class CodexProvider implements PlatformProvider {
     }
   }
 
-  hasKanbanSkills(folderPath: string): boolean {
+  hasIdeafySkills(folderPath: string): boolean {
     try {
       const skillsDir = path.join(folderPath, ".agents", "skills");
       return SKILL_FILES.every((file) => {

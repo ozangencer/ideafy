@@ -4,28 +4,28 @@
  */
 import { getActiveProvider } from "./platform/active";
 
-export function installKanbanMcp(folderPath: string): { success: boolean; error?: string } {
-  return getActiveProvider().installKanbanMcp(folderPath);
+export function installIdeafyMcp(folderPath: string): { success: boolean; error?: string } {
+  return getActiveProvider().installIdeafyMcp(folderPath);
 }
 
-export function removeKanbanMcp(folderPath: string): { success: boolean; error?: string } {
-  return getActiveProvider().removeKanbanMcp(folderPath);
+export function removeIdeafyMcp(folderPath: string): { success: boolean; error?: string } {
+  return getActiveProvider().removeIdeafyMcp(folderPath);
 }
 
-export function hasKanbanMcp(folderPath: string): boolean {
-  return getActiveProvider().hasKanbanMcp(folderPath);
+export function hasIdeafyMcp(folderPath: string): boolean {
+  return getActiveProvider().hasIdeafyMcp(folderPath);
 }
 
-export function installKanbanSkills(folderPath: string): { success: boolean; error?: string } {
-  return getActiveProvider().installKanbanSkills(folderPath);
+export function installIdeafySkills(folderPath: string): { success: boolean; error?: string } {
+  return getActiveProvider().installIdeafySkills(folderPath);
 }
 
-export function removeKanbanSkills(folderPath: string): { success: boolean; error?: string } {
-  return getActiveProvider().removeKanbanSkills(folderPath);
+export function removeIdeafySkills(folderPath: string): { success: boolean; error?: string } {
+  return getActiveProvider().removeIdeafySkills(folderPath);
 }
 
-export function hasKanbanSkills(folderPath: string): boolean {
-  return getActiveProvider().hasKanbanSkills(folderPath);
+export function hasIdeafySkills(folderPath: string): boolean {
+  return getActiveProvider().hasIdeafySkills(folderPath);
 }
 
 export function listProjectSkills(folderPath: string): string[] {

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { installKanbanSkills, removeKanbanSkills, hasKanbanSkills } from "@/lib/mcp-skills-installer";
+import { installIdeafySkills, removeIdeafySkills, hasIdeafySkills } from "@/lib/mcp-skills-installer";
 
-// Check if kanban skills are installed
+// Check if ideafy skills are installed
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,7 +25,7 @@ export async function GET(
       return NextResponse.json({ installed: false, reason: "no_folder" });
     }
 
-    const installed = hasKanbanSkills(project.folderPath);
+    const installed = hasIdeafySkills(project.folderPath);
     return NextResponse.json({ installed });
   } catch (error) {
     console.error("Failed to check skills status:", error);
@@ -36,7 +36,7 @@ export async function GET(
   }
 }
 
-// Install kanban skills
+// Install ideafy skills
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,7 +61,7 @@ export async function POST(
       );
     }
 
-    const result = installKanbanSkills(project.folderPath);
+    const result = installIdeafySkills(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: true });
@@ -80,7 +80,7 @@ export async function POST(
   }
 }
 
-// Remove kanban skills
+// Remove ideafy skills
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -105,7 +105,7 @@ export async function DELETE(
       );
     }
 
-    const result = removeKanbanSkills(project.folderPath);
+    const result = removeIdeafySkills(project.folderPath);
 
     if (result.success) {
       return NextResponse.json({ success: true, installed: false });

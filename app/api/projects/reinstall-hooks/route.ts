@@ -7,7 +7,7 @@ export async function POST() {
     const provider = getActiveProvider();
 
     // Check if the active platform supports hooks
-    if (!provider.installKanbanHook) {
+    if (!provider.installIdeafyHook) {
       return NextResponse.json({
         message: `${provider.displayName} does not support hooks`,
         results: [],
@@ -20,7 +20,7 @@ export async function POST() {
 
     for (const project of projects) {
       if (project.folderPath) {
-        const hookResult = provider.installKanbanHook(project.folderPath);
+        const hookResult = provider.installIdeafyHook(project.folderPath);
         results.push({
           projectId: project.id,
           name: project.name,

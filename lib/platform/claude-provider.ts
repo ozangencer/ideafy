@@ -13,8 +13,9 @@ import type {
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 
-const MCP_SERVER_PATH = path.resolve(process.cwd(), "mcp-server/index.ts");
-const SKILLS_DIR = path.resolve(process.cwd(), "skills");
+const IDEAFY_ROOT = process.env.IDEAFY_ROOT || process.cwd();
+const MCP_SERVER_PATH = path.join(IDEAFY_ROOT, "mcp-server", "index.ts");
+const SKILLS_DIR = path.join(IDEAFY_ROOT, "skills");
 const SKILL_FILES = ["human-test.md", "product-narrative.md", "ideafy.md"];
 
 function readSkill(name: string): string {
@@ -211,7 +212,7 @@ class ClaudeProvider implements PlatformProvider {
     }
   }
 
-  installKanbanMcp(folderPath: string): Result {
+  installIdeafyMcp(folderPath: string): Result {
     try {
       const claudeDir = path.join(folderPath, ".claude");
       const settingsPath = path.join(claudeDir, "settings.json");
@@ -230,13 +231,13 @@ class ClaudeProvider implements PlatformProvider {
       }
 
       const existingMcpServers = (existingSettings.mcpServers as Record<string, unknown>) || {};
-      if (existingMcpServers.kanban) return { success: true };
+      if (existingMcpServers.ideafy) return { success: true };
 
       const mergedSettings = {
         ...existingSettings,
         mcpServers: {
           ...existingMcpServers,
-          kanban: { command: "npx", args: ["tsx", MCP_SERVER_PATH] },
+          ideafy: { command: "npx", args: ["tsx", MCP_SERVER_PATH] },
         },
       };
 
@@ -247,15 +248,15 @@ class ClaudeProvider implements PlatformProvider {
     }
   }
 
-  removeKanbanMcp(folderPath: string): Result {
+  removeIdeafyMcp(folderPath: string): Result {
     try {
       const settingsPath = path.join(folderPath, ".claude", "settings.json");
       if (!fs.existsSync(settingsPath)) return { success: true };
 
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      if (!settings.mcpServers?.kanban) return { success: true };
+      if (!settings.mcpServers?.ideafy) return { success: true };
 
-      delete settings.mcpServers.kanban;
+      delete settings.mcpServers.ideafy;
       if (Object.keys(settings.mcpServers).length === 0) delete settings.mcpServers;
 
       fs.writeFileSync(settingsPath,
@@ -269,18 +270,18 @@ class ClaudeProvider implements PlatformProvider {
     }
   }
 
-  hasKanbanMcp(folderPath: string): boolean {
+  hasIdeafyMcp(folderPath: string): boolean {
     try {
       const settingsPath = path.join(folderPath, ".claude", "settings.json");
       if (!fs.existsSync(settingsPath)) return false;
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      return !!settings.mcpServers?.kanban;
+      return !!settings.mcpServers?.ideafy;
     } catch {
       return false;
     }
   }
 
-  installKanbanSkills(folderPath: string): Result {
+  installIdeafySkills(folderPath: string): Result {
     try {
       const commandsDir = path.join(folderPath, ".claude", "commands");
       if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true });
@@ -299,7 +300,7 @@ class ClaudeProvider implements PlatformProvider {
     }
   }
 
-  removeKanbanSkills(folderPath: string): Result {
+  removeIdeafySkills(folderPath: string): Result {
     try {
       const commandsDir = path.join(folderPath, ".claude", "commands");
       for (const file of SKILL_FILES) {
@@ -315,7 +316,7 @@ class ClaudeProvider implements PlatformProvider {
     }
   }
 
-  hasKanbanSkills(folderPath: string): boolean {
+  hasIdeafySkills(folderPath: string): boolean {
     try {
       const commandsDir = path.join(folderPath, ".claude", "commands");
       return SKILL_FILES.every((file) => fs.existsSync(path.join(commandsDir, file)));
@@ -325,15 +326,15 @@ class ClaudeProvider implements PlatformProvider {
   }
 
   // Claude-specific: Hooks support
-  installKanbanHook(folderPath: string): Result {
+  installIdeafyHook(folderPath: string): Result {
     // Delegate to the hooks module (imported lazily to avoid circular deps)
-    const { installKanbanHook } = require("../hooks");
-    return installKanbanHook(folderPath);
+    const { installIdeafyHook } = require("../hooks");
+    return installIdeafyHook(folderPath);
   }
 
-  removeKanbanHook(folderPath: string): Result {
-    const { removeKanbanHook } = require("../hooks");
-    return removeKanbanHook(folderPath);
+  removeIdeafyHook(folderPath: string): Result {
+    const { removeIdeafyHook } = require("../hooks");
+    return removeIdeafyHook(folderPath);
   }
 }
 

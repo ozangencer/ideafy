@@ -165,7 +165,7 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  installKanbanMcp(folderPath: string): Result {
+  installIdeafyMcp(folderPath: string): Result {
     try {
       const geminiDir = path.join(folderPath, ".gemini");
       const settingsPath = path.join(geminiDir, "settings.json");
@@ -184,13 +184,13 @@ class GeminiProvider implements PlatformProvider {
       }
 
       const existing = (existingSettings.mcpServers as Record<string, unknown>) || {};
-      if (existing.kanban) return { success: true };
+      if (existing.ideafy) return { success: true };
 
       const merged = {
         ...existingSettings,
         mcpServers: {
           ...existing,
-          kanban: {
+          ideafy: {
             command: "npx",
             args: ["tsx", path.resolve(process.cwd(), "mcp-server/index.ts")],
           },
@@ -204,15 +204,15 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  removeKanbanMcp(folderPath: string): Result {
+  removeIdeafyMcp(folderPath: string): Result {
     try {
       const settingsPath = path.join(folderPath, ".gemini", "settings.json");
       if (!fs.existsSync(settingsPath)) return { success: true };
 
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      if (!settings.mcpServers?.kanban) return { success: true };
+      if (!settings.mcpServers?.ideafy) return { success: true };
 
-      delete settings.mcpServers.kanban;
+      delete settings.mcpServers.ideafy;
       if (Object.keys(settings.mcpServers).length === 0) delete settings.mcpServers;
 
       fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
@@ -222,18 +222,18 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  hasKanbanMcp(folderPath: string): boolean {
+  hasIdeafyMcp(folderPath: string): boolean {
     try {
       const settingsPath = path.join(folderPath, ".gemini", "settings.json");
       if (!fs.existsSync(settingsPath)) return false;
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      return !!settings.mcpServers?.kanban;
+      return !!settings.mcpServers?.ideafy;
     } catch {
       return false;
     }
   }
 
-  installKanbanSkills(folderPath: string): Result {
+  installIdeafySkills(folderPath: string): Result {
     try {
       const skillsDir = path.join(folderPath, ".gemini", "skills");
 
@@ -254,7 +254,7 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  removeKanbanSkills(folderPath: string): Result {
+  removeIdeafySkills(folderPath: string): Result {
     try {
       const skillsDir = path.join(folderPath, ".gemini", "skills");
 
@@ -279,7 +279,7 @@ class GeminiProvider implements PlatformProvider {
     }
   }
 
-  hasKanbanSkills(folderPath: string): boolean {
+  hasIdeafySkills(folderPath: string): boolean {
     try {
       const skillsDir = path.join(folderPath, ".gemini", "skills");
       return SKILL_FILES.every((file) => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { removeKanbanHook } from "@/lib/hooks";
+import { removeIdeafyHook } from "@/lib/hooks";
 
 export async function PUT(
   request: NextRequest,
@@ -92,11 +92,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Remove kanban hook from project folder
+    // Remove ideafy hook from project folder
     if (existing.folderPath) {
-      const hookResult = removeKanbanHook(existing.folderPath);
+      const hookResult = removeIdeafyHook(existing.folderPath);
       if (!hookResult.success) {
-        console.warn("Failed to remove kanban hook:", hookResult.error);
+        console.warn("Failed to remove ideafy hook:", hookResult.error);
       }
     }
 

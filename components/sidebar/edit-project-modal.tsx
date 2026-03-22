@@ -69,8 +69,8 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
   const [isLaunchingSkill, setIsLaunchingSkill] = useState(false);
-  const [kanbanInstalled, setKanbanInstalled] = useState<boolean | null>(null);
-  const [isTogglingKanban, setIsTogglingKanban] = useState(false);
+  const [ideafyInstalled, setKanbanInstalled] = useState<boolean | null>(null);
+  const [isTogglingIdeafy, setIsTogglingKanban] = useState(false);
 
   // Check hook and MCP/Skills status on mount
   useEffect(() => {
@@ -98,7 +98,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
     checkStatuses();
   }, [project.id]);
 
-  const handleToggleKanban = async (enabled: boolean) => {
+  const handleToggleIdeafy = async (enabled: boolean) => {
     setIsTogglingKanban(true);
     try {
       const method = enabled ? "POST" : "DELETE";
@@ -118,7 +118,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
         setKanbanInstalled(hookData.installed && mcpData.installed && skillsData.installed);
       }
     } catch (error) {
-      console.error("Failed to toggle kanban:", error);
+      console.error("Failed to toggle ideafy:", error);
     } finally {
       setIsTogglingKanban(false);
     }
@@ -409,25 +409,25 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
           {/* Divider */}
           <div className="border-t border-border" />
 
-          {/* Kanban MCP & Skills */}
+          {/* Ideafy MCP & Skills */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <Plug className="h-4 w-4 text-muted-foreground" />
-                <label className="text-sm font-medium">Kanban MCP & Skills</label>
+                <label className="text-sm font-medium">Ideafy MCP & Skills</label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Install kanban tools, hook, and slash commands to this project
+                Install ideafy tools, hook, and slash commands to this project
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {isTogglingKanban && (
+              {isTogglingIdeafy && (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
               <Switch
-                checked={kanbanInstalled ?? false}
-                onCheckedChange={handleToggleKanban}
-                disabled={isTogglingKanban || kanbanInstalled === null}
+                checked={ideafyInstalled ?? false}
+                onCheckedChange={handleToggleIdeafy}
+                disabled={isTogglingIdeafy || ideafyInstalled === null}
               />
             </div>
           </div>
