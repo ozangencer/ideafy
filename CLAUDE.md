@@ -1,6 +1,6 @@
 # ideafy - Kanban for Claude Code
 
-Solo founder'lar için Linear-inspired kanban. Task takibi, çözüm dokümantasyonu ve test senaryoları.
+Solo founder'lar için kanban. Task takibi, çözüm dokümantasyonu ve test senaryoları.
 
 ## Tech Stack
 
@@ -63,7 +63,7 @@ npm run db:studio    # DB GUI
 - API-first: Tüm CRUD `/api/cards` üzerinden
 - Schema değişikliği: `lib/db/schema.ts` → `npm run db:push`
 - Types: `lib/types.ts`
-- UI tema: Linear-inspired, emoji yok, minimal
+- UI tema: Minimal dark theme, emoji yok
 
 ## Tier Kuralları (Solo - Open Source)
 

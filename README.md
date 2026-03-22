@@ -1,6 +1,6 @@
 # ideafy
 
-A Linear-inspired kanban board for solo founders working with Claude Code.
+A kanban board for solo founders working with Claude Code.
 
 Local-first, SQLite-powered, zero cloud dependencies.
 

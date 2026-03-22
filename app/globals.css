@@ -109,7 +109,7 @@ button:disabled {
 
 @layer base {
   :root {
-    /* Linear-inspired dark theme as default */
+    /* Dark theme as default */
     --background: 0 0% 5%;
     --foreground: 0 0% 100%;
     --card: 0 0% 10%;

@@ -53,7 +53,7 @@ function stripHtml(html: string): string {
   return decoded.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-// Linear-style priority icon with bars (3 levels)
+// Priority icon with bars (3 levels)
 function PriorityIcon({ priority }: { priority: string }) {
   const levels = {
     low: 1,

@@ -29,7 +29,7 @@ interface AddProjectModalProps {
 }
 
 const PRESET_COLORS = [
-  "#5e6ad2", // Linear blue (default)
+  "#5e6ad2", // Indigo (default)
   "#ef4444", // Red
   "#f97316", // Orange
   "#eab308", // Yellow
