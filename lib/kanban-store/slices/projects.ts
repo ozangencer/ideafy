@@ -72,11 +72,17 @@ export const createProjectsSlice: StoreSlice<
     }
   },
 
-  deleteProject: async (id) => {
+  deleteProject: async (id, deleteCards) => {
     try {
-      await fetch(`/api/projects/${id}`, { method: "DELETE" });
+      const url = deleteCards
+        ? `/api/projects/${id}?deleteCards=true`
+        : `/api/projects/${id}`;
+      await fetch(url, { method: "DELETE" });
       set((state) => ({
         projects: state.projects.filter((p) => p.id !== id),
+        cards: deleteCards
+          ? state.cards.filter((c) => c.projectId !== id)
+          : state.cards,
         activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
         documents: state.activeProjectId === id ? [] : state.documents,
       }));

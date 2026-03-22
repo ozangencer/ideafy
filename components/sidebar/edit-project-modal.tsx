@@ -67,6 +67,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [deleteWithCards, setDeleteWithCards] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
   const [isLaunchingSkill, setIsLaunchingSkill] = useState(false);
   const [ideafyInstalled, setKanbanInstalled] = useState<boolean | null>(null);
@@ -172,7 +173,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
 
   const handleDelete = async () => {
     try {
-      await deleteProject(project.id);
+      await deleteProject(project.id, deleteWithCards);
       onClose();
     } catch (error) {
       console.error("Failed to delete project:", error);
@@ -466,15 +467,31 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete project?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete the
-                  project &quot;{project.name}&quot;.
-                  {linkedCardCount > 0 && (
-                    <span className="block mt-2">
-                      {linkedCardCount} task{linkedCardCount > 1 ? "s" : ""} will
-                      be unlinked from this project but not deleted.
+                <AlertDialogDescription asChild>
+                  <div>
+                    <span>
+                      This action cannot be undone. This will permanently delete the
+                      project &quot;{project.name}&quot;.
                     </span>
-                  )}
+                    {linkedCardCount > 0 && (
+                      <>
+                        <span className="block mt-2 text-muted-foreground">
+                          {deleteWithCards
+                            ? `${linkedCardCount} task${linkedCardCount > 1 ? "s" : ""} will be permanently deleted.`
+                            : `${linkedCardCount} task${linkedCardCount > 1 ? "s" : ""} will be unlinked from this project but not deleted.`}
+                        </span>
+                        <label className="flex items-center gap-2 mt-3 cursor-pointer text-sm text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={deleteWithCards}
+                            onChange={(e) => setDeleteWithCards(e.target.checked)}
+                            className="rounded border-border"
+                          />
+                          Also delete all {linkedCardCount} task{linkedCardCount > 1 ? "s" : ""}
+                        </label>
+                      </>
+                    )}
+                  </div>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

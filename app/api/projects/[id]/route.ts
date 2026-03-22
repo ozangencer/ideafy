@@ -100,11 +100,18 @@ export async function DELETE(
       }
     }
 
-    // Unlink cards from project (don't delete them)
-    db.update(schema.cards)
-      .set({ projectId: null })
-      .where(eq(schema.cards.projectId, id))
-      .run();
+    // Delete or unlink cards based on query param
+    const { searchParams } = new URL(request.url);
+    const deleteCards = searchParams.get("deleteCards") === "true";
+
+    if (deleteCards) {
+      db.delete(schema.cards).where(eq(schema.cards.projectId, id)).run();
+    } else {
+      db.update(schema.cards)
+        .set({ projectId: null })
+        .where(eq(schema.cards.projectId, id))
+        .run();
+    }
 
     db.delete(schema.projects).where(eq(schema.projects.id, id)).run();
 

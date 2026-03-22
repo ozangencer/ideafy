@@ -102,7 +102,7 @@ export interface KanbanStore {
     project: Omit<Project, "id" | "createdAt" | "updatedAt" | "nextTaskNumber">
   ) => Promise<void>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
-  deleteProject: (id: string) => Promise<void>;
+  deleteProject: (id: string, deleteCards?: boolean) => Promise<void>;
   setActiveProject: (projectId: string | null) => void;
   toggleProjectPin: (id: string) => Promise<void>;
 
