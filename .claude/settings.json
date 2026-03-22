@@ -11,7 +11,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -n \"$KANBAN_CARD_ID\" ]; then echo \"\\n<system-reminder>\\nKanban Card: $KANBAN_CARD_ID\\nBefore finishing, update the card:\\n- After planning: save_plan (moves to In Progress)\\n- After implementation: save_tests (moves to Human Test)\\n- After idea discussion: save_opinion\\n</system-reminder>\"; fi"
+            "command": "if [ -n \"$IDEAFY_CARD_ID\" ]; then echo \"\\n<system-reminder>\\nIdeafy Card: $IDEAFY_CARD_ID\\nBefore finishing, update the card:\\n- After planning: save_plan (moves to In Progress)\\n- After implementation: save_tests (moves to Human Test)\\n- After idea discussion: save_opinion\\n</system-reminder>\"; fi"
           }
         ]
       }

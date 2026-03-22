@@ -50,7 +50,7 @@ export async function GET(
               hook !== null &&
               "command" in hook &&
               typeof (hook as { command: string }).command === "string" &&
-              (hook as { command: string }).command.includes("KANBAN_CARD_ID")
+              (hook as { command: string }).command.includes("IDEAFY_CARD_ID")
           );
         }
       );

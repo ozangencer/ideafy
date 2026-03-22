@@ -38,12 +38,12 @@ interface Card {
 
 | Tool | Açıklama |
 |------|----------|
-| `mcp__kanban__list_cards` | Kartları listele |
-| `mcp__kanban__get_card` | Kart getir |
-| `mcp__kanban__save_plan` | Plan kaydet → In Progress |
-| `mcp__kanban__save_tests` | Test kaydet → Human Test |
-| `mcp__kanban__move_card` | Kart taşı |
-| `mcp__kanban__update_card` | Kart güncelle |
+| `mcp__ideafy__list_cards` | Kartları listele |
+| `mcp__ideafy__get_card` | Kart getir |
+| `mcp__ideafy__save_plan` | Plan kaydet → In Progress |
+| `mcp__ideafy__save_tests` | Test kaydet → Human Test |
+| `mcp__ideafy__move_card` | Kart taşı |
+| `mcp__ideafy__update_card` | Kart güncelle |
 
 ## MCP Workflow
 

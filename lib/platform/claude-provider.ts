@@ -81,7 +81,7 @@ class ClaudeProvider implements PlatformProvider {
     const cleanPrompt = opts.prompt.replace(/\n/g, " ");
     // Use single quotes to prevent shell interpretation of special chars ([], $, ", etc.)
     const escaped = cleanPrompt.replace(/'/g, "'\\''");
-    return `cd "${workingDir}" && KANBAN_CARD_ID="${opts.cardId}" claude '${escaped}'${permissionFlag}`;
+    return `cd "${workingDir}" && IDEAFY_CARD_ID="${opts.cardId}" claude '${escaped}'${permissionFlag}`;
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {

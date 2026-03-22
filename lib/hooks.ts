@@ -4,14 +4,14 @@ import * as path from "path";
 // Note: This module's functions are also called by claude-provider via require().
 // The exported functions remain the canonical hook implementation for Claude.
 
-const KANBAN_HOOK = {
+const IDEAFY_HOOK = {
   hooks: {
     UserPromptSubmit: [
       {
         hooks: [
           {
             type: "command",
-            command: `if [ -n "$KANBAN_CARD_ID" ]; then echo "\\n<system-reminder>\\nKanban Card: $KANBAN_CARD_ID\\nBefore finishing, update the card:\\n- After planning: save_plan (moves to In Progress)\\n- After implementation: save_tests (moves to Human Test)\\n- After idea discussion: save_opinion\\n</system-reminder>"; fi`,
+            command: `if [ -n "$IDEAFY_CARD_ID" ]; then echo "\\n<system-reminder>\\nIdeafy Card: $IDEAFY_CARD_ID\\nBefore finishing, update the card:\\n- After planning: save_plan (moves to In Progress)\\n- After implementation: save_tests (moves to Human Test)\\n- After idea discussion: save_opinion\\n</system-reminder>"; fi`,
           },
         ],
       },
@@ -62,7 +62,7 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
           hook !== null &&
           "command" in hook &&
           typeof (hook as { command: string }).command === "string" &&
-          (hook as { command: string }).command.includes("KANBAN_CARD_ID")
+          (hook as { command: string }).command.includes("IDEAFY_CARD_ID")
       );
     });
 
@@ -75,7 +75,7 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
       ...existingSettings,
       hooks: {
         ...existingHooks,
-        UserPromptSubmit: [...existingUserPromptSubmit, ...KANBAN_HOOK.hooks.UserPromptSubmit],
+        UserPromptSubmit: [...existingUserPromptSubmit, ...IDEAFY_HOOK.hooks.UserPromptSubmit],
       },
     };
 
@@ -122,7 +122,7 @@ export function removeIdeafyHook(folderPath: string): { success: boolean; error?
             hook !== null &&
             "command" in hook &&
             typeof (hook as { command: string }).command === "string" &&
-            (hook as { command: string }).command.includes("KANBAN_CARD_ID")
+            (hook as { command: string }).command.includes("IDEAFY_CARD_ID")
         );
         return !hasIdeafyHook;
       }

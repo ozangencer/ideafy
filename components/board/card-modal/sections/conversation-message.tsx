@@ -12,7 +12,7 @@ import DOMPurify from "isomorphic-dompurify";
 // Tool ismini gruba çevir
 function getToolGroup(name: string): string {
   if (name.startsWith("mcp__")) {
-    // mcp__kanban__get_card → kanban
+    // mcp__ideafy__get_card → ideafy
     const parts = name.split("__");
     return parts[1] || name;
   }

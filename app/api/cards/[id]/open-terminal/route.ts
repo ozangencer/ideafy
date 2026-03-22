@@ -55,10 +55,10 @@ function buildPrompt(phase: Phase, ctx: PromptContext): string {
 ${branchInfo}
 
 ## Instructions
-1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
 2. Review the solutionSummary field for the implementation plan
 3. Implement the plan
-4. When done, save test scenarios using mcp__kanban__save_tests`;
+4. When done, save test scenarios using mcp__ideafy__save_tests`;
 
     case "retest":
       return `# ${taskHeader}
@@ -68,18 +68,18 @@ ${branchInfo}
 The user tested this implementation but encountered an error.
 
 ## Instructions
-1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
 2. Review the solutionSummary and description fields
 3. Wait for the user to describe the error they encountered
 4. Analyze the error and identify the root cause
 5. Fix the issues while preserving the original solution approach
-6. When done, save updated test scenarios using mcp__kanban__save_tests`;
+6. When done, save updated test scenarios using mcp__ideafy__save_tests`;
 
     case "planning":
       return `# ${taskHeader}
 
 ## Instructions
-1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
 2. Review the description field for task requirements
 3. Analyze this task and create a detailed implementation plan
 4. Do NOT implement yet - only plan`;

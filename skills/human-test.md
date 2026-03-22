@@ -1,7 +1,7 @@
 ---
-allowed-tools: Read, Bash, Grep, Glob, mcp__kanban__create_card, mcp__kanban__save_tests, mcp__kanban__get_project_by_folder
+allowed-tools: Read, Bash, Grep, Glob, mcp__ideafy__create_card, mcp__ideafy__save_tests, mcp__ideafy__get_project_by_folder
 argument-hint: [optional title]
-description: Create a kanban card from current conversation context and move to Human Test
+description: Create an ideafy card from current conversation context and move to Human Test
 ---
 
 # Human Test Card Creator
@@ -14,7 +14,7 @@ Optional argument: $ARGUMENTS (card title override)
 
 ### Step 1: Project Detection
 
-Use `mcp__kanban__get_project_by_folder` with the current working directory to check if this project exists in kanban.
+Use `mcp__ideafy__get_project_by_folder` with the current working directory to check if this project exists in ideafy.
 
 If the response has `found: false`:
 - STOP immediately
@@ -70,7 +70,7 @@ Analyze the current conversation to extract:
 
 ### Step 3: Create Card
 
-Use `mcp__kanban__create_card` with:
+Use `mcp__ideafy__create_card` with:
 - title: Extracted title
 - description: Detailed problem description in markdown
 - solutionSummary: Solution details in markdown
@@ -81,7 +81,7 @@ Use `mcp__kanban__create_card` with:
 
 ### Step 4: Add Tests and Move to Human Test
 
-Use `mcp__kanban__save_tests` with:
+Use `mcp__ideafy__save_tests` with:
 - id: Card ID from Step 3
 - testScenarios: Test scenarios in markdown with checkboxes
 
@@ -90,7 +90,7 @@ Use `mcp__kanban__save_tests` with:
 Report to user:
 - Card display ID (e.g., KAN-64)
 - Title
-- Link hint: "Kanban'da Human Test kolonunda gorebilirsin"
+- Link hint: "Ideafy'de Human Test kolonunda gorebilirsin"
 
 ## Important Notes
 

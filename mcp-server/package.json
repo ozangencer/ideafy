@@ -1,5 +1,5 @@
 {
-  "name": "kanban-mcp-server",
+  "name": "ideafy-mcp-server",
   "version": "1.0.0",
   "description": "MCP server for ideafy app",
   "type": "module",

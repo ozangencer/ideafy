@@ -68,7 +68,7 @@ export async function POST(
     const cleanPrompt = prompt.replace(/\n/g, " ");
 
     // Build claude command - run in worktree directory
-    const claudeCommand = `cd "${worktreePath}" && KANBAN_CARD_ID="${id}" claude "${cleanPrompt}"`;
+    const claudeCommand = `cd "${worktreePath}" && IDEAFY_CARD_ID="${id}" claude "${cleanPrompt}"`;
 
     console.log(`[Resolve Conflict] Working dir: ${worktreePath}`);
     console.log(`[Resolve Conflict] Terminal app: ${terminal}`);

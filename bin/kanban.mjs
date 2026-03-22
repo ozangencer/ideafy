@@ -13,7 +13,7 @@ if (process.argv.includes("--setup-mcp")) {
   const mcpServerPath = join(PROJECT_ROOT, "mcp-server", "index.ts");
   const config = {
     mcpServers: {
-      kanban: {
+      ideafy: {
         command: "npx",
         args: ["tsx", mcpServerPath],
       },

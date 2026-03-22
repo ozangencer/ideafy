@@ -175,7 +175,7 @@ type Status = "ideation" | "backlog" | "bugs" | "progress" | "test" | "completed
 // Create MCP server
 const server = new Server(
   {
-    name: "kanban-mcp-server",
+    name: "ideafy-mcp-server",
     version: "1.0.0",
   },
   {
@@ -836,7 +836,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Kanban MCP server started");
+  console.error("Ideafy MCP server started");
 }
 
 main().catch(console.error);

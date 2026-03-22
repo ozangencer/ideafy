@@ -276,9 +276,9 @@ export function buildPhasePrompt(
 
   switch (phase) {
     case "planning":
-      return `Kanban: ${card.id}
+      return `Ideafy: ${card.id}
 
-Read card via MCP (mcp__kanban__get_card). Review title, description, and any existing notes.
+Read card via MCP (mcp__ideafy__get_card). Review title, description, and any existing notes.
 
 Task: Create implementation plan for "${title}".
 
@@ -296,9 +296,9 @@ IMPORTANT: Do NOT implement yet - plan only.
 IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output the complete plan directly as your response text. Your output will be automatically saved to the card.`;
 
     case "implementation":
-      return `Kanban: ${card.id}
+      return `Ideafy: ${card.id}
 
-Read card via MCP (mcp__kanban__get_card). Follow the approved plan in solutionSummary.
+Read card via MCP (mcp__ideafy__get_card). Follow the approved plan in solutionSummary.
 
 Task: Implement "${title}".
 
@@ -325,9 +325,9 @@ Rules:
 IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results.`;
 
     case "retest":
-      return `Kanban: ${card.id}
+      return `Ideafy: ${card.id}
 
-Read card via MCP (mcp__kanban__get_card). Review previous implementation and test scenarios.
+Read card via MCP (mcp__ideafy__get_card). Review previous implementation and test scenarios.
 
 Task: "${title}" failed during testing.
 
@@ -366,10 +366,10 @@ ${description}
 - Help prioritize if the idea is too broad
 - Be honest but collaborative
 
-## Kanban MCP Tools Available
-- mcp__kanban__save_opinion - Save your final thoughts to the card
-- mcp__kanban__update_card - Update card fields (including priority)
-- mcp__kanban__get_card - Get card details
+## Ideafy MCP Tools Available
+- mcp__ideafy__save_opinion - Save your final thoughts to the card
+- mcp__ideafy__update_card - Update card fields (including priority)
+- mcp__ideafy__get_card - Get card details
 
 Card ID: ${card.id}
 
@@ -379,21 +379,21 @@ Before finishing, you MUST do THREE things:
 ### 1. Update Priority
 Based on our discussion, update the card priority:
 \`\`\`
-mcp__kanban__update_card({ id: "${card.id}", priority: "low" | "medium" | "high" })
+mcp__ideafy__update_card({ id: "${card.id}", priority: "low" | "medium" | "high" })
 \`\`\`
 Be BRUTALLY HONEST - not everything is high priority!
 
 ### 2. Update Complexity
 Based on the scope of the idea, update the card complexity:
 \`\`\`
-mcp__kanban__update_card({ id: "${card.id}", complexity: "trivial" | "low" | "medium" | "high" | "very_high" })
+mcp__ideafy__update_card({ id: "${card.id}", complexity: "trivial" | "low" | "medium" | "high" | "very_high" })
 \`\`\`
 (trivial = few lines, low = simple change, medium = moderate effort, high = significant work, very_high = major undertaking)
 
 ### 3. Save Your Opinion
 Your opinion MUST include EXACTLY these sections:
 \`\`\`
-mcp__kanban__save_opinion({ id: "${card.id}", aiOpinion: "## Summary Verdict\\n[Strong Yes / Yes / Maybe / No / Strong No]\\n\\n## Strengths\\n- Point 1\\n- Point 2\\n\\n## Concerns\\n- Point 1\\n- Point 2\\n\\n## Recommendations\\n- Recommendation 1\\n- Recommendation 2\\n\\n## Priority\\n[PRIORITY: low/medium/high] - Your reasoning\\n\\n## Final Score\\n[X/10] - Brief justification" })
+mcp__ideafy__save_opinion({ id: "${card.id}", aiOpinion: "## Summary Verdict\\n[Strong Yes / Yes / Maybe / No / Strong No]\\n\\n## Strengths\\n- Point 1\\n- Point 2\\n\\n## Concerns\\n- Point 1\\n- Point 2\\n\\n## Recommendations\\n- Recommendation 1\\n- Recommendation 2\\n\\n## Priority\\n[PRIORITY: low/medium/high] - Your reasoning\\n\\n## Final Score\\n[X/10] - Brief justification" })
 \`\`\`
 
 Do NOT end the session without updating priority, complexity, and saving your opinion.
@@ -416,7 +416,7 @@ export function buildTestTogetherPrompt(
   return `You are a QA Partner. Let's test "${taskHeader}" together step by step.
 
 ## Instructions
-1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
 2. Review the testScenarios field - it contains manual test checkboxes
 
 ## Test Scenarios Overview
@@ -442,28 +442,28 @@ For each test scenario:
 ### If ALL tests passed:
 1. Update test scenarios with all checkboxes checked:
 \`\`\`
-mcp__kanban__update_card({ id: "${card.id}", testScenarios: "<updated with all checked>" })
+mcp__ideafy__update_card({ id: "${card.id}", testScenarios: "<updated with all checked>" })
 \`\`\`
 2. Move card to Completed:
 \`\`\`
-mcp__kanban__move_card({ id: "${card.id}", status: "completed" })
+mcp__ideafy__move_card({ id: "${card.id}", status: "completed" })
 \`\`\`
 
 ### If SOME tests failed:
 1. Update test scenarios marking which passed and which failed:
 \`\`\`
-mcp__kanban__update_card({ id: "${card.id}", testScenarios: "<updated with pass/fail status>" })
+mcp__ideafy__update_card({ id: "${card.id}", testScenarios: "<updated with pass/fail status>" })
 \`\`\`
 2. Ask the user: "Should we move this back to In Progress for fixes?"
 3. If yes:
 \`\`\`
-mcp__kanban__move_card({ id: "${card.id}", status: "progress" })
+mcp__ideafy__move_card({ id: "${card.id}", status: "progress" })
 \`\`\`
 
-## Kanban MCP Tools Available
-- mcp__kanban__get_card - Read card details
-- mcp__kanban__update_card - Update card fields
-- mcp__kanban__move_card - Move card between columns
+## Ideafy MCP Tools Available
+- mcp__ideafy__get_card - Read card details
+- mcp__ideafy__update_card - Update card fields
+- mcp__ideafy__move_card - Move card between columns
 
 Card ID: ${card.id}
 
@@ -584,7 +584,7 @@ export function buildTestGenerationPrompt(
   return `# ${taskHeader}
 
 ## Instructions
-1. First, read the card details using: mcp__kanban__get_card with id: "${card.id}"
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
 2. Review the testScenarios field containing manual test cases
 3. Detect the test framework from package.json (Jest, Vitest, or other)
 4. Convert the manual test scenarios into unit test code
@@ -608,7 +608,7 @@ After generating tests, update the testScenarios field with:
 **Running Tests:** \`npm test -- path/to/tests\`
 \`\`\`
 
-Use mcp__kanban__save_tests to update the card with the new format.
+Use mcp__ideafy__save_tests to update the card with the new format.
 
 Focus on:
 - Testing happy paths and edge cases from scenarios
