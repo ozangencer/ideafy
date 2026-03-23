@@ -8,7 +8,9 @@ export async function GET(request: NextRequest) {
   try {
     // Get optional default path from query params
     const { searchParams } = new URL(request.url);
-    const defaultPath = searchParams.get("path");
+    const rawPath = searchParams.get("path");
+    // Strip double quotes to prevent AppleScript injection (macOS paths can't contain ")
+    const defaultPath = rawPath?.replace(/"/g, "") ?? null;
 
     // Use AppleScript to open native macOS file picker
     // Note: We don't restrict file types since markdown UTIs are not universally supported

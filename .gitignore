@@ -53,3 +53,10 @@ docs/
 # Misc
 *.log
 sqlite.db
+
+# Build cache
+tsconfig.tsbuildinfo
+
+# Stray files
+nul
+/kanban.db
