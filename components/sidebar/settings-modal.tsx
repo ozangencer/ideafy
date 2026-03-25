@@ -225,12 +225,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-[min(500px,calc(100vw-3rem))]">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
+        <div className="grid gap-6 py-4 overflow-y-auto max-h-[calc(85vh-10rem)] px-1">
           {/* AI Platform */}
           <div className="grid gap-2">
             <label htmlFor="aiPlatform" className="text-sm font-medium">
