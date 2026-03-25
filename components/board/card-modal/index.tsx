@@ -159,6 +159,7 @@ export function CardModal() {
   const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Track when MCP tool updates arrive to prevent auto-save overwriting them
   const lastMcpUpdateRef = useRef<number>(0);
+  const overlayMouseDownRef = useRef(false);
 
   // Auto-save effect for edit mode
   useEffect(() => {
@@ -706,10 +707,17 @@ export function CardModal() {
       className={`fixed inset-0 z-50 flex justify-end transition-colors duration-200 ${
         isVisible ? "bg-black/40" : "bg-transparent"
       }`}
-      onClick={handleClose}
+      onMouseDown={(e) => {
+        overlayMouseDownRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && overlayMouseDownRef.current) {
+          handleClose();
+        }
+        overlayMouseDownRef.current = false;
+      }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         className={`bg-surface border-l border-border w-full h-full flex flex-col shadow-2xl transition-all duration-200 ease-out ${
           isExpanded ? "max-w-[1400px]" : "max-w-[900px]"
         } ${isVisible ? "translate-x-0" : "translate-x-full"}`}
