@@ -196,20 +196,37 @@ class ClaudeProvider implements PlatformProvider {
   }
 
   listProjectSkills(folderPath: string): string[] {
+    const skills = new Set<string>();
+
+    // .claude/commands/*.md (legacy)
     try {
       const commandsDir = path.join(folderPath, ".claude", "commands");
-      if (!fs.existsSync(commandsDir)) return [];
-      return fs.readdirSync(commandsDir)
-        .filter((entry) => {
-          if (entry.startsWith(".")) return false;
-          if (!entry.endsWith(".md")) return false;
-          return fs.statSync(path.join(commandsDir, entry)).isFile();
-        })
-        .map((entry) => entry.replace(/\.md$/, ""))
-        .sort((a, b) => a.localeCompare(b));
-    } catch {
-      return [];
-    }
+      if (fs.existsSync(commandsDir)) {
+        fs.readdirSync(commandsDir)
+          .filter((entry) => {
+            if (entry.startsWith(".")) return false;
+            if (!entry.endsWith(".md")) return false;
+            return fs.statSync(path.join(commandsDir, entry)).isFile();
+          })
+          .forEach((entry) => skills.add(entry.replace(/\.md$/, "")));
+      }
+    } catch { /* ignore */ }
+
+    // .claude/skills/<name>/SKILL.md
+    try {
+      const skillsDir = path.join(folderPath, ".claude", "skills");
+      if (fs.existsSync(skillsDir)) {
+        fs.readdirSync(skillsDir)
+          .filter((entry) => {
+            if (entry.startsWith(".")) return false;
+            return fs.statSync(path.join(skillsDir, entry)).isDirectory();
+          })
+          .filter((entry) => fs.existsSync(path.join(skillsDir, entry, "SKILL.md")))
+          .forEach((entry) => skills.add(entry));
+      }
+    } catch { /* ignore */ }
+
+    return Array.from(skills).sort((a, b) => a.localeCompare(b));
   }
 
   installIdeafyMcp(folderPath: string): Result {
