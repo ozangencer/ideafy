@@ -6,11 +6,13 @@ import path from "path";
 // Security: validate path is within a known project folder
 function validatePath(filePath: string): boolean {
   const projects = db.select().from(schema.projects).all();
-  const normalizedPath = path.normalize(filePath);
+  const normalizedPath = path.resolve(filePath);
 
   return projects.some((project) => {
-    const normalizedFolder = path.normalize(project.folderPath);
-    return normalizedPath.startsWith(normalizedFolder);
+    // Use path.resolve + trailing separator to prevent prefix attacks
+    // e.g. /home/user/proj matching /home/user/project-private
+    const normalizedFolder = path.resolve(project.folderPath) + path.sep;
+    return normalizedPath.startsWith(normalizedFolder) || normalizedPath === normalizedFolder.slice(0, -1);
   });
 }
 

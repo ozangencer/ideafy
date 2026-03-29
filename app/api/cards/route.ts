@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc, isNotNull, and, lt } from "drizzle-orm";
+import { eq, desc, isNotNull, and, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml } from "@/lib/markdown";
@@ -81,17 +81,18 @@ export async function POST(request: NextRequest) {
       .get();
 
     if (project) {
-      taskNumber = project.nextTaskNumber;
       projectFolder = project.folderPath;
 
-      // Increment project's nextTaskNumber
-      db.update(schema.projects)
+      // Atomic increment — prevents duplicate task numbers on concurrent requests
+      const updated = db.update(schema.projects)
         .set({
-          nextTaskNumber: project.nextTaskNumber + 1,
+          nextTaskNumber: sql`${schema.projects.nextTaskNumber} + 1`,
           updatedAt: now,
         })
         .where(eq(schema.projects.id, body.projectId))
-        .run();
+        .returning({ nextTaskNumber: schema.projects.nextTaskNumber })
+        .get();
+      taskNumber = updated ? updated.nextTaskNumber - 1 : null;
     }
   }
 
@@ -124,7 +125,12 @@ export async function POST(request: NextRequest) {
     completedAt: (body.status === 'completed') ? now : null,
   };
 
-  db.insert(schema.cards).values(newCard).run();
+  try {
+    db.insert(schema.cards).values(newCard).run();
+  } catch (err) {
+    console.error("[cards] Failed to insert card:", err);
+    return NextResponse.json({ error: "Failed to create card" }, { status: 500 });
+  }
 
   return NextResponse.json(newCard, { status: 201 });
 }

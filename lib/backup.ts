@@ -122,8 +122,18 @@ export function cleanOldBackups(retentionDays: number = RETENTION_DAYS): number 
 
 // Restore from a specific backup
 export function restoreFromBackup(backupFilename: string): boolean {
+  // Prevent path traversal — only allow simple filenames
+  if (backupFilename.includes("..") || backupFilename.includes(path.sep) || backupFilename.includes("/")) {
+    throw new Error(`Invalid backup filename: ${backupFilename}`);
+  }
+
   const backupPath = path.join(BACKUP_DIR, backupFilename);
   const targetPath = path.join(DATA_DIR, DB_FILE);
+
+  // Double-check resolved path is within backup directory
+  if (!path.resolve(backupPath).startsWith(path.resolve(BACKUP_DIR))) {
+    throw new Error(`Invalid backup path: ${backupFilename}`);
+  }
 
   if (!fs.existsSync(backupPath)) {
     throw new Error(`Backup not found: ${backupFilename}`);

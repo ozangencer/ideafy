@@ -99,7 +99,7 @@ export async function POST(
     if (deleteBranch) {
       console.log(`[Rollback] Deleting branch: ${card.gitBranchName}`);
       try {
-        await execAsync(`git branch -D ${card.gitBranchName}`, { cwd: workingDir });
+        await execAsync(`git branch -D -- ${JSON.stringify(card.gitBranchName)}`, { cwd: workingDir });
       } catch (branchError) {
         console.warn(`[Rollback] Failed to delete branch: ${branchError}`);
         // Continue anyway - branch deletion is not critical

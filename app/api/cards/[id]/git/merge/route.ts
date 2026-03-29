@@ -324,7 +324,7 @@ export async function POST(
     // Step 7: Delete the branch AFTER successful merge
     console.log(`[Merge] Deleting branch: ${card.gitBranchName}`);
     try {
-      await execAsync(`git branch -D ${card.gitBranchName}`, { cwd: workingDir });
+      await execAsync(`git branch -D -- ${JSON.stringify(card.gitBranchName)}`, { cwd: workingDir });
     } catch (branchError) {
       console.warn(`[Merge] Failed to delete branch: ${branchError}`);
       // Continue anyway - branch deletion is not critical

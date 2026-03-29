@@ -34,7 +34,8 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true; me
 
   if (terminal === "ghostty") {
     // Ghostty doesn't support AppleScript — copy command to clipboard and open
-    execSync(`echo "${command.replace(/"/g, '\\"')}" | pbcopy`);
+    // Use spawn to avoid shell injection via command content
+    const pbcopy = require("child_process").spawnSync("pbcopy", { input: command });
     exec("open -a Ghostty", (error) => {
       if (error) {
         console.error(`[Terminal Launcher] Error opening Ghostty: ${error.message}`);

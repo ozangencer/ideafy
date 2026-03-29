@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml } from "@/lib/markdown";
@@ -59,16 +59,16 @@ export async function PUT(
       .get();
 
     if (project) {
-      taskNumber = project.nextTaskNumber;
-
-      // Increment project's nextTaskNumber
-      db.update(schema.projects)
+      // Atomic increment — prevents duplicate task numbers on concurrent requests
+      const updated = db.update(schema.projects)
         .set({
-          nextTaskNumber: project.nextTaskNumber + 1,
+          nextTaskNumber: sql`${schema.projects.nextTaskNumber} + 1`,
           updatedAt: now,
         })
         .where(eq(schema.projects.id, newProjectId))
-        .run();
+        .returning({ nextTaskNumber: schema.projects.nextTaskNumber })
+        .get();
+      taskNumber = updated ? updated.nextTaskNumber - 1 : null;
     }
   } else if (newProjectId === null) {
     // If project is removed, clear taskNumber
@@ -93,10 +93,15 @@ export async function PUT(
     completedAt,
   };
 
-  db.update(schema.cards)
-    .set(updatedCard)
-    .where(eq(schema.cards.id, id))
-    .run();
+  try {
+    db.update(schema.cards)
+      .set(updatedCard)
+      .where(eq(schema.cards.id, id))
+      .run();
+  } catch (err) {
+    console.error("[cards] Failed to update card:", err);
+    return NextResponse.json({ error: "Failed to update card" }, { status: 500 });
+  }
 
   const result: Card = {
     id: existing.id,
