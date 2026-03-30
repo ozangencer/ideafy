@@ -7,6 +7,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildTestTogetherPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
+import { generateSessionName } from "@/lib/session-name";
 
 export async function POST(
   request: NextRequest,
@@ -81,10 +82,11 @@ export async function POST(
   try {
     const { getProviderForCard } = await import("@/lib/platform/active");
     const provider = getProviderForCard(card);
+    const sessionName = generateSessionName(card, project, "test", "int") || undefined;
 
     // No permission mode restriction - test may need to run commands
     const cliCommand = provider.buildInteractiveCommand(
-      { prompt, cardId: id, permissionMode: null },
+      { prompt, cardId: id, permissionMode: null, sessionName },
       workingDir
     );
 

@@ -15,6 +15,7 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import { generateSessionName } from "@/lib/session-name";
 
 // Card context info
 interface CardContext {
@@ -274,6 +275,7 @@ export async function POST(
   let narrativeContent: string | undefined;
   let projectFolderPath = projectPath || "";
   let projectNarrativePath: string | null = null;
+  let projectForSession: { idPrefix: string } | null = null;
 
   if (card.projectId) {
     const [project] = await db.select().from(projects).where(eq(projects.id, card.projectId));
@@ -282,6 +284,7 @@ export async function POST(
       projectName = project.name;
       projectFolderPath = project.folderPath;
       projectNarrativePath = project.narrativePath;
+      projectForSession = project;
     }
   }
 
@@ -396,10 +399,12 @@ export async function POST(
         }
       };
 
+      const sessionName = generateSessionName(card, projectForSession, "chat", "stream") || undefined;
       const cliArgs = provider.buildStreamArgs({
         prompt: fullPrompt,
         allowedTools: getAllowedTools(card.status, sectionType),
         addDirs: [IMAGES_TEMP_DIR],
+        sessionName,
       });
 
       const spawnEnv = provider.getEnv();

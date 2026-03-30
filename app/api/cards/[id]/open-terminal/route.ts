@@ -10,6 +10,7 @@ import {
   getWorktreePath,
 } from "@/lib/git";
 import { launchTerminal, getTerminalPreference } from "@/lib/terminal-launcher";
+import { generateSessionName, type SessionTip } from "@/lib/session-name";
 
 type Phase = "planning" | "implementation" | "retest";
 
@@ -247,10 +248,14 @@ export async function POST(
 
     const provider = await import("@/lib/platform/active").then(m => m.getProviderForCard(card));
 
+    // Generate session name
+    const tipMap: Record<Phase, SessionTip> = { planning: "plan", implementation: "impl", retest: "retest" };
+    const sessionName = generateSessionName(card, project, tipMap[phase], "int") || undefined;
+
     // Build the terminal command using the active provider
     const permissionMode = (phase === "planning" && provider.capabilities.supportsPermissionModes) ? "plan" : null;
     const cliCommand = provider.buildInteractiveCommand(
-      { prompt, cardId: id, permissionMode },
+      { prompt, cardId: id, permissionMode, sessionName },
       actualWorkingDir
     );
 

@@ -65,23 +65,28 @@ class ClaudeProvider implements PlatformProvider {
   }
 
   buildAutonomousArgs(opts: AutonomousOptions): string[] {
-    return [
+    const args = [
       "-p", opts.prompt,
       "--dangerously-skip-permissions",
       "--output-format", "json",
       "--setting-sources", "user",
     ];
+    if (opts.sessionName) {
+      args.push("-n", opts.sessionName);
+    }
+    return args;
   }
 
   buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): string {
     const permissionFlag = opts.permissionMode
       ? ` --permission-mode ${opts.permissionMode}`
       : "";
+    const sessionFlag = opts.sessionName ? ` -n '${opts.sessionName}'` : "";
     // Escape the prompt for shell usage - replace newlines with spaces
     const cleanPrompt = opts.prompt.replace(/\n/g, " ");
     // Use single quotes to prevent shell interpretation of special chars ([], $, ", etc.)
     const escaped = cleanPrompt.replace(/'/g, "'\\''");
-    return `cd "${workingDir}" && IDEAFY_CARD_ID="${opts.cardId}" claude '${escaped}'${permissionFlag}`;
+    return `cd "${workingDir}" && IDEAFY_CARD_ID="${opts.cardId}" claude${sessionFlag} '${escaped}'${permissionFlag}`;
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
@@ -91,6 +96,9 @@ class ClaudeProvider implements PlatformProvider {
       "--output-format", "stream-json",
       "--verbose",
     ];
+    if (opts.sessionName) {
+      args.push("-n", opts.sessionName);
+    }
     if (opts.allowedTools?.length) {
       args.push("--allowedTools", ...opts.allowedTools);
     }
