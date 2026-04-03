@@ -42,6 +42,45 @@ function markdownToTiptapHtml(markdown: string): string {
   return html;
 }
 
+// Extract task item texts and their checked states from Tiptap TaskList HTML
+function extractCheckStates(html: string): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  const regex = /<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const checked = match[1] === "true";
+    const text = match[2].trim();
+    if (text) {
+      map.set(text, checked);
+    }
+  }
+  return map;
+}
+
+// Merge checked states from existing HTML into new HTML
+function mergeTestCheckState(existingHtml: string, newHtml: string): string {
+  if (!existingHtml || !newHtml) return newHtml;
+
+  const checkedMap = extractCheckStates(existingHtml);
+  if (checkedMap.size === 0) return newHtml;
+
+  return newHtml.replace(
+    /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
+    (fullMatch, prefix, middle, text, suffix) => {
+      const trimmed = text.trim();
+      const wasChecked = checkedMap.get(trimmed);
+      if (wasChecked) {
+        const result = `<li${prefix}true${middle}${text}${suffix}`;
+        return result.replace(
+          /<input type="checkbox"(?:\s+checked="checked")?>/,
+          '<input type="checkbox" checked="checked">'
+        );
+      }
+      return fullMatch;
+    }
+  );
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Database path - relative to MCP server location
@@ -731,11 +770,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Convert markdown to Tiptap-compatible HTML with TaskList support
         const htmlContent = markdownToTiptapHtml(testScenarios);
 
+        // Preserve checked states from existing test scenarios
+        const existing = db.prepare(`SELECT test_scenarios FROM cards WHERE id = ?`).get(id) as { test_scenarios: string } | undefined;
+        const mergedHtml = existing?.test_scenarios
+          ? mergeTestCheckState(existing.test_scenarios, htmlContent)
+          : htmlContent;
+
         const result = db.prepare(`
           UPDATE cards
           SET test_scenarios = ?, status = 'test', updated_at = ?
           WHERE id = ?
-        `).run(htmlContent, new Date().toISOString(), id);
+        `).run(mergedHtml, new Date().toISOString(), id);
 
         if (result.changes === 0) {
           return {

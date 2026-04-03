@@ -44,6 +44,50 @@ export function markdownToTiptapHtml(markdown: string): string {
 }
 
 /**
+ * Extract task item texts and their checked states from Tiptap TaskList HTML
+ */
+function extractCheckStates(html: string): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  const regex = /<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const checked = match[1] === "true";
+    const text = match[2].trim();
+    if (text) {
+      map.set(text, checked);
+    }
+  }
+  return map;
+}
+
+/**
+ * Merge checked states from existing HTML into new HTML.
+ * Matching is by task item text. New items stay unchecked, removed items are dropped.
+ */
+export function mergeTestCheckState(existingHtml: string, newHtml: string): string {
+  if (!existingHtml || !newHtml) return newHtml;
+
+  const checkedMap = extractCheckStates(existingHtml);
+  if (checkedMap.size === 0) return newHtml;
+
+  return newHtml.replace(
+    /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
+    (fullMatch, prefix, middle, text, suffix) => {
+      const trimmed = text.trim();
+      const wasChecked = checkedMap.get(trimmed);
+      if (wasChecked) {
+        const result = `<li${prefix}true${middle}${text}${suffix}`;
+        return result.replace(
+          /<input type="checkbox"(?:\s+checked="checked")?>/,
+          '<input type="checkbox" checked="checked">'
+        );
+      }
+      return fullMatch;
+    }
+  );
+}
+
+/**
  * Check if content is already HTML (starts with < tag)
  */
 export function isHtml(content: string): boolean {

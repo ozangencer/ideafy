@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
-import { ensureHtml } from "@/lib/markdown";
+import { ensureHtml, mergeTestCheckState } from "@/lib/markdown";
 
 export async function PUT(
   request: NextRequest,
@@ -79,7 +79,9 @@ export async function PUT(
     title: body.title ?? existing.title,
     description: body.description !== undefined ? ensureHtml(body.description) : existing.description,
     solutionSummary: body.solutionSummary !== undefined ? ensureHtml(body.solutionSummary) : existing.solutionSummary,
-    testScenarios: body.testScenarios !== undefined ? ensureHtml(body.testScenarios) : existing.testScenarios,
+    testScenarios: body.testScenarios !== undefined
+      ? mergeTestCheckState(existing.testScenarios || "", ensureHtml(body.testScenarios))
+      : existing.testScenarios,
     aiOpinion: body.aiOpinion !== undefined ? ensureHtml(body.aiOpinion) : existing.aiOpinion,
     aiVerdict: body.aiVerdict !== undefined ? body.aiVerdict : existing.aiVerdict,
     status: body.status ?? existing.status,
