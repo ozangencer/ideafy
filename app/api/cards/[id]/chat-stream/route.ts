@@ -240,15 +240,33 @@ function extractAndSaveImages(content: string): { textContent: string; imagePath
 }
 
 // Build conversation context from history
+// Last 4 messages (2 turns) sent in full, older messages truncated to save tokens
 function buildConversationContext(messages: ConversationMessage[]): string {
   if (messages.length === 0) return "";
 
-  const context = messages
-    .slice(-10) // Last 10 messages for context
-    .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
-    .join("\n\n");
+  const RECENT_COUNT = 4;
+  const OLDER_MAX_CHARS = 200;
 
-  return `\n\nPrevious conversation:\n${context}`;
+  const recent = messages.slice(-RECENT_COUNT);
+  const older = messages.slice(-10, -RECENT_COUNT);
+
+  const truncate = (text: string) =>
+    text.length <= OLDER_MAX_CHARS
+      ? text
+      : text.slice(0, OLDER_MAX_CHARS) + "...";
+
+  const parts: string[] = [];
+
+  for (const msg of older) {
+    const role = msg.role === "user" ? "User" : "Assistant";
+    parts.push(`${role}: ${truncate(msg.content)}`);
+  }
+  for (const msg of recent) {
+    const role = msg.role === "user" ? "User" : "Assistant";
+    parts.push(`${role}: ${msg.content}`);
+  }
+
+  return `\n\nPrevious conversation:\n${parts.join("\n\n")}`;
 }
 
 export async function POST(
