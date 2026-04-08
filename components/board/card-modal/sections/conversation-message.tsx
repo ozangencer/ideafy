@@ -8,6 +8,44 @@ import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "isomorphic-dompurify";
+import { MentionData } from "@/lib/types";
+
+// CSS class map for mention types
+const MENTION_CLASS: Record<string, string> = {
+  skill: "mention-inline mention-inline--skill",
+  mcp: "mention-inline mention-inline--mcp",
+  card: "mention-inline mention-inline--card",
+  document: "mention-inline mention-inline--document",
+  plugin: "mention-inline mention-inline--skill",
+};
+
+// Build the display text for a mention as it appears in the content
+function mentionToText(m: MentionData): string {
+  if (m.type === "card") return `[[${m.label}]]`;
+  if (m.type === "document") return `#${m.label}`;
+  return `/${m.label}`; // skill, mcp, plugin
+}
+
+// Replace mention text patterns with highlighted HTML spans
+function highlightMentions(content: string, mentions?: MentionData[]): string {
+  if (!mentions || mentions.length === 0) return content;
+
+  let result = content;
+  // Process longer patterns first to avoid partial matches
+  const sorted = [...mentions].sort((a, b) => mentionToText(b).length - mentionToText(a).length);
+
+  for (const mention of sorted) {
+    const needle = mentionToText(mention);
+    const cls = MENTION_CLASS[mention.type] || MENTION_CLASS.skill;
+    // Escape special regex chars in the needle
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(
+      new RegExp(escaped, "g"),
+      `<span class="${cls}">${needle}</span>`
+    );
+  }
+  return result;
+}
 
 // Tool ismini gruba çevir
 function getToolGroup(name: string): string {
@@ -125,10 +163,11 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
       );
     }
 
-    // For other messages, use ReactMarkdown
+    // For other messages, use ReactMarkdown with inline-highlighted mentions
+    const highlighted = highlightMentions(message.content, message.mentions);
     return (
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-        {message.content}
+        {highlighted}
       </ReactMarkdown>
     );
   };
@@ -194,33 +233,6 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
                 </span>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Mentions indicator */}
-        {message.mentions && message.mentions.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap gap-1">
-            {message.mentions.map((mention, i) => (
-              <span
-                key={i}
-                className={`text-xs px-1.5 py-0.5 rounded font-mono ${
-                  mention.type === "skill"
-                    ? "bg-primary/20 text-primary"
-                    : mention.type === "mcp"
-                    ? "bg-blue-500/20 text-blue-400"
-                    : mention.type === "card"
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : "bg-cyan-500/20 text-cyan-400"
-                }`}
-              >
-                {mention.type === "skill" && "/"}
-                {mention.type === "mcp" && "/"}
-                {mention.type === "card" && "["}
-                {mention.type === "document" && "#"}
-                {mention.label}
-                {mention.type === "card" && "]"}
-              </span>
-            ))}
           </div>
         )}
 

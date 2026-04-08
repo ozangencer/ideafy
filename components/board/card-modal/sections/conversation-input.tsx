@@ -163,9 +163,11 @@ export function ConversationInput({
         // Legacy mcp mention
         mentions.push({ type: "mcp", id: node.attrs.id as string, label: node.attrs.label as string });
       } else if (node.type === "cardMention" && node.attrs) {
-        mentions.push({ type: "card", id: node.attrs.id as string, label: node.attrs.label as string });
+        const cardLabel = (node.attrs.displayId || node.attrs.title || "Card") as string;
+        mentions.push({ type: "card", id: node.attrs.id as string, label: cardLabel });
       } else if (node.type === "documentMention" && node.attrs) {
-        mentions.push({ type: "document", id: node.attrs.id as string, label: node.attrs.label as string });
+        const docLabel = (node.attrs.name || node.attrs.label || "Document") as string;
+        mentions.push({ type: "document", id: node.attrs.id as string, label: docLabel });
       }
       if (node.content && Array.isArray(node.content)) {
         node.content.forEach(traverse);
@@ -243,7 +245,7 @@ export function ConversationInput({
             const json = editor.getJSON();
             const hasImages = JSON.stringify(json).includes('"type":"imageResize"') ||
                               JSON.stringify(json).includes('"type":"image"');
-            const content = hasImages ? editor.getHTML() : view.state.doc.textContent.trim();
+            const content = hasImages ? editor.getHTML() : editor.getText({ blockSeparator: "\n" }).trim();
             const mentions = extractMentions(json);
             onSendRef.current(content, mentions);
             editor.commands.clearContent();
