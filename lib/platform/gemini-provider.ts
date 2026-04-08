@@ -28,6 +28,7 @@ class GeminiProvider implements PlatformProvider {
     supportsHooks: false,
     supportsSkills: true,
     supportsMcp: true,
+    supportsSessionResume: true,
     mcpConfigFormat: "json",
   };
 
@@ -70,6 +71,9 @@ class GeminiProvider implements PlatformProvider {
 
   buildStreamArgs(opts: StreamOptions): string[] {
     // Gemini CLI doesn't support allowedTools or addDirs flags
+    if (opts.resumeSessionId) {
+      return ["--resume", opts.resumeSessionId, "-p", opts.prompt, "--output-format", "stream-json"];
+    }
     return ["-p", opts.prompt, "--output-format", "stream-json"];
   }
 

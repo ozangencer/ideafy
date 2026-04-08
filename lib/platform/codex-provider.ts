@@ -28,6 +28,7 @@ class CodexProvider implements PlatformProvider {
     supportsHooks: false,
     supportsSkills: true,
     supportsMcp: true,
+    supportsSessionResume: true,
     mcpConfigFormat: "toml",
   };
 
@@ -69,6 +70,9 @@ class CodexProvider implements PlatformProvider {
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
+    if (opts.resumeSessionId) {
+      return ["exec", "resume", opts.resumeSessionId, "--json", "--full-auto", opts.prompt];
+    }
     return ["exec", "--json", "--full-auto", opts.prompt];
   }
 

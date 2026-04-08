@@ -37,6 +37,7 @@ class ClaudeProvider implements PlatformProvider {
     supportsHooks: true,
     supportsSkills: true,
     supportsMcp: true,
+    supportsSessionResume: true,
     mcpConfigFormat: "json",
   };
 
@@ -96,12 +97,21 @@ class ClaudeProvider implements PlatformProvider {
       "--output-format", "stream-json",
       "--verbose",
     ];
-    if (opts.sessionName) {
-      args.push("-n", opts.sessionName);
+
+    if (opts.resumeSessionId) {
+      args.push("--resume", opts.resumeSessionId);
+    } else {
+      if (opts.newSessionId) {
+        args.push("--session-id", opts.newSessionId);
+      }
+      if (opts.sessionName) {
+        args.push("-n", opts.sessionName);
+      }
+      if (opts.allowedTools?.length) {
+        args.push("--allowedTools", ...opts.allowedTools);
+      }
     }
-    if (opts.allowedTools?.length) {
-      args.push("--allowedTools", ...opts.allowedTools);
-    }
+
     if (opts.addDirs?.length) {
       for (const dir of opts.addDirs) {
         args.push("--add-dir", dir);

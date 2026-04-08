@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Projects tablosu
 export const projects = sqliteTable("projects", {
@@ -76,3 +76,16 @@ export const conversations = sqliteTable("conversations", {
 
 export type ConversationRecord = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
+
+// Chat sessions — maps (cardId, sectionType) to CLI session ID for resume
+export const chatSessions = sqliteTable("chat_sessions", {
+  id: text("id").primaryKey(),
+  cardId: text("card_id").notNull().references(() => cards.id, { onDelete: "cascade" }),
+  sectionType: text("section_type").notNull(),
+  cliSessionId: text("cli_session_id").notNull(),
+  provider: text("provider").notNull(), // "claude" | "codex" | "gemini"
+  createdAt: text("created_at").notNull(),
+  lastUsedAt: text("last_used_at").notNull(),
+}, (table) => [
+  uniqueIndex("chat_sessions_card_section_idx").on(table.cardId, table.sectionType),
+]);

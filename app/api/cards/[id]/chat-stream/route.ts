@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { conversations, cards, projects } from "@/lib/db/schema";
+import { conversations, cards, projects, chatSessions } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
 import { generateSessionName } from "@/lib/session-name";
+import { resolveSessionId } from "@/lib/platform/session-resolver";
 
 // Card context info
 interface CardContext {
@@ -350,22 +351,6 @@ export async function POST(
   // Extract images from content and save to temp files
   const { textContent, imagePaths } = extractAndSaveImages(content);
 
-  // Build the prompt with system context and conversation history
-  const cardContext: CardContext = {
-    uuid: cardId,
-    displayId,
-    title: card.title,
-    projectName,
-    sectionContent: stripHtml(currentSectionContent || ""),
-    narrativeContent, // Include narrative for opinion section
-    status: card.status,
-    description: stripHtml(card.description || ""),
-    solutionSummary: stripHtml(card.solutionSummary || ""),
-    testScenarios: stripHtml(card.testScenarios || ""),
-  };
-  const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
-  const conversationContext = buildConversationContext(parsedHistory);
-
   // Build user message with image references
   let userMessage = textContent || content;
   if (imagePaths.length > 0) {
@@ -373,7 +358,34 @@ export async function POST(
     userMessage = `${userMessage}\n\nThe user has attached ${imagePaths.length} image(s). Please use the Read tool to view them:\n${imageRefs}`;
   }
 
-  const fullPrompt = `${systemPrompt}${conversationContext}\n\nUser: ${userMessage}`;
+  // Check for existing CLI session to resume
+  const provider = getProviderForCard(card);
+  const [existingSession] = await db.select().from(chatSessions)
+    .where(and(eq(chatSessions.cardId, cardId), eq(chatSessions.sectionType, sectionType)));
+
+  const canResume = !!(existingSession
+    && provider.capabilities.supportsSessionResume
+    && existingSession.provider === provider.id);
+
+  // Build full prompt only when not resuming (fresh session needs full context)
+  let fullPrompt = "";
+  if (!canResume) {
+    const cardContext: CardContext = {
+      uuid: cardId,
+      displayId,
+      title: card.title,
+      projectName,
+      sectionContent: stripHtml(currentSectionContent || ""),
+      narrativeContent,
+      status: card.status,
+      description: stripHtml(card.description || ""),
+      solutionSummary: stripHtml(card.solutionSummary || ""),
+      testScenarios: stripHtml(card.testScenarios || ""),
+    };
+    const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
+    const conversationContext = buildConversationContext(parsedHistory);
+    fullPrompt = `${systemPrompt}${conversationContext}\n\nUser: ${userMessage}`;
+  }
 
   const cwd = projectPath || process.cwd();
 
@@ -392,8 +404,6 @@ export async function POST(
   // Generate assistant message ID for database
   const assistantMessageId = uuidv4();
 
-  const provider = getProviderForCard(card);
-
   // Check if streaming is supported by the active platform
   if (!provider.capabilities.supportsStreamJson) {
     return new Response(
@@ -404,6 +414,10 @@ export async function POST(
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
+
+  // Prepare session ID for fresh sessions (Claude uses --session-id to control it)
+  const newSessionId = (!canResume && provider.capabilities.supportsSessionResume && provider.id === "claude")
+    ? uuidv4() : undefined;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -418,12 +432,26 @@ export async function POST(
       };
 
       const sessionName = generateSessionName(card, projectForSession, "chat", "stream") || undefined;
-      const cliArgs = provider.buildStreamArgs({
-        prompt: fullPrompt,
-        allowedTools: getAllowedTools(card.status, sectionType),
-        addDirs: [IMAGES_TEMP_DIR],
-        sessionName,
-      });
+
+      let cliArgs: string[];
+      if (canResume && existingSession) {
+        // RESUME MODE — only send the new user message, no system prompt or history
+        cliArgs = provider.buildStreamArgs({
+          prompt: userMessage,
+          addDirs: [IMAGES_TEMP_DIR],
+          resumeSessionId: existingSession.cliSessionId,
+        });
+        console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType}`);
+      } else {
+        // FRESH MODE — full context (system prompt + conversation history + user message)
+        cliArgs = provider.buildStreamArgs({
+          prompt: fullPrompt,
+          allowedTools: getAllowedTools(card.status, sectionType),
+          addDirs: [IMAGES_TEMP_DIR],
+          sessionName,
+          newSessionId,
+        });
+      }
 
       const spawnEnv = provider.getEnv();
       console.log(`[chat-stream] spawning ${provider.id}:`, provider.getCliPath(), JSON.stringify(cliArgs.slice(0, 3)), `(${cliArgs.length} args, cwd: ${cwd}, HOME: ${spawnEnv.HOME}, OPENAI_API_KEY: ${spawnEnv.OPENAI_API_KEY ? 'SET' : 'unset'})`);
@@ -545,6 +573,51 @@ export async function POST(
           } catch (error) {
             console.error("Failed to save assistant message:", error);
           }
+        }
+
+        // Session management after process completes
+        try {
+          if (code === 0) {
+            if (canResume && existingSession) {
+              // Successful resume — update lastUsedAt
+              await db.update(chatSessions)
+                .set({ lastUsedAt: new Date().toISOString() })
+                .where(eq(chatSessions.id, existingSession.id));
+            } else if (provider.capabilities.supportsSessionResume) {
+              // Fresh session succeeded — save session ID
+              let sessionId = newSessionId; // Claude: we set it upfront
+              if (!sessionId) {
+                // Codex/Gemini: resolve from filesystem
+                sessionId = resolveSessionId(provider.id, cwd) ?? undefined;
+              }
+              if (sessionId) {
+                await db.insert(chatSessions).values({
+                  id: uuidv4(),
+                  cardId,
+                  sectionType,
+                  cliSessionId: sessionId,
+                  provider: provider.id,
+                  createdAt: new Date().toISOString(),
+                  lastUsedAt: new Date().toISOString(),
+                }).onConflictDoUpdate({
+                  target: [chatSessions.cardId, chatSessions.sectionType],
+                  set: {
+                    cliSessionId: sessionId,
+                    provider: provider.id,
+                    lastUsedAt: new Date().toISOString(),
+                  },
+                });
+                console.log(`[chat-stream] saved session ${sessionId} for ${cardId}/${sectionType}`);
+              }
+            }
+          } else if (canResume && existingSession) {
+            // Resume failed — delete stale session, send error so client can retry
+            await db.delete(chatSessions).where(eq(chatSessions.id, existingSession.id));
+            console.log(`[chat-stream] resume failed (code ${code}), deleted stale session ${existingSession.cliSessionId}`);
+            sendEvent("resume_failed", { message: "Session expired, retrying with full context" });
+          }
+        } catch (sessionError) {
+          console.error("[chat-stream] session management error:", sessionError);
         }
 
         sendEvent("close", { code, messageId: assistantMessageId });

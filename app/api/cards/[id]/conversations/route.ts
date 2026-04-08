@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { conversations } from "@/lib/db/schema";
+import { conversations, chatSessions } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import type { SectionType, ConversationMessage } from "@/lib/types";
@@ -130,6 +130,16 @@ export async function DELETE(
         and(
           eq(conversations.cardId, cardId),
           eq(conversations.sectionType, sectionType)
+        )
+      );
+
+    // Also clear CLI session mapping so next message starts fresh
+    await db
+      .delete(chatSessions)
+      .where(
+        and(
+          eq(chatSessions.cardId, cardId),
+          eq(chatSessions.sectionType, sectionType)
         )
       );
 

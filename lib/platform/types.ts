@@ -7,6 +7,7 @@ export interface PlatformCapabilities {
   supportsHooks: boolean;
   supportsSkills: boolean;
   supportsMcp: boolean;
+  supportsSessionResume: boolean;
   mcpConfigFormat: "json" | "toml";
 }
 
@@ -27,6 +28,8 @@ export interface StreamOptions {
   allowedTools?: string[];
   addDirs?: string[];
   sessionName?: string;
+  resumeSessionId?: string;
+  newSessionId?: string;
 }
 
 export interface CliResponse {
