@@ -4,8 +4,8 @@ import { db } from "@/lib/db";
 import { conversations, cards, projects, chatSessions } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
-import { join, dirname } from "path";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { tmpdir } from "os";
 import type { SectionType, ConversationMessage } from "@/lib/types";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
 import { resolveSessionId } from "@/lib/platform/session-resolver";
+import { extractConversationImages, generateImageReferences } from "@/lib/prompts";
 
 // Card context info
 interface CardContext {
@@ -198,46 +199,6 @@ function readNarrativeContent(projectFolderPath: string, customNarrativePath?: s
   return undefined;
 }
 
-// Temp directory for images
-const IMAGES_TEMP_DIR = join(tmpdir(), "ideafy-images");
-
-// Extract base64 images from HTML content and save to temp files
-function extractAndSaveImages(content: string): { textContent: string; imagePaths: string[] } {
-  const imagePaths: string[] = [];
-  const tempDir = IMAGES_TEMP_DIR;
-
-  // Create temp directory if it doesn't exist
-  if (!existsSync(tempDir)) {
-    mkdirSync(tempDir, { recursive: true });
-  }
-
-  // Match base64 images in img tags
-  const imgRegex = /<img[^>]*src="data:image\/([^;]+);base64,([^"]+)"[^>]*>/gi;
-  let match;
-  let imageIndex = 0;
-
-  while ((match = imgRegex.exec(content)) !== null) {
-    const extension = match[1] || "png";
-    const base64Data = match[2];
-    const filename = `chat-image-${Date.now()}-${imageIndex}.${extension}`;
-    const filepath = join(tempDir, filename);
-
-    try {
-      // Save base64 to file
-      const buffer = Buffer.from(base64Data, "base64");
-      writeFileSync(filepath, buffer);
-      imagePaths.push(filepath);
-      imageIndex++;
-    } catch (error) {
-      console.error("Failed to save image:", error);
-    }
-  }
-
-  // Strip HTML to get clean text content
-  const textContent = stripHtml(content);
-
-  return { textContent, imagePaths };
-}
 
 // Build conversation context from history
 // Last 4 messages (2 turns) sent in full, older messages truncated to save tokens
@@ -347,14 +308,11 @@ export async function POST(
     createdAt: new Date().toISOString(),
   });
 
-  // Extract images from content and save to temp files
-  const { textContent, imagePaths } = extractAndSaveImages(content);
-
-  // Build user message with image references
-  let userMessage = textContent || content;
-  if (imagePaths.length > 0) {
-    const imageRefs = imagePaths.map((p, i) => `[Image ${i + 1}: ${p}]`).join("\n");
-    userMessage = `${userMessage}\n\nThe user has attached ${imagePaths.length} image(s). Please use the Read tool to view them:\n${imageRefs}`;
+  // Extract base64 images from content, save to temp files
+  const { cleanContent, savedImages } = extractConversationImages(content, cardId, 0);
+  let userMessage = stripHtml(cleanContent) || stripHtml(content);
+  if (savedImages.length > 0) {
+    userMessage = `${userMessage}\n\n${generateImageReferences(savedImages)}`;
   }
 
   // Check for existing CLI session to resume
@@ -435,7 +393,7 @@ export async function POST(
         // RESUME MODE — only send the new user message, no system prompt or history
         cliArgs = provider.buildStreamArgs({
           prompt: userMessage,
-          addDirs: [IMAGES_TEMP_DIR],
+          addDirs: [tmpdir()],
           resumeSessionId: existingSession.cliSessionId,
         });
         console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType}`);
@@ -444,7 +402,7 @@ export async function POST(
         cliArgs = provider.buildStreamArgs({
           prompt: fullPrompt,
           allowedTools: getAllowedTools(card.status, sectionType),
-          addDirs: [IMAGES_TEMP_DIR],
+          addDirs: [tmpdir()],
           newSessionId,
         });
       }
