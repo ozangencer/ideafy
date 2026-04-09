@@ -28,7 +28,7 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
-import { generateSessionName, type SessionTip } from "@/lib/session-name";
+
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
   switch (phase) {
@@ -96,10 +96,6 @@ export async function POST(
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
   const processKey = `${id}-autonomous`;
-
-  // Generate session name
-  const sessionTip: SessionTip = phase === "retest" ? "retest" : "auto";
-  const sessionName = generateSessionName(card, project, sessionTip, "auto") || undefined;
 
   // Mark card as processing (persists through page refresh)
   db.update(schema.cards)
@@ -187,7 +183,6 @@ export async function POST(
       cardTitle: card.title,
       displayId,
       aiPlatform: card.aiPlatform,
-      sessionName,
     });
 
     // Convert markdown response to HTML for TipTap editor
@@ -295,13 +290,12 @@ interface RunClaudeOptions {
   cardTitle: string;
   displayId: string | null;
   aiPlatform?: string | null;
-  sessionName?: string;
 }
 
 async function runClaudeCli(
   options: RunClaudeOptions
 ): Promise<{ response: string; cost?: number; duration?: number }> {
-  const { prompt, cwd, phase, processKey, cardId, cardTitle, displayId, aiPlatform, sessionName } = options;
+  const { prompt, cwd, phase, processKey, cardId, cardTitle, displayId, aiPlatform } = options;
 
   // Kill any existing process for this card
   const existing = getProcess(processKey);
@@ -310,7 +304,7 @@ async function runClaudeCli(
   }
 
   const provider = getProviderForCard({ aiPlatform });
-  const args = provider.buildAutonomousArgs({ prompt, sessionName });
+  const args = provider.buildAutonomousArgs({ prompt });
 
   console.log(`[${provider.displayName}] Running in ${cwd}:`);
   console.log(`[${provider.displayName}] Prompt length: ${prompt.length} chars`);

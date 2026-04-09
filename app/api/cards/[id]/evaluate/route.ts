@@ -15,7 +15,6 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
-import { generateSessionName } from "@/lib/session-name";
 
 export async function POST(
   request: NextRequest,
@@ -91,7 +90,6 @@ export async function POST(
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 
     const provider = getProviderForCard(card);
-    const sessionName = generateSessionName(card, project, "eval", "auto") || undefined;
 
     // Run CLI with spawn for process tracking
     const { responseText, cost, duration } = await new Promise<{
@@ -99,7 +97,7 @@ export async function POST(
       cost?: number;
       duration?: number;
     }>((resolve, reject) => {
-      const cliProcess = spawn(provider.getCliPath(), provider.buildAutonomousArgs({ prompt, sessionName }), {
+      const cliProcess = spawn(provider.getCliPath(), provider.buildAutonomousArgs({ prompt }), {
         cwd: workingDir,
         stdio: ["pipe", "pipe", "pipe"],
         env: provider.getCIEnv(),

@@ -72,9 +72,6 @@ class ClaudeProvider implements PlatformProvider {
       "--output-format", "json",
       "--setting-sources", "user",
     ];
-    if (opts.sessionName) {
-      args.push("-n", opts.sessionName);
-    }
     return args;
   }
 
@@ -82,12 +79,11 @@ class ClaudeProvider implements PlatformProvider {
     const permissionFlag = opts.permissionMode
       ? ` --permission-mode ${opts.permissionMode}`
       : "";
-    const sessionFlag = opts.sessionName ? ` -n '${opts.sessionName}'` : "";
     // Escape the prompt for shell usage - replace newlines with spaces
     const cleanPrompt = opts.prompt.replace(/\n/g, " ");
     // Use single quotes to prevent shell interpretation of special chars ([], $, ", etc.)
     const escaped = cleanPrompt.replace(/'/g, "'\\''");
-    return `cd "${workingDir}" && IDEAFY_CARD_ID="${opts.cardId}" claude${sessionFlag} '${escaped}'${permissionFlag}`;
+    return `cd "${workingDir}" && IDEAFY_CARD_ID="${opts.cardId}" claude '${escaped}'${permissionFlag}`;
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
@@ -103,9 +99,6 @@ class ClaudeProvider implements PlatformProvider {
     } else {
       if (opts.newSessionId) {
         args.push("--session-id", opts.newSessionId);
-      }
-      if (opts.sessionName) {
-        args.push("-n", opts.sessionName);
       }
       if (opts.allowedTools?.length) {
         args.push("--allowedTools", ...opts.allowedTools);

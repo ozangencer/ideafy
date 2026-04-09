@@ -3,6 +3,8 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import ImageResize from "tiptap-extension-resize-image";
+import { Fragment, Slice } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import { SkillMention, McpMention, UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 
 // Base extensions used by both content editor and chat input
@@ -113,11 +115,16 @@ export const commonEditorProps = {
           const base64 = reader.result as string;
           const nodeType = view.state.schema.nodes.imageResize || view.state.schema.nodes.image;
           if (nodeType) {
-            view.dispatch(
-              view.state.tr.replaceSelectionWith(
-                nodeType.create({ src: base64 })
-              )
+            const imageNode = nodeType.create({ src: base64 });
+            const paragraphNode = view.state.schema.nodes.paragraph.create();
+            const fragment = Fragment.from([imageNode, paragraphNode]);
+            const tr = view.state.tr.replaceSelection(
+              new Slice(fragment, 0, 0)
             );
+            // Move cursor into the new paragraph after the image
+            tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(view.state.selection.from) + imageNode.nodeSize)));
+            view.dispatch(tr);
+            view.focus();
           }
         };
         reader.readAsDataURL(file);

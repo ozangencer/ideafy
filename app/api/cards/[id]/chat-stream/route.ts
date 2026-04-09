@@ -15,7 +15,6 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
-import { generateSessionName } from "@/lib/session-name";
 import { resolveSessionId } from "@/lib/platform/session-resolver";
 
 // Card context info
@@ -431,8 +430,6 @@ export async function POST(
         }
       };
 
-      const sessionName = generateSessionName(card, projectForSession, "chat", "stream") || undefined;
-
       let cliArgs: string[];
       if (canResume && existingSession) {
         // RESUME MODE — only send the new user message, no system prompt or history
@@ -448,7 +445,6 @@ export async function POST(
           prompt: fullPrompt,
           allowedTools: getAllowedTools(card.status, sectionType),
           addDirs: [IMAGES_TEMP_DIR],
-          sessionName,
           newSessionId,
         });
       }

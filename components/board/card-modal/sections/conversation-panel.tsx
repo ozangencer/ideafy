@@ -35,7 +35,7 @@ function parseTestScenarios(html: string): { text: string; group: string; checke
   const liRegex = /<li([^>]*)data-type="taskItem"([^>]*)>([\s\S]*?)<\/li>/g;
   let match;
   while ((match = liRegex.exec(html)) !== null) {
-    for (const [pos, title] of headings) {
+    for (const [pos, title] of Array.from(headings)) {
       if (pos < match.index) currentGroup = title;
     }
     // data-checked can be in either attribute group

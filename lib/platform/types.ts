@@ -13,21 +13,18 @@ export interface PlatformCapabilities {
 
 export interface AutonomousOptions {
   prompt: string;
-  sessionName?: string;
 }
 
 export interface InteractiveOptions {
   prompt: string;
   cardId: string;
   permissionMode?: "plan" | null;
-  sessionName?: string;
 }
 
 export interface StreamOptions {
   prompt: string;
   allowedTools?: string[];
   addDirs?: string[];
-  sessionName?: string;
   resumeSessionId?: string;
   newSessionId?: string;
 }

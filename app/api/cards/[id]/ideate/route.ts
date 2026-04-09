@@ -7,7 +7,6 @@ import { tmpdir } from "os";
 import { join } from "path";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildIdeationPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
-import { generateSessionName } from "@/lib/session-name";
 
 export async function POST(
   request: NextRequest,
@@ -76,12 +75,11 @@ export async function POST(
   try {
     const { getProviderForCard } = await import("@/lib/platform/active");
     const provider = getProviderForCard(card);
-    const sessionName = generateSessionName(card, project, "ideate", "int") || undefined;
 
     // Build the terminal command using the active provider
     const permissionMode = provider.capabilities.supportsPermissionModes ? "plan" : null;
     const cliCommand = provider.buildInteractiveCommand(
-      { prompt, cardId: id, permissionMode, sessionName },
+      { prompt, cardId: id, permissionMode },
       workingDir
     );
 
