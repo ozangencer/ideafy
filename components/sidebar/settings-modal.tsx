@@ -366,7 +366,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             </Select>
             <p className="text-xs text-muted-foreground">
               {terminalApp === "ghostty"
-                ? "Ghostty will open and command will be copied to clipboard"
+                ? "Ghostty will open a new window and run the command via AppleScript"
                 : "Terminal to use for opening coding sessions"}
             </p>
           </div>

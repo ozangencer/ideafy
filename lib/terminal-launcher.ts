@@ -1,4 +1,4 @@
-import { exec, execSync, spawn } from "child_process";
+import { spawn } from "child_process";
 import { writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -26,43 +26,31 @@ export function getTerminalPreference(): TerminalApp {
 
 /**
  * Launch a command in the user's preferred terminal app.
- * Returns a message for Ghostty (clipboard-based) or null for AppleScript terminals.
  */
 export function launchTerminal(opts: LaunchTerminalOptions): { success: true; message?: string } {
   const terminal = opts.terminal || getTerminalPreference();
   const { command } = opts;
 
-  if (terminal === "ghostty") {
-    // Ghostty doesn't support AppleScript — copy command to clipboard and open
-    // Use spawn to avoid shell injection via command content
-    const pbcopy = require("child_process").spawnSync("pbcopy", { input: command });
-    exec("open -a Ghostty", (error) => {
-      if (error) {
-        console.error(`[Terminal Launcher] Error opening Ghostty: ${error.message}`);
-      }
-    });
-    return {
-      success: true,
-      message: "Ghostty opened. Command copied to clipboard - press Cmd+V to paste.",
-    };
-  }
-
-  // iTerm2 or Terminal.app — write command to temp script, launch via AppleScript
   const timestamp = Date.now();
   const scriptPath = join(tmpdir(), `ideafy-${timestamp}.sh`);
   writeFileSync(scriptPath, `#!/bin/bash\n${command}\n`, { mode: 0o755 });
 
-  const appName = terminal === "iterm2" ? "iTerm" : "Terminal";
+  if (terminal === "ghostty") {
+    // Ghostty: open new instance with -e flag to run the script
+    spawn("open", ["-na", "Ghostty.app", "--args", "-e", scriptPath]);
+    return { success: true };
+  }
 
+  // iTerm2 or Terminal.app — launch via AppleScript
   const appleScript =
     terminal === "iterm2"
-      ? `tell application "${appName}"
+      ? `tell application "iTerm"
     create window with default profile
     tell current session of current window
         write text "${scriptPath}"
     end tell
 end tell`
-      : `tell application "${appName}"
+      : `tell application "Terminal"
     do script "${scriptPath}"
     activate
 end tell`;

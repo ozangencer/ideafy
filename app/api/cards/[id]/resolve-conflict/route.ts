@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { exec, execSync, spawn } from "child_process";
+import { spawn } from "child_process";
 import { writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -74,52 +74,34 @@ export async function POST(
     console.log(`[Resolve Conflict] Terminal app: ${terminal}`);
     console.log(`[Resolve Conflict] Conflict files: ${conflictFiles?.join(", ") || "none"}`);
 
-    if (terminal === "ghostty") {
-      // Ghostty doesn't support AppleScript
-      // Copy command to clipboard and open Ghostty
-      execSync(`echo "${claudeCommand.replace(/"/g, '\\"')}" | pbcopy`);
-      exec("open -a Ghostty", (error) => {
-        if (error) {
-          console.error(`[Resolve Conflict] Error opening Ghostty: ${error.message}`);
-        }
-      });
-
-      return NextResponse.json({
-        success: true,
-        cardId: id,
-        workingDir: worktreePath,
-        terminal,
-        message: "Ghostty opened. Command copied to clipboard - press Cmd+V to paste.",
-      });
-    }
-
-    // iTerm2 or Terminal.app - use AppleScript
-    // Write command to temp script to avoid complex escaping
     const timestamp = Date.now();
     const scriptPath = join(tmpdir(), `claude-conflict-${timestamp}.sh`);
     writeFileSync(scriptPath, `#!/bin/bash\n${claudeCommand}\n`, { mode: 0o755 });
 
-    const appName = terminal === "iterm2" ? "iTerm" : "Terminal";
-
-    const appleScript = terminal === "iterm2"
-      ? `tell application "${appName}"
+    if (terminal === "ghostty") {
+      spawn("open", ["-na", "Ghostty.app", "--args", "-e", scriptPath]);
+    } else {
+      const appleScript =
+        terminal === "iterm2"
+          ? `tell application "iTerm"
     create window with default profile
     tell current session of current window
         write text "${scriptPath}"
     end tell
 end tell`
-      : `tell application "${appName}"
+          : `tell application "Terminal"
     do script "${scriptPath}"
     activate
 end tell`;
 
-    const osascriptProcess = spawn("osascript", []);
-    osascriptProcess.stdin.write(appleScript);
-    osascriptProcess.stdin.end();
-    osascriptProcess.on("error", (error) => {
-      console.error(`[Resolve Conflict] Error: ${error.message}`);
-      try { unlinkSync(scriptPath); } catch {}
-    });
+      const osascriptProcess = spawn("osascript", []);
+      osascriptProcess.stdin.write(appleScript);
+      osascriptProcess.stdin.end();
+      osascriptProcess.on("error", (error) => {
+        console.error(`[Resolve Conflict] Error: ${error.message}`);
+        try { unlinkSync(scriptPath); } catch {}
+      });
+    }
 
     return NextResponse.json({
       success: true,
