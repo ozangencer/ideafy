@@ -173,18 +173,23 @@ export function BackgroundProcesses() {
     runningProcessesRef.current = currentRunning;
   }, [runningProcesses, toast]);
 
-  // Always poll - component is always mounted
+  // Poll only when there are running processes
+  const hasRunning = backgroundProcesses.some((p) => p.status === "running");
+
   useEffect(() => {
     // Initial fetch
     fetchBackgroundProcesses();
+  }, [fetchBackgroundProcesses]);
 
-    // Always poll every 3 seconds to catch new processes
+  useEffect(() => {
+    if (!hasRunning) return;
+
     const interval = setInterval(() => {
       fetchBackgroundProcesses();
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [fetchBackgroundProcesses]);
+  }, [hasRunning, fetchBackgroundProcesses]);
 
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;

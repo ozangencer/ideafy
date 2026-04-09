@@ -216,8 +216,9 @@ export const createConversationSlice: StoreSlice<
   },
 
   detachConversation: () => {
-    // Clear UI state without aborting the process - lets it run in background
-    set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
+    // Modal closed while streaming — keep stream alive so it continues
+    // in background. The finally block in sendMessage will clean up
+    // when the stream naturally completes.
   },
 
   clearConversation: async (cardId, sectionType) => {

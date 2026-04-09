@@ -4,10 +4,50 @@ import { useRef, useEffect, useCallback, useState } from "react";
 import { ConversationMessage as Message, SectionType, SECTION_CONFIG } from "@/lib/types";
 import { ConversationMessage } from "./conversation-message";
 import { ConversationInput } from "./conversation-input";
-import { MessageSquare, Trash2, Terminal, Loader2 } from "lucide-react";
+import { MessageSquare, Trash2, Terminal, Loader2, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useKanbanStore } from "@/lib/store";
+
+/** Parse TipTap taskList HTML into individual scenario items (only taskItems, not headings) */
+function parseTestScenarios(html: string): { text: string; group: string; checked: boolean }[] {
+  const items: { text: string; group: string; checked: boolean }[] = [];
+  let currentGroup = "";
+
+  // Collect heading positions
+  const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/g;
+  const headings = new Map<number, string>();
+  let hMatch;
+  while ((hMatch = headingRegex.exec(html)) !== null) {
+    headings.set(hMatch.index, hMatch[1].replace(/<[^>]*>/g, "").trim());
+  }
+
+  // Find all taskItems
+  const liRegex = /<li([^>]*)data-type="taskItem"([^>]*)>([\s\S]*?)<\/li>/g;
+  let match;
+  while ((match = liRegex.exec(html)) !== null) {
+    for (const [pos, title] of headings) {
+      if (pos < match.index) currentGroup = title;
+    }
+    // data-checked can be in either attribute group
+    const attrs = match[1] + match[2];
+    const checked = attrs.includes('data-checked="true"');
+    const text = match[3].replace(/<[^>]*>/g, "").trim();
+    if (text) {
+      items.push({ text, group: currentGroup, checked });
+    }
+  }
+  return items;
+}
 
 interface ConversationPanelProps {
   cardId: string;
@@ -44,6 +84,7 @@ export function ConversationPanel({
   const config = SECTION_CONFIG[sectionType];
   const { toast } = useToast();
   const [isGeneratingTests, setIsGeneratingTests] = useState(false);
+  const [isResumingCli, setIsResumingCli] = useState(false);
   const conversationError = useKanbanStore((s) => s.conversationError);
   const setConversationError = useKanbanStore((s) => s.setConversationError);
 
@@ -62,12 +103,39 @@ export function ConversationPanel({
   // Check if testScenarios has content (strip HTML tags)
   const hasTestScenarios = testScenarios && testScenarios.replace(/<[^>]*>/g, "").trim().length > 0;
 
-  // Handle generate tests button click
+  // Test scenario selection dialog state
+  const [showTestDialog, setShowTestDialog] = useState(false);
+  const [parsedScenarios, setParsedScenarios] = useState<{ text: string; group: string; selected: boolean }[]>([]);
+
+  const openTestDialog = () => {
+    if (!testScenarios) return;
+    const items = parseTestScenarios(testScenarios);
+    // Invert: checked (already tested) → unselected, unchecked (needs testing) → selected
+    setParsedScenarios(items.map(item => ({ text: item.text, group: item.group, selected: !item.checked })));
+    setShowTestDialog(true);
+  };
+
+  const toggleScenario = (index: number) => {
+    setParsedScenarios(prev =>
+      prev.map((item, i) => i === index ? { ...item, selected: !item.selected } : item)
+    );
+  };
+
+  const selectAll = () => setParsedScenarios(prev => prev.map(item => ({ ...item, selected: true })));
+  const selectNone = () => setParsedScenarios(prev => prev.map(item => ({ ...item, selected: false })));
+
+  // Handle generate tests with selected scenarios
   const handleGenerateTests = async () => {
+    const selected = parsedScenarios.filter(s => s.selected).map(s => s.text);
+    if (selected.length === 0) return;
+
+    setShowTestDialog(false);
     setIsGeneratingTests(true);
     try {
       const response = await fetch(`/api/cards/${cardId}/generate-tests`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedScenarios: selected }),
       });
 
       const data = await response.json();
@@ -83,7 +151,7 @@ export function ConversationPanel({
 
       toast({
         title: "Terminal Opened",
-        description: data.message || "Claude Code is generating tests",
+        description: data.message || `Generating tests for ${selected.length} scenario(s)`,
       });
     } catch (error) {
       toast({
@@ -93,6 +161,28 @@ export function ConversationPanel({
       });
     } finally {
       setIsGeneratingTests(false);
+    }
+  };
+
+  // Handle resume CLI session button
+  const handleResumeCli = async () => {
+    setIsResumingCli(true);
+    try {
+      const response = await fetch(`/api/cards/${cardId}/resume-cli`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectionType }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        toast({ variant: "destructive", title: "Resume Failed", description: data.error });
+        return;
+      }
+      toast({ title: "Terminal Opened", description: data.message });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: error instanceof Error ? error.message : "Failed to resume" });
+    } finally {
+      setIsResumingCli(false);
     }
   };
 
@@ -151,34 +241,61 @@ export function ConversationPanel({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* Generate Tests button - only show on tests tab when scenarios exist */}
+        <div className="flex items-center gap-1">
           {sectionType === "tests" && hasTestScenarios && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateTests}
-              disabled={isGeneratingTests}
-              className="h-6 px-2 text-xs border-green-500/50 text-green-500 hover:bg-green-500/10"
-            >
-              {isGeneratingTests ? (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              ) : (
-                <Terminal className="w-3 h-3 mr-1" />
-              )}
-              Generate Tests
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openTestDialog}
+                  disabled={isGeneratingTests}
+                  className="h-6 w-6 p-0 text-green-500 hover:bg-green-500/10"
+                >
+                  {isGeneratingTests ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Terminal className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Generate Tests</TooltipContent>
+            </Tooltip>
           )}
           {messages.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClearHistory}
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="w-3 h-3 mr-1" />
-              Clear
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResumeCli}
+                  disabled={isResumingCli}
+                  className="h-6 w-6 p-0 text-blue-500 hover:bg-blue-500/10"
+                >
+                  {isResumingCli ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <SquareTerminal className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Resume in CLI</TooltipContent>
+            </Tooltip>
+          )}
+          {messages.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClearHistory}
+                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Clear</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -227,6 +344,60 @@ export function ConversationPanel({
           placeholder={config.chatPlaceholder}
         />
       </div>
+      {/* Test Scenario Selection Dialog */}
+      <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Test Scenarios</DialogTitle>
+            <DialogDescription>
+              Choose which scenarios to generate tests for.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[300px] overflow-y-auto py-2">
+            {parsedScenarios.map((scenario, index) => {
+              const prevGroup = index > 0 ? parsedScenarios[index - 1].group : "";
+              const showGroup = scenario.group && scenario.group !== prevGroup;
+              return (
+                <div key={index}>
+                  {showGroup && (
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2 pt-2 pb-1">
+                      {scenario.group}
+                    </div>
+                  )}
+                  <label className="flex items-start gap-2 px-2 py-1 rounded hover:bg-muted/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={scenario.selected}
+                      onChange={() => toggleScenario(index)}
+                      className="mt-0.5 accent-green-500"
+                    />
+                    <span className="text-sm">{scenario.text}</span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter className="flex items-center justify-between sm:justify-between">
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={selectAll} className="text-xs h-7">
+                Select All
+              </Button>
+              <Button variant="ghost" size="sm" onClick={selectNone} className="text-xs h-7">
+                Clear
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleGenerateTests}
+              disabled={parsedScenarios.filter(s => s.selected).length === 0}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Terminal className="w-3.5 h-3.5 mr-1.5" />
+              Generate ({parsedScenarios.filter(s => s.selected).length})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -609,10 +609,14 @@ Generated: ${now}
 
 export function buildTestGenerationPrompt(
   card: { id: string; title: string; testScenarios: string },
-  displayId: string | null
+  displayId: string | null,
+  selectedScenarios?: string | null
 ): string {
   const title = stripHtml(card.title);
-  const scenarios = stripHtml(card.testScenarios);
+  const allScenarios = stripHtml(card.testScenarios);
+  const scenariosText = selectedScenarios
+    ? `- ${selectedScenarios}`
+    : allScenarios;
   const taskHeader = displayId ? `[${displayId}] ${title}` : title;
 
   return `# ${taskHeader}
@@ -625,7 +629,7 @@ export function buildTestGenerationPrompt(
 5. Create test files following project conventions
 
 ## Test Scenarios to Convert
-${scenarios}
+${scenariosText}
 
 ## Output Format
 After generating tests, update the testScenarios field with:

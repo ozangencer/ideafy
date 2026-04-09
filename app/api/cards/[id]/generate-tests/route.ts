@@ -17,6 +17,17 @@ export async function POST(
 ) {
   const { id } = await params;
 
+  // Parse optional selected scenarios from request body
+  let selectedScenarios: string[] | null = null;
+  try {
+    const body = await request.json();
+    if (Array.isArray(body.selectedScenarios) && body.selectedScenarios.length > 0) {
+      selectedScenarios = body.selectedScenarios;
+    }
+  } catch {
+    // No body or invalid JSON — use all scenarios
+  }
+
   // Get the card from database
   const card = db
     .select()
@@ -71,14 +82,19 @@ export async function POST(
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
 
-  // Build prompt
+  // Build prompt — use selected scenarios if provided, otherwise all
+  const scenariosForPrompt = selectedScenarios
+    ? selectedScenarios.join("\n- ")
+    : null;
+
   const prompt = buildTestGenerationPrompt(
     {
       id: card.id,
       title: card.title,
       testScenarios: card.testScenarios,
     },
-    displayId
+    displayId,
+    scenariosForPrompt
   );
 
   try {

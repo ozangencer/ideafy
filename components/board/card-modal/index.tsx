@@ -317,16 +317,7 @@ export function CardModal() {
   // Poll background processes to detect running chat streams
   useEffect(() => {
     if (!selectedCard || isDraftMode) return;
-
-    // Initial fetch
     fetchBackgroundProcesses();
-
-    // Poll every 2 seconds while modal is open
-    const interval = setInterval(() => {
-      fetchBackgroundProcesses();
-    }, 2000);
-
-    return () => clearInterval(interval);
   }, [selectedCard, isDraftMode, fetchBackgroundProcesses]);
 
   // Get current conversation messages
