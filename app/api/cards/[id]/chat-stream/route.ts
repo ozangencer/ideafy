@@ -477,7 +477,6 @@ export async function POST(
 
       cliProcess.stdout?.on("data", (data: Buffer) => {
         const raw = data.toString();
-        console.log(`[chat-stream] stdout (${provider.id}):`, raw.slice(0, 300));
         stdoutBuffer += raw;
         const lines = stdoutBuffer.split('\n');
         stdoutBuffer = lines.pop() || "";
@@ -486,7 +485,6 @@ export async function POST(
           if (!line.trim()) continue;
 
           const events = provider.parseStreamLine(line);
-          console.log(`[chat-stream] parsed ${events.length} events from line:`, line.slice(0, 100));
           for (const event of events) {
             switch (event.type) {
               case "text":
@@ -521,7 +519,6 @@ export async function POST(
 
       cliProcess.stderr?.on("data", (data: Buffer) => {
         const text = data.toString();
-        console.log(`[chat-stream] stderr (${provider.id}):`, text.slice(0, 500));
         if (text.includes("error") || text.includes("Error")) {
           sendEvent("stderr", text);
         }

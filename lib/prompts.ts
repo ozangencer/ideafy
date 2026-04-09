@@ -124,40 +124,6 @@ export function saveCardImagesToTemp(
 }
 
 /**
- * Extract base64 images from a conversation message content string,
- * save them to temp files, and return the content with images replaced
- * by file path references. This dramatically reduces token usage when
- * chat history is included in prompts.
- */
-export function extractConversationImages(
-  content: string,
-  cardId: string,
-  messageIndex: number
-): { cleanContent: string; savedImages: SavedImage[] } {
-  const savedImages: SavedImage[] = [];
-  const timestamp = Date.now();
-  const imgRegex = /<img[^>]*src=["']data:(image\/[^;]+);base64,([^"']+)["'][^>]*>/gi;
-
-  let index = 0;
-  const cleanContent = content.replace(imgRegex, (_match, mimeType: string, base64Data: string) => {
-    const ext = mimeType.split('/')[1] || 'png';
-    const filename = `kanban-${cardId.slice(0, 8)}-chat-${messageIndex}-${index}-${timestamp}.${ext}`;
-    const filepath = join(tmpdir(), filename);
-
-    const buffer = Buffer.from(base64Data, 'base64');
-    writeFileSync(filepath, buffer);
-
-    const imgId = `chat_image_${messageIndex}_${index}`;
-    savedImages.push({ id: imgId, path: filepath, fieldName: 'conversation' });
-    index++;
-
-    return `[Image: see ${filepath}]`;
-  });
-
-  return { cleanContent, savedImages };
-}
-
-/**
  * Generate markdown reference section for saved images.
  * Tells Claude to use the Read tool to view them.
  */
