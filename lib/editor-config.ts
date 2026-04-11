@@ -122,7 +122,8 @@ export const commonEditorProps = {
               new Slice(fragment, 0, 0)
             );
             // Move cursor into the new paragraph after the image
-            tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(view.state.selection.from) + imageNode.nodeSize)));
+            const pos = Math.min(tr.mapping.map(view.state.selection.from) + imageNode.nodeSize, tr.doc.content.size - 1);
+            tr.setSelection(TextSelection.near(tr.doc.resolve(pos)));
             view.dispatch(tr);
             view.focus();
           }

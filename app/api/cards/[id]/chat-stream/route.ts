@@ -176,6 +176,33 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function processMentions(
+  message: string,
+  mentions: Array<{ type: string; id: string; label: string }> | undefined
+): string {
+  if (!mentions?.length) return message;
+
+  let processed = message;
+
+  // Only strip / from MCP and plugin mentions — these are NOT CLI skills
+  // Skill mentions keep their / prefix so Claude CLI can invoke them
+  for (const mention of mentions) {
+    if (mention.type === "mcp" || mention.type === "plugin") {
+      const slashPattern = new RegExp(`/${mention.label}\\b`, "g");
+      processed = processed.replace(slashPattern, mention.label);
+    }
+  }
+
+  // Add context for MCP mentions so Claude uses the right tools
+  const mcpMentions = mentions.filter(m => m.type === "mcp");
+  if (mcpMentions.length > 0) {
+    const names = mcpMentions.map(m => m.id).join(", ");
+    processed = `[Referenced MCP tools: ${names} — use the corresponding mcp__* tools]\n\n${processed}`;
+  }
+
+  return processed;
+}
+
 // Read product narrative file for a project
 function readNarrativeContent(projectFolderPath: string, customNarrativePath?: string | null): string | undefined {
   try {
@@ -314,6 +341,9 @@ export async function POST(
   if (savedImages.length > 0) {
     userMessage = `${userMessage}\n\n${generateImageReferences(savedImages)}`;
   }
+
+  // Process mentions: strip / from MCP mentions to prevent CLI skill interpretation
+  userMessage = processMentions(userMessage, mentions);
 
   // Check for existing CLI session to resume
   const provider = getProviderForCard(card);
