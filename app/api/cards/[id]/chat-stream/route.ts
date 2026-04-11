@@ -33,13 +33,21 @@ interface CardContext {
 }
 
 // Get allowed tools based on card status AND section type
-function getAllowedTools(status: string, sectionType: string): string[] {
-  // Only "tests" section on active cards gets full code execution tools
-  if (sectionType === "tests" && ["progress", "test", "completed"].includes(status)) {
-    return ["Read", "Edit", "Write", "Bash", "Grep", "Glob"];
+function getAllowedTools(
+  mentions?: Array<{ type: string; id: string; label: string }>
+): string[] {
+  const base = ["Read", "Grep", "Glob"];
+
+  // Add MCP tool patterns for referenced MCP mentions
+  if (mentions?.length) {
+    for (const m of mentions) {
+      if (m.type === "mcp" || m.type === "plugin") {
+        base.push(`mcp__${m.id}__*`);
+      }
+    }
   }
-  // All other sections: read-only (card field updates happen via MCP tools)
-  return ["Read"];
+
+  return base;
 }
 
 // Build card context string
@@ -429,9 +437,11 @@ export async function POST(
         console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType}`);
       } else {
         // FRESH MODE — full context (system prompt + conversation history + user message)
+        const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
         cliArgs = provider.buildStreamArgs({
           prompt: fullPrompt,
-          allowedTools: getAllowedTools(card.status, sectionType),
+          skipPermissions: isTestAction,
+          allowedTools: isTestAction ? undefined : getAllowedTools(mentions),
           addDirs: [tmpdir()],
           newSessionId,
         });

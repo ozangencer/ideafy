@@ -24,6 +24,7 @@ export interface InteractiveOptions {
 export interface StreamOptions {
   prompt: string;
   allowedTools?: string[];
+  skipPermissions?: boolean;
   addDirs?: string[];
   resumeSessionId?: string;
   newSessionId?: string;

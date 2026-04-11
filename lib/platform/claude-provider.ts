@@ -94,13 +94,17 @@ class ClaudeProvider implements PlatformProvider {
       "--verbose",
     ];
 
+    if (opts.skipPermissions) {
+      args.push("--dangerously-skip-permissions");
+    }
+
     if (opts.resumeSessionId) {
       args.push("--resume", opts.resumeSessionId);
     } else {
       if (opts.newSessionId) {
         args.push("--session-id", opts.newSessionId);
       }
-      if (opts.allowedTools?.length) {
+      if (!opts.skipPermissions && opts.allowedTools?.length) {
         args.push("--allowedTools", ...opts.allowedTools);
       }
     }
