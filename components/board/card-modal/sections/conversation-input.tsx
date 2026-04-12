@@ -6,12 +6,12 @@ import Placeholder from "@tiptap/extension-placeholder";
 import ImageResize from "tiptap-extension-resize-image";
 import { useCallback, useRef, useMemo, useEffect, useState, useLayoutEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, Square } from "lucide-react";
+import { Send, Square, X } from "lucide-react";
 import { useKanbanStore } from "@/lib/store";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
+import { ImageAttachment } from "@/lib/image-attachment-extension";
 import { MentionData, SectionType } from "@/lib/types";
-import { commonEditorProps } from "@/lib/editor-config";
 
 interface ConversationInputProps {
   cardId: string;
@@ -54,6 +54,21 @@ export function ConversationInput({
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
 
+  // Pasted image attachments shown as chips above the editor. Kept outside the
+  // TipTap doc so the input height stays stable. At send time, they are serialized
+  // into the HTML content as <img src="data:..."> tags so the backend
+  // extractConversationImages() regex picks them up and writes temp files — the
+  // existing contract to the CLI is unchanged.
+  //
+  // Each chip is paired with an inline `imageAttachment` node in the editor doc
+  // that displays `📎 image N`. The `id` links both sides for two-way binding
+  // (chip × removes the node; backspacing the node removes the chip via onUpdate).
+  // `index` is a monotonic counter that only resets on send.
+  type PastedImage = { id: string; base64: string; mime: string; index: number };
+  const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
+  const pastedImagesRef = useRef<PastedImage[]>([]);
+  const indexCounterRef = useRef(0);
+
   // Refs to avoid recreating editorProps on every render
   const isLoadingRef = useRef(isLoading);
   const onSendRef = useRef(onSend);
@@ -62,7 +77,48 @@ export function ConversationInput({
   useLayoutEffect(() => {
     isLoadingRef.current = isLoading;
     onSendRef.current = onSend;
-  }, [isLoading, onSend]);
+    pastedImagesRef.current = pastedImages;
+  }, [isLoading, onSend, pastedImages]);
+
+  // editorRef lets removePastedImage reach the current editor without forcing
+  // the callback identity to change on every editor re-render.
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
+
+  const removePastedImage = useCallback((id: string) => {
+    setPastedImages((prev) => prev.filter((img) => img.id !== id));
+    const ed = editorRef.current;
+    if (!ed) return;
+    const positions: Array<{ from: number; to: number }> = [];
+    ed.state.doc.descendants((node, pos) => {
+      if (node.type.name === "imageAttachment" && node.attrs.id === id) {
+        positions.push({ from: pos, to: pos + node.nodeSize });
+      }
+    });
+    // Reverse so earlier positions don't shift later ones during deletion.
+    positions.reverse().forEach(({ from, to }) => {
+      ed.chain().focus().deleteRange({ from, to }).run();
+    });
+  }, []);
+
+  // Build the content string in the same shape the backend expects:
+  // - plain text when there are no images
+  // - HTML with embedded <img src="data:..."> when images are attached
+  const buildContent = useCallback((ed: ReturnType<typeof useEditor>) => {
+    if (!ed) return "";
+    const chips = pastedImagesRef.current;
+    const json = ed.getJSON();
+    const editorHasImg =
+      JSON.stringify(json).includes('"type":"imageResize"') ||
+      JSON.stringify(json).includes('"type":"image"');
+    const anyImages = chips.length > 0 || editorHasImg;
+    if (!anyImages) {
+      return ed.getText({ blockSeparator: "\n" }).trim();
+    }
+    const chipsHtml = chips
+      .map((img) => `<p><img src="${img.base64}" alt="" /></p>`)
+      .join("");
+    return chipsHtml + ed.getHTML();
+  }, []);
 
   // Fetch and maintain documents for the card's project
   useEffect(() => {
@@ -217,6 +273,7 @@ export function ConversationInput({
     DocumentMention.configure({
       suggestion: documentSuggestion,
     }),
+    ImageAttachment,
   ], [placeholder, unifiedSuggestion, cardSuggestion, documentSuggestion]);
 
   const editor = useEditor({
@@ -226,11 +283,60 @@ export function ConversationInput({
       attributes: {
         class: "prose-kanban chat-input-editor",
       },
-      // Handle image paste
-      handlePaste: commonEditorProps.handlePaste,
+      // Intercept image paste — push into chips state instead of inserting
+      // an inline node so the editor height stays stable. An `imageAttachment`
+      // node ("📎 image N") is inserted at the caret so the user sees where in
+      // the message the image was attached and can reference it by number.
+      // Backend `extractConversationImages` only matches base64 <img> tags,
+      // so the span markers are passed through as decorative text.
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
+            const MAX_SIZE = 5 * 1024 * 1024;
+            if (file.size > MAX_SIZE) {
+              console.warn("Image too large (max 5MB)");
+              return true;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = reader.result as string;
+              const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              const index = ++indexCounterRef.current;
+              setPastedImages((prev) => [
+                ...prev,
+                { id, base64, mime: item.type, index },
+              ]);
+              const nodeType = view.state.schema.nodes.imageAttachment;
+              if (nodeType) {
+                view.dispatch(
+                  view.state.tr
+                    .replaceSelectionWith(nodeType.create({ id, index }))
+                    .scrollIntoView()
+                );
+              }
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+        return false;
+      },
       // Handle Enter key here - this runs AFTER suggestion handlers
       // Using refs to avoid recreating this function on every render
       handleKeyDown: (view, event) => {
+        if (event.key === "Enter" && event.shiftKey) {
+          event.preventDefault();
+          if (editor) {
+            editor.chain().focus().setHardBreak().scrollIntoView().run();
+          }
+          return true;
+        }
         if (event.key === "Enter" && !event.shiftKey) {
           // Check if suggestion popup is open - if so, let it handle the key
           if (isSuggestionPopupOpen()) {
@@ -241,14 +347,15 @@ export function ConversationInput({
           event.preventDefault();
 
           // Use refs to get current values without causing re-renders
-          if (editor && !isLoadingRef.current && checkHasContent(editor)) {
+          const hasChips = pastedImagesRef.current.length > 0;
+          if (editor && !isLoadingRef.current && (checkHasContent(editor) || hasChips)) {
             const json = editor.getJSON();
-            const hasImages = JSON.stringify(json).includes('"type":"imageResize"') ||
-                              JSON.stringify(json).includes('"type":"image"');
-            const content = hasImages ? editor.getHTML() : editor.getText({ blockSeparator: "\n" }).trim();
+            const content = buildContent(editor);
             const mentions = extractMentions(json);
             onSendRef.current(content, mentions);
             editor.commands.clearContent();
+            setPastedImages([]);
+            indexCounterRef.current = 0;
           }
           return true;
         }
@@ -257,24 +364,39 @@ export function ConversationInput({
     },
     onUpdate: ({ editor: ed }) => {
       setIsEmpty(!checkHasContent(ed));
+      // Sync doc → state: if the user backspaced an attachment marker out of
+      // the editor, drop the matching chip from state.
+      const aliveIds = new Set<string>();
+      ed.state.doc.descendants((node) => {
+        if (node.type.name === "imageAttachment") {
+          aliveIds.add(node.attrs.id as string);
+        }
+      });
+      setPastedImages((prev) => {
+        const filtered = prev.filter((img) => aliveIds.has(img.id));
+        return filtered.length === prev.length ? prev : filtered;
+      });
     },
   });
+
+  // Keep editorRef in sync for callbacks that need the latest instance.
+  useLayoutEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   // Handle send via button click
   const handleSend = useCallback(() => {
     if (!editor || isLoading) return;
-    if (!checkHasContent(editor)) return;
+    const hasChips = pastedImages.length > 0;
+    if (!checkHasContent(editor) && !hasChips) return;
 
-    // Get HTML content (includes images) or plain text
     const json = editor.getJSON();
-    const hasImages = JSON.stringify(json).includes('"type":"imageResize"') ||
-                      JSON.stringify(json).includes('"type":"image"');
-
-    const content = hasImages ? editor.getHTML() : editor.getText().trim();
+    const content = buildContent(editor);
     const mentions = extractMentions(json);
     onSend(content, mentions);
     editor.commands.clearContent();
-  }, [editor, isLoading, onSend, extractMentions, checkHasContent]);
+    setPastedImages([]);
+  }, [editor, isLoading, onSend, extractMentions, checkHasContent, pastedImages.length, buildContent]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
@@ -287,6 +409,31 @@ export function ConversationInput({
         ref={containerRef}
         className="flex-1 chat-input-container rounded-lg border border-border/50 bg-background/50 focus-within:border-accent/50 transition-colors"
       >
+        {pastedImages.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-3 pt-2 pb-1.5 border-b border-border/30">
+            {pastedImages.map((img) => (
+              <div
+                key={img.id}
+                className="relative w-16 h-16 rounded border border-border/50 bg-background overflow-hidden shrink-0"
+                title={`📎 image ${img.index} (${img.mime})`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.base64} alt="" className="w-full h-full object-cover" />
+                <span className="absolute bottom-0 left-0 right-0 bg-background/85 text-[10px] font-mono text-center text-amber-600 dark:text-amber-400 py-0.5 border-t border-border/40 leading-tight">
+                  📎 {img.index}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removePastedImage(img.id)}
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-background border border-border/60 flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/60 transition-colors shadow-sm"
+                  aria-label={`Remove image ${img.index}`}
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <EditorContent editor={editor} />
       </div>
       {isLoading ? (
@@ -303,7 +450,7 @@ export function ConversationInput({
         <Button
           size="icon"
           onClick={handleSend}
-          disabled={isEmpty}
+          disabled={isEmpty && pastedImages.length === 0}
           className="h-9 w-9 shrink-0"
         >
           <Send className="h-4 w-4" />

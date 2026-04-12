@@ -206,6 +206,21 @@ export function ConversationPanel({
     }
   }, [messages, streamingMessage]);
 
+  // Keep pinned-to-bottom when the scroll container resizes (e.g. input bar grows
+  // after image paste or Shift+Enter newlines). Without this, the latest message
+  // slides out of view as clientHeight shrinks.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (!userScrolledUpRef.current && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Build message list with streaming or background processing indicator
   const allMessages = (() => {
     if (streamingMessage) {

@@ -438,6 +438,16 @@ button:disabled {
   @apply bg-orange-500/30;
 }
 
+/* Image attachment marker (paste chip ↔ inline pill link) */
+.image-attachment {
+  @apply inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-xs font-mono border-l-2 select-none align-baseline;
+  @apply bg-amber-500/15 text-amber-600 border-l-amber-500;
+}
+
+.light .image-attachment {
+  @apply bg-amber-100 text-amber-700 border-l-amber-500;
+}
+
 /* Inline mention highlights in chat messages */
 .mention-inline {
   @apply px-1 py-0.5 rounded text-xs font-mono;
@@ -548,7 +558,10 @@ button:disabled {
 }
 
 .chat-input-container .ProseMirror {
-  @apply outline-none px-3 py-2 text-sm min-h-[38px] max-h-[200px] overflow-y-auto;
+  @apply outline-none px-3 py-2 text-sm min-h-[38px] overflow-y-auto;
+  max-height: min(40vh, 420px);
+  scroll-padding-block-end: 1.5rem;
+  transition: max-height 150ms ease-out;
 }
 
 /* Chat input image styles - smaller than main editor */
