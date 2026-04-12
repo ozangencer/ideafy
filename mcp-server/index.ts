@@ -530,7 +530,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             setClauses.push(`${fieldMap[key]} = ?`);
             // Convert markdown to HTML for rich text fields
             if (markdownFields.includes(key) && typeof value === "string") {
-              values.push(markdownToTiptapHtml(value));
+              let htmlValue = markdownToTiptapHtml(value);
+              // Preserve existing check states when overwriting test_scenarios
+              if (key === "testScenarios") {
+                const existing = db.prepare(`SELECT test_scenarios FROM cards WHERE id = ?`).get(id) as { test_scenarios: string } | undefined;
+                if (existing?.test_scenarios) {
+                  htmlValue = mergeTestCheckState(existing.test_scenarios, htmlValue);
+                }
+              }
+              values.push(htmlValue);
             } else {
               values.push(value);
             }
