@@ -426,18 +426,20 @@ export async function POST(
         }
       };
 
+      const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
+
       let cliArgs: string[];
       if (canResume && existingSession) {
         // RESUME MODE — only send the new user message, no system prompt or history
         cliArgs = provider.buildStreamArgs({
           prompt: userMessage,
+          skipPermissions: isTestAction,
           addDirs: [tmpdir()],
           resumeSessionId: existingSession.cliSessionId,
         });
-        console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType}`);
+        console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType} (skipPermissions=${isTestAction})`);
       } else {
         // FRESH MODE — full context (system prompt + conversation history + user message)
-        const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
         cliArgs = provider.buildStreamArgs({
           prompt: fullPrompt,
           skipPermissions: isTestAction,
