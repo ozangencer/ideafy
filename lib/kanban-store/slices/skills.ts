@@ -3,13 +3,15 @@ import { KanbanStore, StoreSlice } from "../types";
 import { UnifiedItem } from "@/lib/types";
 
 export const createSkillsSlice: StoreSlice<
-  Pick<KanbanStore, "skills" | "mcps" | "plugins" | "projectSkills" | "projectMcps" | "fetchSkills" | "fetchMcps" | "fetchPlugins" | "fetchProjectExtensions" | "getUnifiedItems">
+  Pick<KanbanStore, "skills" | "mcps" | "agents" | "plugins" | "projectSkills" | "projectMcps" | "projectAgents" | "fetchSkills" | "fetchMcps" | "fetchAgents" | "fetchPlugins" | "fetchProjectExtensions" | "getUnifiedItems">
 > = (set, get) => ({
   skills: [],
   mcps: [],
+  agents: [],
   plugins: [],
   projectSkills: [],
   projectMcps: [],
+  projectAgents: [],
 
   fetchSkills: async () => {
     try {
@@ -31,6 +33,16 @@ export const createSkillsSlice: StoreSlice<
     }
   },
 
+  fetchAgents: async () => {
+    try {
+      const response = await fetch("/api/agents");
+      const data = await parseJson<{ agents?: string[] }>(response);
+      set({ agents: data.agents || [] });
+    } catch (error) {
+      console.error("Failed to fetch agents:", error);
+    }
+  },
+
   fetchPlugins: async () => {
     // Plugins are future feature - return empty for now
     set({ plugins: [] });
@@ -38,28 +50,31 @@ export const createSkillsSlice: StoreSlice<
 
   fetchProjectExtensions: async (projectId: string | null) => {
     if (!projectId) {
-      set({ projectSkills: [], projectMcps: [] });
+      set({ projectSkills: [], projectMcps: [], projectAgents: [] });
       return;
     }
 
     try {
-      const [skillsRes, mcpsRes] = await Promise.all([
+      const [skillsRes, mcpsRes, agentsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/skills/list`),
         fetch(`/api/projects/${projectId}/mcps/list`),
+        fetch(`/api/projects/${projectId}/agents/list`),
       ]);
 
-      const [skillsData, mcpsData] = await Promise.all([
+      const [skillsData, mcpsData, agentsData] = await Promise.all([
         parseJson<{ skills?: string[] }>(skillsRes),
         parseJson<{ mcps?: string[] }>(mcpsRes),
+        parseJson<{ agents?: string[] }>(agentsRes),
       ]);
 
       set({
         projectSkills: skillsData.skills || [],
         projectMcps: mcpsData.mcps || [],
+        projectAgents: agentsData.agents || [],
       });
     } catch (error) {
       console.error("Failed to fetch project extensions:", error);
-      set({ projectSkills: [], projectMcps: [] });
+      set({ projectSkills: [], projectMcps: [], projectAgents: [] });
     }
   },
 
@@ -90,6 +105,19 @@ export const createSkillsSlice: StoreSlice<
           id: mcp,
           label: mcp,
           type: "mcp",
+        });
+      }
+    });
+
+    // Merge global + project agents (dedupe)
+    const allAgents = Array.from(new Set([...state.agents, ...state.projectAgents]));
+    allAgents.forEach((agent) => {
+      if (!addedIds.has(`agent-${agent}`)) {
+        addedIds.add(`agent-${agent}`);
+        items.push({
+          id: agent,
+          label: agent,
+          type: "agent",
         });
       }
     });

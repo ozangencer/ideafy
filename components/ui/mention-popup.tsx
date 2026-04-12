@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Terminal, Server, Puzzle } from "lucide-react";
+import { Terminal, Server, Puzzle, Bot } from "lucide-react";
 import { UnifiedItemType } from "@/lib/types";
 
 export interface MentionItem {
@@ -121,6 +121,12 @@ const TYPE_CONFIG: Record<UnifiedItemType, {
     label: "MCP",
     iconClass: "text-blue-400",
     borderClass: "border-l-blue-500",
+  },
+  agent: {
+    icon: Bot,
+    label: "Agent",
+    iconClass: "text-amber-400",
+    borderClass: "border-l-amber-500",
   },
   plugin: {
     icon: Puzzle,

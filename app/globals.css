@@ -406,6 +406,14 @@ button:disabled {
   @apply bg-blue-100 text-blue-700 border-l-blue-500;
 }
 
+.unified-mention--agent {
+  @apply bg-amber-500/20 text-amber-400 border-l-amber-500;
+}
+
+.light .unified-mention--agent {
+  @apply bg-amber-100 text-amber-700 border-l-amber-500;
+}
+
 .unified-mention--plugin {
   @apply bg-purple-500/20 text-purple-400 border-l-purple-500;
 }

@@ -20,6 +20,7 @@ export default function Home() {
     fetchSettings,
     fetchSkills,
     fetchMcps,
+    fetchAgents,
     fetchDocuments,
     isModalOpen,
     isLoading,
@@ -58,7 +59,8 @@ export default function Home() {
     fetchSettings();
     fetchSkills();
     fetchMcps();
-  }, [fetchCards, fetchProjects, fetchSettings, fetchSkills, fetchMcps]);
+    fetchAgents();
+  }, [fetchCards, fetchProjects, fetchSettings, fetchSkills, fetchMcps, fetchAgents]);
 
   // Polling: Refresh data every 10 seconds (skip when modal/editor is open to prevent form reset)
   useEffect(() => {
@@ -68,13 +70,14 @@ export default function Home() {
       fetchCards();
       fetchSkills();
       fetchMcps();
+      fetchAgents();
       if (activeProjectId) {
         fetchDocuments(activeProjectId);
       }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
 
   // Focus refresh: Refresh when tab becomes visible (skip when modal/editor is open)
   useEffect(() => {
@@ -83,6 +86,7 @@ export default function Home() {
         fetchCards();
         fetchSkills();
         fetchMcps();
+        fetchAgents();
         if (activeProjectId) {
           fetchDocuments(activeProjectId);
         }
@@ -91,7 +95,7 @@ export default function Home() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
 
   // Get active project name for display
   const activeProject = projects.find((p) => p.id === activeProjectId);

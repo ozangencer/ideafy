@@ -7,6 +7,7 @@ export interface PlatformCapabilities {
   supportsHooks: boolean;
   supportsSkills: boolean;
   supportsMcp: boolean;
+  supportsAgents: boolean;
   supportsSessionResume: boolean;
   mcpConfigFormat: "json" | "toml";
 }
@@ -67,11 +68,13 @@ export interface PlatformProvider {
   // Config paths
   getDefaultSkillsPath(): string;
   getDefaultMcpConfigPath(): string;
+  getDefaultAgentsPath(): string;
   getProjectConfigDir(): string;
 
   // Extensions
   listProjectMcps(folderPath: string): string[];
   listProjectSkills(folderPath: string): string[];
+  listProjectAgents(folderPath: string): string[];
   installIdeafyMcp(folderPath: string): Result;
   removeIdeafyMcp(folderPath: string): Result;
   hasIdeafyMcp(folderPath: string): boolean;

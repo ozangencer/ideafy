@@ -181,10 +181,10 @@ export const SECTION_CONFIG: Record<SectionType, {
 };
 
 // Mention types for chat input
-export type UnifiedItemType = "skill" | "mcp" | "plugin";
+export type UnifiedItemType = "skill" | "mcp" | "agent" | "plugin";
 
 export interface MentionData {
-  type: "skill" | "mcp" | "plugin" | "card" | "document";
+  type: "skill" | "mcp" | "agent" | "plugin" | "card" | "document";
   id: string;
   label: string;
 }

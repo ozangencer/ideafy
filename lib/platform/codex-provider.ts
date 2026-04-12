@@ -28,6 +28,7 @@ class CodexProvider implements PlatformProvider {
     supportsHooks: false,
     supportsSkills: true,
     supportsMcp: true,
+    supportsAgents: true,
     supportsSessionResume: true,
     mcpConfigFormat: "toml",
   };
@@ -147,6 +148,10 @@ class CodexProvider implements PlatformProvider {
     return "~/.codex/config.toml";
   }
 
+  getDefaultAgentsPath(): string {
+    return "~/.codex/agents";
+  }
+
   getProjectConfigDir(): string {
     return ".codex";
   }
@@ -176,6 +181,23 @@ class CodexProvider implements PlatformProvider {
           if (!fs.statSync(entryPath).isDirectory()) return false;
           return fs.existsSync(path.join(entryPath, "SKILL.md"));
         })
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [];
+    }
+  }
+
+  listProjectAgents(folderPath: string): string[] {
+    try {
+      const agentsDir = path.join(folderPath, ".codex", "agents");
+      if (!fs.existsSync(agentsDir)) return [];
+      return fs.readdirSync(agentsDir)
+        .filter((entry) => {
+          if (entry.startsWith(".")) return false;
+          if (!entry.endsWith(".toml")) return false;
+          return fs.statSync(path.join(agentsDir, entry)).isFile();
+        })
+        .map((entry) => entry.replace(/\.toml$/, ""))
         .sort((a, b) => a.localeCompare(b));
     } catch {
       return [];

@@ -37,6 +37,7 @@ class ClaudeProvider implements PlatformProvider {
     supportsHooks: true,
     supportsSkills: true,
     supportsMcp: true,
+    supportsAgents: true,
     supportsSessionResume: true,
     mcpConfigFormat: "json",
   };
@@ -192,6 +193,10 @@ class ClaudeProvider implements PlatformProvider {
     return "~/.claude.json";
   }
 
+  getDefaultAgentsPath(): string {
+    return "~/.claude/agents";
+  }
+
   getProjectConfigDir(): string {
     return ".claude";
   }
@@ -242,6 +247,23 @@ class ClaudeProvider implements PlatformProvider {
     } catch { /* ignore */ }
 
     return Array.from(skills).sort((a, b) => a.localeCompare(b));
+  }
+
+  listProjectAgents(folderPath: string): string[] {
+    try {
+      const agentsDir = path.join(folderPath, ".claude", "agents");
+      if (!fs.existsSync(agentsDir)) return [];
+      return fs.readdirSync(agentsDir)
+        .filter((entry) => {
+          if (entry.startsWith(".")) return false;
+          if (!entry.endsWith(".md")) return false;
+          return fs.statSync(path.join(agentsDir, entry)).isFile();
+        })
+        .map((entry) => entry.replace(/\.md$/, ""))
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [];
+    }
   }
 
   installIdeafyMcp(folderPath: string): Result {

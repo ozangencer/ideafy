@@ -42,11 +42,12 @@ export function MarkdownEditor({
   const isUpdatingFromExternal = useRef(false);
   const lastSyncedValue = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { cards, projects, activeProjectId, documents, skills, mcps } = useKanbanStore();
+  const { cards, projects, activeProjectId, documents, skills, mcps, agents } = useKanbanStore();
 
-  // Local state for project-specific skills/mcps
+  // Local state for project-specific skills/mcps/agents
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
+  const [localProjectAgents, setLocalProjectAgents] = useState<string[]>([]);
 
   // Ref to hold current documents for the callback
   const documentsRef = useRef<typeof documents>([]);
@@ -78,22 +79,25 @@ export function MarkdownEditor({
     if (!effectiveProjectId) {
       setLocalProjectSkills([]);
       setLocalProjectMcps([]);
+      setLocalProjectAgents([]);
       return;
     }
 
-    // Fetch project's skills and mcps
+    // Fetch project's skills, mcps and agents
     Promise.all([
       fetch(`/api/projects/${effectiveProjectId}/skills/list`).then(r => r.json()).catch(() => ({ skills: [] })),
       fetch(`/api/projects/${effectiveProjectId}/mcps/list`).then(r => r.json()).catch(() => ({ mcps: [] })),
-    ]).then(([skillsData, mcpsData]) => {
+      fetch(`/api/projects/${effectiveProjectId}/agents/list`).then(r => r.json()).catch(() => ({ agents: [] })),
+    ]).then(([skillsData, mcpsData, agentsData]) => {
       setLocalProjectSkills(skillsData.skills || []);
       setLocalProjectMcps(mcpsData.mcps || []);
+      setLocalProjectAgents(agentsData.agents || []);
     });
   }, [projectId, activeProjectId]);
 
   // Create unified items getter that merges global + card's project items
   const getUnifiedItems = useCallback(() => {
-    const items: Array<{ id: string; label: string; type: "skill" | "mcp" | "plugin" }> = [];
+    const items: Array<{ id: string; label: string; type: "skill" | "mcp" | "agent" | "plugin" }> = [];
     const addedIds = new Set<string>();
 
     // Merge global + project skills
@@ -114,8 +118,17 @@ export function MarkdownEditor({
       }
     });
 
+    // Merge global + project agents
+    const allAgents = Array.from(new Set([...agents, ...localProjectAgents]));
+    allAgents.forEach((agent) => {
+      if (!addedIds.has(`agent-${agent}`)) {
+        addedIds.add(`agent-${agent}`);
+        items.push({ id: agent, label: agent, type: "agent" });
+      }
+    });
+
     return items;
-  }, [skills, mcps, localProjectSkills, localProjectMcps]);
+  }, [skills, mcps, agents, localProjectSkills, localProjectMcps, localProjectAgents]);
 
   // Callback to get current documents (used by suggestion)
   const getDocuments = useCallback(() => documentsRef.current, []);

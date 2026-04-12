@@ -5,6 +5,7 @@ import { useKanbanStore } from "@/lib/store";
 import { ProjectList } from "./project-list";
 import { SkillList } from "./skill-list";
 import { McpList } from "./mcp-list";
+import { AgentList } from "./agent-list";
 import { DocumentList } from "./document-list";
 import { SettingsModal } from "./settings-modal";
 import { Button } from "@/components/ui/button";
@@ -227,6 +228,9 @@ export function Sidebar() {
 
             {/* MCPs Section */}
             <McpList />
+
+            {/* Agents Section */}
+            <AgentList />
 
             {/* Documents Section - only show when project selected */}
             {activeProjectId && (

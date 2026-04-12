@@ -28,6 +28,7 @@ class GeminiProvider implements PlatformProvider {
     supportsHooks: false,
     supportsSkills: true,
     supportsMcp: true,
+    supportsAgents: true,
     supportsSessionResume: true,
     mcpConfigFormat: "json",
   };
@@ -135,6 +136,10 @@ class GeminiProvider implements PlatformProvider {
     return "~/.gemini/settings.json";
   }
 
+  getDefaultAgentsPath(): string {
+    return "~/.gemini/agents";
+  }
+
   getProjectConfigDir(): string {
     return ".gemini";
   }
@@ -163,6 +168,23 @@ class GeminiProvider implements PlatformProvider {
           if (!fs.statSync(entryPath).isDirectory()) return false;
           return fs.existsSync(path.join(entryPath, "SKILL.md"));
         })
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [];
+    }
+  }
+
+  listProjectAgents(folderPath: string): string[] {
+    try {
+      const agentsDir = path.join(folderPath, ".gemini", "agents");
+      if (!fs.existsSync(agentsDir)) return [];
+      return fs.readdirSync(agentsDir)
+        .filter((entry) => {
+          if (entry.startsWith(".")) return false;
+          if (!entry.endsWith(".md")) return false;
+          return fs.statSync(path.join(agentsDir, entry)).isFile();
+        })
+        .map((entry) => entry.replace(/\.md$/, ""))
         .sort((a, b) => a.localeCompare(b));
     } catch {
       return [];

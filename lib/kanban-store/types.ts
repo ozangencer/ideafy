@@ -47,12 +47,14 @@ export interface KanbanStore {
   // Quick entry state
   isQuickEntryOpen: boolean;
 
-  // Skills, MCPs & Plugins state
+  // Skills, MCPs, Agents & Plugins state
   skills: string[];
   mcps: string[];
+  agents: string[];
   plugins: string[];
   projectSkills: string[];
   projectMcps: string[];
+  projectAgents: string[];
 
   // Claude integration state
   startingCardId: string | null;
@@ -129,9 +131,10 @@ export interface KanbanStore {
   closeQuickEntry: () => void;
   toggleQuickEntry: () => void;
 
-  // Skills, MCPs & Plugins actions
+  // Skills, MCPs, Agents & Plugins actions
   fetchSkills: () => Promise<void>;
   fetchMcps: () => Promise<void>;
+  fetchAgents: () => Promise<void>;
   fetchPlugins: () => Promise<void>;
   fetchProjectExtensions: (projectId: string | null) => Promise<void>;
   getUnifiedItems: () => UnifiedItem[];

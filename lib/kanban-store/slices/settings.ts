@@ -62,6 +62,9 @@ export const createSettingsSlice: StoreSlice<
         get().fetchMcps();
       }
       if (updates.aiPlatform) {
+        get().fetchAgents();
+      }
+      if (updates.aiPlatform) {
         const activeProjectId = get().activeProjectId;
         if (activeProjectId) {
           get().fetchProjectExtensions(activeProjectId);

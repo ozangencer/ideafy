@@ -35,3 +35,7 @@ export function listProjectSkills(folderPath: string): string[] {
 export function listProjectMcps(folderPath: string): string[] {
   return getActiveProvider().listProjectMcps(folderPath);
 }
+
+export function listProjectAgents(folderPath: string): string[] {
+  return getActiveProvider().listProjectAgents(folderPath);
+}
