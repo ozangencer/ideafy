@@ -19,25 +19,38 @@ const MENTION_CLASS: Record<string, string> = {
   plugin: "mention-inline mention-inline--skill",
 };
 
-// Build the display text for a mention as it appears in the content
-function mentionToText(m: MentionData): string {
-  if (m.type === "card") return `[[${m.label}]]`;
-  if (m.type === "document") return `#${m.label}`;
-  return `/${m.label}`; // skill, mcp, plugin
+// Build candidate display texts for a mention as it may appear in the content.
+// Multiple candidates cover legacy formats (e.g. bare card id, `#doc` pre-@-trigger).
+function mentionToTexts(m: MentionData): string[] {
+  if (m.type === "card") {
+    // New format: [[IDE-XX · Title]]; legacy: [[IDE-XX]] or [[Title]].
+    // The label may be "IDE-XX · Title", just "IDE-XX", or just "Title".
+    const texts = new Set<string>();
+    texts.add(`[[${m.label}]]`);
+    const idPart = m.label.split(" · ")[0];
+    if (idPart) texts.add(`[[${idPart}]]`);
+    return Array.from(texts);
+  }
+  if (m.type === "document") return [`@${m.label}`, `#${m.label}`];
+  return [`/${m.label}`]; // skill, mcp, plugin
 }
 
 // Replace mention text patterns with highlighted HTML spans
 function highlightMentions(content: string, mentions?: MentionData[]): string {
   if (!mentions || mentions.length === 0) return content;
 
-  let result = content;
-  // Process longer patterns first to avoid partial matches
-  const sorted = [...mentions].sort((a, b) => mentionToText(b).length - mentionToText(a).length);
+  // Build (needle, mention) pairs, longest needle first to avoid partial matches.
+  const pairs: Array<{ needle: string; mention: MentionData }> = [];
+  for (const mention of mentions) {
+    for (const needle of mentionToTexts(mention)) {
+      pairs.push({ needle, mention });
+    }
+  }
+  pairs.sort((a, b) => b.needle.length - a.needle.length);
 
-  for (const mention of sorted) {
-    const needle = mentionToText(mention);
+  let result = content;
+  for (const { needle, mention } of pairs) {
     const cls = MENTION_CLASS[mention.type] || MENTION_CLASS.skill;
-    // Escape special regex chars in the needle
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     result = result.replace(
       new RegExp(escaped, "g"),

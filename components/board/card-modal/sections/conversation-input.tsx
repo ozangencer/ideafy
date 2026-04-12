@@ -232,7 +232,9 @@ export function ConversationInput({
         // Legacy mcp mention
         mentions.push({ type: "mcp", id: node.attrs.id as string, label: node.attrs.label as string });
       } else if (node.type === "cardMention" && node.attrs) {
-        const cardLabel = (node.attrs.displayId || node.attrs.title || "Card") as string;
+        const displayId = (node.attrs.displayId as string) || "";
+        const title = (node.attrs.title as string) || "";
+        const cardLabel = displayId && title ? `${displayId} · ${title}` : (displayId || title || "Card");
         mentions.push({ type: "card", id: node.attrs.id as string, label: cardLabel });
       } else if (node.type === "documentMention" && node.attrs) {
         const docLabel = (node.attrs.name || node.attrs.label || "Document") as string;
