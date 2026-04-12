@@ -387,7 +387,7 @@ export function createCardSuggestion(
   };
 }
 
-// Document suggestion for # trigger
+// Document suggestion for @ trigger
 interface DocumentSuggestionConfig {
   getDocuments: () => DocumentFile[];
 }
@@ -396,7 +396,7 @@ export function createDocumentSuggestion(
   config: DocumentSuggestionConfig
 ): Omit<SuggestionOptions<DocumentMentionItem>, "editor"> {
   return {
-    char: "#",
+    char: "@",
     allowSpaces: false,
     startOfLine: false,
 

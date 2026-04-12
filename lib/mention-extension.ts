@@ -320,6 +320,13 @@ export const UnifiedMention = Node.create<UnifiedMentionOptions>({
   },
 });
 
+function formatCardMention(attrs: Record<string, unknown>): string {
+  const displayId = (attrs.displayId as string) || "";
+  const title = (attrs.title as string) || "";
+  if (displayId && title) return `${displayId} · ${title}`;
+  return displayId || title || "Card";
+}
+
 // Card Mention Options
 export interface CardMentionOptions {
   HTMLAttributes: Record<string, unknown>;
@@ -378,7 +385,7 @@ export const CardMention = Node.create<CardMentionOptions>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const displayText = node.attrs.displayId || node.attrs.title || "Card";
+    const displayText = formatCardMention(node.attrs);
     return [
       "span",
       mergeAttributes(
@@ -394,8 +401,7 @@ export const CardMention = Node.create<CardMentionOptions>({
   },
 
   renderText({ node }) {
-    const displayText = node.attrs.displayId || node.attrs.title || "Card";
-    return `[[${displayText}]]`;
+    return `[[${formatCardMention(node.attrs)}]]`;
   },
 
   addKeyboardShortcuts() {
@@ -449,7 +455,7 @@ export const DocumentMention = Node.create<DocumentMentionOptions>({
     return {
       HTMLAttributes: {},
       suggestion: {
-        char: "#",
+        char: "@",
         allowSpaces: false,
         items: () => [],
       },
@@ -508,12 +514,12 @@ export const DocumentMention = Node.create<DocumentMentionOptions>({
           class: `mention document-mention${isClaudeMd ? " claude-md" : ""}`,
         }
       ),
-      `#${node.attrs.name}`,
+      `@${node.attrs.name}`,
     ];
   },
 
   renderText({ node }) {
-    return `#${node.attrs.name}`;
+    return `@${node.attrs.name}`;
   },
 
   addKeyboardShortcuts() {
