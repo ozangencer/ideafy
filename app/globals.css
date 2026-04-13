@@ -136,9 +136,9 @@ button:disabled {
     /* Paper theme — #f7f6f3 base, warm cream */
     --background: 45 20% 96%;
     --foreground: 30 8% 12%;
-    --card: 45 25% 99%;
+    --card: 42 35% 98.5%;
     --card-foreground: 30 8% 12%;
-    --popover: 45 25% 99%;
+    --popover: 42 35% 98.5%;
     --popover-foreground: 30 8% 12%;
     --primary: 235 58% 50%;
     --primary-foreground: 0 0% 100%;
@@ -150,8 +150,8 @@ button:disabled {
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 40 12% 86%;
-    --input: 40 12% 86%;
+    --border: 40 15% 89%;
+    --input: 40 15% 89%;
     --ring: 35 8% 50%;
     --surface: 42 18% 92%;
   }
