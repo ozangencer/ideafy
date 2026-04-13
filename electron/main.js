@@ -149,7 +149,7 @@ function createMainWindow() {
     icon: path.join(PROJECT_ROOT, "public", "icon-512-dock.png"),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 12 },
-    backgroundColor: "#0a0a0b",
+    backgroundColor: "#16140f",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -182,7 +182,7 @@ function createMainWindow() {
           'left: 0',
           'right: 0',
           'height: 40px',
-          'background: hsl(0 0% 5%)',
+          'background: hsl(40 13% 8%)',
           '-webkit-app-region: drag',
           'z-index: 9999',
           'pointer-events: auto',

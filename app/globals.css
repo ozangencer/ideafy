@@ -77,15 +77,15 @@ body {
 /* Input and textarea styles */
 input,
 textarea {
-  background-color: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #ffffff;
+  background-color: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
   font-family: inherit;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #666666;
+  color: hsl(var(--muted-foreground));
 }
 
 input:focus,
@@ -109,49 +109,61 @@ button:disabled {
 
 @layer base {
   :root {
-    /* Dark theme as default */
-    --background: 0 0% 5%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 235 58% 60%;
+    /* Warm-dark theme as default (#16140f base, paired with paper light) */
+    --background: 40 13% 8%;
+    --foreground: 40 15% 96%;
+    --card: 40 12% 11%;
+    --card-foreground: 40 15% 96%;
+    --popover: 40 12% 11%;
+    --popover-foreground: 40 15% 96%;
+    --primary: 235 58% 64%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 16%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 16%;
-    --muted-foreground: 0 0% 40%;
-    --accent: 235 58% 60%;
+    --secondary: 40 10% 16%;
+    --secondary-foreground: 40 15% 96%;
+    --muted: 40 10% 16%;
+    --muted-foreground: 40 8% 55%;
+    --accent: 235 58% 64%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 16%;
-    --input: 0 0% 16%;
-    --ring: 0 0% 40%;
+    --border: 40 10% 18%;
+    --input: 40 10% 18%;
+    --ring: 40 8% 50%;
     --radius: 0.5rem;
-    --surface: 0 0% 10%;
+    --surface: 40 12% 11%;
   }
   .light {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 5%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 5%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 5%;
+    /* Paper theme — #f7f6f3 base, warm cream */
+    --background: 45 20% 96%;
+    --foreground: 30 8% 12%;
+    --card: 45 25% 99%;
+    --card-foreground: 30 8% 12%;
+    --popover: 45 25% 99%;
+    --popover-foreground: 30 8% 12%;
     --primary: 235 58% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 5%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --secondary: 42 18% 92%;
+    --secondary-foreground: 30 8% 12%;
+    --muted: 42 18% 92%;
+    --muted-foreground: 35 6% 42%;
     --accent: 235 58% 50%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 88%;
-    --input: 0 0% 88%;
-    --ring: 0 0% 50%;
+    --border: 40 12% 86%;
+    --input: 40 12% 86%;
+    --ring: 35 8% 50%;
+    --surface: 42 18% 92%;
+  }
+  /* Pure-white opt-in: power-user override on top of paper light */
+  .light.pure-white {
+    --background: 0 0% 100%;
+    --card: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --muted: 0 0% 96%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
     --surface: 0 0% 96%;
   }
 }

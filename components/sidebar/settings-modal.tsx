@@ -23,6 +23,11 @@ import {
 } from "@/components/ui/select";
 import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
+import { useTheme } from "next-themes";
+import {
+  isPureWhiteEnabled,
+  setPureWhiteEnabled,
+} from "@/components/theme-provider";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -40,6 +45,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [isReinstallingHooks, setIsReinstallingHooks] = useState(false);
   const [hookResult, setHookResult] = useState<{ success: number; failed: number } | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+
+  // Appearance
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [pureWhite, setPureWhite] = useState(false);
+  useEffect(() => {
+    setPureWhite(isPureWhiteEnabled());
+  }, []);
+  const activeTheme = (theme === "system" ? resolvedTheme : theme) ?? "dark";
 
   // Track capabilities based on selected platform
   const [capabilities, setCapabilities] = useState<PlatformCapabilities | null>(null);
@@ -237,6 +250,42 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </DialogHeader>
 
         <div className="grid gap-6 py-4 overflow-y-auto max-h-[calc(85vh-10rem)] px-1">
+          {/* Appearance */}
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">Appearance</label>
+            <Select
+              value={activeTheme === "light" ? "paper" : "dark"}
+              onValueChange={(value) => setTheme(value === "paper" ? "light" : "dark")}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select theme" />
+              </SelectTrigger>
+              <SelectContent className="z-[70]">
+                <SelectItem value="paper">Paper (warm light)</SelectItem>
+                <SelectItem value="dark">Warm dark</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Paper is Ideafy&apos;s default light mode — a warm cream tone tuned for thinking sessions.
+            </p>
+            {activeTheme === "light" && (
+              <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={pureWhite}
+                  onChange={(e) => {
+                    setPureWhite(e.target.checked);
+                    setPureWhiteEnabled(e.target.checked);
+                  }}
+                  className="h-3.5 w-3.5 cursor-pointer"
+                />
+                Use pure white instead of paper cream
+              </label>
+            )}
+          </div>
+
+          <div className="border-t border-border" />
+
           {/* AI Platform */}
           <div className="grid gap-2">
             <label htmlFor="aiPlatform" className="text-sm font-medium">
