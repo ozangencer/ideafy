@@ -4,7 +4,8 @@ import path from "path";
 const DATA_DIR = path.join(process.cwd(), "data");
 const BACKUP_DIR = path.join(process.cwd(), "backups");
 const DB_FILE = "kanban.db";
-const RETENTION_DAYS = 3;
+const RETENTION_DAYS = 7;
+const MAX_BACKUP_COUNT = 20;
 
 // Ensure backup directory exists
 function ensureBackupDir(): void {
@@ -13,29 +14,36 @@ function ensureBackupDir(): void {
   }
 }
 
-// Generate backup filename with timestamp
+// Generate daily backup filename — same day always overwrites same file
 function generateBackupFilename(): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  return `kanban-${year}-${month}-${day}-${hours}-${minutes}.db`;
+  return `kanban-${year}-${month}-${day}.db`;
 }
 
-// Parse date from backup filename
+// Parse date from backup filename — accepts both legacy and current formats
 function parseDateFromFilename(filename: string): Date | null {
-  const match = filename.match(/kanban-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.db/);
-  if (!match) return null;
-  const [, year, month, day, hours, minutes] = match;
-  return new Date(
-    parseInt(year),
-    parseInt(month) - 1,
-    parseInt(day),
-    parseInt(hours),
-    parseInt(minutes)
-  );
+  const daily = filename.match(/^kanban-(\d{4})-(\d{2})-(\d{2})\.db$/);
+  if (daily) {
+    const [, year, month, day] = daily;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+
+  const legacy = filename.match(/^kanban-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.db$/);
+  if (legacy) {
+    const [, year, month, day, hours, minutes] = legacy;
+    return new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes)
+    );
+  }
+
+  return null;
 }
 
 export interface BackupInfo {
@@ -95,8 +103,11 @@ export function getBackupList(): BackupInfo[] {
   );
 }
 
-// Clean up backups older than retention period
-export function cleanOldBackups(retentionDays: number = RETENTION_DAYS): number {
+// Clean up backups by age and, if still over the cap, by count.
+export function cleanOldBackups(
+  retentionDays: number = RETENTION_DAYS,
+  maxCount: number = MAX_BACKUP_COUNT
+): number {
   ensureBackupDir();
 
   const cutoffDate = new Date();
@@ -105,14 +116,24 @@ export function cleanOldBackups(retentionDays: number = RETENTION_DAYS): number 
   const files = fs.readdirSync(BACKUP_DIR);
   let deletedCount = 0;
 
+  // Pass 1 — age-based cleanup
   for (const filename of files) {
     if (!filename.endsWith(".db")) continue;
     const date = parseDateFromFilename(filename);
     if (!date) continue;
 
     if (date < cutoffDate) {
-      const filePath = path.join(BACKUP_DIR, filename);
-      fs.unlinkSync(filePath);
+      fs.unlinkSync(path.join(BACKUP_DIR, filename));
+      deletedCount++;
+    }
+  }
+
+  // Pass 2 — count cap (oldest first)
+  const remaining = getBackupList();
+  if (remaining.length > maxCount) {
+    const excess = remaining.slice(maxCount);
+    for (const backup of excess) {
+      fs.unlinkSync(backup.path);
       deletedCount++;
     }
   }

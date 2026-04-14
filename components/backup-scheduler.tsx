@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-const BACKUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour in milliseconds
+const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export function BackupScheduler() {
   const lastBackupRef = useRef<number>(0);
