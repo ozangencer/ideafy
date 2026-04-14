@@ -88,7 +88,7 @@ export const MentionPopup = forwardRef<MentionPopupRef, MentionPopupProps>(
           >
             <span
               className={`font-mono text-xs ${
-                item.prefix === "/" ? "text-primary/70" : "text-blue-500/70"
+                item.prefix === "/" ? "text-[#0a0a0a]/70" : "text-[#0a0a0a]/60"
               }`}
             >
               {item.prefix}
@@ -119,8 +119,8 @@ const TYPE_CONFIG: Record<UnifiedItemType, {
   mcp: {
     icon: Server,
     label: "MCP",
-    iconClass: "text-blue-400",
-    borderClass: "border-l-blue-500",
+    iconClass: "text-[#0a0a0a]",
+    borderClass: "border-l-[#0a0a0a]",
   },
   agent: {
     icon: Bot,
@@ -131,8 +131,8 @@ const TYPE_CONFIG: Record<UnifiedItemType, {
   plugin: {
     icon: Puzzle,
     label: "Plugin",
-    iconClass: "text-purple-400",
-    borderClass: "border-l-purple-500",
+    iconClass: "text-[#71717a]",
+    borderClass: "border-l-[#71717a]",
   },
 };
 

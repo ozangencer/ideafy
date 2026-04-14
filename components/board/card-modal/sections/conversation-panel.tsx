@@ -265,7 +265,7 @@ export function ConversationPanel({
                   size="sm"
                   onClick={openTestDialog}
                   disabled={isGeneratingTests}
-                  className="h-6 w-6 p-0 text-green-500 hover:bg-green-500/10"
+                  className="h-6 w-6 p-0 text-[#0a0a0a] hover:bg-[#fafaf9]"
                 >
                   {isGeneratingTests ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -285,7 +285,7 @@ export function ConversationPanel({
                   size="sm"
                   onClick={handleResumeCli}
                   disabled={isResumingCli}
-                  className="h-6 w-6 p-0 text-blue-500 hover:bg-blue-500/10"
+                  className="h-6 w-6 p-0 text-[#0a0a0a] hover:bg-[#fafaf9]"
                 >
                   {isResumingCli ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -384,7 +384,7 @@ export function ConversationPanel({
                       type="checkbox"
                       checked={scenario.selected}
                       onChange={() => toggleScenario(index)}
-                      className="mt-0.5 accent-green-500"
+                      className="mt-0.5 accent-[#0a0a0a]"
                     />
                     <span className="text-sm">{scenario.text}</span>
                   </label>
@@ -405,7 +405,7 @@ export function ConversationPanel({
               size="sm"
               onClick={handleGenerateTests}
               disabled={parsedScenarios.filter(s => s.selected).length === 0}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-[#0a0a0a] text-white hover:bg-black border border-[#0a0a0a]"
             >
               <Terminal className="w-3.5 h-3.5 mr-1.5" />
               Generate ({parsedScenarios.filter(s => s.selected).length})

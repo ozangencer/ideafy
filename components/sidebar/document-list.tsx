@@ -139,7 +139,7 @@ function FileItem({
       onClick={() => openDocument(node.document!)}
       className={`w-full text-left py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
         isSelected
-          ? "bg-primary/10 text-primary"
+          ? "bg-[#fafaf9] text-[#0a0a0a] font-medium border-l-2 border-[#0a0a0a]"
           : isClaudeMd
             ? "text-foreground hover:bg-muted"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"

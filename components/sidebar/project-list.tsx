@@ -25,7 +25,7 @@ export function ProjectList() {
         onClick={() => setActiveProject(null)}
         className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
           activeProjectId === null
-            ? "bg-primary/10 text-primary"
+            ? "bg-[#fafaf9] text-[#0a0a0a] font-medium border-l-2 border-[#0a0a0a]"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >

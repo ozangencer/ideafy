@@ -276,7 +276,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                           key={presetColor}
                           className={`w-7 h-7 rounded-md transition-all ${
                             color === presetColor
-                              ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                              ? "ring-2 ring-[#0a0a0a] ring-offset-2 ring-offset-background"
                               : "hover:scale-110"
                           }`}
                           style={{ backgroundColor: presetColor }}
@@ -306,8 +306,8 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
           // Step 2: Narrative
           <div className="grid gap-4 py-4">
             {/* CLAUDE.md Warning */}
-            <Alert className="bg-blue-500/10 border-blue-500/30">
-              <Info className="h-4 w-4 text-blue-500" />
+            <Alert className="bg-[#fafaf9] border-[#e5e5e5]">
+              <Info className="h-4 w-4 text-[#0a0a0a]" />
               <AlertDescription className="text-sm">
                 For better AI evaluations, your project should have a CLAUDE.md file.
                 You can create one with <code className="px-1 py-0.5 bg-muted rounded text-xs">claude /init</code>

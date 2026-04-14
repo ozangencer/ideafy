@@ -193,8 +193,8 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
       <div
         className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
           isUser
-            ? "bg-accent/20 text-accent"
-            : "bg-purple-500/20 text-purple-400"
+            ? "bg-[#0a0a0a] text-white"
+            : "bg-[#fafaf9] text-[#0a0a0a] border border-[#e5e5e5]"
         }`}
       >
         {isUser ? (
@@ -208,7 +208,7 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
       <div
         className={`flex-1 max-w-[85%] rounded-lg px-3 py-2 ${
           isUser
-            ? "bg-accent/10 text-foreground"
+            ? "bg-[#fafaf9] text-[#0a0a0a] border border-[#e5e5e5]"
             : "bg-surface border border-border/50"
         }`}
       >
@@ -239,7 +239,7 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
               {Array.from(groupToolCalls(message.toolCalls)).map(([group, count]) => (
                 <span
                   key={group}
-                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400"
+                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-[#fafaf9] text-[#0a0a0a] border border-[#e5e5e5]"
                 >
                   <Wrench className="w-3 h-3" />
                   {group}: {count}
@@ -259,8 +259,8 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
               disabled={isApplying || applied}
               className={`h-6 px-2 text-xs ${
                 applied
-                  ? "text-green-400"
-                  : "text-accent hover:text-accent hover:bg-accent/10"
+                  ? "text-[#16a34a]"
+                  : "text-[#0a0a0a] hover:text-[#0a0a0a] hover:bg-[#fafaf9]"
               }`}
             >
               {isApplying ? (

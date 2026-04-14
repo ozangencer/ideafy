@@ -32,7 +32,7 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
       }}
       className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 group/project cursor-pointer relative ${
         isActive
-          ? "bg-primary/10 text-primary"
+          ? "bg-[#fafaf9] text-[#0a0a0a] font-medium border-l-2 border-[#0a0a0a]"
           : "text-foreground hover:bg-muted"
       }`}
     >
@@ -91,7 +91,7 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
               <Star
                 className={`h-3 w-3 ${
                   project.isPinned
-                    ? "fill-primary text-primary"
+                    ? "fill-[#0a0a0a] text-[#0a0a0a]"
                     : "text-muted-foreground"
                 }`}
               />

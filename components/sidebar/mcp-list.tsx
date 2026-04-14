@@ -50,7 +50,7 @@ export function McpList() {
               </>
             ) : (
               <>
-                <span className="text-blue-500/70 font-mono text-xs">/</span>
+                <span className="text-[#0a0a0a]/60 font-mono text-xs">/</span>
                 <span className="truncate">{mcp}</span>
               </>
             )}

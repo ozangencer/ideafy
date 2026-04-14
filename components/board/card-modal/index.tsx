@@ -741,11 +741,11 @@ export function CardModal() {
 
         {/* Git Branch Actions for Human Test cards */}
         {status === "test" && gitBranchName && gitBranchStatus === "active" && (
-          <div className="mx-6 my-3 border-2 border-blue-500/50 rounded-lg p-4 bg-blue-500/10">
+          <div className="mx-6 my-3 border border-[#0a0a0a] rounded-lg p-4 bg-[#fafaf9]">
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm">
-                  <GitBranch className="h-4 w-4 text-blue-500" />
+                  <GitBranch className="h-4 w-4 text-[#0a0a0a]" />
                   <span className="font-mono text-muted-foreground">{gitBranchName}</span>
                 </div>
                 <div className="flex gap-2">
@@ -776,7 +776,7 @@ export function CardModal() {
               </div>
               {gitWorktreeStatus === "active" && gitWorktreePath && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <FolderGit2 className="h-3.5 w-3.5 text-cyan-500" />
+                  <FolderGit2 className="h-3.5 w-3.5 text-[#0a0a0a]" />
                   <span className="font-mono truncate" title={gitWorktreePath}>
                     {gitWorktreePath.split("/").slice(-3).join("/")}
                   </span>
@@ -811,7 +811,7 @@ export function CardModal() {
                       variant="outline"
                       onClick={handleStartDevServer}
                       disabled={isServerLoading}
-                      className="border-cyan-500/50 text-cyan-500 hover:bg-cyan-500/10"
+                      className="border-[#0a0a0a]/30 text-[#0a0a0a] hover:bg-[#fafaf9]"
                     >
                       {isServerLoading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -845,11 +845,11 @@ export function CardModal() {
         )}
 
         {status === "progress" && gitWorktreeStatus === "active" && gitWorktreePath && gitBranchName && (
-          <div className="mx-6 my-2 flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10">
-            <FolderGit2 className="h-4 w-4 text-cyan-500" />
+          <div className="mx-6 my-2 flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-[#e5e5e5] bg-[#fafaf9]">
+            <FolderGit2 className="h-4 w-4 text-[#0a0a0a]" />
             <div className="flex flex-col gap-0.5 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-cyan-500 font-medium">Worktree active</span>
+                <span className="text-[#0a0a0a] font-medium">Worktree active</span>
                 <span className="font-mono text-muted-foreground text-xs">{gitBranchName}</span>
               </div>
               <span className="font-mono text-muted-foreground text-xs truncate" title={gitWorktreePath}>
