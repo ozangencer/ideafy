@@ -60,3 +60,5 @@ tsconfig.tsbuildinfo
 # Stray files
 nul
 /kanban.db
+/ideafy.db
+/sqlite.db
