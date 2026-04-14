@@ -102,7 +102,7 @@ export const CardMentionPopup = forwardRef<CardMentionPopupRef, CardMentionPopup
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 {item.displayId && (
-                  <span className="font-mono text-xs text-[#0a0a0a]/70 flex-shrink-0">
+                  <span className="font-mono text-xs text-ink/70 flex-shrink-0">
                     {item.displayId}
                   </span>
                 )}

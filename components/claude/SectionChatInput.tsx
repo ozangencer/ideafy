@@ -325,7 +325,7 @@ export function SectionChatInput({
             size="sm"
             onClick={handleSubmit}
             disabled={!inputValue.trim()}
-            className="h-9 px-3 bg-[#0a0a0a] text-white hover:bg-black border border-[#0a0a0a] disabled:opacity-40"
+            className="h-9 px-3 bg-ink text-background hover:bg-ink/90 border border-ink disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -336,9 +336,9 @@ export function SectionChatInput({
       {isLoading && activityLog.length > 0 && (
         <div
           ref={activityRef}
-          className="max-h-[120px] overflow-y-auto rounded-lg border border-[#0a0a0a] bg-[#fafaf9] p-3 space-y-1.5"
+          className="max-h-[120px] overflow-y-auto rounded-lg border border-ink bg-paper-cream p-3 space-y-1.5"
         >
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#0a0a0a] mb-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-ink mb-2">
             <Brain className="h-4 w-4 animate-spin" />
             <span>Claude is thinking...</span>
           </div>
@@ -346,14 +346,14 @@ export function SectionChatInput({
             <div key={i} className="flex items-start gap-2 text-xs">
               {entry.type === "thinking" && (
                 <>
-                  <Brain className="h-3 w-3 mt-0.5 text-[#0a0a0a] flex-shrink-0" />
+                  <Brain className="h-3 w-3 mt-0.5 text-ink flex-shrink-0" />
                   <span className="text-[#3f3f46] italic">{truncate(entry.content, 200)}</span>
                 </>
               )}
               {entry.type === "tool_use" && (
                 <>
-                  <Wrench className="h-3 w-3 mt-0.5 text-[#0a0a0a] flex-shrink-0" />
-                  <span className="text-[#0a0a0a] font-medium">{entry.content}</span>
+                  <Wrench className="h-3 w-3 mt-0.5 text-ink flex-shrink-0" />
+                  <span className="text-ink font-medium">{entry.content}</span>
                 </>
               )}
               {entry.type === "tool_result" && (

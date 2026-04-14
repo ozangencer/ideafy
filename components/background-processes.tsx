@@ -14,8 +14,8 @@ import type { BackgroundProcess, ProcessType } from "@/lib/types";
 
 // Process type config for display
 const PROCESS_TYPE_CONFIG: Record<ProcessType, { label: string; color: string; bgColor: string }> = {
-  chat: { label: "Chat", color: "text-[#0a0a0a]", bgColor: "bg-[#0a0a0a]" },
-  autonomous: { label: "Autonomous", color: "text-[#0a0a0a]", bgColor: "bg-[#0a0a0a]" },
+  chat: { label: "Chat", color: "text-ink", bgColor: "bg-ink" },
+  autonomous: { label: "Autonomous", color: "text-ink", bgColor: "bg-ink" },
   "quick-fix": { label: "Quick Fix", color: "text-amber-500", bgColor: "bg-amber-500" },
   evaluate: { label: "Evaluate", color: "text-cyan-500", bgColor: "bg-cyan-500" },
 };
@@ -209,7 +209,7 @@ export function BackgroundProcesses() {
         >
           {/* Activity icon */}
           <svg
-            className={`w-5 h-5 ${runningCount > 0 ? "text-[#0a0a0a]" : "text-muted-foreground"}`}
+            className={`w-5 h-5 ${runningCount > 0 ? "text-ink" : "text-muted-foreground"}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -223,7 +223,7 @@ export function BackgroundProcesses() {
           </svg>
           {/* Badge */}
           {runningCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-[#0a0a0a] text-[10px] font-medium text-white flex items-center justify-center">
+            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-ink text-[10px] font-medium text-background flex items-center justify-center">
               {runningCount}
             </span>
           )}

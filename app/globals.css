@@ -116,13 +116,13 @@ button:disabled {
     --card-foreground: 40 15% 96%;
     --popover: 40 12% 11%;
     --popover-foreground: 40 15% 96%;
-    --primary: 235 58% 64%;
+    --primary: 18 55% 60%;
     --primary-foreground: 0 0% 100%;
     --secondary: 40 10% 16%;
     --secondary-foreground: 40 15% 96%;
     --muted: 40 10% 16%;
     --muted-foreground: 40 8% 55%;
-    --accent: 235 58% 64%;
+    --accent: 18 55% 60%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
@@ -131,6 +131,9 @@ button:disabled {
     --ring: 40 8% 50%;
     --radius: 0.5rem;
     --surface: 40 12% 11%;
+    --ink: 40 15% 96%;
+    --paper-cream: 40 10% 16%;
+    --paper-edge: 40 10% 18%;
   }
   .light {
     /* Paper theme — #f7f6f3 base, warm cream */
@@ -140,13 +143,13 @@ button:disabled {
     --card-foreground: 30 8% 12%;
     --popover: 42 35% 98.5%;
     --popover-foreground: 30 8% 12%;
-    --primary: 235 58% 50%;
+    --primary: 18 58% 48%;
     --primary-foreground: 0 0% 100%;
     --secondary: 42 18% 92%;
     --secondary-foreground: 30 8% 12%;
     --muted: 42 18% 92%;
     --muted-foreground: 35 6% 42%;
-    --accent: 235 58% 50%;
+    --accent: 18 58% 48%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
@@ -154,6 +157,9 @@ button:disabled {
     --input: 40 15% 89%;
     --ring: 35 8% 50%;
     --surface: 42 18% 92%;
+    --ink: 0 0% 4%;
+    --paper-cream: 60 14% 98%;
+    --paper-edge: 0 0% 90%;
   }
   /* Pure-white opt-in: power-user override on top of paper light */
   .light.pure-white {
@@ -165,6 +171,8 @@ button:disabled {
     --border: 0 0% 90%;
     --input: 0 0% 90%;
     --surface: 0 0% 96%;
+    --paper-cream: 0 0% 96%;
+    --paper-edge: 0 0% 90%;
   }
 }
 

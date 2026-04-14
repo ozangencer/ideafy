@@ -36,7 +36,7 @@ export function Column({ id, title, cards }: ColumnProps) {
         ref={setNodeRef}
         onClick={() => toggleColumnCollapse(id)}
         className={`flex flex-col items-center w-10 min-w-10 bg-surface rounded-lg cursor-pointer hover:bg-muted transition-all duration-200 snap-start ${
-          isOver ? "ring-2 ring-[#0a0a0a] ring-opacity-40" : ""
+          isOver ? "ring-2 ring-ink ring-opacity-40" : ""
         }`}
       >
         <div className="py-3 px-2">
@@ -66,7 +66,7 @@ export function Column({ id, title, cards }: ColumnProps) {
     <div
       ref={setNodeRef}
       className={`flex flex-col w-72 min-w-72 bg-surface rounded-lg transition-all duration-200 snap-start ${
-        isOver ? "ring-2 ring-[#0a0a0a] ring-opacity-40 scale-[1.02]" : ""
+        isOver ? "ring-2 ring-ink ring-opacity-40 scale-[1.02]" : ""
       }`}
     >
       {/* Column Header */}
@@ -135,7 +135,7 @@ export function Column({ id, title, cards }: ColumnProps) {
         {cards.length === 0 && (
           <div
             className={`text-center py-8 text-muted-foreground text-sm transition-colors ${
-              isOver ? "bg-[#fafaf9] rounded-md text-[#0a0a0a]" : ""
+              isOver ? "bg-paper-cream rounded-md text-ink" : ""
             }`}
           >
             {isOver ? "Drop here" : "No tasks"}

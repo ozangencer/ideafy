@@ -15,6 +15,9 @@ const config: Config = {
   			'surface-hover': 'hsl(var(--muted))',
   			border: 'hsl(var(--border))',
   			'border-light': '#3a3a3a',
+  			ink: 'hsl(var(--ink))',
+  			'paper-cream': 'hsl(var(--paper-cream))',
+  			'paper-edge': 'hsl(var(--paper-edge))',
   			text: {
   				primary: '#ffffff',
   				secondary: '#a0a0a0',

@@ -372,11 +372,11 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
             onClick={handleClick}
             onContextMenu={handleContextMenu}
             className={`bg-card border border-border rounded-md p-3 transition-colors group touch-none select-none relative ${
-              isDragging ? "shadow-2xl ring-2 ring-[#0a0a0a]/40" : ""
+              isDragging ? "shadow-2xl ring-2 ring-ink/40" : ""
             } ${isBeingDragged ? "z-50" : ""} ${
               isLocked
                 ? "opacity-50 cursor-not-allowed"
-                : "hover:border-[#0a0a0a]/40"
+                : "hover:border-ink/40"
             }`}
           >
             {/* Unlock button - only for interactive locks (terminal), not background processing */}
@@ -408,7 +408,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                   {displayId}
                 </span>
               )}
-              <h3 className={`text-sm font-medium text-card-foreground transition-colors line-clamp-2 flex-1 ${isLocked ? "" : "group-hover:text-[#0a0a0a]"}`}>
+              <h3 className={`text-sm font-medium text-card-foreground transition-colors line-clamp-2 flex-1 ${isLocked ? "" : "group-hover:text-ink"}`}>
                 {card.title}
               </h3>
               {!isLocked && <PriorityIcon priority={card.priority} />}
@@ -463,10 +463,10 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                         disabled={isEvaluating || isLocked}
                         className={`p-1 rounded transition-colors ${
                           isEvaluating
-                            ? "bg-[#0a0a0a]/20 text-[#0a0a0a] cursor-wait"
+                            ? "bg-ink/20 text-ink cursor-wait"
                             : isLocked
-                            ? "bg-[#0a0a0a]/10 text-[#0a0a0a]/30 cursor-not-allowed"
-                            : "bg-[#0a0a0a]/10 text-[#0a0a0a]/70 hover:bg-[#0a0a0a]/20 hover:text-[#0a0a0a]"
+                            ? "bg-ink/10 text-ink/30 cursor-not-allowed"
+                            : "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink"
                         }`}
                       >
                         {isEvaluating ? (
@@ -544,10 +544,10 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                         disabled={isStarting || isLocked}
                         className={`p-1 rounded transition-colors ${
                           isStarting
-                            ? "bg-[#0a0a0a]/20 text-[#0a0a0a] cursor-wait"
+                            ? "bg-ink/20 text-ink cursor-wait"
                             : isLocked
-                            ? "bg-[#0a0a0a]/10 text-[#0a0a0a]/30 cursor-not-allowed"
-                            : "bg-[#0a0a0a]/10 text-[#0a0a0a]/70 hover:bg-[#0a0a0a]/20 hover:text-[#0a0a0a]"
+                            ? "bg-ink/10 text-ink/30 cursor-not-allowed"
+                            : "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink"
                         }`}
                       >
                         {isStarting ? (
@@ -664,7 +664,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                         <span className={`p-1 rounded flex items-center gap-1 ${
                           isComplete
                             ? "bg-green-500/15 text-green-500"
-                            : "bg-[#0a0a0a]/10 text-[#0a0a0a]"
+                            : "bg-ink/10 text-ink"
                         }`}>
                           <FlaskConical className="w-3 h-3" />
                           {progress && (
