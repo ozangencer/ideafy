@@ -62,13 +62,13 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-6 text-muted-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit(project);
               }}
             >
-              <Pencil className="h-3 w-3 text-muted-foreground" />
+              <Pencil className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right">
@@ -82,7 +82,7 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-6 text-muted-foreground"
               onClick={(e) => {
                 e.stopPropagation();
                 toggleProjectPin(project.id);
@@ -90,9 +90,7 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
             >
               <Star
                 className={`h-3 w-3 ${
-                  project.isPinned
-                    ? "fill-ink text-ink"
-                    : "text-muted-foreground"
+                  project.isPinned ? "fill-current" : ""
                 }`}
               />
             </Button>
