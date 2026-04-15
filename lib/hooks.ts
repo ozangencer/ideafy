@@ -9,6 +9,22 @@ import * as path from "path";
 // KANBAN_CARD_ID substrings) to identify prior Ideafy hook entries.
 const IDEAFY_HOOK_MARKER = "# ideafy-hook";
 
+// When curl succeeds the hook echoes whatever /api/hook-context returned
+// (empty body = 204 = no output). When curl fails (server unreachable) the
+// `||` branch fires and emits an offline reminder so Claude can offer to
+// launch Ideafy instead of silently losing the integration.
+const IDEAFY_HOOK_COMMAND =
+  `${IDEAFY_HOOK_MARKER}\n` +
+  `curl -sf -X POST -H "Content-Type: application/json" --data-binary @- ` +
+  `"http://localhost:\${IDEAFY_PORT:-3030}/api/hook-context?card_hint=\${IDEAFY_CARD_ID:-}" 2>/dev/null ` +
+  `|| printf '<system-reminder>\\nIdeafy local server is unreachable at http://localhost:%s. ` +
+  `Card tracking, phase-aware policy, and session binding are OFF for this session until Ideafy is launched.\\n\\n` +
+  `Ask the user ONCE per session in one short sentence whether to launch Ideafy (for example: ` +
+  `"Ideafy is not running. Shall I launch it?"). ` +
+  `On yes, call the Bash tool with: open -a Ideafy (or tell the user to run npm run dev in the ideafy repo if they built from source). ` +
+  `Do not re-ask on later turns in this session even if this reminder keeps appearing while the server is starting up.\\n` +
+  `</system-reminder>\\n' "\${IDEAFY_PORT:-3030}"`;
+
 const IDEAFY_HOOK = {
   hooks: {
     UserPromptSubmit: [
@@ -16,7 +32,7 @@ const IDEAFY_HOOK = {
         hooks: [
           {
             type: "command",
-            command: `${IDEAFY_HOOK_MARKER}\ncurl -sf -X POST -H "Content-Type: application/json" --data-binary @- "http://localhost:\${IDEAFY_PORT:-3030}/api/hook-context?card_hint=\${IDEAFY_CARD_ID:-}" 2>/dev/null`,
+            command: IDEAFY_HOOK_COMMAND,
           },
         ],
       },
