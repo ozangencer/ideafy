@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Terminal, Server, Puzzle, Bot } from "lucide-react";
 import { UnifiedItemType } from "@/lib/types";
 
@@ -149,6 +149,11 @@ export interface UnifiedMentionPopupRef {
 export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMentionPopupProps>(
   ({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+    useEffect(() => {
+      itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" });
+    }, [selectedIndex]);
 
     const selectItem = (index: number) => {
       const item = items[index];
@@ -202,6 +207,7 @@ export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMen
           return (
             <button
               key={`${item.type}-${item.id}`}
+              ref={(el) => { itemRefs.current[index] = el; }}
               onClick={() => selectItem(index)}
               className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors border-l-2 ${
                 config.borderClass

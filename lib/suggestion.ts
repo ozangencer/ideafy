@@ -129,7 +129,6 @@ export function createUnifiedSuggestion(
         .filter((item) =>
           item.label.toLowerCase().includes(query.toLowerCase())
         )
-        .slice(0, 10)
         .map((item) => ({
           id: item.id,
           label: item.label,
