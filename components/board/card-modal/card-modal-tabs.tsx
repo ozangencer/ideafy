@@ -42,20 +42,17 @@ export function CardModalTabs({ activeTab, onTabChange, sectionValues }: CardMod
                 value={section}
                 className={`
                   h-9 px-3 gap-2 rounded-md text-sm font-medium transition-colors
-                  data-[state=active]:bg-muted data-[state=active]:text-foreground
-                  data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-muted/50
+                  data-[state=active]:bg-primary/10 data-[state=active]:text-foreground
+                  data-[state=inactive]:text-muted-foreground
+                  data-[state=inactive]:hover:bg-foreground/[0.04] data-[state=inactive]:hover:text-foreground
                 `}
               >
                 <Icon
-                  className="w-4 h-4"
-                  style={{ color: isActive ? config.color : undefined }}
+                  className={`w-4 h-4 ${isActive ? "text-primary" : ""}`}
                 />
                 <span>{config.label}</span>
                 {isFilled && !isActive && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: config.color }}
-                  />
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
                 )}
               </TabsTrigger>
             );

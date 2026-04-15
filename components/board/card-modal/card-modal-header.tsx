@@ -118,7 +118,7 @@ export function CardModalHeader({
               variant="ghost"
               size="icon"
               onClick={onBack}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground"
               title="Go back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -130,7 +130,7 @@ export function CardModalHeader({
                 variant="ghost"
                 size="icon"
                 onClick={onExport}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground"
               >
                 <FileDown className="h-5 w-5" />
               </Button>
@@ -141,7 +141,7 @@ export function CardModalHeader({
             variant="ghost"
             size="icon"
             onClick={onToggleExpand}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground"
             title={isExpanded ? "Collapse panel" : "Expand panel"}
           >
             {isExpanded ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
