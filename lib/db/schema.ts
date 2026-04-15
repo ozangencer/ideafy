@@ -77,6 +77,24 @@ export const conversations = sqliteTable("conversations", {
 export type ConversationRecord = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
 
+// Ideafy sessions — maps a Claude Code session to a card binding, enabling
+// card-aware hooks in terminal sessions not launched from Ideafy's UI.
+// state: "offered" = hook has shown the card-creation offer once and is now
+//        silent until the user explicitly binds a card.
+//        "bound"   = session is attached to a card; hook returns the
+//        phase-aware policy for that card.
+export const ideafySessions = sqliteTable("ideafy_sessions", {
+  sessionId: text("session_id").primaryKey(),
+  projectId: text("project_id"),
+  state: text("state").notNull(), // "offered" | "bound"
+  cardId: text("card_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type IdeafySessionRecord = typeof ideafySessions.$inferSelect;
+export type NewIdeafySession = typeof ideafySessions.$inferInsert;
+
 // Chat sessions — maps (cardId, sectionType) to CLI session ID for resume
 export const chatSessions = sqliteTable("chat_sessions", {
   id: text("id").primaryKey(),

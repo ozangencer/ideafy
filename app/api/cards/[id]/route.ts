@@ -4,6 +4,54 @@ import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml, mergeTestCheckState } from "@/lib/markdown";
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  const row = db
+    .select()
+    .from(schema.cards)
+    .where(eq(schema.cards.id, id))
+    .get();
+
+  if (!row) {
+    return NextResponse.json({ error: "Card not found" }, { status: 404 });
+  }
+
+  const result: Card = {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    solutionSummary: row.solutionSummary,
+    testScenarios: row.testScenarios,
+    aiOpinion: row.aiOpinion,
+    aiVerdict: (row.aiVerdict as Card["aiVerdict"]) ?? null,
+    status: row.status as Card["status"],
+    complexity: row.complexity as Card["complexity"],
+    priority: row.priority as Card["priority"],
+    projectFolder: row.projectFolder,
+    projectId: row.projectId,
+    taskNumber: row.taskNumber,
+    gitBranchName: row.gitBranchName,
+    gitBranchStatus: row.gitBranchStatus as Card["gitBranchStatus"],
+    gitWorktreePath: row.gitWorktreePath,
+    gitWorktreeStatus: row.gitWorktreeStatus as Card["gitWorktreeStatus"],
+    devServerPort: row.devServerPort,
+    devServerPid: row.devServerPid,
+    rebaseConflict: row.rebaseConflict ?? null,
+    conflictFiles: row.conflictFiles ? JSON.parse(row.conflictFiles) : null,
+    processingType: (row.processingType as Card["processingType"]) ?? null,
+    aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    completedAt: row.completedAt,
+  };
+
+  return NextResponse.json(result);
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -432,7 +432,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Hooks</label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Reminds you to update cards on every message
+                  Guides Claude through each card phase with a confirmation policy
                 </p>
                 <div className="flex items-center gap-3">
                   <Button

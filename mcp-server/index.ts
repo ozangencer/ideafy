@@ -438,6 +438,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["folderPath"],
         },
       },
+      {
+        name: "bind_session_to_card",
+        description:
+          "Bind the current Claude Code session to an Ideafy card so the hook's phase-aware policy applies from the next user turn onward. Call this immediately after create_card when starting work from a plain terminal, or when the user names an existing card (e.g. 'this is for IDE-125'). The sessionId is provided by Claude Code in the hook input as the session_id field.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sessionId: {
+              type: "string",
+              description: "Claude Code session ID. Read it from the hook input's session_id field, or from the SESSION_ID environment variable if available.",
+            },
+            cardId: {
+              type: "string",
+              description: "Card ID to bind this session to.",
+            },
+          },
+          required: ["sessionId", "cardId"],
+        },
+      },
     ],
   };
 });
@@ -830,6 +849,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         return {
           content: [{ type: "text", text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}` }],
+        };
+      }
+
+      case "bind_session_to_card": {
+        const { sessionId, cardId } = args as { sessionId: string; cardId: string };
+
+        if (!sessionId || !cardId) {
+          return {
+            content: [{ type: "text", text: "sessionId and cardId are required" }],
+            isError: true,
+          };
+        }
+
+        const card = db
+          .prepare(`SELECT id, project_id as projectId, title, status FROM cards WHERE id = ?`)
+          .get(cardId) as { id: string; projectId: string | null; title: string; status: string } | undefined;
+
+        if (!card) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${cardId}` }],
+            isError: true,
+          };
+        }
+
+        const now = new Date().toISOString();
+        const existing = db
+          .prepare(`SELECT session_id FROM ideafy_sessions WHERE session_id = ?`)
+          .get(sessionId) as { session_id: string } | undefined;
+
+        if (existing) {
+          db.prepare(
+            `UPDATE ideafy_sessions SET project_id = ?, state = 'bound', card_id = ?, updated_at = ? WHERE session_id = ?`
+          ).run(card.projectId, card.id, now, sessionId);
+        } else {
+          db.prepare(
+            `INSERT INTO ideafy_sessions (session_id, project_id, state, card_id, created_at, updated_at) VALUES (?, ?, 'bound', ?, ?, ?)`
+          ).run(sessionId, card.projectId, card.id, now, now);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Session ${sessionId} bound to card ${card.id} ("${card.title}", column: ${card.status}). The phase-aware hook policy will apply from the next user turn.`,
+            },
+          ],
         };
       }
 

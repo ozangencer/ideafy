@@ -418,7 +418,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                 <label className="text-sm font-medium">Ideafy MCP & Skills</label>
               </div>
               <p className="text-xs text-muted-foreground">
-                Install ideafy tools, hook, and slash commands to this project
+                Install ideafy tools, phase-aware hook, and slash commands in this project
               </p>
             </div>
             <div className="flex items-center gap-2">

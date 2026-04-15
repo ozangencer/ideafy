@@ -2,7 +2,10 @@
   "mcpServers": {
     "ideafy": {
       "command": "npx",
-      "args": ["tsx", "mcp-server/index.ts"]
+      "args": [
+        "tsx",
+        "mcp-server/index.ts"
+      ]
     }
   },
   "hooks": {
@@ -11,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -n \"$IDEAFY_CARD_ID\" ]; then echo \"\\n<system-reminder>\\nIdeafy Card: $IDEAFY_CARD_ID\\nBefore finishing, update the card:\\n- After planning: save_plan (moves to In Progress)\\n- After implementation: save_tests (moves to Human Test)\\n- After idea discussion: save_opinion\\n</system-reminder>\"; fi"
+            "command": "# ideafy-hook\ncurl -sf -X POST -H \"Content-Type: application/json\" --data-binary @- \"http://localhost:${IDEAFY_PORT:-3030}/api/hook-context?card_hint=${IDEAFY_CARD_ID:-}\" 2>/dev/null"
           }
         ]
       }

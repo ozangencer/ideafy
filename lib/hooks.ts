@@ -4,6 +4,11 @@ import * as path from "path";
 // Note: This module's functions are also called by claude-provider via require().
 // The exported functions remain the canonical hook implementation for Claude.
 
+// Dedup anchor kept stable across hook revisions. installIdeafyHook and
+// removeIdeafyHook look for this marker (and the legacy IDEAFY_CARD_ID /
+// KANBAN_CARD_ID substrings) to identify prior Ideafy hook entries.
+const IDEAFY_HOOK_MARKER = "# ideafy-hook";
+
 const IDEAFY_HOOK = {
   hooks: {
     UserPromptSubmit: [
@@ -11,13 +16,21 @@ const IDEAFY_HOOK = {
         hooks: [
           {
             type: "command",
-            command: `if [ -n "$IDEAFY_CARD_ID" ]; then echo "\\n<system-reminder>\\nIdeafy Card: $IDEAFY_CARD_ID\\nBefore finishing, update the card:\\n- After planning: save_plan (moves to In Progress)\\n- After implementation: save_tests (moves to Human Test)\\n- After idea discussion: save_opinion\\n</system-reminder>"; fi`,
+            command: `${IDEAFY_HOOK_MARKER}\ncurl -sf -X POST -H "Content-Type: application/json" --data-binary @- "http://localhost:\${IDEAFY_PORT:-3030}/api/hook-context?card_hint=\${IDEAFY_CARD_ID:-}" 2>/dev/null`,
           },
         ],
       },
     ],
   },
 };
+
+function isIdeafyHookCommand(cmd: string): boolean {
+  return (
+    cmd.includes("# ideafy-hook") ||
+    cmd.includes("IDEAFY_CARD_ID") ||
+    cmd.includes("KANBAN_CARD_ID")
+  );
+}
 
 /**
  * Install ideafy hook to a project's .claude/settings.json
@@ -50,32 +63,34 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
     const existingHooks = (existingSettings.hooks as Record<string, unknown[]>) || {};
     const existingUserPromptSubmit = existingHooks.UserPromptSubmit || [];
 
-    // Check if ideafy hook already exists (look inside nested hooks array)
-    const hasIdeafyHook = existingUserPromptSubmit.some((hookGroup: unknown) => {
+    // Strip any previous Ideafy hook entries so reinstall always writes the
+    // current canonical body. Matches the current "# ideafy-hook" marker,
+    // plus legacy IDEAFY_CARD_ID / KANBAN_CARD_ID substrings from older
+    // hook revisions.
+    const filteredUserPromptSubmit = existingUserPromptSubmit.filter((hookGroup: unknown) => {
       if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
-        return false;
+        return true;
       }
       const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
-      return innerHooks.some(
-        (hook: unknown) =>
-          typeof hook === "object" &&
-          hook !== null &&
-          "command" in hook &&
-          typeof (hook as { command: string }).command === "string" &&
-          (hook as { command: string }).command.includes("IDEAFY_CARD_ID")
-      );
+      const containsIdeafyHook = innerHooks.some((hook: unknown) => {
+        if (
+          typeof hook !== "object" ||
+          hook === null ||
+          !("command" in hook) ||
+          typeof (hook as { command: string }).command !== "string"
+        ) {
+          return false;
+        }
+        return isIdeafyHookCommand((hook as { command: string }).command);
+      });
+      return !containsIdeafyHook;
     });
 
-    if (hasIdeafyHook) {
-      return { success: true }; // Already installed
-    }
-
-    // Add ideafy hook
     const mergedSettings = {
       ...existingSettings,
       hooks: {
         ...existingHooks,
-        UserPromptSubmit: [...existingUserPromptSubmit, ...IDEAFY_HOOK.hooks.UserPromptSubmit],
+        UserPromptSubmit: [...filteredUserPromptSubmit, ...IDEAFY_HOOK.hooks.UserPromptSubmit],
       },
     };
 
@@ -109,21 +124,24 @@ export function removeIdeafyHook(folderPath: string): { success: boolean; error?
       return { success: true }; // No hooks to remove
     }
 
-    // Filter out ideafy hook (look inside nested hooks array)
+    // Filter out any ideafy hook — current marker or legacy anchors.
     settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit.filter(
       (hookGroup: unknown) => {
         if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
-          return true; // Keep non-standard entries
+          return true;
         }
         const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
-        const hasIdeafyHook = innerHooks.some(
-          (hook: unknown) =>
-            typeof hook === "object" &&
-            hook !== null &&
-            "command" in hook &&
-            typeof (hook as { command: string }).command === "string" &&
-            (hook as { command: string }).command.includes("IDEAFY_CARD_ID")
-        );
+        const hasIdeafyHook = innerHooks.some((hook: unknown) => {
+          if (
+            typeof hook !== "object" ||
+            hook === null ||
+            !("command" in hook) ||
+            typeof (hook as { command: string }).command !== "string"
+          ) {
+            return false;
+          }
+          return isIdeafyHookCommand((hook as { command: string }).command);
+        });
         return !hasIdeafyHook;
       }
     );
