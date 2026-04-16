@@ -142,7 +142,7 @@ export default function Home() {
               {/* Keyboard hints */}
               <span className="text-xs text-muted-foreground hidden lg:block">
                 <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">
-                  {"\u2318"}K
+                  {"\u2318\u21E7"}K
                 </kbd>{" "}
                 quick entry{" "}
                 <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs ml-1">
