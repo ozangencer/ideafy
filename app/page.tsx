@@ -22,6 +22,7 @@ export default function Home() {
     fetchMcps,
     fetchAgents,
     fetchDocuments,
+    fetchBackgroundProcesses,
     isModalOpen,
     isLoading,
     cards,
@@ -47,10 +48,13 @@ export default function Home() {
     const handler = () => {
       fetchCards();
       if (activeProjectId) fetchDocuments(activeProjectId);
+      // Quick-entry Ideate fires an evaluate POST before closing; give the
+      // server a moment to register the process, then refresh the tray.
+      setTimeout(() => fetchBackgroundProcesses(), 500);
     };
     window.addEventListener("refresh-data", handler);
     return () => window.removeEventListener("refresh-data", handler);
-  }, [fetchCards, fetchDocuments, activeProjectId]);
+  }, [fetchCards, fetchDocuments, fetchBackgroundProcesses, activeProjectId]);
 
   // Initial fetch
   useEffect(() => {
