@@ -19,8 +19,8 @@ const IDEAFY_HOOK_COMMAND =
   `"http://localhost:\${IDEAFY_PORT:-3030}/api/hook-context?card_hint=\${IDEAFY_CARD_ID:-}" 2>/dev/null ` +
   `|| printf '<system-reminder>\\nIdeafy local server is unreachable at http://localhost:%s. ` +
   `Card tracking, phase-aware policy, and session binding are OFF for this session until Ideafy is launched.\\n\\n` +
-  `Ask the user ONCE per session in one short sentence whether to launch Ideafy (for example: ` +
-  `"Ideafy is not running. Shall I launch it?"). ` +
+  `Ask the user ONCE per session whether to launch Ideafy. Explain that this project is tracked by Ideafy ` +
+  `but the server is not running, so you cannot create or update kanban cards for this session. ` +
   `On yes, call the Bash tool with: open -a Ideafy (or tell the user to run npm run dev in the ideafy repo if they built from source). ` +
   `Do not re-ask on later turns in this session even if this reminder keeps appearing while the server is starting up.\\n` +
   `</system-reminder>\\n' "\${IDEAFY_PORT:-3030}"`;
