@@ -62,14 +62,14 @@ const PLATFORM_MAP: Record<string, AiPlatform> = {
 };
 
 const PLATFORM_LABELS: Record<AiPlatform, { label: string; color: string }> = {
-  claude: { label: "Claude", color: "#d97706" },
+  claude: { label: "Claude", color: "#cc785c" },
   gemini: { label: "Gemini", color: "#4285f4" },
   codex: { label: "Codex", color: "#10a37f" },
 };
 
 // Platform options for [ autocomplete
 const PLATFORM_OPTIONS = [
-  { key: "claude" as AiPlatform, label: "Claude Code", color: "#d97706", bracket: "[claude" },
+  { key: "claude" as AiPlatform, label: "Claude Code", color: "#cc785c", bracket: "[claude" },
   { key: "gemini" as AiPlatform, label: "Gemini CLI", color: "#4285f4", bracket: "[gemini" },
   { key: "codex" as AiPlatform, label: "Codex CLI", color: "#10a37f", bracket: "[codex" },
 ];
@@ -698,14 +698,26 @@ export default function QuickEntryPage() {
   );
 
   const statusLabel = COLUMNS.find((c) => c.id === status)?.title;
-  const hasBadges = true; // Always show - at minimum the status badge is visible
+  const hasBadges =
+    !!selectedProject ||
+    priority !== "medium" ||
+    statusExplicit ||
+    complexity !== "medium" ||
+    !!aiPlatform;
+  const missingForIdeate = !title.trim()
+    ? "(title)"
+    : !descHasContent
+    ? "(notes)"
+    : !selectedProject
+    ? "(@project)"
+    : "";
 
   return (
     <div className="h-screen w-screen bg-transparent flex items-start justify-center">
-      <div ref={containerRef} className="w-full rounded-lg overflow-hidden bg-[hsl(var(--popover))] border border-white/[0.08] shadow-[0_16px_70px_-12px_rgba(0,0,0,0.8)]">
+      <div ref={containerRef} className="w-full rounded-2xl overflow-hidden bg-[hsl(var(--popover))] border border-[hsl(var(--border))] shadow-[var(--shadow-popover)]">
         {/* Drag handle */}
         <div className="h-4 w-full cursor-grab active:cursor-grabbing" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-          <div className="mx-auto mt-1.5 w-8 h-1 rounded-full bg-white/[0.12]" />
+          <div className="mx-auto mt-1.5 w-8 h-1 rounded-full bg-[hsl(var(--foreground)/0.15)]" />
         </div>
         {/* Title */}
         <input
@@ -716,16 +728,19 @@ export default function QuickEntryPage() {
           onKeyDown={handleTitleKeyDown}
           onFocus={() => setFocusedField("title")}
           placeholder="New card"
-          className="block w-full bg-transparent border-0 px-5 pt-1 pb-1 text-[15px] font-medium text-foreground placeholder:text-muted-foreground/50 outline-none ring-0 focus:ring-0"
+          className="block w-full bg-transparent border-0 px-5 pt-1 pb-2 text-[17px] font-medium tracking-tight leading-tight text-foreground placeholder:text-muted-foreground/50 outline-none ring-0 focus:ring-0"
           autoComplete="off"
           spellCheck={false}
         />
 
         {/* Description */}
         <div
-          className="px-5 pb-3 pt-0"
+          className="relative px-5 pb-3 pt-0"
           onFocus={() => setFocusedField("description")}
         >
+          {focusedField === "description" && (
+            <span className="pointer-events-none absolute left-0 top-0 bottom-3 w-[2px] rounded-r-full bg-[hsl(var(--primary)/0.5)]" />
+          )}
           <QuickEntryEditor
             ref={descRef}
             placeholder="Notes"
@@ -751,16 +766,23 @@ export default function QuickEntryPage() {
                 onRemove={() => setPriority("medium")}
               />
             )}
-            <TokenBadge
-              label={statusLabel ?? status}
-              color={STATUS_COLORS[status]}
-              onRemove={() => { setStatus("ideation"); setStatusExplicit(false); }}
-            />
-            <TokenBadge
-              label={complexity === "high" ? "C: High" : complexity === "low" ? "C: Low" : "C: Medium"}
-              color={complexity === "high" ? "#f87171" : complexity === "low" ? "#22c55e" : "#facc15"}
-              onRemove={() => setComplexity("medium")}
-            />
+            {statusExplicit && (
+              <TokenBadge
+                label={statusLabel ?? status}
+                color={STATUS_COLORS[status]}
+                onRemove={() => {
+                  setStatus("ideation");
+                  setStatusExplicit(false);
+                }}
+              />
+            )}
+            {complexity !== "medium" && (
+              <TokenBadge
+                label={complexity === "high" ? "C: High" : "C: Low"}
+                color={complexity === "high" ? "#f87171" : "#22c55e"}
+                onRemove={() => setComplexity("medium")}
+              />
+            )}
             {aiPlatform && (
               <TokenBadge
                 label={PLATFORM_LABELS[aiPlatform].label}
@@ -773,22 +795,22 @@ export default function QuickEntryPage() {
 
         {/* Project required error */}
         {projectError && (
-          <div className="mx-5 mb-2 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/20 text-[12px] text-red-400">
-            Project is required. Type <kbd className="font-mono bg-red-500/10 px-1 py-0.5 rounded text-red-300">@</kbd> to select a project.
+          <div className="mx-5 mb-2 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/20 text-[12px] text-red-500">
+            Project is required. Type <kbd className="font-mono bg-red-500/30 px-1.5 py-0.5 rounded text-red-600">@</kbd> to select a project.
           </div>
         )}
 
         {/* Autocomplete dropdown */}
         {showAutocomplete && (
-          <div className="border-t border-white/[0.06]">
+          <div className="border-t border-[hsl(var(--border))]">
             {acType === "project" &&
               (acItems as Project[]).map((project, idx) => (
                 <button
                   key={project.id}
-                  className={`w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
+                  className={`relative w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
                     idx === acIndex
-                      ? "bg-white/[0.08]"
-                      : "hover:bg-white/[0.04]"
+                      ? "bg-[hsl(var(--foreground)/0.06)]"
+                      : "hover:bg-[hsl(var(--foreground)/0.03)]"
                   }`}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -797,7 +819,7 @@ export default function QuickEntryPage() {
                   onMouseEnter={() => setAcIndex(idx)}
                 >
                   {idx === acIndex && (
-                    <span className="text-foreground/60 text-xs">{">"}</span>
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full bg-[hsl(var(--primary))]" />
                   )}
                   <span
                     className="w-2 h-2 rounded-full shrink-0"
@@ -806,7 +828,7 @@ export default function QuickEntryPage() {
                   <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
                     {project.name}
                   </span>
-                  <span className="text-muted-foreground/30 text-xs ml-auto font-mono">
+                  <span className="text-muted-foreground/55 text-xs ml-auto font-mono">
                     {project.idPrefix}
                   </span>
                 </button>
@@ -816,10 +838,10 @@ export default function QuickEntryPage() {
                 (option, idx) => (
                   <button
                     key={option.key}
-                    className={`w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
+                    className={`relative w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
                       idx === acIndex
-                        ? "bg-white/[0.08]"
-                        : "hover:bg-white/[0.04]"
+                        ? "bg-[hsl(var(--foreground)/0.06)]"
+                        : "hover:bg-[hsl(var(--foreground)/0.03)]"
                     }`}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -828,7 +850,7 @@ export default function QuickEntryPage() {
                     onMouseEnter={() => setAcIndex(idx)}
                   >
                     {idx === acIndex && (
-                      <span className="text-foreground/60 text-xs">{">"}</span>
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full bg-[hsl(var(--primary))]" />
                     )}
                     <span
                       className="w-2 h-2 rounded-full shrink-0"
@@ -837,7 +859,7 @@ export default function QuickEntryPage() {
                     <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
                       {option.label}
                     </span>
-                    <span className="text-muted-foreground/30 text-xs ml-auto font-mono">
+                    <span className="text-muted-foreground/55 text-xs ml-auto font-mono">
                       {option.slash}
                     </span>
                   </button>
@@ -848,10 +870,10 @@ export default function QuickEntryPage() {
                 (option, idx) => (
                   <button
                     key={option.key}
-                    className={`w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
+                    className={`relative w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
                       idx === acIndex
-                        ? "bg-white/[0.08]"
-                        : "hover:bg-white/[0.04]"
+                        ? "bg-[hsl(var(--foreground)/0.06)]"
+                        : "hover:bg-[hsl(var(--foreground)/0.03)]"
                     }`}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -860,13 +882,13 @@ export default function QuickEntryPage() {
                     onMouseEnter={() => setAcIndex(idx)}
                   >
                     {idx === acIndex && (
-                      <span className="text-foreground/60 text-xs">{">"}</span>
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full bg-[hsl(var(--primary))]" />
                     )}
                     <PlatformIcon platform={option.key} size={14} className="shrink-0" />
                     <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
                       {option.label}
                     </span>
-                    <span className="text-muted-foreground/30 text-xs ml-auto font-mono">
+                    <span className="text-muted-foreground/55 text-xs ml-auto font-mono">
                       {option.bracket}
                     </span>
                   </button>
@@ -877,10 +899,10 @@ export default function QuickEntryPage() {
                 (option, idx) => (
                   <button
                     key={option.key}
-                    className={`w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
+                    className={`relative w-full px-5 py-2 flex items-center gap-2.5 text-[13px] text-left transition-colors ${
                       idx === acIndex
-                        ? "bg-white/[0.08]"
-                        : "hover:bg-white/[0.04]"
+                        ? "bg-[hsl(var(--foreground)/0.06)]"
+                        : "hover:bg-[hsl(var(--foreground)/0.03)]"
                     }`}
                     onMouseDown={(e) => {
                       e.preventDefault();
@@ -889,7 +911,7 @@ export default function QuickEntryPage() {
                     onMouseEnter={() => setAcIndex(idx)}
                   >
                     {idx === acIndex && (
-                      <span className="text-foreground/60 text-xs">{">"}</span>
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full bg-[hsl(var(--primary))]" />
                     )}
                     <span
                       className="w-2 h-2 rounded-full shrink-0"
@@ -898,7 +920,7 @@ export default function QuickEntryPage() {
                     <span className={idx === acIndex ? "text-foreground" : "text-foreground/70"}>
                       {option.label}
                     </span>
-                    <span className="text-muted-foreground/30 text-xs ml-auto font-mono">
+                    <span className="text-muted-foreground/55 text-xs ml-auto font-mono">
                       {option.trigger}
                     </span>
                   </button>
@@ -909,45 +931,79 @@ export default function QuickEntryPage() {
 
         {/* Trigger hints - hidden when autocomplete is open */}
         {!showAutocomplete && (
-          <div className="px-5 py-1.5 border-t border-white/[0.06] flex items-center gap-3 text-[10px] text-muted-foreground/40 font-mono">
+          <div
+            className={`px-5 py-1.5 border-t border-[hsl(var(--border))] flex items-center gap-3 text-[10px] font-mono transition-colors duration-300 ${
+              title.trim() || descHasContent
+                ? "text-muted-foreground/60"
+                : "text-muted-foreground/30"
+            }`}
+          >
             <span>@ project</span>
             <span>/ status</span>
             <span>[ platform</span>
             <span>c: complexity</span>
-            <span>! low</span>
-            <span>!! high</span>
+            <span>! priority</span>
           </div>
         )}
 
         {/* Footer */}
-        <div className={`px-5 py-2 ${showAutocomplete ? "border-t border-white/[0.06]" : ""} flex items-center gap-4 text-[11px] text-muted-foreground/40`}>
-          <span className={canSubmit ? "text-muted-foreground/60" : ""}>
-            <kbd className="font-mono">
+        <div
+          className={`px-5 py-2 ${
+            showAutocomplete ? "border-t border-[hsl(var(--border))]" : ""
+          } flex items-center gap-4 text-[11px] text-muted-foreground/55`}
+        >
+          <span className={canSubmit ? "text-muted-foreground/80" : ""}>
+            <kbd className="px-1 py-[1px] bg-secondary border border-border rounded text-[10px] font-mono">
               {focusedField === "title" ? "\u21A9" : "\u2318\u21A9"}
             </kbd>{" "}
             Create
             {!selectedProject && (
-              <span className="ml-1 text-muted-foreground/25">
+              <span className="ml-1 text-muted-foreground/55">
                 (@project)
               </span>
             )}
-          </span>
-          <span>
-            <kbd className="font-mono">Tab</kbd>{" "}
-            {focusedField === "title" ? "Notes" : "Title"}
-          </span>
-          <span>
-            <kbd className="font-mono">Esc</kbd> Close
           </span>
           <button
             type="button"
             onClick={handleIdeate}
             disabled={!canIdeate}
-            className={`ml-auto flex items-center gap-1.5 px-2 py-0.5 rounded transition-colors ${canIdeate ? "bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 hover:text-purple-300 cursor-pointer" : "text-muted-foreground/20 cursor-default"}`}
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded transition-all ${
+              canIdeate
+                ? "bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.2)] active:translate-y-[0.5px] cursor-pointer"
+                : "text-muted-foreground/40 cursor-default"
+            }`}
           >
             <Brain className="w-3 h-3" />
-            <span><kbd className="font-mono">{"\u2318"}I</kbd> Ideate</span>
+            <span className="flex items-center gap-1">
+              <kbd
+                className={`px-1 py-[1px] border rounded text-[10px] font-mono ${
+                  canIdeate
+                    ? "bg-[hsl(var(--primary)/0.15)] border-[hsl(var(--primary)/0.3)]"
+                    : "bg-secondary border-border"
+                }`}
+              >
+                {"\u2318"}I
+              </kbd>
+              Ideate
+            </span>
+            {!canIdeate && missingForIdeate && (
+              <span className="text-[10px] text-muted-foreground/55">
+                {missingForIdeate}
+              </span>
+            )}
           </button>
+          <span className="ml-auto">
+            <kbd className="px-1 py-[1px] bg-secondary border border-border rounded text-[10px] font-mono">
+              Tab
+            </kbd>{" "}
+            {focusedField === "title" ? "Notes" : "Title"}
+          </span>
+          <span>
+            <kbd className="px-1 py-[1px] bg-secondary border border-border rounded text-[10px] font-mono">
+              Esc
+            </kbd>{" "}
+            Close
+          </span>
         </div>
       </div>
     </div>
@@ -964,7 +1020,7 @@ function TokenBadge({
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 pl-1.5 pr-1 py-0.5 rounded-md bg-white/[0.06] text-[11px] text-foreground/70">
+    <span className="inline-flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 rounded-md bg-[hsl(var(--foreground)/0.06)] text-[11px] text-foreground/80">
       <span
         className="w-1.5 h-1.5 rounded-full"
         style={{ backgroundColor: color }}
@@ -972,8 +1028,9 @@ function TokenBadge({
       {label}
       <button
         type="button"
-        className="text-muted-foreground/40 hover:text-foreground/60 transition-colors"
+        className="p-0.5 -m-0.5 text-muted-foreground/50 hover:text-foreground/70 transition-colors"
         onClick={onRemove}
+        aria-label={`Remove ${label}`}
       >
         <X className="w-3 h-3" />
       </button>
