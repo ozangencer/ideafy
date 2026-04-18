@@ -40,6 +40,7 @@ interface CardModalHeaderProps {
   onToggleExpand: () => void;
   onClose: () => void;
   isTitleValid: boolean;
+  autoFocusTitle?: boolean;
 }
 
 export function CardModalHeader({
@@ -65,6 +66,7 @@ export function CardModalHeader({
   onToggleExpand,
   onClose,
   isTitleValid,
+  autoFocusTitle,
 }: CardModalHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border">
@@ -102,6 +104,7 @@ export function CardModalHeader({
             type="text"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
+            autoFocus={autoFocusTitle}
             className={`bg-transparent border-none outline-none w-full text-foreground p-0 ${
               !isTitleValid ? "placeholder:text-muted-foreground/50" : ""
             }`}

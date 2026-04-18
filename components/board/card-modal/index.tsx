@@ -737,6 +737,7 @@ export function CardModal() {
           onToggleExpand={() => setIsExpanded(!isExpanded)}
           onClose={handleClose}
           isTitleValid={isTitleValid}
+          autoFocusTitle={isDraftMode}
         />
 
         {/* Git Branch Actions for Human Test cards */}
