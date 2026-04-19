@@ -38,6 +38,7 @@ export interface Card {
   conflictFiles: string[] | null;
   processingType: ProcessingType;
   aiPlatform: AiPlatform | null;
+  useWorktree: boolean | null; // null = follow project setting, true/false = per-card override
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;

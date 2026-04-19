@@ -423,6 +423,7 @@ export function CardModal() {
           rebaseConflict: null,
           conflictFiles: null,
           processingType: null,
+          useWorktree: null,
         });
       } else {
         const cardId = selectedCard.id;

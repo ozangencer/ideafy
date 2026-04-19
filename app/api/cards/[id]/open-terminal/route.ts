@@ -147,8 +147,8 @@ export async function POST(
   let gitWorktreeStatus = card.gitWorktreeStatus;
   let actualWorkingDir = workingDir;
 
-  // Only use worktrees if project has it enabled (default: true)
-  const shouldUseWorktree = project?.useWorktrees ?? true;
+  // Per-card override wins; otherwise fall back to project setting (default: true)
+  const shouldUseWorktree = card.useWorktree ?? project?.useWorktrees ?? true;
 
   if (phase === "implementation" && project && card.taskNumber && shouldUseWorktree) {
     const repoCheck = await isGitRepo(workingDir);

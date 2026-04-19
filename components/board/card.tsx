@@ -33,6 +33,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 
 // Decode HTML entities and strip tags for preview text
 function stripHtml(html: string): string {
@@ -146,12 +147,13 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, settings, startDevServer, stopDevServer } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, updateCard, settings, startDevServer, stopDevServer } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
   const [showIdeationConfirm, setShowIdeationConfirm] = useState(false);
   const [showAutonomousConfirm, setShowAutonomousConfirm] = useState(false);
+  const [dialogUseWorktree, setDialogUseWorktree] = useState(true);
   const [showTestTogetherConfirm, setShowTestTogetherConfirm] = useState(false);
   const [isServerLoading, setIsServerLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isBeingDragged } = useDraggable({
@@ -212,15 +214,29 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
     unlockCard(card.id);
   };
 
+  const projectDefaultWorktree = project?.useWorktrees ?? true;
+  const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
+
   const handleStartClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLocked || isStarting || !canStart) return;
+    setDialogUseWorktree(effectiveUseWorktree);
     setShowAutonomousConfirm(true);
   };
 
   const handleStart = async () => {
     setShowAutonomousConfirm(false);
     if (isStarting || !canStart) return;
+
+    // Persist per-card override only when it diverges from project default.
+    // Matching the project default clears the override (back to "follow project").
+    if (phase === "implementation") {
+      const desiredOverride =
+        dialogUseWorktree === projectDefaultWorktree ? null : dialogUseWorktree;
+      if (desiredOverride !== (card.useWorktree ?? null)) {
+        await updateCard(card.id, { useWorktree: desiredOverride });
+      }
+    }
 
     const result = await startTask(card.id);
     if (!result.success) {
@@ -634,15 +650,19 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     <TooltipContent side="top">Worktree active</TooltipContent>
                   </Tooltip>
                 )}
-                {/* Show "Main" badge when project has worktrees disabled */}
-                {project && !project.useWorktrees && !isBackgroundProcessing && (
+                {/* Show "Main" badge when effective setting is "no worktree" (card override or project setting) */}
+                {project && !effectiveUseWorktree && !isBackgroundProcessing && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="p-1 rounded bg-gray-500/15 text-gray-400">
                         <GitCommitHorizontal className="w-3 h-3" />
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent side="top">Direct on main (no worktree)</TooltipContent>
+                    <TooltipContent side="top">
+                      {card.useWorktree === false
+                        ? "Direct on main (card override)"
+                        : "Direct on main (no worktree)"}
+                    </TooltipContent>
                   </Tooltip>
                 )}
                 {stripHtml(card.solutionSummary) && !isBackgroundProcessing && (
@@ -780,7 +800,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                   <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in Ghostty terminal.
                 </p>
                 {phase === "implementation" && (
-                  project?.useWorktrees === false ? (
+                  !effectiveUseWorktree ? (
                     <p className="text-gray-400 text-xs font-mono">
                       Working directly on main (worktrees disabled)
                     </p>
@@ -863,12 +883,8 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                   </p>
                 )}
                 {phase === "implementation" && (
-                  <div className="space-y-1">
-                    {project?.useWorktrees === false ? (
-                      <p className="text-amber-500">
-                        Files in your project may be modified. Working directly on main branch.
-                      </p>
-                    ) : (
+                  <div className="space-y-2">
+                    {dialogUseWorktree ? (
                       <>
                         <p className="text-amber-500">
                           Files in your project may be modified. A new worktree will be created automatically.
@@ -879,7 +895,25 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                           </p>
                         )}
                       </>
+                    ) : (
+                      <p className="text-amber-500">
+                        Files in your project may be modified. Working directly on main branch.
+                      </p>
                     )}
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <div className="space-y-0.5">
+                        <label className="text-sm font-medium">Use git worktree</label>
+                        <p className="text-xs text-muted-foreground">
+                          {dialogUseWorktree
+                            ? "Isolated branch for this task"
+                            : "Work directly on main (flow mode)"}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={dialogUseWorktree}
+                        onCheckedChange={setDialogUseWorktree}
+                      />
+                    </div>
                   </div>
                 )}
                 {phase === "retest" && (

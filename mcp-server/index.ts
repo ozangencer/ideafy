@@ -283,6 +283,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               enum: ["low", "medium", "high"],
               description: "Task priority",
             },
+            useWorktree: {
+              type: ["boolean", "null"],
+              description: "Per-card worktree override. true = force isolated worktree, false = work on main branch, null = follow project setting.",
+            },
           },
           required: ["id"],
         },
@@ -485,6 +489,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             project_folder as projectFolder,
             project_id as projectId,
             task_number as taskNumber,
+            git_worktree_path as gitWorktreePath,
+            git_worktree_status as gitWorktreeStatus,
+            use_worktree as useWorktree,
             created_at as createdAt,
             updated_at as updatedAt
           FROM cards WHERE id = ?
@@ -496,6 +503,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+
+        // SQLite stores booleans as 0/1; normalize useWorktree for JSON output
+        const rawUseWorktree = (card as unknown as { useWorktree: number | null }).useWorktree;
+        (card as unknown as { useWorktree: boolean | null }).useWorktree =
+          rawUseWorktree === null || rawUseWorktree === undefined ? null : Boolean(rawUseWorktree);
 
         // Extract images from HTML fields
         const { cleanedCard, images } = extractCardImages(card);
@@ -539,6 +551,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           status: "status",
           complexity: "complexity",
           priority: "priority",
+          useWorktree: "use_worktree",
         };
 
         const setClauses: string[] = ["updated_at = ?"];
@@ -558,6 +571,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 }
               }
               values.push(htmlValue);
+            } else if (key === "useWorktree") {
+              // SQLite integer column: true/false → 1/0, null passes through
+              values.push(value === null ? null : value ? 1 : 0);
             } else {
               values.push(value);
             }
@@ -620,6 +636,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             project_folder as projectFolder,
             project_id as projectId,
             task_number as taskNumber,
+            git_worktree_path as gitWorktreePath,
+            git_worktree_status as gitWorktreeStatus,
+            use_worktree as useWorktree,
             created_at as createdAt,
             updated_at as updatedAt
           FROM cards
@@ -643,6 +662,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         query += " ORDER BY updated_at DESC";
 
         const cards = db.prepare(query).all(...params) as Card[];
+
+        // SQLite stores booleans as 0/1; normalize useWorktree on every row
+        for (const row of cards) {
+          const raw = (row as unknown as { useWorktree: number | null }).useWorktree;
+          (row as unknown as { useWorktree: boolean | null }).useWorktree =
+            raw === null || raw === undefined ? null : Boolean(raw);
+        }
 
         // Extract images from all cards (max 10 total)
         const allImages: ExtractedImage[] = [];

@@ -44,6 +44,7 @@ export async function GET(
     conflictFiles: row.conflictFiles ? JSON.parse(row.conflictFiles) : null,
     processingType: (row.processingType as Card["processingType"]) ?? null,
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
+    useWorktree: row.useWorktree ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
@@ -139,6 +140,9 @@ export async function PUT(
     projectId: newProjectId,
     taskNumber,
     aiPlatform: body.aiPlatform !== undefined ? (body.aiPlatform || null) : existing.aiPlatform,
+    useWorktree: body.useWorktree !== undefined
+      ? (typeof body.useWorktree === "boolean" ? body.useWorktree : null)
+      : existing.useWorktree,
     updatedAt: now,
     completedAt,
   };
@@ -177,6 +181,7 @@ export async function PUT(
     conflictFiles: existing.conflictFiles ? JSON.parse(existing.conflictFiles) : null,
     processingType: (existing.processingType as Card["processingType"]) ?? null,
     aiPlatform: (updatedCard.aiPlatform as Card["aiPlatform"]) ?? null,
+    useWorktree: updatedCard.useWorktree ?? null,
     createdAt: existing.createdAt,
     updatedAt: updatedCard.updatedAt,
     completedAt: updatedCard.completedAt,
