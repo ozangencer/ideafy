@@ -19,6 +19,13 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import {
+  generateBranchName,
+  isGitRepo,
+  createWorktree,
+  worktreeExists,
+  getWorktreePath,
+} from "@/lib/git";
 
 const execAsync = promisify(exec);
 
@@ -86,6 +93,66 @@ export async function POST(
     .where(eq(schema.cards.id, id))
     .run();
 
+  // Resolve worktree: per-card override wins, else project default (true).
+  let gitBranchName = card.gitBranchName;
+  let gitBranchStatus = card.gitBranchStatus;
+  let gitWorktreePath = card.gitWorktreePath;
+  let gitWorktreeStatus = card.gitWorktreeStatus;
+  let actualWorkingDir = workingDir;
+
+  const shouldUseWorktree = card.useWorktree ?? project?.useWorktrees ?? true;
+
+  if (shouldUseWorktree && project && card.taskNumber) {
+    const isRepo = await isGitRepo(workingDir);
+
+    if (isRepo) {
+      let branchName = card.gitBranchName;
+      if (!branchName) {
+        branchName = generateBranchName(
+          project.idPrefix,
+          card.taskNumber,
+          card.title
+        );
+      }
+
+      const expectedWorktreePath = getWorktreePath(workingDir, branchName);
+      const worktreeExistsResult = await worktreeExists(workingDir, expectedWorktreePath);
+
+      if (worktreeExistsResult) {
+        console.log(`[Quick Fix] Using existing worktree: ${expectedWorktreePath}`);
+        actualWorkingDir = expectedWorktreePath;
+        gitWorktreePath = expectedWorktreePath;
+        gitWorktreeStatus = "active";
+        gitBranchName = branchName;
+        gitBranchStatus = "active";
+      } else {
+        console.log(`[Quick Fix] Creating worktree for branch: ${branchName}`);
+        const worktreeResult = await createWorktree(workingDir, branchName);
+
+        if (worktreeResult.success) {
+          actualWorkingDir = worktreeResult.worktreePath;
+          gitWorktreePath = worktreeResult.worktreePath;
+          gitWorktreeStatus = "active";
+          gitBranchName = branchName;
+          gitBranchStatus = "active";
+          console.log(`[Quick Fix] Created worktree at: ${worktreeResult.worktreePath}`);
+        } else {
+          console.error(`[Quick Fix] Failed to create worktree: ${worktreeResult.error}`);
+          db.update(schema.cards)
+            .set({ processingType: null })
+            .where(eq(schema.cards.id, id))
+            .run();
+          return NextResponse.json(
+            { error: `Failed to create git worktree: ${worktreeResult.error}` },
+            { status: 500 }
+          );
+        }
+      }
+    }
+  } else if (!shouldUseWorktree) {
+    console.log(`[Quick Fix] Working directly on main branch (worktrees disabled)`);
+  }
+
   try {
     let prompt = buildQuickFixPrompt(card);
 
@@ -107,7 +174,7 @@ export async function POST(
       duration?: number;
     }>((resolve, reject) => {
       const cliProcess = spawn(provider.getCliPath(), provider.buildAutonomousArgs({ prompt }), {
-        cwd: workingDir,
+        cwd: actualWorkingDir,
         stdio: ["pipe", "pipe", "pipe"],
         env: provider.getCIEnv(),
       });
@@ -197,17 +264,17 @@ export async function POST(
 
     try {
       // Stage all changes
-      await execAsync("git add -A", { cwd: workingDir });
+      await execAsync("git add -A", { cwd: actualWorkingDir });
 
       // Check if there are changes to commit
       const { stdout: status } = await execAsync("git status --porcelain", {
-        cwd: workingDir,
+        cwd: actualWorkingDir,
       });
 
       if (status.trim()) {
         // Commit the changes
         const escapedMsg = commitMessage.replace(/"/g, '\\"');
-        await execAsync(`git commit -m "${escapedMsg}"`, { cwd: workingDir });
+        await execAsync(`git commit -m "${escapedMsg}"`, { cwd: actualWorkingDir });
         console.log(`[Quick Fix] Auto-committed: ${commitMessage}`);
       } else {
         console.log(`[Quick Fix] No changes to commit`);
@@ -228,6 +295,10 @@ export async function POST(
         testScenarios,
         updatedAt,
         processingType: null,
+        gitBranchName,
+        gitBranchStatus,
+        gitWorktreePath,
+        gitWorktreeStatus,
       })
       .where(eq(schema.cards.id, id))
       .run();
@@ -243,6 +314,10 @@ export async function POST(
       testScenarios,
       cost,
       duration,
+      gitBranchName,
+      gitBranchStatus,
+      gitWorktreePath,
+      gitWorktreeStatus,
     });
   } catch (error) {
     console.error("Quick Fix error:", error);

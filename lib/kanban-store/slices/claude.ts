@@ -236,16 +236,20 @@ export const createClaudeSlice: StoreSlice<
       lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
     }));
 
+    // Poll while the request is in-flight so the banner catches the process
+    // as soon as it spawns (worktree setup may delay the spawn by several seconds).
+    const pollInterval = setInterval(() => {
+      get().fetchBackgroundProcesses();
+    }, 1000);
+
     try {
       // Start the API call (process starts immediately on backend)
       const fetchPromise = fetch(`/api/cards/${cardId}/quick-fix`, {
         method: "POST",
       });
 
-      // Refresh background processes after a short delay to show the new process
-      setTimeout(() => get().fetchBackgroundProcesses(), 500);
-
       const response = await fetchPromise;
+      clearInterval(pollInterval);
 
       const data = await parseJson<{
         newStatus: Card["status"];
@@ -278,6 +282,7 @@ export const createClaudeSlice: StoreSlice<
 
       return { success: true };
     } catch (error) {
+      clearInterval(pollInterval);
       console.error("Failed to quick fix:", error);
       set((state) => ({
         quickFixingCardId: null,

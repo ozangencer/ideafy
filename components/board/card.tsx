@@ -270,12 +270,20 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   const handleQuickFixClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isLocked || !canQuickFix) return;
+    setDialogUseWorktree(effectiveUseWorktree);
     setShowQuickFixConfirm(true);
   };
 
   const handleQuickFix = async () => {
     setShowQuickFixConfirm(false);
     if (isQuickFixing || !canQuickFix) return;
+
+    // Persist per-card override only when it diverges from project default.
+    const desiredOverride =
+      dialogUseWorktree === projectDefaultWorktree ? null : dialogUseWorktree;
+    if (desiredOverride !== (card.useWorktree ?? null)) {
+      await updateCard(card.id, { useWorktree: desiredOverride });
+    }
 
     const result = await quickFixTask(card.id);
     if (!result.success) {
@@ -775,6 +783,30 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                   <strong className="text-amber-500">Warning:</strong> No plan will be written. This runs in autonomous mode with full file access.
                   After the bug fix is completed, the card will automatically be moved to the Human Test column.
                 </p>
+                {dialogUseWorktree && expectedWorktreePath && (
+                  <p className="text-cyan-500 text-xs font-mono">
+                    {expectedWorktreePath.split('/').slice(-3).join('/')}
+                  </p>
+                )}
+                {!dialogUseWorktree && (
+                  <p className="text-gray-400 text-xs font-mono">
+                    Working directly on main branch
+                  </p>
+                )}
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Use git worktree</label>
+                    <p className="text-xs text-muted-foreground">
+                      {dialogUseWorktree
+                        ? "Isolated branch for this fix"
+                        : "Work directly on main (flow mode)"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={dialogUseWorktree}
+                    onCheckedChange={setDialogUseWorktree}
+                  />
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
