@@ -10,7 +10,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
-import { normalizeUseWorktree } from "./serialize-card.js";
+import { normalizeUseWorktree, serializeUseWorktreeForDb } from "./serialize-card.js";
 
 // Configure marked for Tiptap-compatible HTML
 marked.setOptions({
@@ -589,7 +589,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               values.push(htmlValue);
             } else if (key === "useWorktree") {
               // SQLite integer column: true/false → 1/0, null passes through
-              values.push(value === null ? null : value ? 1 : 0);
+              values.push(serializeUseWorktreeForDb(value as boolean | null));
             } else {
               values.push(value);
             }

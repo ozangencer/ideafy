@@ -7,3 +7,12 @@ export function normalizeUseWorktree(
   if (value === null || value === undefined) return null;
   return Boolean(value);
 }
+
+// Reverse direction: JS boolean|null → SQLite INTEGER|NULL. null stays null
+// (clears the override); true → 1; false → 0.
+export function serializeUseWorktreeForDb(
+  value: boolean | null
+): 0 | 1 | null {
+  if (value === null) return null;
+  return value ? 1 : 0;
+}
