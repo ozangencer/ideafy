@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync } from "fs";
 import { join } from "path";
 
@@ -11,7 +11,9 @@ export function findBinary(binaryName: string, candidatePaths: string[]): string
   }
 
   try {
-    const result = execSync(`which ${binaryName}`, { encoding: "utf-8" }).trim();
+    // execFileSync avoids the shell entirely — protects against future callers
+    // passing a binaryName with whitespace/metacharacters.
+    const result = execFileSync("which", [binaryName], { encoding: "utf-8" }).trim();
     if (result && existsSync(result)) return result;
   } catch {
     // which command failed

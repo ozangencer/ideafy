@@ -1,11 +1,10 @@
-import { spawn } from "child_process";
-import { exec } from "child_process";
+import { spawn, execFile } from "child_process";
 import { promisify } from "util";
 import * as net from "net";
 import * as fs from "fs";
 import * as path from "path";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Check if a port is in use
@@ -117,8 +116,9 @@ export function stopDevServer(pid: number): boolean {
  */
 export async function openInBrowser(url: string): Promise<void> {
   try {
-    // macOS specific - use 'open' command
-    await execAsync(`open "${url}"`);
+    // execFile avoids the shell — url is passed as argv so any
+    // metacharacters (&, ;, $(…)) are inert.
+    await execFileAsync("open", [url]);
   } catch (error) {
     console.error("Failed to open browser:", error);
   }

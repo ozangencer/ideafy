@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import type { AiPlatform } from "@/lib/types";
 import { getPlatformProvider } from "@/lib/platform";
 
@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
     // CLI not found via provider, try which as fallback
     const binaryName = platform === "claude" ? "claude" : platform === "gemini" ? "gemini" : "codex";
     try {
-      const result = execSync(`which ${binaryName}`, { encoding: "utf-8" }).trim();
+      // execFileSync keeps binaryName out of a shell even though it's currently
+      // a closed enum; defense in depth against future refactors.
+      const result = execFileSync("which", [binaryName], { encoding: "utf-8" }).trim();
       return NextResponse.json({
         found: !!result,
         path: result || null,

