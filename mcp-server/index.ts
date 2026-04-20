@@ -10,6 +10,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
+import { normalizeUseWorktree } from "./serialize-card.js";
 
 // Configure marked for Tiptap-compatible HTML
 marked.setOptions({
@@ -522,7 +523,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // SQLite stores booleans as 0/1; normalize useWorktree for JSON output
         const rawUseWorktree = (card as unknown as { useWorktree: number | null }).useWorktree;
         (card as unknown as { useWorktree: boolean | null }).useWorktree =
-          rawUseWorktree === null || rawUseWorktree === undefined ? null : Boolean(rawUseWorktree);
+          normalizeUseWorktree(rawUseWorktree);
 
         // Extract images from HTML fields
         const { cleanedCard, images } = extractCardImages(card);
@@ -682,7 +683,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         for (const row of cards) {
           const raw = (row as unknown as { useWorktree: number | null }).useWorktree;
           (row as unknown as { useWorktree: boolean | null }).useWorktree =
-            raw === null || raw === undefined ? null : Boolean(raw);
+            normalizeUseWorktree(raw);
         }
 
         // Extract images from all cards (max 10 total)

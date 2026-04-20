@@ -632,11 +632,11 @@ export function buildTestGenerationPrompt(
 ${scenariosText}
 
 ## Output Format
-After generating tests, update the testScenarios field with:
+After generating tests AND verifying they pass (run the test command and confirm 0 failures), update the testScenarios field with:
 
 \`\`\`markdown
 ## Test Scenarios
-[Keep the original manual scenarios as checkboxes]
+[Keep the original manual scenarios as checkboxes. For every scenario now covered by a passing unit test, mark it as checked: \`- [x] ...\`. Scenarios that still require manual verification stay \`- [ ] ...\`.]
 
 ## Unit Test Files
 | File | Description |
@@ -647,6 +647,8 @@ After generating tests, update the testScenarios field with:
 \`\`\`
 
 Use mcp__ideafy__save_tests to update the card with the new format.
+
+**Checkbox rule (mandatory):** If a manual scenario is now covered by a passing unit test, its checkbox MUST be \`[x]\` in the markdown you send to save_tests. Do not wait for the user to tell you to tick passing scenarios — ticking them is part of the job. Only leave \`[ ]\` for scenarios that genuinely still need human verification (UI, regressions, integration-level checks).
 
 Focus on:
 - Testing happy paths and edge cases from scenarios
