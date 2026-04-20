@@ -12,7 +12,7 @@
     "dev": "next dev -H 127.0.0.1 -p ${PORT:-3030}",
     "dev:clean": "rm -rf .next && next dev -H 127.0.0.1 -p ${PORT:-3030}",
     "dev:turbo": "rm -rf .next && next dev -H 127.0.0.1 -p ${PORT:-3030} --turbo",
-    "build": "next build",
+    "build": "next build && rm -rf .next/standalone/data",
     "build:mcp": "cd mcp-server && npm install && npm run build",
     "start": "next start -H 127.0.0.1 -p ${PORT:-3030}",
     "lint": "next lint",
@@ -22,8 +22,10 @@
     "db:studio": "drizzle-kit studio",
     "electron": "electron .",
     "rebuild:electron": "electron-builder install-app-deps",
-    "pack": "npm run build && npm run build:mcp && electron-builder --dir",
-    "dist": "npm run build && npm run build:mcp && electron-builder --mac"
+    "rebuild:system": "npm rebuild better-sqlite3 && cd mcp-server && npm rebuild better-sqlite3",
+    "rebuild:natives": "node scripts/rebuild-native-deps.mjs",
+    "pack": "npm run rebuild:system && npm run build && npm run build:mcp && npm run rebuild:natives && electron-builder --dir && npm run rebuild:system",
+    "dist": "npm run rebuild:system && npm run build && npm run build:mcp && npm run rebuild:natives && electron-builder --mac && npm run rebuild:system"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -108,20 +110,19 @@
     "copyright": "Copyright © 2026 Ozan Gencer",
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/better-sqlite3/**",
       "**/*.node"
     ],
     "files": [
       "electron/**/*",
       "!electron/node_modules",
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*",
       "package.json"
     ],
     "extraResources": [
-      { "from": ".next/static", "to": "app/.next/static" },
-      { "from": "public", "to": "app/public" },
+      { "from": ".next/standalone", "to": "app-next", "filter": ["!data/**"] },
+      { "from": ".next/static", "to": "app-next/.next/static" },
+      { "from": "public", "to": "app-next/public" },
+      { "from": "drizzle", "to": "app-next/drizzle" },
+      { "from": "skills", "to": "app-next/skills" },
       { "from": "mcp-server/dist", "to": "mcp-server/dist" },
       { "from": "mcp-server/node_modules", "to": "mcp-server/node_modules" }
     ],

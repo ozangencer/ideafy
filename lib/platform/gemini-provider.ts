@@ -15,6 +15,7 @@ import type {
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
 import { appResourcesRoot } from "../paths";
+import { buildMcpInvocation } from "./mcp-invocation";
 
 let cachedGeminiPath: string | null = null;
 
@@ -219,10 +220,7 @@ class GeminiProvider implements PlatformProvider {
         ...existingSettings,
         mcpServers: {
           ...existing,
-          ideafy: {
-            command: "npx",
-            args: ["tsx", path.resolve(appResourcesRoot(), "mcp-server/index.ts")],
-          },
+          ideafy: buildMcpInvocation(),
         },
       };
 

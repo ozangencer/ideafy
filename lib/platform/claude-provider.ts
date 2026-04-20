@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { appResourcesRoot, resolveUserSkillsDir } from "../paths";
+import { buildMcpInvocation } from "./mcp-invocation";
 
 // In dev IDEAFY_ROOT is the repo (skills/ + mcp-server/index.ts live there);
 // in the packaged DMG the Electron shell exports IDEAFY_APP_RESOURCES pointing
@@ -301,7 +302,7 @@ class ClaudeProvider implements PlatformProvider {
         ...existingSettings,
         mcpServers: {
           ...existingMcpServers,
-          ideafy: { command: "npx", args: ["tsx", MCP_SERVER_PATH] },
+          ideafy: buildMcpInvocation(),
         },
       };
 

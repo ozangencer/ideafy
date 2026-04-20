@@ -78,15 +78,11 @@ function ensureUserDataDir() {
 }
 
 function resolveStandaloneServer() {
-  // Packaged layout: Resources/app.asar/.next/standalone/server.js
-  // electron-builder sets process.resourcesPath correctly in production.
-  return path.join(
-    process.resourcesPath,
-    "app.asar",
-    ".next",
-    "standalone",
-    "server.js"
-  );
+  // Standalone lives OUTSIDE asar (as extraResources → app-next/) because
+  // (a) spawn() can't execute files inside an asar archive (ENOTDIR), and
+  // (b) Next's standalone/node_modules gets pruned as "duplicate" if placed
+  // in asar, leaving better-sqlite3 unreachable at runtime.
+  return path.join(process.resourcesPath, "app-next", "server.js");
 }
 
 async function startNextServer() {
@@ -112,6 +108,9 @@ async function startNextServer() {
     // Packaged: run the standalone server under Electron's bundled Node.
     // ELECTRON_RUN_AS_NODE disables Chromium init for this child process.
     const serverPath = resolveStandaloneServer();
+    // Drizzle migrations + skills are small, read-only files — bundle them
+    // alongside the server outside asar so fs.readFileSync just works.
+    const packagedResources = path.join(process.resourcesPath, "app-next");
     nextProcess = spawn(process.execPath, [serverPath], {
       cwd: path.dirname(serverPath),
       stdio: "inherit",
@@ -121,7 +120,16 @@ async function startNextServer() {
         PORT,
         HOSTNAME: HOST,
         IDEAFY_USER_DATA: userData,
-        IDEAFY_APP_RESOURCES: path.join(process.resourcesPath, "app.asar"),
+        IDEAFY_APP_RESOURCES: packagedResources,
+        // Explicit marker so server code can branch on packaged vs dev
+        // without relying on asar-suffix heuristics.
+        IDEAFY_PACKAGED: "1",
+        // Absolute path to the Electron binary + the compiled MCP server,
+        // used when we generate MCP invocation config for Claude Desktop.
+        // Paths are stable: Electron is at Contents/MacOS/, MCP at
+        // Contents/Resources/mcp-server/dist/index.js.
+        IDEAFY_ELECTRON_EXEC: process.execPath,
+        IDEAFY_MCP_ENTRY: path.join(process.resourcesPath, "mcp-server", "dist", "index.js"),
       }),
     });
   }
@@ -169,7 +177,10 @@ function killNextServer() {
 // into userData/skills and let the Next server resolve against that.
 async function mirrorSkillsToUserData() {
   if (!isPackaged) return;
-  const src = path.join(process.resourcesPath, "app.asar", "skills");
+  // Bundled skills live in extraResources (app-next/skills — same layout
+  // the standalone server sees under IDEAFY_APP_RESOURCES). Copy to
+  // userData on first launch so users can edit/add their own.
+  const src = path.join(process.resourcesPath, "app-next", "skills");
   const dst = path.join(app.getPath("userData"), "skills");
   if (!fs.existsSync(src)) return;
   if (fs.existsSync(dst)) return;
@@ -182,7 +193,9 @@ async function mirrorSkillsToUserData() {
 
 function iconPath(relative) {
   if (isPackaged) {
-    return path.join(process.resourcesPath, "app.asar", relative);
+    // public/ is bundled into extraResources (app-next/public/…) so the
+    // dock icon is reachable via a real filesystem path at runtime.
+    return path.join(process.resourcesPath, "app-next", relative);
   }
   return path.join(REPO_ROOT, relative);
 }

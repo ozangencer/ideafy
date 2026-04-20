@@ -15,6 +15,7 @@ import type {
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
 import { appResourcesRoot } from "../paths";
+import { buildMcpInvocation } from "./mcp-invocation";
 
 let cachedCodexPath: string | null = null;
 
@@ -223,8 +224,17 @@ class CodexProvider implements PlatformProvider {
 
       if (content.includes("[mcp_servers.ideafy]")) return { success: true };
 
-      const mcpServerPath = path.resolve(appResourcesRoot(), "mcp-server/index.ts");
-      const tomlBlock = `\n[mcp_servers.ideafy]\ncommand = "npx"\nargs = ["tsx", "${mcpServerPath}"]\n`;
+      const mcp = buildMcpInvocation();
+      // Codex config is TOML, so serialize the invocation by hand. Args is
+      // always an array of strings and env is a flat string map.
+      const argsToml = mcp.args.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(", ");
+      let tomlBlock = `\n[mcp_servers.ideafy]\ncommand = "${mcp.command.replace(/"/g, '\\"')}"\nargs = [${argsToml}]\n`;
+      if (mcp.env) {
+        const envLines = Object.entries(mcp.env)
+          .map(([k, v]) => `${k} = "${v.replace(/"/g, '\\"')}"`)
+          .join("\n");
+        tomlBlock += `\n[mcp_servers.ideafy.env]\n${envLines}\n`;
+      }
 
       fs.writeFileSync(configPath, content + tomlBlock);
       return { success: true };

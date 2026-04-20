@@ -4,6 +4,8 @@ node_modules/
 # Next.js
 .next/
 out/
+# Standalone build spills a stray server.js at repo root
+/server.js
 
 # Production
 build/
