@@ -8,6 +8,7 @@ import {
   isProcessRunning,
   openInBrowser,
   symlinkDatabase,
+  ensureWorktreeDependencies,
 } from "@/lib/dev-server";
 
 // POST - Start dev server
@@ -68,6 +69,9 @@ export async function POST(
   try {
     // Symlink the main database to the worktree
     symlinkDatabase(mainProjectPath, card.gitWorktreePath);
+
+    // Ensure worktree can resolve npm deps (links main's node_modules)
+    ensureWorktreeDependencies(mainProjectPath, card.gitWorktreePath);
 
     // Find available port (main app on 3030, worktrees start from 3031)
     const port = await findAvailablePort(3031);

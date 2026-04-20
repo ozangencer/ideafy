@@ -7,18 +7,25 @@ import * as path from "path";
 const execFileAsync = promisify(execFile);
 
 /**
- * Check if a port is in use
+ * Check if a port is in use. We try binding to both the default host and
+ * 127.0.0.1 explicitly — on macOS, a server bound only to 127.0.0.1 (which
+ * is exactly what `next dev -H 127.0.0.1` does) doesn't conflict with an
+ * IPv6/dual-stack bind, so the default probe falsely reports "free".
  */
 export async function isPortInUse(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(true));
-    server.once("listening", () => {
-      server.close();
-      resolve(false);
+  const probe = (host?: string) =>
+    new Promise<boolean>((resolve) => {
+      const server = net.createServer();
+      server.once("error", () => resolve(true));
+      server.once("listening", () => {
+        server.close();
+        resolve(false);
+      });
+      if (host) server.listen(port, host);
+      else server.listen(port);
     });
-    server.listen(port);
-  });
+  const [any, loopback] = await Promise.all([probe(), probe("127.0.0.1")]);
+  return any || loopback;
 }
 
 /**
@@ -55,16 +62,18 @@ export async function startDevServer(
   port: number
 ): Promise<{ pid: number; port: number }> {
   return new Promise((resolve, reject) => {
-    // Start npm run dev with the specified port
-    // Using detached: true to let the process continue after parent exits
-    // Using stdio: 'ignore' to prevent the process from being tied to the parent
     const child = spawn("npm", ["run", "dev", "--", "-p", port.toString()], {
       cwd: worktreePath,
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", "ignore", "pipe"],
     });
 
-    // Unref to allow the parent to exit independently
+    let stderrTail = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderrTail += chunk.toString();
+      if (stderrTail.length > 4096) stderrTail = stderrTail.slice(-4096);
+    });
+
     child.unref();
 
     if (!child.pid) {
@@ -72,12 +81,21 @@ export async function startDevServer(
       return;
     }
 
-    // Give the server a moment to start
     setTimeout(() => {
       if (isProcessRunning(child.pid!)) {
+        // Drain future stderr into the void so the pipe buffer never fills
+        child.stderr?.removeAllListeners("data");
+        child.stderr?.resume();
         resolve({ pid: child.pid!, port });
       } else {
-        reject(new Error("Dev server process exited immediately"));
+        const detail = stderrTail.trim().split("\n").slice(-5).join("\n");
+        reject(
+          new Error(
+            detail
+              ? `Dev server exited immediately: ${detail}`
+              : "Dev server exited immediately"
+          )
+        );
       }
     }, 1000);
   });
@@ -165,4 +183,43 @@ export function symlinkDatabase(mainProjectPath: string, worktreePath: string): 
   // Create symlink
   fs.symlinkSync(mainDbPath, worktreeDbPath);
   console.log(`[DevServer] Database symlink created successfully`);
+}
+
+/**
+ * Ensure the worktree has a node_modules directory so `npm run dev` can resolve
+ * `next` and other deps. Git worktrees share the same package.json as the main
+ * checkout, so symlinking node_modules is safe and avoids a multi-minute install.
+ *
+ * If the worktree already has a real node_modules dir (e.g. someone ran
+ * `npm install` inside it), leave it untouched.
+ */
+export function ensureWorktreeDependencies(
+  mainProjectPath: string,
+  worktreePath: string
+): void {
+  const mainModulesPath = path.join(mainProjectPath, "node_modules");
+  const worktreeModulesPath = path.join(worktreePath, "node_modules");
+
+  if (!fs.existsSync(mainModulesPath)) {
+    console.warn(
+      `[DevServer] Main node_modules missing at ${mainModulesPath} — skipping symlink`
+    );
+    return;
+  }
+
+  if (fs.existsSync(worktreeModulesPath)) {
+    const stats = fs.lstatSync(worktreeModulesPath);
+    if (stats.isSymbolicLink()) {
+      const target = fs.readlinkSync(worktreeModulesPath);
+      if (target === mainModulesPath) return;
+      fs.unlinkSync(worktreeModulesPath);
+      console.log(`[DevServer] Replaced stale node_modules symlink`);
+    } else {
+      // Real directory — respect it
+      return;
+    }
+  }
+
+  fs.symlinkSync(mainModulesPath, worktreeModulesPath, "dir");
+  console.log(`[DevServer] Linked worktree node_modules -> ${mainModulesPath}`);
 }
