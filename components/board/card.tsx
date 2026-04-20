@@ -147,7 +147,7 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
 }
 
 export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardId, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardId, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, updateCard, settings, startDevServer, stopDevServer } = useKanbanStore();
+  const { selectCard, openModal, projects, startTask, startingCardIds, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardIds, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, updateCard, settings, startDevServer, stopDevServer } = useKanbanStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -161,8 +161,8 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
   });
 
   // Check both local state AND persisted processingType from database
-  const isStarting = startingCardId === card.id || card.processingType === "autonomous";
-  const isQuickFixing = quickFixingCardId === card.id || card.processingType === "quick-fix";
+  const isStarting = startingCardIds.includes(card.id) || card.processingType === "autonomous";
+  const isQuickFixing = quickFixingCardIds.includes(card.id) || card.processingType === "quick-fix";
   const isEvaluating = evaluatingCardIds.includes(card.id) || card.processingType === "evaluate";
   const isLocked = lockedCardIds.includes(card.id) || !!card.processingType;
   // Background processing = auto unlock when done, no manual unlock needed

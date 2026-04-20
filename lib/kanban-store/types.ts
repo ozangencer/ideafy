@@ -57,8 +57,8 @@ export interface KanbanStore {
   projectAgents: string[];
 
   // Claude integration state
-  startingCardId: string | null;
-  quickFixingCardId: string | null;
+  startingCardIds: string[];
+  quickFixingCardIds: string[];
   evaluatingCardIds: string[];
   lockedCardIds: string[];
 

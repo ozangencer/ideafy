@@ -11,8 +11,8 @@ import { KanbanStore, StoreSlice } from "../types";
 export const createClaudeSlice: StoreSlice<
   Pick<
     KanbanStore,
-    | "startingCardId"
-    | "quickFixingCardId"
+    | "startingCardIds"
+    | "quickFixingCardIds"
     | "evaluatingCardIds"
     | "lockedCardIds"
     | "startTask"
@@ -26,14 +26,14 @@ export const createClaudeSlice: StoreSlice<
     | "clearProcessing"
   >
 > = (set, get) => ({
-  startingCardId: null,
-  quickFixingCardId: null,
+  startingCardIds: [],
+  quickFixingCardIds: [],
   evaluatingCardIds: [],
   lockedCardIds: [],
 
   startTask: async (cardId) => {
     set((state) => ({
-      startingCardId: cardId,
+      startingCardIds: addUniqueId(state.startingCardIds, cardId),
       lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
     }));
 
@@ -59,7 +59,7 @@ export const createClaudeSlice: StoreSlice<
 
       if (!response.ok) {
         set((state) => ({
-          startingCardId: null,
+          startingCardIds: removeId(state.startingCardIds, cardId),
           lockedCardIds: removeId(state.lockedCardIds, cardId),
         }));
         return { success: false, error: data.error || "Failed to start task" };
@@ -88,7 +88,7 @@ export const createClaudeSlice: StoreSlice<
 
           return { ...card, ...updates };
         }),
-        startingCardId: null,
+        startingCardIds: removeId(state.startingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
 
@@ -99,7 +99,7 @@ export const createClaudeSlice: StoreSlice<
     } catch (error) {
       console.error("Failed to start task:", error);
       set((state) => ({
-        startingCardId: null,
+        startingCardIds: removeId(state.startingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
       // Refresh background processes on error too
@@ -232,7 +232,7 @@ export const createClaudeSlice: StoreSlice<
 
   quickFixTask: async (cardId) => {
     set((state) => ({
-      quickFixingCardId: cardId,
+      quickFixingCardIds: addUniqueId(state.quickFixingCardIds, cardId),
       lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
     }));
 
@@ -260,7 +260,7 @@ export const createClaudeSlice: StoreSlice<
 
       if (!response.ok) {
         set((state) => ({
-          quickFixingCardId: null,
+          quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
           lockedCardIds: removeId(state.lockedCardIds, cardId),
         }));
         return { success: false, error: data.error || "Failed to quick fix" };
@@ -273,7 +273,7 @@ export const createClaudeSlice: StoreSlice<
           testScenarios: data.testScenarios,
           updatedAt: nowIso(),
         }),
-        quickFixingCardId: null,
+        quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
 
@@ -285,7 +285,7 @@ export const createClaudeSlice: StoreSlice<
       clearInterval(pollInterval);
       console.error("Failed to quick fix:", error);
       set((state) => ({
-        quickFixingCardId: null,
+        quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
       }));
       // Refresh background processes on error too
@@ -403,8 +403,8 @@ export const createClaudeSlice: StoreSlice<
 
       // Update local state
       set((state) => ({
-        startingCardId: state.startingCardId === cardId ? null : state.startingCardId,
-        quickFixingCardId: state.quickFixingCardId === cardId ? null : state.quickFixingCardId,
+        startingCardIds: removeId(state.startingCardIds, cardId),
+        quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
         evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
         cards: state.cards.map((card) =>
