@@ -1,0 +1,83 @@
+name: Release
+
+# Triggers on any `v*` tag push — e.g. `git tag v0.2.0 && git push --tags`.
+# One runner per arch so better-sqlite3 rebuilds target the runner's CPU.
+# Each runner uploads its own DMG to the GitHub Release matching the tag.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }} DMG
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Build Next standalone
+        run: npm run build
+
+      - name: Build MCP server
+        run: npm run build:mcp
+
+      - name: Package DMG
+        # --${{ arch }} filters package.json mac.target to the current runner's
+        # arch so we don't double-ship an x64 DMG from the arm64 runner.
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        env:
+          # Ad-hoc signing until an Apple Developer ID is provisioned.
+          # To enable notarization later: set mac.notarize=true in
+          # package.json and add these secrets to the repo:
+          #   CSC_LINK                       (base64-encoded .p12)
+          #   CSC_KEY_PASSWORD               (cert password)
+          #   APPLE_ID                       (developer Apple ID email)
+          #   APPLE_APP_SPECIFIC_PASSWORD    (app-specific password)
+          #   APPLE_TEAM_ID                  (Developer Team ID)
+          # electron-builder reads them automatically.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload DMG to draft Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+          fail_on_unmatched_files: false
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ideafy-${{ matrix.arch }}-dmg
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+          retention-days: 14

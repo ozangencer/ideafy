@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements applied when hardenedRuntime + signing is turned on.
+  Unused today (ad-hoc signed builds don't read this file), but kept in
+  the tree so the flip to a real Developer ID is one package.json edit
+  rather than a new file to scaffold.
+
+  Notes:
+  - com.apple.security.cs.allow-jit — required because Electron's V8 is a
+    JIT; omit it and the renderer crashes under hardened runtime.
+  - com.apple.security.cs.allow-unsigned-executable-memory — needed by
+    native modules (better-sqlite3) that allocate writable+executable
+    memory pages via mmap.
+  - inherit is set on the child process spawn for ELECTRON_RUN_AS_NODE
+    (the Next server + MCP server) so they pick up the same perms.
+  - disable-library-validation lets Electron load .node addons whose
+    own signatures don't match our Developer ID.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <key>com.apple.security.inherit</key>
+  <true/>
+</dict>
+</plist>

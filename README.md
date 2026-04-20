@@ -55,7 +55,19 @@ The separation is what keeps each lens honest, and what makes a card legible to 
 
 ## Install
 
-Ideafy Solo ships as a macOS desktop app. Grab the latest DMG from the [releases page](https://github.com/ozangencer/ideafy/releases/latest), drag it into **Applications**, and launch it. No account, no signup, no cloud.
+Ideafy Solo ships as a macOS desktop app. Grab the latest DMG from the [releases page](https://github.com/ozangencer/ideafy/releases/latest) — pick **arm64** for Apple Silicon or **x64** for Intel — drag it into **Applications**, and launch it. No account, no signup, no cloud.
+
+### First-launch: Gatekeeper
+
+Because Ideafy currently ships without an Apple Developer ID signature, macOS will refuse to open it the first time with *"ideafy is damaged and can't be opened"* or *"cannot be opened because the developer cannot be verified"*. Clear the quarantine flag once and it runs normally every time after:
+
+```bash
+xattr -d com.apple.quarantine /Applications/ideafy.app
+```
+
+Or right-click **ideafy.app → Open** and confirm once in the dialog — the choice is remembered.
+
+A properly signed + notarized build is on the roadmap; until then, the quarantine flag is the only thing between you and a first run.
 
 ### Prerequisites
 
@@ -130,7 +142,30 @@ npm run dev        # Next.js on http://localhost:3030
 npm run electron   # optional: launch the desktop shell against the dev server
 ```
 
-The SQLite database is stored under `data/` in dev mode. Schema lives in `lib/db/schema.ts` and is applied with `npm run db:push`.
+The SQLite database is stored under `data/` in dev mode. Schema lives in `lib/db/schema.ts` and can be iterated with `npm run db:push`; `drizzle/` holds the committed migrations the packaged DMG applies at boot.
+
+### Packaging your own DMG
+
+```bash
+npm run pack       # produces an unsigned .app in dist/ for local testing
+npm run dist       # produces x64 + arm64 DMGs in dist/
+```
+
+The build pipeline rebuilds `better-sqlite3` against Electron's Node ABI for each target arch; dev mode is automatically restored afterwards so `npm run dev` keeps working.
+
+#### Signing + notarization
+
+When an Apple Developer ID becomes available, enabling a signed + notarized build is a three-line flip in `package.json` under `build.mac`:
+
+```diff
+-"identity": null,
+-"hardenedRuntime": false,
+-"notarize": false,
++"hardenedRuntime": true,
++"notarize": true,
+```
+
+…plus five secrets in the CI environment: `CSC_LINK` (base64 .p12), `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. `electron-builder` reads them automatically during the release workflow, and the existing `electron/entitlements.mac.plist` supplies the runtime permissions (JIT, unsigned executable memory for the sqlite binding, env-var inheritance).
 
 ## Contributing
 
