@@ -813,7 +813,7 @@ export function CardModal() {
                       variant="outline"
                       onClick={handleStartDevServer}
                       disabled={isServerLoading}
-                      className="border-ink/30 text-ink hover:bg-paper-cream"
+                      className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
                     >
                       {isServerLoading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />

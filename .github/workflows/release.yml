@@ -47,16 +47,18 @@ jobs:
         # arch so we don't double-ship an x64 DMG from the arm64 runner.
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
         env:
-          # Ad-hoc signing until an Apple Developer ID is provisioned.
-          # To enable notarization later: set mac.notarize=true in
-          # package.json and add these secrets to the repo:
+          # Developer ID signing + notarization. Required repo secrets:
           #   CSC_LINK                       (base64-encoded .p12)
           #   CSC_KEY_PASSWORD               (cert password)
           #   APPLE_ID                       (developer Apple ID email)
           #   APPLE_APP_SPECIFIC_PASSWORD    (app-specific password)
           #   APPLE_TEAM_ID                  (Developer Team ID)
-          # electron-builder reads them automatically.
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # electron-builder picks them up automatically from the env below.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload DMG to draft Release

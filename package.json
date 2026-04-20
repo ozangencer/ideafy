@@ -133,10 +133,9 @@
         { "target": "dmg", "arch": ["x64"] },
         { "target": "dmg", "arch": ["arm64"] }
       ],
-      "identity": null,
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "notarize": false,
+      "notarize": true,
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist"
     },
