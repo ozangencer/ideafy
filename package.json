@@ -1,22 +1,29 @@
 {
   "name": "ideafy",
   "version": "0.1.0",
-  "bin": {
-    "ideafy": "./bin/kanban.mjs"
+  "description": "Kanban for Claude Code — local-first, AI-native task board",
+  "author": "Ozan Gencer",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "engines": {
+    "node": ">=20.11"
   },
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p ${PORT:-3030}",
     "dev:clean": "rm -rf .next && next dev -H 127.0.0.1 -p ${PORT:-3030}",
     "dev:turbo": "rm -rf .next && next dev -H 127.0.0.1 -p ${PORT:-3030} --turbo",
     "build": "next build",
+    "build:mcp": "cd mcp-server && npm install && npm run build",
     "start": "next start -H 127.0.0.1 -p ${PORT:-3030}",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "electron:install": "cd electron && npm install",
-    "electron": "cd electron && npx electron ."
+    "electron": "electron .",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "pack": "npm run build && npm run build:mcp && electron-builder --dir",
+    "dist": "npm run build && npm run build:mcp && electron-builder --mac"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -56,6 +63,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "get-port": "^7.1.0",
     "isomorphic-dompurify": "^3.9.0",
     "lucide-react": "^0.562.0",
     "marked": "^17.0.1",
@@ -78,6 +86,7 @@
     "zustand": "5.0.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "22.10.7",
     "@types/react": "18.3.18",
@@ -85,10 +94,52 @@
     "@types/uuid": "10.0.0",
     "autoprefixer": "^10.4.23",
     "drizzle-kit": "^0.31.8",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
     "eslint": "8.57.1",
     "eslint-config-next": "^14.2.33",
     "postcss": "8.5.1",
     "tailwindcss": "3.4.17",
     "typescript": "5.7.3"
+  },
+  "build": {
+    "appId": "com.ozangencer.ideafy",
+    "productName": "ideafy",
+    "copyright": "Copyright © 2026 Ozan Gencer",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/*.node"
+    ],
+    "files": [
+      "electron/**/*",
+      "!electron/node_modules",
+      ".next/standalone/**/*",
+      ".next/static/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": ".next/static", "to": "app/.next/static" },
+      { "from": "public", "to": "app/public" },
+      { "from": "mcp-server/dist", "to": "mcp-server/dist" },
+      { "from": "mcp-server/node_modules", "to": "mcp-server/node_modules" }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "electron/icons/app-icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["x64"] },
+        { "target": "dmg", "arch": ["arm64"] }
+      ],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "notarize": false
+    },
+    "directories": {
+      "output": "dist",
+      "buildResources": "electron"
+    }
   }
 }
