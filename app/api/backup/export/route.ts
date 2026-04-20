@@ -11,12 +11,19 @@ export interface ExportData {
     solutionSummary: string;
     testScenarios: string;
     aiOpinion: string;
+    aiVerdict: string | null;
     status: string;
     complexity: string;
     priority: string;
     projectFolder: string;
     projectId: string | null;
     taskNumber: number | null;
+    gitBranchName: string | null;
+    gitBranchStatus: string | null;
+    gitWorktreePath: string | null;
+    gitWorktreeStatus: string | null;
+    aiPlatform: string | null;
+    useWorktree: boolean | null;
     createdAt: string;
     updatedAt: string;
     completedAt: string | null;
@@ -30,6 +37,8 @@ export interface ExportData {
     color: string;
     isPinned: boolean;
     documentPaths: string | null;
+    narrativePath: string | null;
+    useWorktrees: boolean;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -58,12 +67,19 @@ export async function GET() {
         solutionSummary: card.solutionSummary,
         testScenarios: card.testScenarios,
         aiOpinion: card.aiOpinion,
+        aiVerdict: card.aiVerdict,
         status: card.status,
         complexity: card.complexity,
         priority: card.priority,
         projectFolder: card.projectFolder,
         projectId: card.projectId,
         taskNumber: card.taskNumber,
+        gitBranchName: card.gitBranchName,
+        gitBranchStatus: card.gitBranchStatus,
+        gitWorktreePath: card.gitWorktreePath,
+        gitWorktreeStatus: card.gitWorktreeStatus,
+        aiPlatform: card.aiPlatform,
+        useWorktree: card.useWorktree,
         createdAt: card.createdAt,
         updatedAt: card.updatedAt,
         completedAt: card.completedAt,
@@ -77,6 +93,8 @@ export async function GET() {
         color: project.color,
         isPinned: project.isPinned,
         documentPaths: project.documentPaths,
+        narrativePath: project.narrativePath,
+        useWorktrees: project.useWorktrees,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
       })),
