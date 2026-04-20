@@ -1,5 +1,6 @@
 "use client";
 
+import DOMPurify from "isomorphic-dompurify";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { SectionType, SECTION_CONFIG } from "@/lib/types";
 
@@ -23,11 +24,15 @@ export function SectionEditor({
   const config = SECTION_CONFIG[sectionType];
 
   if (readOnly) {
+    // DOMPurify default config preserves every tag/attr TipTap produces
+    // (p, ul, li, table, img, code, blockquote, task-list classes …) while
+    // stripping <script>, on* event handlers, and javascript: URLs.
+    const sanitized = value ? DOMPurify.sanitize(value) : "";
     return (
       <div className="h-full flex flex-col p-4 overflow-hidden">
         <div className="flex-1 min-h-0 overflow-y-auto prose-kanban">
-          {value ? (
-            <div dangerouslySetInnerHTML={{ __html: value }} />
+          {sanitized ? (
+            <div dangerouslySetInnerHTML={{ __html: sanitized }} />
           ) : (
             <p className="text-muted-foreground text-sm">No content</p>
           )}

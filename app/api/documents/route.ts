@@ -16,6 +16,22 @@ function validatePath(filePath: string): boolean {
   });
 }
 
+// Documents route ships Markdown-only content: the product-narrative and
+// other per-project docs edited through the in-app editor. Restrict both
+// read and write to .md files outside hidden/tooling directories so this
+// endpoint can't be repurposed into reading .env or planting a git hook.
+function isAllowedDocPath(filePath: string): boolean {
+  const resolved = path.resolve(filePath);
+  if (!resolved.toLowerCase().endsWith(".md")) return false;
+  const segments = resolved.split(path.sep);
+  for (const seg of segments) {
+    if (seg === "" || seg === "..") continue;
+    if (seg.startsWith(".")) return false; // .git, .env, .worktrees, …
+    if (seg === "node_modules") return false;
+  }
+  return true;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -25,7 +41,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Path required" }, { status: 400 });
     }
 
-    if (!validatePath(filePath)) {
+    if (!validatePath(filePath) || !isAllowedDocPath(filePath)) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -53,7 +69,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Path required" }, { status: 400 });
     }
 
-    if (!validatePath(filePath)) {
+    if (!validatePath(filePath) || !isAllowedDocPath(filePath)) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

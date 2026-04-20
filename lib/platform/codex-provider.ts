@@ -6,6 +6,7 @@ import type {
   PlatformCapabilities,
   AutonomousOptions,
   InteractiveOptions,
+  InteractiveInvocation,
   StreamOptions,
   CliResponse,
   StreamEvent,
@@ -63,11 +64,12 @@ class CodexProvider implements PlatformProvider {
     return ["-q", opts.prompt];
   }
 
-  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): string {
+  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): InteractiveInvocation {
     const cleanPrompt = opts.prompt.replace(/\n/g, " ");
-    // Use single quotes to prevent shell interpretation of special chars ([], $, ", etc.)
-    const escaped = cleanPrompt.replace(/'/g, "'\\''");
-    return `cd "${workingDir}" && codex '${escaped}'`;
+    return {
+      cwd: workingDir,
+      argv: [this.getCliPath(), cleanPrompt],
+    };
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {

@@ -6,8 +6,25 @@ import { Brain, Wrench, User, Loader2, ArrowUpToLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import DOMPurify from "isomorphic-dompurify";
+
+// rehype-sanitize runs AFTER rehype-raw, stripping <script>, event handlers
+// (onerror, onclick, …), and javascript: URLs while preserving formatting tags
+// that Claude / Codex / Gemini output. Keeps GFM tables + inline images + details
+// callouts visually intact.
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    // Allow inline style + class on common tags so existing Claude output with
+    // `<span class="...">` or highlighted code blocks still renders.
+    span: [...(defaultSchema.attributes?.span || []), "className", "style"],
+    div: [...(defaultSchema.attributes?.div || []), "className", "style"],
+    code: [...(defaultSchema.attributes?.code || []), "className"],
+  },
+};
 import { MentionData } from "@/lib/types";
 
 // CSS class map for mention types
@@ -179,7 +196,10 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
     // For other messages, use ReactMarkdown with inline-highlighted mentions
     const highlighted = highlightMentions(message.content, message.mentions);
     return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
+      >
         {highlighted}
       </ReactMarkdown>
     );

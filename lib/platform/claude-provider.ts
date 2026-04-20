@@ -6,6 +6,7 @@ import type {
   PlatformCapabilities,
   AutonomousOptions,
   InteractiveOptions,
+  InteractiveInvocation,
   StreamOptions,
   CliResponse,
   StreamEvent,
@@ -76,15 +77,17 @@ class ClaudeProvider implements PlatformProvider {
     return args;
   }
 
-  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): string {
-    const permissionFlag = opts.permissionMode
-      ? ` --permission-mode ${opts.permissionMode}`
-      : "";
-    // Escape the prompt for shell usage - replace newlines with spaces
+  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): InteractiveInvocation {
     const cleanPrompt = opts.prompt.replace(/\n/g, " ");
-    // Use single quotes to prevent shell interpretation of special chars ([], $, ", etc.)
-    const escaped = cleanPrompt.replace(/'/g, "'\\''");
-    return `cd "${workingDir}" && IDEAFY_CARD_ID="${opts.cardId}" claude '${escaped}'${permissionFlag}`;
+    const argv = [this.getCliPath(), cleanPrompt];
+    if (opts.permissionMode) {
+      argv.push("--permission-mode", opts.permissionMode);
+    }
+    return {
+      cwd: workingDir,
+      argv,
+      env: { IDEAFY_CARD_ID: opts.cardId },
+    };
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {

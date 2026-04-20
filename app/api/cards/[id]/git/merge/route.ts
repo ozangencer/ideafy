@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { squashMergeFromWorktree, isGitRepo, removeWorktree, pruneWorktrees, getDefaultBranch } from "@/lib/git";
-import { existsSync } from "fs";
+import {
+  squashMergeFromWorktree,
+  isGitRepo,
+  removeWorktree,
+  pruneWorktrees,
+  getDefaultBranch,
+  git,
+} from "@/lib/git";
+import { existsSync, readFileSync } from "fs";
 import { stopDevServer, isProcessRunning } from "@/lib/dev-server";
-import { exec } from "child_process";
-import { promisify } from "util";
 import type { Status } from "@/lib/types";
-
-const execAsync = promisify(exec);
 
 export async function POST(
   request: NextRequest,
@@ -97,7 +100,7 @@ export async function POST(
       const gitFile = `${card.gitWorktreePath}/.git`;
       if (existsSync(gitFile)) {
         try {
-          const { stdout: gitDirContent } = await execAsync(`cat "${gitFile}"`, { cwd: card.gitWorktreePath });
+          const gitDirContent = readFileSync(gitFile, "utf-8");
           const match = gitDirContent.match(/gitdir:\s*(.+)/);
           if (match) {
             gitDir = match[1].trim();
@@ -116,17 +119,20 @@ export async function POST(
         // Get conflict files
         let conflictFiles: string[] = [];
         try {
-          const { stdout: conflictOutput } = await execAsync(
-            'git diff --name-only --diff-filter=U',
-            { cwd: card.gitWorktreePath }
+          const { stdout: conflictOutput } = await git(
+            card.gitWorktreePath,
+            "diff",
+            "--name-only",
+            "--diff-filter=U"
           );
           conflictFiles = conflictOutput.trim().split('\n').filter(f => f);
         } catch {
           // Try alternative method
           try {
-            const { stdout: statusOutput } = await execAsync(
-              'git status --porcelain',
-              { cwd: card.gitWorktreePath }
+            const { stdout: statusOutput } = await git(
+              card.gitWorktreePath,
+              "status",
+              "--porcelain"
             );
             conflictFiles = statusOutput
               .split('\n')
@@ -168,9 +174,11 @@ export async function POST(
     if (card.gitWorktreePath && existsSync(card.gitWorktreePath)) {
       console.log(`[Merge] Checking for uncommitted changes in worktree: ${card.gitWorktreePath}`);
       try {
-        const { stdout: worktreeStatus } = await execAsync("git status --porcelain", {
-          cwd: card.gitWorktreePath,
-        });
+        const { stdout: worktreeStatus } = await git(
+          card.gitWorktreePath,
+          "status",
+          "--porcelain"
+        );
         if (worktreeStatus.trim()) {
           console.log(`[Merge] Found uncommitted changes in worktree, blocking merge`);
           return NextResponse.json(
@@ -192,9 +200,11 @@ export async function POST(
     const defaultBranch = await getDefaultBranch(workingDir);
     console.log(`[Merge] Checking commit count between ${defaultBranch} and ${card.gitBranchName}`);
     try {
-      const { stdout: commitCount } = await execAsync(
-        `git rev-list --count ${defaultBranch}..${card.gitBranchName}`,
-        { cwd: workingDir }
+      const { stdout: commitCount } = await git(
+        workingDir,
+        "rev-list",
+        "--count",
+        `${defaultBranch}..${card.gitBranchName}`
       );
       const count = parseInt(commitCount.trim(), 10);
       console.log(`[Merge] Branch has ${count} commits ahead of ${defaultBranch}`);
@@ -213,13 +223,13 @@ export async function POST(
     }
 
     // Step 3: Check for uncommitted changes in main repo
-    const { stdout: mainStatus } = await execAsync("git status --porcelain", { cwd: workingDir });
+    const { stdout: mainStatus } = await git(workingDir, "status", "--porcelain");
     if (mainStatus.trim()) {
       if (commitFirst) {
         // User requested to commit first
         console.log(`[Merge] Committing uncommitted changes in main repo...`);
-        await execAsync("git add -A", { cwd: workingDir });
-        await execAsync(`git commit -m "chore: Work in progress before merge"`, { cwd: workingDir });
+        await git(workingDir, "add", "-A");
+        await git(workingDir, "commit", "-m", "chore: Work in progress before merge");
         console.log(`[Merge] Main repo changes committed`);
       } else {
         // Return error with option to commit
@@ -239,7 +249,7 @@ export async function POST(
       console.log(`[Merge] Rebasing branch onto ${defaultBranch} in worktree...`);
       try {
         // Rebase onto local main (not origin/main) to include local unpushed commits
-        await execAsync(`git rebase ${defaultBranch}`, { cwd: card.gitWorktreePath });
+        await git(card.gitWorktreePath, "rebase", defaultBranch);
         console.log(`[Merge] Rebase successful`);
       } catch (rebaseError) {
         const errorMsg = rebaseError instanceof Error ? rebaseError.message : String(rebaseError);
@@ -250,9 +260,11 @@ export async function POST(
           // Get list of conflicting files
           let conflictFiles: string[] = [];
           try {
-            const { stdout: conflictOutput } = await execAsync(
-              'git diff --name-only --diff-filter=U',
-              { cwd: card.gitWorktreePath }
+            const { stdout: conflictOutput } = await git(
+              card.gitWorktreePath,
+              "diff",
+              "--name-only",
+              "--diff-filter=U"
             );
             conflictFiles = conflictOutput.trim().split('\n').filter(f => f);
           } catch {
@@ -287,7 +299,7 @@ export async function POST(
 
         // Other rebase error - abort and return
         try {
-          await execAsync('git rebase --abort', { cwd: card.gitWorktreePath });
+          await git(card.gitWorktreePath, "rebase", "--abort");
         } catch {
           // Ignore abort errors
         }
@@ -324,7 +336,7 @@ export async function POST(
     // Step 7: Delete the branch AFTER successful merge
     console.log(`[Merge] Deleting branch: ${card.gitBranchName}`);
     try {
-      await execAsync(`git branch -D -- ${JSON.stringify(card.gitBranchName)}`, { cwd: workingDir });
+      await git(workingDir, "branch", "-D", "--", card.gitBranchName);
     } catch (branchError) {
       console.warn(`[Merge] Failed to delete branch: ${branchError}`);
       // Continue anyway - branch deletion is not critical

@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { spawn } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import type { TerminalApp } from "@/lib/types";
 import { buildTestGenerationPrompt, stripHtml } from "@/lib/prompts";
-import {
-  worktreeExists,
-} from "@/lib/git";
+import { worktreeExists } from "@/lib/git";
+import { launchTerminal } from "@/lib/terminal-launcher";
 
 export async function POST(
   request: NextRequest,
@@ -101,8 +96,7 @@ export async function POST(
     const { getProviderForCard } = await import("@/lib/platform/active");
     const provider = getProviderForCard(card);
 
-    // Build CLI command using the active provider
-    const cliCommand = provider.buildInteractiveCommand(
+    const invocation = provider.buildInteractiveCommand(
       { prompt, cardId: id },
       actualWorkingDir
     );
@@ -111,34 +105,7 @@ export async function POST(
     console.log(`[Generate Tests] Prompt length: ${prompt.length} chars`);
     console.log(`[Generate Tests] Terminal app: ${terminal}`);
 
-    const timestamp = Date.now();
-    const scriptPath = join(tmpdir(), `ideafy-test-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
-
-    if (terminal === "ghostty") {
-      spawn("open", ["-na", "Ghostty.app", "--args", "-e", scriptPath]);
-    } else {
-      const appleScript =
-        terminal === "iterm2"
-          ? `tell application "iTerm"
-    create window with default profile
-    tell current session of current window
-        write text "${scriptPath}"
-    end tell
-end tell`
-          : `tell application "Terminal"
-    do script "${scriptPath}"
-    activate
-end tell`;
-
-      const osascriptProcess = spawn("osascript", []);
-      osascriptProcess.stdin.write(appleScript);
-      osascriptProcess.stdin.end();
-      osascriptProcess.on("error", (error) => {
-        console.error(`[Generate Tests] Error: ${error.message}`);
-        try { unlinkSync(scriptPath); } catch {}
-      });
-    }
+    launchTerminal({ ...invocation, terminal, tag: "Generate Tests" });
 
     return NextResponse.json({
       success: true,

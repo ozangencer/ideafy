@@ -1,13 +1,22 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { existsSync, mkdirSync } from "fs";
-import { join, basename } from "path";
+import { join } from "path";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-/**
- * Slugify a string for use in branch names
- */
+// Every git invocation in this module goes through `git()` which uses
+// execFile. That means args are passed as a real argv array — no shell,
+// no string interpolation, no escaping contract the caller has to honour.
+// A branch name containing $(id), "; rm -rf ~; echo ", or a newline is a
+// literal argument that git will either accept or reject, never shell out.
+export async function git(
+  cwd: string,
+  ...args: string[]
+): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync("git", args, { cwd });
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -16,9 +25,6 @@ export function slugify(text: string): string {
     .substring(0, 50);
 }
 
-/**
- * Generate a branch name for a kanban card
- */
 export function generateBranchName(
   idPrefix: string,
   taskNumber: number,
@@ -28,39 +34,32 @@ export function generateBranchName(
   return `kanban/${idPrefix}-${taskNumber}-${slug}`;
 }
 
-/**
- * Check if a directory is a git repository
- */
 export async function isGitRepo(projectPath: string): Promise<boolean> {
   try {
-    await execAsync("git rev-parse --git-dir", { cwd: projectPath });
+    await git(projectPath, "rev-parse", "--git-dir");
     return true;
   } catch {
     return false;
   }
 }
 
-/**
- * Get the current branch name
- */
 export async function getCurrentBranch(projectPath: string): Promise<string> {
-  const { stdout } = await execAsync("git branch --show-current", {
-    cwd: projectPath,
-  });
+  const { stdout } = await git(projectPath, "branch", "--show-current");
   return stdout.trim();
 }
 
-/**
- * Check if a branch exists (locally)
- */
 export async function branchExists(
   projectPath: string,
   branchName: string
 ): Promise<boolean> {
   try {
-    await execAsync(`git show-ref --verify --quiet refs/heads/${branchName}`, {
-      cwd: projectPath,
-    });
+    await git(
+      projectPath,
+      "show-ref",
+      "--verify",
+      "--quiet",
+      `refs/heads/${branchName}`
+    );
     return true;
   } catch {
     return false;
@@ -78,38 +77,25 @@ export async function createBranch(
   let didStash = false;
 
   try {
-    // Check if there are uncommitted changes FIRST
-    const { stdout: statusOutput } = await execAsync("git status --porcelain", {
-      cwd: projectPath,
-    });
-
+    const { stdout: statusOutput } = await git(projectPath, "status", "--porcelain");
     const hasChanges = statusOutput.trim() !== "";
 
-    // Stash changes if needed
     if (hasChanges) {
       console.log("[Git] Stashing uncommitted changes...");
-      await execAsync("git stash push -m 'kanban-auto-stash'", {
-        cwd: projectPath,
-      });
+      await git(projectPath, "stash", "push", "-m", "kanban-auto-stash");
       didStash = true;
     }
 
-    // Get the default branch
     const defaultBranch = await getDefaultBranch(projectPath);
 
-    // Checkout to the default branch
-    await execAsync(`git checkout ${defaultBranch}`, { cwd: projectPath });
+    await git(projectPath, "checkout", defaultBranch);
+    await git(projectPath, "checkout", "-b", branchName);
 
-    // Create and checkout the new branch
-    await execAsync(`git checkout -b ${branchName}`, { cwd: projectPath });
-
-    // Pop stash if we stashed
     if (didStash) {
       console.log("[Git] Restoring stashed changes...");
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
-      } catch (stashError) {
-        // Stash pop failed - likely conflicts
+        await git(projectPath, "stash", "pop");
+      } catch {
         console.error("[Git] Stash pop failed, changes remain in stash");
         return {
           success: true,
@@ -121,10 +107,9 @@ export async function createBranch(
 
     return { success: true, stashApplied: didStash };
   } catch (error) {
-    // If we stashed but failed, try to restore
     if (didStash) {
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Could not restore stash after failure");
       }
@@ -137,24 +122,20 @@ export async function createBranch(
   }
 }
 
-/**
- * Get the default branch (main or master)
- */
 export async function getDefaultBranch(projectPath: string): Promise<string> {
   try {
-    // Try to get from remote
-    const { stdout } = await execAsync(
-      "git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo 'refs/heads/main'",
-      { cwd: projectPath }
+    const { stdout } = await git(
+      projectPath,
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD"
     );
-    const ref = stdout.trim();
-    return ref.replace("refs/remotes/origin/", "").replace("refs/heads/", "");
+    return stdout
+      .trim()
+      .replace("refs/remotes/origin/", "")
+      .replace("refs/heads/", "");
   } catch {
-    // Fallback: check if main exists, otherwise use master
     try {
-      await execAsync("git show-ref --verify --quiet refs/heads/main", {
-        cwd: projectPath,
-      });
+      await git(projectPath, "show-ref", "--verify", "--quiet", "refs/heads/main");
       return "main";
     } catch {
       return "master";
@@ -174,69 +155,45 @@ export async function squashMerge(
   let didStash = false;
 
   try {
-    // Check for uncommitted changes
-    const { stdout: statusOutput } = await execAsync("git status --porcelain", {
-      cwd: projectPath,
-    });
-
+    const { stdout: statusOutput } = await git(projectPath, "status", "--porcelain");
     const hasChanges = statusOutput.trim() !== "";
 
-    // Stash changes if needed
     if (hasChanges) {
       console.log("[Git] Stashing uncommitted changes before merge...");
-      await execAsync("git stash push -m 'kanban-merge-stash'", {
-        cwd: projectPath,
-      });
+      await git(projectPath, "stash", "push", "-m", "kanban-merge-stash");
       didStash = true;
     }
 
     const defaultBranch = await getDefaultBranch(projectPath);
     const currentBranch = await getCurrentBranch(projectPath);
 
-    // If we're on the feature branch, checkout to default branch first
     if (currentBranch === branchName) {
-      await execAsync(`git checkout ${defaultBranch}`, { cwd: projectPath });
+      await git(projectPath, "checkout", defaultBranch);
     }
 
-    // Squash merge
-    await execAsync(`git merge --squash ${branchName}`, { cwd: projectPath });
+    await git(projectPath, "merge", "--squash", branchName);
 
-    // Check if there are STAGED changes to commit after squash merge
-    // git diff --cached --quiet exits with 1 if there are staged changes, 0 if none
     let hasStagedChanges = false;
     try {
-      await execAsync("git diff --cached --quiet", { cwd: projectPath });
+      await git(projectPath, "diff", "--cached", "--quiet");
       hasStagedChanges = false;
     } catch {
       hasStagedChanges = true;
     }
 
     if (hasStagedChanges) {
-      // Commit the squashed changes
-      // Split message into title and body, use multiple -m flags for proper formatting
-      const [title, ...bodyParts] = commitMessage.split('\n\n');
-      const body = bodyParts.join('\n\n');
-      const escapedTitle = title.replace(/"/g, '\\"');
-      const escapedBody = body.replace(/"/g, '\\"');
-
-      const commitCmd = body
-        ? `git commit -m "${escapedTitle}" -m "${escapedBody}"`
-        : `git commit -m "${escapedTitle}"`;
-
-      await execAsync(commitCmd, { cwd: projectPath });
+      await git(projectPath, ...buildCommitArgs(commitMessage));
       console.log("[Git] Squash merge committed successfully");
     } else {
       console.log("[Git] No changes to commit after squash merge (branch may have no unique commits)");
     }
 
-    // Delete the feature branch (use -D because squash merge doesn't mark as merged)
-    await execAsync(`git branch -D ${branchName}`, { cwd: projectPath });
+    await git(projectPath, "branch", "-D", branchName);
 
-    // Pop stash if we stashed
     if (didStash) {
       console.log("[Git] Restoring stashed changes after merge...");
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Stash pop failed after merge, changes remain in stash");
       }
@@ -244,10 +201,9 @@ export async function squashMerge(
 
     return { success: true };
   } catch (error) {
-    // Try to restore stash on failure
     if (didStash) {
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Could not restore stash after failure");
       }
@@ -272,38 +228,26 @@ export async function rollback(
   let didStash = false;
 
   try {
-    // Check for uncommitted changes
-    const { stdout: statusOutput } = await execAsync("git status --porcelain", {
-      cwd: projectPath,
-    });
-
+    const { stdout: statusOutput } = await git(projectPath, "status", "--porcelain");
     const hasChanges = statusOutput.trim() !== "";
 
-    // Stash changes if needed
     if (hasChanges) {
       console.log("[Git] Stashing uncommitted changes before rollback...");
-      await execAsync("git stash push -m 'kanban-rollback-stash'", {
-        cwd: projectPath,
-      });
+      await git(projectPath, "stash", "push", "-m", "kanban-rollback-stash");
       didStash = true;
     }
 
     const defaultBranch = await getDefaultBranch(projectPath);
+    await git(projectPath, "checkout", defaultBranch);
 
-    // Checkout to default branch
-    await execAsync(`git checkout ${defaultBranch}`, { cwd: projectPath });
-
-    // Optionally delete the feature branch
     if (deleteBranch) {
-      // Use -D to force delete (in case of unmerged changes)
-      await execAsync(`git branch -D ${branchName}`, { cwd: projectPath });
+      await git(projectPath, "branch", "-D", branchName);
     }
 
-    // Pop stash if we stashed
     if (didStash) {
       console.log("[Git] Restoring stashed changes after rollback...");
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Stash pop failed after rollback, changes remain in stash");
       }
@@ -311,10 +255,9 @@ export async function rollback(
 
     return { success: true };
   } catch (error) {
-    // Try to restore stash on failure
     if (didStash) {
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Could not restore stash after failure");
       }
@@ -327,9 +270,6 @@ export async function rollback(
   }
 }
 
-/**
- * Get branch status (ahead/behind main)
- */
 export async function getBranchStatus(
   projectPath: string,
   branchName: string
@@ -337,16 +277,17 @@ export async function getBranchStatus(
   try {
     const defaultBranch = await getDefaultBranch(projectPath);
 
-    // Check if branch exists
     const exists = await branchExists(projectPath, branchName);
     if (!exists) {
       return { ahead: 0, behind: 0, exists: false };
     }
 
-    // Get ahead/behind count
-    const { stdout } = await execAsync(
-      `git rev-list --left-right --count ${defaultBranch}...${branchName}`,
-      { cwd: projectPath }
+    const { stdout } = await git(
+      projectPath,
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${defaultBranch}...${branchName}`
     );
 
     const [behind, ahead] = stdout.trim().split(/\s+/).map(Number);
@@ -368,29 +309,21 @@ export async function checkoutBranch(
   let didStash = false;
 
   try {
-    // Check for uncommitted changes
-    const { stdout: statusOutput } = await execAsync("git status --porcelain", {
-      cwd: projectPath,
-    });
-
+    const { stdout: statusOutput } = await git(projectPath, "status", "--porcelain");
     const hasChanges = statusOutput.trim() !== "";
 
-    // Stash changes if needed
     if (hasChanges) {
       console.log("[Git] Stashing uncommitted changes before checkout...");
-      await execAsync("git stash push -m 'kanban-checkout-stash'", {
-        cwd: projectPath,
-      });
+      await git(projectPath, "stash", "push", "-m", "kanban-checkout-stash");
       didStash = true;
     }
 
-    await execAsync(`git checkout ${branchName}`, { cwd: projectPath });
+    await git(projectPath, "checkout", branchName);
 
-    // Pop stash if we stashed
     if (didStash) {
       console.log("[Git] Restoring stashed changes after checkout...");
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Stash pop failed after checkout, changes remain in stash");
       }
@@ -398,10 +331,9 @@ export async function checkoutBranch(
 
     return { success: true };
   } catch (error) {
-    // Try to restore stash on failure
     if (didStash) {
       try {
-        await execAsync("git stash pop", { cwd: projectPath });
+        await git(projectPath, "stash", "pop");
       } catch {
         console.error("[Git] Could not restore stash after failure");
       }
@@ -418,44 +350,28 @@ export async function checkoutBranch(
 // Git Worktree Functions
 // ============================================
 
-/**
- * Get the base directory for worktrees
- * Returns: /project/.worktrees/kanban
- */
 export function getWorktreeBaseDir(projectPath: string): string {
   return join(projectPath, ".worktrees", "kanban");
 }
 
-/**
- * Get the worktree path for a specific branch
- * Example: /project/.worktrees/kanban/KAN-1-add-auth
- */
 export function getWorktreePath(projectPath: string, branchName: string): string {
-  // Extract the branch name part after "kanban/" prefix
   const branchPart = branchName.startsWith("kanban/")
-    ? branchName.slice(7) // Remove "kanban/" prefix
+    ? branchName.slice(7)
     : branchName;
 
   return join(getWorktreeBaseDir(projectPath), branchPart);
 }
 
-/**
- * Check if a worktree exists at the given path
- */
 export async function worktreeExists(
   projectPath: string,
   worktreePath: string
 ): Promise<boolean> {
   try {
-    // Check if directory exists
     if (!existsSync(worktreePath)) {
       return false;
     }
 
-    // Verify it's a valid worktree by listing worktrees
-    const { stdout } = await execAsync("git worktree list --porcelain", {
-      cwd: projectPath,
-    });
+    const { stdout } = await git(projectPath, "worktree", "list", "--porcelain");
 
     return stdout.includes(`worktree ${worktreePath}`);
   } catch {
@@ -471,14 +387,9 @@ interface WorktreeInfo {
   isPrunable: boolean;
 }
 
-/**
- * List all worktrees for a project
- */
 export async function listWorktrees(projectPath: string): Promise<WorktreeInfo[]> {
   try {
-    const { stdout } = await execAsync("git worktree list --porcelain", {
-      cwd: projectPath,
-    });
+    const { stdout } = await git(projectPath, "worktree", "list", "--porcelain");
 
     const worktrees: WorktreeInfo[] = [];
     const entries = stdout.trim().split("\n\n");
@@ -529,35 +440,34 @@ export async function createWorktree(
   const baseDir = getWorktreeBaseDir(projectPath);
 
   try {
-    // Ensure base directory exists
     if (!existsSync(baseDir)) {
       mkdirSync(baseDir, { recursive: true });
       console.log(`[Git Worktree] Created base directory: ${baseDir}`);
     }
 
-    // Check if worktree already exists
     const exists = await worktreeExists(projectPath, worktreePath);
     if (exists) {
       console.log(`[Git Worktree] Worktree already exists: ${worktreePath}`);
       return { success: true, worktreePath };
     }
 
-    // Check if branch exists
     const branchExistsResult = await branchExists(projectPath, branchName);
 
     if (branchExistsResult) {
-      // Branch exists - create worktree with existing branch
       console.log(`[Git Worktree] Creating worktree for existing branch: ${branchName}`);
-      await execAsync(`git worktree add "${worktreePath}" ${branchName}`, {
-        cwd: projectPath,
-      });
+      await git(projectPath, "worktree", "add", worktreePath, branchName);
     } else {
-      // Branch doesn't exist - create new branch and worktree
       const defaultBranch = await getDefaultBranch(projectPath);
       console.log(`[Git Worktree] Creating new branch and worktree: ${branchName} from ${defaultBranch}`);
-      await execAsync(`git worktree add -b ${branchName} "${worktreePath}" ${defaultBranch}`, {
-        cwd: projectPath,
-      });
+      await git(
+        projectPath,
+        "worktree",
+        "add",
+        "-b",
+        branchName,
+        worktreePath,
+        defaultBranch
+      );
     }
 
     console.log(`[Git Worktree] Created worktree at: ${worktreePath}`);
@@ -572,26 +482,19 @@ export async function createWorktree(
   }
 }
 
-/**
- * Remove a worktree
- */
 export async function removeWorktree(
   projectPath: string,
   worktreePath: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Check if worktree exists
     const exists = await worktreeExists(projectPath, worktreePath);
     if (!exists) {
       console.log(`[Git Worktree] Worktree doesn't exist, skipping removal: ${worktreePath}`);
       return { success: true };
     }
 
-    // Remove the worktree (force to handle uncommitted changes)
     console.log(`[Git Worktree] Removing worktree: ${worktreePath}`);
-    await execAsync(`git worktree remove --force "${worktreePath}"`, {
-      cwd: projectPath,
-    });
+    await git(projectPath, "worktree", "remove", "--force", worktreePath);
 
     console.log(`[Git Worktree] Worktree removed successfully`);
     return { success: true };
@@ -604,15 +507,12 @@ export async function removeWorktree(
   }
 }
 
-/**
- * Prune orphan worktrees (cleanup stale worktree references)
- */
 export async function pruneWorktrees(
   projectPath: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     console.log(`[Git Worktree] Pruning stale worktrees...`);
-    await execAsync("git worktree prune", { cwd: projectPath });
+    await git(projectPath, "worktree", "prune");
     return { success: true };
   } catch (error) {
     return {
@@ -632,14 +532,9 @@ export async function squashMergeFromWorktree(
   commitMessage: string
 ): Promise<{ success: boolean; error?: string; uncommittedInMain?: boolean }> {
   try {
-    // Check for uncommitted changes in main repo
-    const { stdout: statusOutput } = await execAsync("git status --porcelain", {
-      cwd: projectPath,
-    });
-
+    const { stdout: statusOutput } = await git(projectPath, "status", "--porcelain");
     const hasChanges = statusOutput.trim() !== "";
 
-    // Block merge if there are uncommitted changes
     if (hasChanges) {
       console.log("[Git Worktree] Uncommitted changes found in main repo, blocking merge");
       return {
@@ -652,37 +547,24 @@ export async function squashMergeFromWorktree(
     const defaultBranch = await getDefaultBranch(projectPath);
     const currentBranch = await getCurrentBranch(projectPath);
 
-    // If we're not on the default branch, checkout to it
     if (currentBranch !== defaultBranch) {
       console.log(`[Git Worktree] Checking out to ${defaultBranch}...`);
-      await execAsync(`git checkout ${defaultBranch}`, { cwd: projectPath });
+      await git(projectPath, "checkout", defaultBranch);
     }
 
-    // Squash merge the branch
     console.log(`[Git Worktree] Squash merging ${branchName}...`);
-    await execAsync(`git merge --squash ${branchName}`, { cwd: projectPath });
+    await git(projectPath, "merge", "--squash", branchName);
 
-    // Check if there are staged changes to commit
     let hasStagedChanges = false;
     try {
-      await execAsync("git diff --cached --quiet", { cwd: projectPath });
+      await git(projectPath, "diff", "--cached", "--quiet");
       hasStagedChanges = false;
     } catch {
       hasStagedChanges = true;
     }
 
     if (hasStagedChanges) {
-      // Commit the squashed changes
-      const [title, ...bodyParts] = commitMessage.split("\n\n");
-      const body = bodyParts.join("\n\n");
-      const escapedTitle = title.replace(/"/g, '\\"');
-      const escapedBody = body.replace(/"/g, '\\"');
-
-      const commitCmd = body
-        ? `git commit -m "${escapedTitle}" -m "${escapedBody}"`
-        : `git commit -m "${escapedTitle}"`;
-
-      await execAsync(commitCmd, { cwd: projectPath });
+      await git(projectPath, ...buildCommitArgs(commitMessage));
       console.log("[Git Worktree] Squash merge committed successfully");
       return { success: true };
     } else {
@@ -698,4 +580,16 @@ export async function squashMergeFromWorktree(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+// Build `git commit` argv with title + optional body separated at the first
+// blank line, as distinct -m values. Passing them through argv means no shell
+// quoting is required — a message containing $(id), backticks, or newlines
+// lands in git as literal text.
+export function buildCommitArgs(commitMessage: string): string[] {
+  const [title, ...bodyParts] = commitMessage.split("\n\n");
+  const body = bodyParts.join("\n\n");
+  const args = ["commit", "-m", title];
+  if (body) args.push("-m", body);
+  return args;
 }

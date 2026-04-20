@@ -18,13 +18,4 @@ if (window.electronAPI) {
       window.electronAPI.notifyQuickEntryClosed();
     }
   });
-
-  // Restore auth tokens from OS keychain on app startup
-  if (window.electronAPI.onAuthRestoreTokens) {
-    window.electronAPI.onAuthRestoreTokens((tokens) => {
-      window.dispatchEvent(
-        new CustomEvent("auth-restore-tokens", { detail: tokens })
-      );
-    });
-  }
 }

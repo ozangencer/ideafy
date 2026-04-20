@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { spawn } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildIdeationPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
+import { launchTerminal } from "@/lib/terminal-launcher";
 
 export async function POST(
   request: NextRequest,
@@ -78,7 +75,7 @@ export async function POST(
 
     // Build the terminal command using the active provider
     const permissionMode = provider.capabilities.supportsPermissionModes ? "plan" : null;
-    const cliCommand = provider.buildInteractiveCommand(
+    const invocation = provider.buildInteractiveCommand(
       { prompt, cardId: id, permissionMode },
       workingDir
     );
@@ -86,34 +83,7 @@ export async function POST(
     console.log(`[Ideate] Terminal app: ${terminal}`);
     console.log(`[Ideate] Prompt length: ${prompt.length} chars`);
 
-    const timestamp = Date.now();
-    const scriptPath = join(tmpdir(), `ideafy-ideate-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
-
-    if (terminal === "ghostty") {
-      spawn("open", ["-na", "Ghostty.app", "--args", "-e", scriptPath]);
-    } else {
-      const appleScript =
-        terminal === "iterm2"
-          ? `tell application "iTerm"
-    create window with default profile
-    tell current session of current window
-        write text "${scriptPath}"
-    end tell
-end tell`
-          : `tell application "Terminal"
-    do script "${scriptPath}"
-    activate
-end tell`;
-
-      const osascriptProcess = spawn("osascript", []);
-      osascriptProcess.stdin.write(appleScript);
-      osascriptProcess.stdin.end();
-      osascriptProcess.on("error", (error) => {
-        console.error(`[Ideate] Error: ${error.message}`);
-        try { unlinkSync(scriptPath); } catch {}
-      });
-    }
+    launchTerminal({ ...invocation, terminal, tag: "Ideate" });
 
     return NextResponse.json({
       success: true,

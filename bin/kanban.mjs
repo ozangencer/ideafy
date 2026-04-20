@@ -24,6 +24,7 @@ if (process.argv.includes("--setup-mcp")) {
 }
 
 const PORT = process.env.PORT || "3030";
+const HOST = "127.0.0.1";
 
 // 1. Ensure data/ directory exists for SQLite
 const dataDir = join(PROJECT_ROOT, "data");
@@ -46,7 +47,7 @@ try {
 
 // 3. Start Next.js dev server
 console.log(`\nStarting ideafy on port ${PORT}...`);
-const nextProcess = spawn("npx", ["next", "dev", "-p", PORT], {
+const nextProcess = spawn("npx", ["next", "dev", "-H", HOST, "-p", PORT], {
   cwd: PROJECT_ROOT,
   stdio: "inherit",
   env: { ...process.env, PORT },
@@ -54,7 +55,7 @@ const nextProcess = spawn("npx", ["next", "dev", "-p", PORT], {
 
 // 4. Open browser after a short delay
 setTimeout(() => {
-  const url = `http://localhost:${PORT}`;
+  const url = `http://${HOST}:${PORT}`;
   try {
     // macOS
     spawn("open", [url], { stdio: "ignore" });

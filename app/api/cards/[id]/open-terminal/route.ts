@@ -248,7 +248,7 @@ export async function POST(
 
     // Build the terminal command using the active provider
     const permissionMode = (phase === "planning" && provider.capabilities.supportsPermissionModes) ? "plan" : null;
-    const cliCommand = provider.buildInteractiveCommand(
+    const invocation = provider.buildInteractiveCommand(
       { prompt, cardId: id, permissionMode },
       actualWorkingDir
     );
@@ -257,7 +257,7 @@ export async function POST(
     console.log(`[Open Terminal] Prompt length: ${prompt.length} chars`);
     console.log(`[Open Terminal] Terminal app: ${terminal}`);
 
-    const launchResult = launchTerminal({ command: cliCommand, terminal });
+    launchTerminal({ ...invocation, terminal, tag: "Open Terminal" });
 
     return NextResponse.json({
       success: true,
@@ -269,7 +269,6 @@ export async function POST(
       gitBranchName,
       gitWorktreePath,
       gitWorktreeStatus,
-      message: launchResult.message,
     });
   } catch (error) {
     console.error("Open terminal error:", error);

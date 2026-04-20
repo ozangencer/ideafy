@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { isGitRepo, removeWorktree, pruneWorktrees } from "@/lib/git";
+import { isGitRepo, removeWorktree, pruneWorktrees, git } from "@/lib/git";
 import { stopDevServer, isProcessRunning } from "@/lib/dev-server";
-import { exec } from "child_process";
-import { promisify } from "util";
 import type { Status } from "@/lib/types";
-
-const execAsync = promisify(exec);
 
 export async function POST(
   request: NextRequest,
@@ -99,7 +95,7 @@ export async function POST(
     if (deleteBranch) {
       console.log(`[Rollback] Deleting branch: ${card.gitBranchName}`);
       try {
-        await execAsync(`git branch -D -- ${JSON.stringify(card.gitBranchName)}`, { cwd: workingDir });
+        await git(workingDir, "branch", "-D", "--", card.gitBranchName);
       } catch (branchError) {
         console.warn(`[Rollback] Failed to delete branch: ${branchError}`);
         // Continue anyway - branch deletion is not critical

@@ -7,51 +7,85 @@ import { db, schema } from "@/lib/db";
 import type { TerminalApp } from "@/lib/types";
 
 export interface LaunchTerminalOptions {
-  command: string;
+  cwd: string;
+  argv: string[];
+  env?: Record<string, string>;
   terminal?: TerminalApp;
+  /** Optional log tag used in stderr messages. */
+  tag?: string;
 }
 
-/**
- * Get the user's preferred terminal app from settings
- */
+// POSIX shell single-quote: safe for any string (no null byte). Embedded
+// single quotes are closed, escaped, and reopened — the classic 'foo'\''bar'.
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+// Env var names are ASCII identifiers. Reject anything weird so a caller
+// can't smuggle shell syntax through an env key.
+function assertValidEnvName(name: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid env var name: ${name}`);
+  }
+}
+
 export function getTerminalPreference(): TerminalApp {
-  const terminalSetting = db
+  const row = db
     .select()
     .from(schema.settings)
     .where(eq(schema.settings.key, "terminal_app"))
     .get();
-
-  return (terminalSetting?.value || "iterm2") as TerminalApp;
+  return (row?.value || "iterm2") as TerminalApp;
 }
 
-/**
- * Launch a command in the user's preferred terminal app.
- */
-export function launchTerminal(opts: LaunchTerminalOptions): { success: true; message?: string } {
+export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
   const terminal = opts.terminal || getTerminalPreference();
-  const { command } = opts;
+  const tag = opts.tag || "Terminal Launcher";
+
+  const lines = ["#!/bin/bash", "set -e"];
+  lines.push(`cd ${shellQuote(opts.cwd)}`);
+  if (opts.env) {
+    for (const [k, v] of Object.entries(opts.env)) {
+      assertValidEnvName(k);
+      lines.push(`export ${k}=${shellQuote(v)}`);
+    }
+  }
+  if (opts.argv.length === 0) {
+    throw new Error("argv must not be empty");
+  }
+  lines.push(`exec ${opts.argv.map(shellQuote).join(" ")}`);
+  const scriptBody = lines.join("\n") + "\n";
 
   const timestamp = Date.now();
-  const scriptPath = join(tmpdir(), `ideafy-${timestamp}.sh`);
-  writeFileSync(scriptPath, `#!/bin/bash\n${command}\n`, { mode: 0o755 });
+  const random = Math.random().toString(36).slice(2, 8);
+  const scriptPath = join(tmpdir(), `ideafy-${timestamp}-${random}.sh`);
+  // 0o700 — only the current user can read/execute. The script may contain
+  // the prompt, which we treat as confidential.
+  writeFileSync(scriptPath, scriptBody, { mode: 0o700 });
 
   if (terminal === "ghostty") {
-    // Ghostty: open new instance with -e flag to run the script
     spawn("open", ["-na", "Ghostty.app", "--args", "-e", scriptPath]);
     return { success: true };
   }
 
-  // iTerm2 or Terminal.app — launch via AppleScript
+  // scriptPath is under our control (tmpdir + timestamp/random), but guard
+  // defensively: anything that would break the AppleScript string literal
+  // is rejected rather than embedded.
+  if (/[\r\n"\\]/.test(scriptPath)) {
+    throw new Error(`Unsafe script path: ${scriptPath}`);
+  }
+
+  const quotedPath = `"${scriptPath}"`;
   const appleScript =
     terminal === "iterm2"
       ? `tell application "iTerm"
     create window with default profile
     tell current session of current window
-        write text "${scriptPath}"
+        write text ${quotedPath}
     end tell
 end tell`
       : `tell application "Terminal"
-    do script "${scriptPath}"
+    do script ${quotedPath}
     activate
 end tell`;
 
@@ -59,7 +93,7 @@ end tell`;
   osascriptProcess.stdin.write(appleScript);
   osascriptProcess.stdin.end();
   osascriptProcess.on("error", (error) => {
-    console.error(`[Terminal Launcher] Error: ${error.message}`);
+    console.error(`[${tag}] osascript error: ${error.message}`);
     try {
       unlinkSync(scriptPath);
     } catch {}

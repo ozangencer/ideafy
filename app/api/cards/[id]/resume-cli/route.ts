@@ -40,11 +40,13 @@ export async function POST(
   const provider = getProviderForCard(card);
   const terminal = getTerminalPreference();
 
-  // Build resume command
-  const cliCommand = `cd "${workingDir}" && ${provider.getCliPath()} --resume "${session.cliSessionId}"`;
-
   try {
-    launchTerminal({ command: cliCommand, terminal });
+    launchTerminal({
+      cwd: workingDir,
+      argv: [provider.getCliPath(), "--resume", session.cliSessionId],
+      terminal,
+      tag: "Resume CLI",
+    });
 
     return NextResponse.json({
       success: true,

@@ -45,7 +45,7 @@ export async function POST(
   // Build the interactive command: cd to project folder and run /product-narrative skill
   // Pass the project's narrative path as argument so the skill writes to the correct location
   const narrativePath = project.narrativePath || "docs/product-narrative.md";
-  const command = provider.buildInteractiveCommand(
+  const invocation = provider.buildInteractiveCommand(
     { prompt: `/product-narrative ${narrativePath}`, cardId: "", permissionMode: null },
     project.folderPath
   );
@@ -56,12 +56,12 @@ export async function POST(
   console.log(`[Narrative Skill] Terminal: ${terminal}`);
   console.log(`[Narrative Skill] Working dir: ${project.folderPath}`);
 
-  const result = launchTerminal({ command, terminal });
+  launchTerminal({ ...invocation, terminal, tag: "Narrative Skill" });
 
   return NextResponse.json({
     success: true,
     terminal,
     workingDir: project.folderPath,
-    message: result.message || "Terminal opened with /product-narrative skill.",
+    message: "Terminal opened with /product-narrative skill.",
   });
 }

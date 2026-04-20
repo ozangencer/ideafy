@@ -9,8 +9,11 @@ export async function GET(request: NextRequest) {
     // Get optional default path from query params
     const { searchParams } = new URL(request.url);
     const rawPath = searchParams.get("path");
-    // Sanitize: strip quotes and backslashes to prevent AppleScript injection
-    const defaultPath = rawPath?.replace(/["'\\]/g, "") ?? null;
+    // Sanitize: strip anything that could terminate the AppleScript string literal
+    // ("), re-enter it ('), escape within it (\), or inject a new statement via
+    // newline/CR/tab/null. Prior regex missed \n which let `\nto shell script ...`
+    // slip through and run arbitrary commands through the osascript dialog.
+    const defaultPath = rawPath?.replace(/["'\\\r\n\t\0]/g, "") ?? null;
 
     let script: string;
 

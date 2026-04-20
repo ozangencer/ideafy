@@ -22,6 +22,12 @@ export interface InteractiveOptions {
   permissionMode?: "plan" | null;
 }
 
+export interface InteractiveInvocation {
+  cwd: string;
+  argv: string[];
+  env?: Record<string, string>;
+}
+
 export interface StreamOptions {
   prompt: string;
   allowedTools?: string[];
@@ -58,7 +64,7 @@ export interface PlatformProvider {
 
   // Command building
   buildAutonomousArgs(opts: AutonomousOptions): string[];
-  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): string;
+  buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): InteractiveInvocation;
   buildStreamArgs(opts: StreamOptions): string[];
 
   // Response parsing

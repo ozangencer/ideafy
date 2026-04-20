@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { spawn, exec } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
 import {
@@ -25,9 +24,8 @@ import {
   createWorktree,
   worktreeExists,
   getWorktreePath,
+  git,
 } from "@/lib/git";
-
-const execAsync = promisify(exec);
 
 export async function POST(
   request: NextRequest,
@@ -264,17 +262,15 @@ export async function POST(
 
     try {
       // Stage all changes
-      await execAsync("git add -A", { cwd: actualWorkingDir });
+      await git(actualWorkingDir, "add", "-A");
 
       // Check if there are changes to commit
-      const { stdout: status } = await execAsync("git status --porcelain", {
-        cwd: actualWorkingDir,
-      });
+      const { stdout: status } = await git(actualWorkingDir, "status", "--porcelain");
 
       if (status.trim()) {
-        // Commit the changes
-        const escapedMsg = commitMessage.replace(/"/g, '\\"');
-        await execAsync(`git commit -m "${escapedMsg}"`, { cwd: actualWorkingDir });
+        // Commit the changes — commitMessage goes in as a literal argv element,
+        // so $(), backticks, and quotes in card titles can't break out.
+        await git(actualWorkingDir, "commit", "-m", commitMessage);
         console.log(`[Quick Fix] Auto-committed: ${commitMessage}`);
       } else {
         console.log(`[Quick Fix] No changes to commit`);

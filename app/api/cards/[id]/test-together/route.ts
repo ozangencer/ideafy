@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { spawn } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildTestTogetherPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
+import { launchTerminal } from "@/lib/terminal-launcher";
 
 export async function POST(
   request: NextRequest,
@@ -83,7 +80,7 @@ export async function POST(
     const provider = getProviderForCard(card);
 
     // No permission mode restriction - test may need to run commands
-    const cliCommand = provider.buildInteractiveCommand(
+    const invocation = provider.buildInteractiveCommand(
       { prompt, cardId: id, permissionMode: null },
       workingDir
     );
@@ -91,34 +88,7 @@ export async function POST(
     console.log(`[TestTogether] Terminal app: ${terminal}`);
     console.log(`[TestTogether] Prompt length: ${prompt.length} chars`);
 
-    const timestamp = Date.now();
-    const scriptPath = join(tmpdir(), `ideafy-test-together-${timestamp}.sh`);
-    writeFileSync(scriptPath, `#!/bin/bash\n${cliCommand}\n`, { mode: 0o755 });
-
-    if (terminal === "ghostty") {
-      spawn("open", ["-na", "Ghostty.app", "--args", "-e", scriptPath]);
-    } else {
-      const appleScript =
-        terminal === "iterm2"
-          ? `tell application "iTerm"
-    create window with default profile
-    tell current session of current window
-        write text "${scriptPath}"
-    end tell
-end tell`
-          : `tell application "Terminal"
-    do script "${scriptPath}"
-    activate
-end tell`;
-
-      const osascriptProcess = spawn("osascript", []);
-      osascriptProcess.stdin.write(appleScript);
-      osascriptProcess.stdin.end();
-      osascriptProcess.on("error", (error) => {
-        console.error(`[TestTogether] Error: ${error.message}`);
-        try { unlinkSync(scriptPath); } catch {}
-      });
-    }
+    launchTerminal({ ...invocation, terminal, tag: "TestTogether" });
 
     return NextResponse.json({
       success: true,

@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export async function GET() {
   try {
-    // Use AppleScript to open native macOS folder picker
+    // Use AppleScript to open native macOS folder picker. execFile avoids the
+    // shell entirely so the (currently static) script body can't be smuggled
+    // through shell interpretation if it ever gains dynamic input.
     const script = `
       set selectedFolder to choose folder with prompt "Select Project Folder"
       return POSIX path of selectedFolder
     `;
 
-    const { stdout } = await execAsync(`osascript -e '${script}'`);
+    const { stdout } = await execFileAsync("osascript", ["-e", script]);
     const folderPath = stdout.trim();
 
     // Remove trailing slash if present
