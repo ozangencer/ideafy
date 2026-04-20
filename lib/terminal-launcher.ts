@@ -39,6 +39,13 @@ export function getTerminalPreference(): TerminalApp {
 }
 
 export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
+  // macOS-only: iTerm/Terminal/Ghostty + osascript have no analogues on
+  // Linux/Windows. Fail loudly rather than silently on a dev machine
+  // building the app for macOS distribution.
+  if (process.platform !== "darwin") {
+    throw new Error("launchTerminal is only supported on macOS");
+  }
+
   const terminal = opts.terminal || getTerminalPreference();
   const tag = opts.tag || "Terminal Launcher";
 

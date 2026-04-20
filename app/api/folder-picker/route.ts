@@ -5,6 +5,12 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 
 export async function GET() {
+  if (process.platform !== "darwin") {
+    return NextResponse.json(
+      { error: "Folder picker is only supported on macOS" },
+      { status: 400 }
+    );
+  }
   try {
     // Use AppleScript to open native macOS folder picker. execFile avoids the
     // shell entirely so the (currently static) script body can't be smuggled

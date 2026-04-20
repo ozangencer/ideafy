@@ -33,9 +33,12 @@ Thumbs.db
 
 # Database
 data/*.db
+data/*.db-wal
+data/*.db-shm
 
 # Backups
 backups/
+data/backups/
 
 # Git worktrees
 .worktrees/

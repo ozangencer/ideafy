@@ -5,6 +5,12 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 
 export async function GET(request: NextRequest) {
+  if (process.platform !== "darwin") {
+    return NextResponse.json(
+      { error: "File picker is only supported on macOS" },
+      { status: 400 }
+    );
+  }
   try {
     // Get optional default path from query params
     const { searchParams } = new URL(request.url);

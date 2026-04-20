@@ -13,10 +13,17 @@ import type {
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
+import { appResourcesRoot, resolveUserSkillsDir } from "../paths";
 
-const IDEAFY_ROOT = process.env.IDEAFY_ROOT || process.cwd();
+// In dev IDEAFY_ROOT is the repo (skills/ + mcp-server/index.ts live there);
+// in the packaged DMG the Electron shell exports IDEAFY_APP_RESOURCES pointing
+// at Resources/app.asar. Either way appResourcesRoot() returns the right
+// anchor for read-only bundled files.
+const IDEAFY_ROOT = appResourcesRoot();
 const MCP_SERVER_PATH = path.join(IDEAFY_ROOT, "mcp-server", "index.ts");
-const SKILLS_DIR = path.join(IDEAFY_ROOT, "skills");
+// Skills are read from the user-writable mirror so custom/user-edited
+// skills take precedence over the bundled copies.
+const SKILLS_DIR = resolveUserSkillsDir();
 const SKILL_FILES = ["human-test.md", "product-narrative.md", "ideafy.md"];
 
 function readSkill(name: string): string {

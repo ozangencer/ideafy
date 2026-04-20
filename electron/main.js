@@ -8,63 +8,145 @@ const {
   nativeImage,
   screen,
 } = require("electron");
-const { spawn, execSync } = require("child_process");
+const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const fsp = require("fs/promises");
 const http = require("http");
+const net = require("net");
 
-const PROJECT_ROOT = path.resolve(__dirname, "..");
-const PORT = process.env.PORT || "3030";
+// Paths differ between `npm run electron` in the repo and the packaged DMG.
+// In the DMG, __dirname is inside app.asar; PROJECT_ROOT makes no sense.
+// Branch on app.isPackaged and keep two code paths.
+const isPackaged = app.isPackaged;
+const REPO_ROOT = path.resolve(__dirname, "..");
+
 const HOST = "127.0.0.1";
-const DEV_URL = `http://${HOST}:${PORT}`;
+let PORT = null; // resolved at startup via get-port
+let DEV_URL = null;
 
 let mainWindow = null;
 let quickEntryWindow = null;
 let tray = null;
 let nextProcess = null;
 
+// ── Env + port helpers ────────────────────────────────────────────────
+
+// In packaged mode only pass the env vars the Next server actually needs.
+// Stripping the rest keeps shell-exported dev secrets (API keys, DEBUG
+// flags) from leaking into the production runtime.
+function buildChildEnv(extra) {
+  const base = {};
+  if (isPackaged) {
+    const allow = ["HOME", "PATH", "USER", "LANG", "LC_ALL", "SHELL", "TMPDIR"];
+    for (const k of allow) {
+      if (process.env[k]) base[k] = process.env[k];
+    }
+  } else {
+    Object.assign(base, process.env);
+  }
+  return { ...base, ...extra };
+}
+
+// get-port is ESM-only; import it dynamically from CommonJS.
+async function pickPort() {
+  const preferred = Number(process.env.PORT || 3030);
+  try {
+    const { default: getPort } = await import("get-port");
+    return getPort({ port: [preferred, 3031, 3032, 3033, 3034, 3035] });
+  } catch {
+    // Fallback: test the preferred port manually, then walk forward.
+    for (let p = preferred; p < preferred + 20; p++) {
+      const free = await new Promise((resolve) => {
+        const s = net.createServer();
+        s.once("error", () => resolve(false));
+        s.once("listening", () => s.close(() => resolve(true)));
+        s.listen(p, HOST);
+      });
+      if (free) return p;
+    }
+    return preferred;
+  }
+}
+
 // ── Server lifecycle ──────────────────────────────────────────────────
 
-function ensureDataDir() {
-  const dataDir = path.join(PROJECT_ROOT, "data");
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-    console.log("Created data/ directory");
-  }
+function ensureUserDataDir() {
+  const dir = app.getPath("userData");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
-function runDbPush() {
-  console.log("Setting up database...");
-  try {
-    execSync("npx drizzle-kit push", {
-      cwd: PROJECT_ROOT,
-      stdio: "inherit",
-    });
-    console.log("Database ready.");
-  } catch {
-    console.error("Warning: Database setup failed. Continuing anyway...");
-  }
+function resolveStandaloneServer() {
+  // Packaged layout: Resources/app.asar/.next/standalone/server.js
+  // electron-builder sets process.resourcesPath correctly in production.
+  return path.join(
+    process.resourcesPath,
+    "app.asar",
+    ".next",
+    "standalone",
+    "server.js"
+  );
 }
 
-function startNextServer() {
-  return new Promise((resolve) => {
+async function startNextServer() {
+  PORT = String(await pickPort());
+  DEV_URL = `http://${HOST}:${PORT}`;
+
+  const userData = ensureUserDataDir();
+
+  if (!isPackaged) {
+    // Dev: spawn `next dev` exactly as before so hot-reload and TS
+    // source-rewrite stay intact.
     nextProcess = spawn("npx", ["next", "dev", "-H", HOST, "-p", PORT], {
-      cwd: PROJECT_ROOT,
+      cwd: REPO_ROOT,
       stdio: "inherit",
-      env: { ...process.env, PORT },
+      env: buildChildEnv({
+        PORT,
+        HOSTNAME: HOST,
+        IDEAFY_USER_DATA: userData,
+        IDEAFY_APP_RESOURCES: REPO_ROOT,
+      }),
     });
-
-    nextProcess.on("error", (err) => {
-      console.error("Failed to start Next.js server:", err.message);
+  } else {
+    // Packaged: run the standalone server under Electron's bundled Node.
+    // ELECTRON_RUN_AS_NODE disables Chromium init for this child process.
+    const serverPath = resolveStandaloneServer();
+    nextProcess = spawn(process.execPath, [serverPath], {
+      cwd: path.dirname(serverPath),
+      stdio: "inherit",
+      env: buildChildEnv({
+        ELECTRON_RUN_AS_NODE: "1",
+        NODE_ENV: "production",
+        PORT,
+        HOSTNAME: HOST,
+        IDEAFY_USER_DATA: userData,
+        IDEAFY_APP_RESOURCES: path.join(process.resourcesPath, "app.asar"),
+      }),
     });
+  }
 
-    // Poll the API endpoint (not just root) to ensure routes are compiled
+  nextProcess.on("error", (err) => {
+    console.error("Failed to start Next.js server:", err.message);
+  });
+
+  await waitForServerReady();
+}
+
+function waitForServerReady() {
+  const deadline = Date.now() + 60_000;
+  return new Promise((resolve, reject) => {
     const poll = setInterval(() => {
+      if (Date.now() > deadline) {
+        clearInterval(poll);
+        reject(new Error("Next.js server did not start within 60s"));
+        return;
+      }
       http
         .get(`${DEV_URL}/api/cards`, (res) => {
-          if (res.statusCode === 200) {
+          if (res.statusCode && res.statusCode < 500) {
             clearInterval(poll);
-            console.log("Next.js server and API ready.");
+            console.log(`Next.js server ready on ${DEV_URL}`);
             resolve();
           }
         })
@@ -80,7 +162,30 @@ function killNextServer() {
   }
 }
 
+// ── Skills mirror (packaged only) ─────────────────────────────────────
+
+// The bundled skills/ dir ships inside asar (read-only). Users need to be
+// able to drop their own skills in, so on first launch mirror the bundle
+// into userData/skills and let the Next server resolve against that.
+async function mirrorSkillsToUserData() {
+  if (!isPackaged) return;
+  const src = path.join(process.resourcesPath, "app.asar", "skills");
+  const dst = path.join(app.getPath("userData"), "skills");
+  if (!fs.existsSync(src)) return;
+  if (fs.existsSync(dst)) return;
+  await fsp.mkdir(dst, { recursive: true });
+  await fsp.cp(src, dst, { recursive: true });
+  console.log(`Mirrored skills/ to ${dst}`);
+}
+
 // ── Main Window ───────────────────────────────────────────────────────
+
+function iconPath(relative) {
+  if (isPackaged) {
+    return path.join(process.resourcesPath, "app.asar", relative);
+  }
+  return path.join(REPO_ROOT, relative);
+}
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -88,7 +193,7 @@ function createMainWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    icon: path.join(PROJECT_ROOT, "public", "icon-512-dock.png"),
+    icon: iconPath(path.join("public", "icon-512-dock.png")),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 12 },
     backgroundColor: "#16140f",
@@ -255,7 +360,6 @@ function hideQuickEntry() {
 // IPC: quick entry window requests to close
 ipcMain.on("close-quick-entry-window", () => {
   hideQuickEntry();
-  // Tell main window to refresh data immediately
   if (mainWindow && mainWindow.webContents) {
     mainWindow.webContents.send("refresh-data");
   }
@@ -272,11 +376,11 @@ ipcMain.on("resize-quick-entry", (_event, height) => {
 // ── Tray ──────────────────────────────────────────────────────────────
 
 function createTray() {
-  const iconPath = path.join(__dirname, "icons", "tray-iconTemplate.png");
+  const trayPath = path.join(__dirname, "icons", "tray-iconTemplate.png");
 
   let trayIcon;
-  if (fs.existsSync(iconPath)) {
-    trayIcon = nativeImage.createFromPath(iconPath);
+  if (fs.existsSync(trayPath)) {
+    trayIcon = nativeImage.createFromPath(trayPath);
     trayIcon.setTemplateImage(true);
   } else {
     trayIcon = nativeImage.createEmpty();
@@ -351,10 +455,10 @@ function registerGlobalShortcut() {
 app.on("ready", async () => {
   // Set dock icon to ideafy logo
   if (process.platform === "darwin") {
-    const dockIcon = nativeImage.createFromPath(
-      path.join(PROJECT_ROOT, "public", "icon-512-dock.png")
-    );
-    app.dock.setIcon(dockIcon);
+    const dockIconPath = iconPath(path.join("public", "icon-512-dock.png"));
+    if (fs.existsSync(dockIconPath)) {
+      app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
+    }
   }
 
   // Set app name and menu bar
@@ -387,9 +491,14 @@ app.on("ready", async () => {
     Menu.setApplicationMenu(appMenu);
   }
 
-  ensureDataDir();
-  runDbPush();
-  await startNextServer();
+  try {
+    await mirrorSkillsToUserData();
+    await startNextServer();
+  } catch (err) {
+    console.error("Failed to boot:", err);
+    app.quit();
+    return;
+  }
 
   createMainWindow();
   createQuickEntryWindow();

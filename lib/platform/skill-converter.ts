@@ -5,8 +5,12 @@
  */
 import * as fs from "fs";
 import * as path from "path";
+import { resolveUserSkillsDir } from "../paths";
 
-const SKILLS_DIR = path.resolve(process.cwd(), "skills");
+// User-writable skills dir — in packaged mode this is userData/skills (mirror
+// of the bundled skills on first boot, editable afterwards); in dev it's
+// the repo's skills/ directory.
+const SKILLS_DIR = resolveUserSkillsDir();
 
 export const SKILL_FILES = ["human-test.md", "product-narrative.md", "ideafy.md"];
 

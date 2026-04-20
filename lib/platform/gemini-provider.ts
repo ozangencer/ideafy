@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
+import { appResourcesRoot } from "../paths";
 
 let cachedGeminiPath: string | null = null;
 
@@ -220,7 +221,7 @@ class GeminiProvider implements PlatformProvider {
           ...existing,
           ideafy: {
             command: "npx",
-            args: ["tsx", path.resolve(process.cwd(), "mcp-server/index.ts")],
+            args: ["tsx", path.resolve(appResourcesRoot(), "mcp-server/index.ts")],
           },
         },
       };

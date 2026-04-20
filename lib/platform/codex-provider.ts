@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
+import { appResourcesRoot } from "../paths";
 
 let cachedCodexPath: string | null = null;
 
@@ -222,7 +223,7 @@ class CodexProvider implements PlatformProvider {
 
       if (content.includes("[mcp_servers.ideafy]")) return { success: true };
 
-      const mcpServerPath = path.resolve(process.cwd(), "mcp-server/index.ts");
+      const mcpServerPath = path.resolve(appResourcesRoot(), "mcp-server/index.ts");
       const tomlBlock = `\n[mcp_servers.ideafy]\ncommand = "npx"\nargs = ["tsx", "${mcpServerPath}"]\n`;
 
       fs.writeFileSync(configPath, content + tomlBlock);

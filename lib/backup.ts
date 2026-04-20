@@ -1,8 +1,11 @@
 import fs from "fs";
 import path from "path";
+import { resolveUserDataDir } from "./paths";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const BACKUP_DIR = path.join(process.cwd(), "backups");
+// Backups live alongside the live DB in the userData dir so a DMG install
+// and a dev repo don't step on each other's backup history.
+const DATA_DIR = resolveUserDataDir();
+const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const DB_FILE = "kanban.db";
 const RETENTION_DAYS = 7;
 const MAX_BACKUP_COUNT = 20;

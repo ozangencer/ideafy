@@ -83,8 +83,19 @@ function mergeTestCheckState(existingHtml: string, newHtml: string): string {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Database path - relative to MCP server location
-const DB_PATH = resolve(__dirname, "../data/kanban.db");
+// DB path resolution — packaged DMG sets IDEAFY_USER_DATA to the app's
+// userData dir (same DB the Electron-spawned Next server uses). Dev /
+// standalone MCP usage falls back to the repo's data/kanban.db so
+// existing workflows keep working.
+function resolveDbPath(): string {
+  const userDataEnv = process.env.IDEAFY_USER_DATA;
+  if (userDataEnv) {
+    return resolve(userDataEnv, "kanban.db");
+  }
+  return resolve(__dirname, "../data/kanban.db");
+}
+
+const DB_PATH = resolveDbPath();
 
 // ============================================================================
 // Image Extraction Helpers
@@ -148,8 +159,12 @@ function extractCardImages(card: Card): {
   return { cleanedCard, images: allImages };
 }
 
-// Initialize database connection
+// Initialize database connection. WAL journal mode so this process and
+// the Next server can read/write the same DB concurrently without
+// SQLITE_BUSY errors.
 const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
 // ============================================================================
 // Card ID Resolution Helper
