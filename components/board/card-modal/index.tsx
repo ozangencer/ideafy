@@ -111,6 +111,7 @@ export function CardModal() {
   const [showCommitFirstDialog, setShowCommitFirstDialog] = useState(false);
   const [showDiscardDraftDialog, setShowDiscardDraftDialog] = useState(false);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
   const [conflictInfo, setConflictInfo] = useState<{
     conflictFiles: string[];
     worktreePath: string;
@@ -752,7 +753,7 @@ export function CardModal() {
                 </div>
                 <div className="flex gap-2">
                   <Button
-                    onClick={() => handleMerge()}
+                    onClick={() => setShowMergeConfirmDialog(true)}
                     disabled={isMerging}
                     size="sm"
                     className="bg-green-600 hover:bg-green-700"
@@ -957,6 +958,46 @@ export function CardModal() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRollingBack}>Cancel</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showMergeConfirmDialog} onOpenChange={setShowMergeConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Merge Branch into Main?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  This will merge{" "}
+                  <span className="font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">
+                    {gitBranchName}
+                  </span>{" "}
+                  into the main branch and move this card to Completed.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This action cannot be easily undone. Make sure you have tested the changes.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMerging}>Cancel</AlertDialogCancel>
+            <Button
+              onClick={() => {
+                setShowMergeConfirmDialog(false);
+                handleMerge();
+              }}
+              disabled={isMerging}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isMerging ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <GitMerge className="mr-2 h-4 w-4" />
+              )}
+              Merge & Complete
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
