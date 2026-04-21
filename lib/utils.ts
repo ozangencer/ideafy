@@ -1,3 +1,6 @@
+/**
+ * Shared UI utility helpers: className merging and color conversion.
+ */
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
