@@ -8,6 +8,7 @@ import * as path from "path";
 // removeIdeafyHook look for this marker (and the legacy IDEAFY_CARD_ID /
 // KANBAN_CARD_ID substrings) to identify prior Ideafy hook entries.
 const IDEAFY_HOOK_MARKER = "# ideafy-hook";
+const IDEAFY_PRE_EDIT_MARKER = "# ideafy-pre-edit-check";
 
 // When curl succeeds the hook echoes whatever /api/hook-context returned
 // (empty body = 204 = no output). When curl fails (server unreachable) the
@@ -25,6 +26,15 @@ const IDEAFY_HOOK_COMMAND =
   `Do not re-ask on later turns in this session even if this reminder keeps appearing while the server is starting up.\\n` +
   `</system-reminder>\\n' "\${IDEAFY_PORT:-3030}"`;
 
+// PreToolUse hook for Edit/Write/NotebookEdit/MultiEdit. Posts the tool call
+// to /api/pre-edit-check; the endpoint returns a deny decision if the bound
+// card requires a feature branch and the working tree is on the wrong one.
+// Fails open (|| true) so a down Ideafy server never wedges the editor.
+const IDEAFY_PRE_EDIT_COMMAND =
+  `${IDEAFY_PRE_EDIT_MARKER}\n` +
+  `curl -sf -X POST -H "Content-Type: application/json" --data-binary @- ` +
+  `"http://localhost:\${IDEAFY_PORT:-3030}/api/pre-edit-check" 2>/dev/null || true`;
+
 const IDEAFY_HOOK = {
   hooks: {
     UserPromptSubmit: [
@@ -33,6 +43,17 @@ const IDEAFY_HOOK = {
           {
             type: "command",
             command: IDEAFY_HOOK_COMMAND,
+          },
+        ],
+      },
+    ],
+    PreToolUse: [
+      {
+        matcher: "Edit|Write|NotebookEdit|MultiEdit",
+        hooks: [
+          {
+            type: "command",
+            command: IDEAFY_PRE_EDIT_COMMAND,
           },
         ],
       },
@@ -46,6 +67,10 @@ function isIdeafyHookCommand(cmd: string): boolean {
     cmd.includes("IDEAFY_CARD_ID") ||
     cmd.includes("KANBAN_CARD_ID")
   );
+}
+
+function isIdeafyPreEditCommand(cmd: string): boolean {
+  return cmd.includes(IDEAFY_PRE_EDIT_MARKER) || cmd.includes("/api/pre-edit-check");
 }
 
 /**
@@ -78,35 +103,50 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
     // Merge hooks
     const existingHooks = (existingSettings.hooks as Record<string, unknown[]>) || {};
     const existingUserPromptSubmit = existingHooks.UserPromptSubmit || [];
+    const existingPreToolUse = existingHooks.PreToolUse || [];
+
+    const filterGroups = (
+      groups: unknown[],
+      matcher: (cmd: string) => boolean
+    ): unknown[] =>
+      groups.filter((hookGroup: unknown) => {
+        if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
+          return true;
+        }
+        const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
+        const containsMatch = innerHooks.some((hook: unknown) => {
+          if (
+            typeof hook !== "object" ||
+            hook === null ||
+            !("command" in hook) ||
+            typeof (hook as { command: string }).command !== "string"
+          ) {
+            return false;
+          }
+          return matcher((hook as { command: string }).command);
+        });
+        return !containsMatch;
+      });
 
     // Strip any previous Ideafy hook entries so reinstall always writes the
     // current canonical body. Matches the current "# ideafy-hook" marker,
     // plus legacy IDEAFY_CARD_ID / KANBAN_CARD_ID substrings from older
     // hook revisions.
-    const filteredUserPromptSubmit = existingUserPromptSubmit.filter((hookGroup: unknown) => {
-      if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
-        return true;
-      }
-      const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
-      const containsIdeafyHook = innerHooks.some((hook: unknown) => {
-        if (
-          typeof hook !== "object" ||
-          hook === null ||
-          !("command" in hook) ||
-          typeof (hook as { command: string }).command !== "string"
-        ) {
-          return false;
-        }
-        return isIdeafyHookCommand((hook as { command: string }).command);
-      });
-      return !containsIdeafyHook;
-    });
+    const filteredUserPromptSubmit = filterGroups(
+      existingUserPromptSubmit,
+      isIdeafyHookCommand
+    );
+    const filteredPreToolUse = filterGroups(
+      existingPreToolUse,
+      isIdeafyPreEditCommand
+    );
 
     const mergedSettings = {
       ...existingSettings,
       hooks: {
         ...existingHooks,
         UserPromptSubmit: [...filteredUserPromptSubmit, ...IDEAFY_HOOK.hooks.UserPromptSubmit],
+        PreToolUse: [...filteredPreToolUse, ...IDEAFY_HOOK.hooks.PreToolUse],
       },
     };
 
@@ -136,18 +176,20 @@ export function removeIdeafyHook(folderPath: string): { success: boolean; error?
     const content = fs.readFileSync(settingsPath, "utf-8");
     const settings = JSON.parse(content);
 
-    if (!settings.hooks?.UserPromptSubmit) {
+    if (!settings.hooks) {
       return { success: true }; // No hooks to remove
     }
 
-    // Filter out any ideafy hook — current marker or legacy anchors.
-    settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit.filter(
-      (hookGroup: unknown) => {
+    const filterGroups = (
+      groups: unknown[],
+      matcher: (cmd: string) => boolean
+    ): unknown[] =>
+      groups.filter((hookGroup: unknown) => {
         if (typeof hookGroup !== "object" || hookGroup === null || !("hooks" in hookGroup)) {
           return true;
         }
         const innerHooks = (hookGroup as { hooks: unknown[] }).hooks;
-        const hasIdeafyHook = innerHooks.some((hook: unknown) => {
+        const hasMatch = innerHooks.some((hook: unknown) => {
           if (
             typeof hook !== "object" ||
             hook === null ||
@@ -156,16 +198,32 @@ export function removeIdeafyHook(folderPath: string): { success: boolean; error?
           ) {
             return false;
           }
-          return isIdeafyHookCommand((hook as { command: string }).command);
+          return matcher((hook as { command: string }).command);
         });
-        return !hasIdeafyHook;
-      }
-    );
+        return !hasMatch;
+      });
 
-    // Clean up empty arrays
-    if (settings.hooks.UserPromptSubmit.length === 0) {
-      delete settings.hooks.UserPromptSubmit;
+    // Filter out any ideafy hook — current marker or legacy anchors.
+    if (settings.hooks.UserPromptSubmit) {
+      settings.hooks.UserPromptSubmit = filterGroups(
+        settings.hooks.UserPromptSubmit,
+        isIdeafyHookCommand
+      );
+      if (settings.hooks.UserPromptSubmit.length === 0) {
+        delete settings.hooks.UserPromptSubmit;
+      }
     }
+
+    if (settings.hooks.PreToolUse) {
+      settings.hooks.PreToolUse = filterGroups(
+        settings.hooks.PreToolUse,
+        isIdeafyPreEditCommand
+      );
+      if (settings.hooks.PreToolUse.length === 0) {
+        delete settings.hooks.PreToolUse;
+      }
+    }
+
     if (Object.keys(settings.hooks).length === 0) {
       delete settings.hooks;
     }

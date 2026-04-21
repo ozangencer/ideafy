@@ -5,6 +5,7 @@ import {
   buildCreationOfferPolicy,
   buildPhasePolicy,
   isTerminalPhase,
+  resolveEffectiveWorktree,
   resolveProjectByFolderAncestor,
 } from "@/lib/hook-policy";
 
@@ -113,11 +114,40 @@ export async function POST(request: NextRequest) {
       return new Response(null, { status: 204 });
     }
 
-    const body = buildPhasePolicy({
-      id: card.id,
-      title: card.title,
-      status: card.status,
-    });
+    const cardProject = card.projectId
+      ? db
+          .select()
+          .from(schema.projects)
+          .where(eq(schema.projects.id, card.projectId))
+          .get()
+      : null;
+
+    const branchPolicy =
+      card.status === "progress"
+        ? resolveEffectiveWorktree(
+            {
+              useWorktree: card.useWorktree,
+              gitBranchName: card.gitBranchName,
+              taskNumber: card.taskNumber,
+              title: card.title,
+            },
+            cardProject
+              ? {
+                  useWorktrees: cardProject.useWorktrees,
+                  idPrefix: cardProject.idPrefix,
+                }
+              : null
+          )
+        : undefined;
+
+    const body = buildPhasePolicy(
+      {
+        id: card.id,
+        title: card.title,
+        status: card.status,
+      },
+      branchPolicy
+    );
     if (!body) {
       return new Response(null, { status: 204 });
     }

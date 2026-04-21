@@ -1,6 +1,7 @@
 import * as path from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { generateBranchName } from "@/lib/git";
 
 const PHASE_INSTRUCTIONS: Record<string, string> = {
   ideation:
@@ -17,18 +18,52 @@ export function isTerminalPhase(status: string | null | undefined): boolean {
   return status === "test" || status === "completed" || status === "withdrawn";
 }
 
+// Compute the effective worktree policy for a card: card-level override wins,
+// else project default, else true. Returns the target branch name if
+// enforcement is active — reused by both the hook policy renderer and the
+// pre-edit-check endpoint so they agree on "what branch should this card be
+// on right now".
+export function resolveEffectiveWorktree(
+  card: {
+    useWorktree: boolean | null;
+    gitBranchName: string | null;
+    taskNumber: number | null;
+    title: string;
+  },
+  project: { useWorktrees: boolean; idPrefix: string } | null
+): { enforced: boolean; targetBranch: string | null } {
+  const effective = card.useWorktree ?? project?.useWorktrees ?? true;
+  if (!effective) return { enforced: false, targetBranch: null };
+
+  if (card.gitBranchName) {
+    return { enforced: true, targetBranch: card.gitBranchName };
+  }
+
+  if (project && card.taskNumber != null) {
+    return {
+      enforced: true,
+      targetBranch: generateBranchName(project.idPrefix, card.taskNumber, card.title),
+    };
+  }
+
+  return { enforced: true, targetBranch: null };
+}
+
 // Phase-aware policy block used once a session is bound to a card.
-export function buildPhasePolicy(card: {
-  id: string;
-  title: string;
-  status: string;
-}): string | null {
+export function buildPhasePolicy(
+  card: {
+    id: string;
+    title: string;
+    status: string;
+  },
+  branchPolicy?: { enforced: boolean; targetBranch: string | null }
+): string | null {
   const phaseInstruction = PHASE_INSTRUCTIONS[card.status];
   if (!phaseInstruction) return null;
 
   const title = (card.title || "").replace(/"/g, '\\"');
 
-  return [
+  const lines = [
     "<system-reminder>",
     `Ideafy card: ${card.id} — "${title}"`,
     `Current column: ${card.status}`,
@@ -47,9 +82,21 @@ export function buildPhasePolicy(card: {
     "   progressed since the last refusal (new content added, a previously-open",
     "   question resolved, a missing section filled in). Do not re-ask on cosmetic",
     "   or no-op turns.",
-    "</system-reminder>",
-    "",
-  ].join("\n");
+  ];
+
+  if (branchPolicy?.enforced && branchPolicy.targetBranch) {
+    lines.push(
+      `8. This card must be implemented on branch "${branchPolicy.targetBranch}".`,
+      "   Before the first Edit/Write/NotebookEdit in this session, verify the",
+      "   current branch. If it does not match, call mcp__ideafy__ensure_branch",
+      `   with cardId "${card.id}" to create or check out the correct branch.`,
+      "   The PreToolUse hook will block edits performed on the wrong branch."
+    );
+  }
+
+  lines.push("</system-reminder>", "");
+
+  return lines.join("\n");
 }
 
 // First-contact policy: shown once per fresh session that lands in a project

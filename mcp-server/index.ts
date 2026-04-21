@@ -11,6 +11,16 @@ import { fileURLToPath } from "url";
 import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
 import { normalizeUseWorktree, serializeUseWorktreeForDb } from "./serialize-card.js";
+import {
+  createWorktree,
+  ensureBranchInPlace,
+  generateBranchName,
+  getCurrentBranch,
+  getWorktreePath,
+  isGitRepo,
+  worktreeExists,
+} from "./git-helpers.js";
+import { existsSync } from "fs";
 
 // Configure marked for Tiptap-compatible HTML
 marked.setOptions({
@@ -459,6 +469,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "ensure_branch",
+        description:
+          "Ensure the current working directory is on the git branch this card is supposed to be implemented on. If the card/project has worktree enforcement enabled and the branch is missing, creates it (and a worktree when the project uses worktrees). Idempotent: returns a no-op message when already on the correct branch or when enforcement is disabled.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cardId: {
+              type: "string",
+              description:
+                "Card ID: UUID, display ID (e.g., KAN-54), or task number. The card must exist and have a resolvable project.",
+            },
+          },
+          required: ["cardId"],
+        },
+      },
+      {
         name: "bind_session_to_card",
         description:
           "Bind the current Claude Code session to an Ideafy card so the hook's phase-aware policy applies from the next user turn onward. Call this immediately after create_card when starting work from a plain terminal, or when the user names an existing card (e.g. 'this is for IDE-125'). The sessionId is provided by Claude Code in the hook input as the session_id field.",
@@ -891,6 +917,252 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         return {
           content: [{ type: "text", text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}` }],
+        };
+      }
+
+      case "ensure_branch": {
+        const { cardId: rawId } = args as { cardId: string };
+        const cardId = resolveCardId(rawId);
+        if (!cardId) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
+
+        const card = db
+          .prepare(
+            `SELECT
+               id, title, task_number as taskNumber,
+               project_id as projectId,
+               project_folder as projectFolder,
+               git_branch_name as gitBranchName,
+               git_worktree_path as gitWorktreePath,
+               use_worktree as useWorktree
+             FROM cards WHERE id = ?`
+          )
+          .get(cardId) as
+          | {
+              id: string;
+              title: string;
+              taskNumber: number | null;
+              projectId: string | null;
+              projectFolder: string | null;
+              gitBranchName: string | null;
+              gitWorktreePath: string | null;
+              useWorktree: number | null;
+            }
+          | undefined;
+
+        if (!card) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${cardId}` }],
+            isError: true,
+          };
+        }
+
+        const project = card.projectId
+          ? (db
+              .prepare(
+                `SELECT
+                   id, folder_path as folderPath,
+                   id_prefix as idPrefix,
+                   use_worktrees as useWorktrees
+                 FROM projects WHERE id = ?`
+              )
+              .get(card.projectId) as
+              | {
+                  id: string;
+                  folderPath: string;
+                  idPrefix: string;
+                  useWorktrees: number | null;
+                }
+              | undefined)
+          : undefined;
+
+        const cardUseWorktree = normalizeUseWorktree(card.useWorktree);
+        const projectUseWorktrees = project
+          ? Boolean(project.useWorktrees ?? 1)
+          : null;
+        const effective = cardUseWorktree ?? projectUseWorktrees ?? true;
+
+        if (!effective) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Worktree enforcement is disabled for this card (useWorktree=false). No branch change performed.",
+              },
+            ],
+          };
+        }
+
+        const projectFolder = project?.folderPath || card.projectFolder || "";
+        if (!projectFolder) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Cannot determine project folder for this card. Aborting ensure_branch.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        if (!(await isGitRepo(projectFolder))) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Project folder is not a git repo: ${projectFolder}. ensure_branch has no work to do.`,
+              },
+            ],
+          };
+        }
+
+        let targetBranch = card.gitBranchName;
+        let branchGenerated = false;
+        if (!targetBranch) {
+          if (!project || card.taskNumber == null) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Card has no gitBranchName and no taskNumber/project to generate one from. Set a branch name or bind a project before calling ensure_branch.",
+                },
+              ],
+              isError: true,
+            };
+          }
+          targetBranch = generateBranchName(
+            project.idPrefix,
+            card.taskNumber,
+            card.title
+          );
+          branchGenerated = true;
+        }
+
+        const useWorktreeMode = projectUseWorktrees ?? true;
+        const nowIso = new Date().toISOString();
+
+        // Worktree mode — prefer an existing worktree path; if missing, create.
+        if (useWorktreeMode) {
+          const expectedPath =
+            card.gitWorktreePath || getWorktreePath(projectFolder, targetBranch);
+
+          if (await worktreeExists(projectFolder, expectedPath)) {
+            // Worktree exists — verify it is actually on the target branch.
+            const branchInWorktree = await getCurrentBranch(expectedPath);
+            if (branchInWorktree === targetBranch) {
+              if (
+                branchGenerated ||
+                card.gitBranchName !== targetBranch ||
+                card.gitWorktreePath !== expectedPath
+              ) {
+                db.prepare(
+                  `UPDATE cards
+                   SET git_branch_name = ?, git_branch_status = 'active',
+                       git_worktree_path = ?, git_worktree_status = 'active',
+                       updated_at = ?
+                   WHERE id = ?`
+                ).run(targetBranch, expectedPath, nowIso, cardId);
+              }
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Already on branch "${targetBranch}" in worktree ${expectedPath}. No changes made.`,
+                  },
+                ],
+              };
+            }
+          }
+
+          const result = await createWorktree(projectFolder, targetBranch);
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Failed to create worktree for branch "${targetBranch}": ${result.error ?? "unknown error"}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          db.prepare(
+            `UPDATE cards
+             SET git_branch_name = ?, git_branch_status = 'active',
+                 git_worktree_path = ?, git_worktree_status = 'active',
+                 updated_at = ?
+             WHERE id = ?`
+          ).run(targetBranch, result.worktreePath, nowIso, cardId);
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Worktree ready at ${result.worktreePath} on branch "${targetBranch}". cd into it to continue.`,
+              },
+            ],
+          };
+        }
+
+        // In-place mode — the project opted out of worktrees; just switch
+        // branches in the project folder.
+        const cwd =
+          card.gitWorktreePath && existsSync(card.gitWorktreePath)
+            ? card.gitWorktreePath
+            : projectFolder;
+
+        const currentBranch = await getCurrentBranch(cwd);
+        if (currentBranch === targetBranch) {
+          if (branchGenerated || card.gitBranchName !== targetBranch) {
+            db.prepare(
+              `UPDATE cards
+               SET git_branch_name = ?, git_branch_status = 'active', updated_at = ?
+               WHERE id = ?`
+            ).run(targetBranch, nowIso, cardId);
+          }
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Already on branch "${targetBranch}" in ${cwd}. No changes made.`,
+              },
+            ],
+          };
+        }
+
+        const checkout = await ensureBranchInPlace(cwd, targetBranch);
+        if (!checkout.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to switch to branch "${targetBranch}" in ${cwd}: ${checkout.error ?? "unknown error"}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        db.prepare(
+          `UPDATE cards
+           SET git_branch_name = ?, git_branch_status = 'active', updated_at = ?
+           WHERE id = ?`
+        ).run(targetBranch, nowIso, cardId);
+
+        const stashNote = checkout.error ? ` (${checkout.error})` : "";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Switched to branch "${targetBranch}" in ${cwd}.${stashNote}`,
+            },
+          ],
         };
       }
 
