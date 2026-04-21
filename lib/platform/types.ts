@@ -45,7 +45,7 @@ export interface CliResponse {
 }
 
 export interface StreamEvent {
-  type: "text" | "thinking" | "tool_use" | "tool_result" | "result" | "system";
+  type: "text" | "thinking" | "tool_use" | "tool_result" | "result" | "system" | "session_id";
   data: unknown;
 }
 

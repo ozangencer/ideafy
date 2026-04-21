@@ -100,11 +100,20 @@ export function BackgroundProcesses() {
   // Track killed process IDs to show correct toast
   const killedIdsRef = useRef<Set<string>>(new Set());
 
+  // Chat processes are foreground (user sees "Thinking..." in the chat panel itself)
+  // so they should never appear in the Background Processes banner. The store still
+  // keeps them because card-modal uses them to restore a "thinking" placeholder when
+  // a card is reopened mid-stream.
+  const visibleProcesses = useMemo(
+    () => backgroundProcesses.filter((p) => p.processType !== "chat"),
+    [backgroundProcesses]
+  );
+
   // Separate running and completed processes
   const { runningProcesses, completedProcesses } = useMemo(() => {
-    const running = backgroundProcesses.filter((p) => p.status === "running");
+    const running = visibleProcesses.filter((p) => p.status === "running");
     // Sort completed by completedAt descending (newest first)
-    const completed = backgroundProcesses
+    const completed = visibleProcesses
       .filter((p) => p.status === "completed")
       .sort((a, b) => {
         const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
@@ -112,7 +121,7 @@ export function BackgroundProcesses() {
         return bTime - aTime;
       });
     return { runningProcesses: running, completedProcesses: completed };
-  }, [backgroundProcesses]);
+  }, [visibleProcesses]);
 
   // Handle kill with tracking
   const handleKill = async (processId: string) => {
@@ -173,7 +182,8 @@ export function BackgroundProcesses() {
     runningProcessesRef.current = currentRunning;
   }, [runningProcesses, toast]);
 
-  // Poll only when there are running processes
+  // Poll when any process is running (including chat — the store still needs to
+  // reflect its completion so the in-panel "thinking" placeholder clears).
   const hasRunning = backgroundProcesses.some((p) => p.status === "running");
 
   useEffect(() => {
@@ -194,8 +204,9 @@ export function BackgroundProcesses() {
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;
 
-  // Don't render the button if no processes, but keep component mounted for polling
-  if (backgroundProcesses.length === 0) {
+  // Don't render the button if no visible (non-chat) processes, but keep the
+  // component mounted so polling continues for chat progress.
+  if (visibleProcesses.length === 0) {
     return null;
   }
 

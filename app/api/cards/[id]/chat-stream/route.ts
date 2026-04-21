@@ -394,6 +394,7 @@ export async function POST(
   const encoder = new TextEncoder();
   let isClosed = false;
   let fullResponse = "";
+  let streamSessionId: string | null = null;
   const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
 
   // Generate assistant message ID for database
@@ -508,6 +509,11 @@ export async function POST(
               case "system":
                 sendEvent("system", event.data);
                 break;
+              case "session_id":
+                if (!streamSessionId) {
+                  streamSessionId = String(event.data);
+                }
+                break;
             }
           }
         }
@@ -543,6 +549,11 @@ export async function POST(
                 }
                 break;
               }
+              case "session_id":
+                if (!streamSessionId) {
+                  streamSessionId = String(event.data);
+                }
+                break;
             }
           }
           stdoutBuffer = "";
@@ -578,9 +589,11 @@ export async function POST(
                 .where(eq(chatSessions.id, existingSession.id));
             } else if (provider.capabilities.supportsSessionResume) {
               // Fresh session succeeded — save session ID
-              let sessionId = newSessionId; // Claude: we set it upfront
+              // Claude: we set it upfront via --session-id
+              // Codex/Gemini: captured from stream events (thread.started / init)
+              // Filesystem resolver kept as a last-resort fallback
+              let sessionId = newSessionId ?? streamSessionId ?? undefined;
               if (!sessionId) {
-                // Codex/Gemini: resolve from filesystem
                 sessionId = resolveSessionId(provider.id, cwd) ?? undefined;
               }
               if (sessionId) {

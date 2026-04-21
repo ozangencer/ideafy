@@ -170,29 +170,37 @@ export async function POST(
       }
     }
 
-    // Step 1: Check for uncommitted changes in worktree (block merge if found)
+    // Step 1: Check for uncommitted tracked changes in worktree
+    // Ignore untracked files (e.g. node_modules symlink created by Start Dev Server)
     if (card.gitWorktreePath && existsSync(card.gitWorktreePath)) {
-      console.log(`[Merge] Checking for uncommitted changes in worktree: ${card.gitWorktreePath}`);
+      console.log(`[Merge] Checking for uncommitted tracked changes in worktree: ${card.gitWorktreePath}`);
       try {
         const { stdout: worktreeStatus } = await git(
           card.gitWorktreePath,
           "status",
-          "--porcelain"
+          "--porcelain",
+          "-uno"
         );
         if (worktreeStatus.trim()) {
-          console.log(`[Merge] Found uncommitted changes in worktree, blocking merge`);
-          return NextResponse.json(
-            {
-              error: "Worktree'de commit edilmemiş değişiklikler var. Önce commit yapın.",
-              uncommittedInWorktree: true,
-              worktreePath: card.gitWorktreePath,
-            },
-            { status: 400 }
-          );
+          if (commitFirst) {
+            console.log(`[Merge] Committing tracked modifications in worktree...`);
+            await git(card.gitWorktreePath, "add", "-u");
+            await git(card.gitWorktreePath, "commit", "-m", "chore: WIP before merge");
+            console.log(`[Merge] Worktree changes committed`);
+          } else {
+            console.log(`[Merge] Found uncommitted changes in worktree, asking user`);
+            return NextResponse.json(
+              {
+                error: "Worktree'de commit edilmemiş değişiklikler var.",
+                uncommittedInWorktree: true,
+                worktreePath: card.gitWorktreePath,
+              },
+              { status: 400 }
+            );
+          }
         }
       } catch (statusError) {
         console.warn(`[Merge] Could not check worktree status: ${statusError}`);
-        // Continue anyway - worktree might be in a bad state
       }
     }
 

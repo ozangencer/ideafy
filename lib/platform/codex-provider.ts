@@ -92,8 +92,17 @@ class CodexProvider implements PlatformProvider {
       const json = JSON.parse(line);
       const events: StreamEvent[] = [];
 
-      // Skip lifecycle events
-      if (json.type === "thread.started" || json.type === "turn.started") {
+      // Emit session ID from thread.started so the caller can persist it
+      // without walking ~/.codex/sessions/ (directory layout varies by version)
+      if (json.type === "thread.started") {
+        if (json.thread_id) {
+          events.push({ type: "session_id", data: String(json.thread_id) });
+        }
+        return events;
+      }
+
+      // Skip other lifecycle events
+      if (json.type === "turn.started") {
         return [];
       }
 

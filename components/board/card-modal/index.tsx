@@ -109,6 +109,7 @@ export function CardModal() {
   const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [showCommitFirstDialog, setShowCommitFirstDialog] = useState(false);
+  const [commitFirstScope, setCommitFirstScope] = useState<"main" | "worktree">("main");
   const [showDiscardDraftDialog, setShowDiscardDraftDialog] = useState(false);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
@@ -498,6 +499,7 @@ export function CardModal() {
         const error = await response.json();
 
         if (error.uncommittedInMain) {
+          setCommitFirstScope("main");
           setShowCommitFirstDialog(true);
           return;
         }
@@ -515,11 +517,8 @@ export function CardModal() {
         }
 
         if (error.uncommittedInWorktree) {
-          toast({
-            variant: "destructive",
-            title: "Uncommitted Changes",
-            description: "Please commit your changes in the worktree before merging.",
-          });
+          setCommitFirstScope("worktree");
+          setShowCommitFirstDialog(true);
           return;
         }
 
@@ -1007,7 +1006,9 @@ export function CardModal() {
           <AlertDialogHeader>
             <AlertDialogTitle>Uncommitted Changes</AlertDialogTitle>
             <AlertDialogDescription>
-              There are uncommitted changes in the main repository. Would you like to commit these changes and proceed with the merge?
+              {commitFirstScope === "worktree"
+                ? "There are uncommitted changes in the worktree. Would you like to commit these changes and proceed with the merge?"
+                : "There are uncommitted changes in the main repository. Would you like to commit these changes and proceed with the merge?"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

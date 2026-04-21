@@ -102,8 +102,14 @@ class GeminiProvider implements PlatformProvider {
       const json = JSON.parse(line);
       const events: StreamEvent[] = [];
 
-      // Skip init and user message events
-      if (json.type === "init") return [];
+      // Emit session ID from init so the caller can persist it without
+      // guessing the ~/.gemini/tmp/<hash>/chats/ path (layout varies by version)
+      if (json.type === "init") {
+        if (json.session_id) {
+          events.push({ type: "session_id", data: String(json.session_id) });
+        }
+        return events;
+      }
       if (json.type === "message" && json.role === "user") return [];
 
       // Handle assistant message events - content is a string
