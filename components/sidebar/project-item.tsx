@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Pencil, Star } from "lucide-react";
+import { hexToRgba } from "@/lib/utils";
 
 interface ProjectItemProps {
   project: Project;
@@ -18,6 +19,13 @@ interface ProjectItemProps {
 
 export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
   const { setActiveProject, toggleProjectPin } = useKanbanStore();
+
+  const activeStyle = isActive
+    ? {
+        backgroundColor: hexToRgba(project.color, 0.12),
+        boxShadow: `inset 0 0 0 1px ${hexToRgba(project.color, 0.28)}`,
+      }
+    : undefined;
 
   return (
     <div
@@ -30,16 +38,33 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
           setActiveProject(project.id);
         }
       }}
-      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 group/project cursor-pointer relative ${
+      style={activeStyle}
+      className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-sm transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 group/project cursor-pointer relative overflow-hidden ${
         isActive
-          ? "bg-paper-cream text-ink font-medium border-l-2 border-ink"
+          ? "text-foreground font-medium"
           : "text-foreground hover:bg-muted"
       }`}
     >
+      {/* Left accent bar — colored when active */}
+      <span
+        aria-hidden="true"
+        className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm transition-opacity duration-150 ${
+          isActive ? "opacity-100" : "opacity-0"
+        }`}
+        style={{ backgroundColor: project.color }}
+      />
+
       {/* Color indicator */}
       <div
-        className="w-2 h-2 rounded-full shrink-0"
-        style={{ backgroundColor: project.color }}
+        className={`rounded-full shrink-0 transition-all duration-150 ${
+          isActive ? "w-2.5 h-2.5" : "w-2 h-2"
+        }`}
+        style={{
+          backgroundColor: project.color,
+          boxShadow: isActive
+            ? `0 0 0 3px ${hexToRgba(project.color, 0.22)}`
+            : undefined,
+        }}
       />
 
       {/* Project name */}

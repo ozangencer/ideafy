@@ -23,12 +23,18 @@ export function ProjectList() {
       {/* All Projects option */}
       <button
         onClick={() => setActiveProject(null)}
-        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
+        className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-sm transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 relative overflow-hidden ${
           activeProjectId === null
-            ? "bg-paper-cream text-ink font-medium border-l-2 border-ink"
+            ? "bg-muted text-foreground font-medium shadow-[inset_0_0_0_1px_hsl(var(--border))]"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
+        <span
+          aria-hidden="true"
+          className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-sm bg-ink transition-opacity duration-150 ${
+            activeProjectId === null ? "opacity-100" : "opacity-0"
+          }`}
+        />
         <Layers className="h-4 w-4" />
         <span>All Projects</span>
       </button>
