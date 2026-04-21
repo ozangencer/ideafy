@@ -66,6 +66,27 @@ export interface DocumentFile {
   isClaudeMd: boolean;
 }
 
+export type SkillSource = "global" | "project";
+
+export interface SkillListItem {
+  name: string;
+  title: string;
+  path: string;
+  group: string | null;
+  description: string | null;
+  source: SkillSource;
+}
+
+export interface UserSkillGroup {
+  id: string;
+  name: string;
+  skillNames: string[];
+}
+
+export interface SkillPreview extends SkillListItem {
+  content: string;
+}
+
 export interface TreeNode {
   name: string;
   type: "folder" | "file";
@@ -182,7 +203,7 @@ export const SECTION_CONFIG: Record<SectionType, {
 };
 
 // Mention types for chat input
-export type UnifiedItemType = "skill" | "mcp" | "agent" | "plugin";
+export type UnifiedItemType = "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
 
 export interface MentionData {
   type: "skill" | "mcp" | "agent" | "plugin" | "card" | "document";
@@ -196,6 +217,7 @@ export interface UnifiedItem {
   label: string;
   type: UnifiedItemType;
   description?: string;
+  children?: UnifiedItem[];
 }
 
 // Tool call data from Claude responses

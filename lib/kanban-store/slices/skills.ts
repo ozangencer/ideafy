@@ -1,11 +1,35 @@
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
-import { UnifiedItem } from "@/lib/types";
+import {
+  assignSkillToGroupInCollection,
+  buildSkillGroupUnifiedItems,
+  deleteSkillGroupFromCollection,
+  normalizeGroupName,
+  renameSkillGroupInCollection,
+  upsertSkillGroup,
+} from "@/lib/skills/grouping";
+import { SkillListItem, SkillPreview, UnifiedItem, UserSkillGroup } from "@/lib/types";
+
+function getScopedGroups(
+  state: Pick<KanbanStore, "globalSkillGroups" | "projectSkillGroups">,
+  source: "global" | "project",
+  projectId?: string | null
+): UserSkillGroup[] {
+  if (source === "global") return state.globalSkillGroups;
+  if (!projectId) return [];
+  return state.projectSkillGroups[projectId] || [];
+}
 
 export const createSkillsSlice: StoreSlice<
-  Pick<KanbanStore, "skills" | "mcps" | "agents" | "plugins" | "projectSkills" | "projectMcps" | "projectAgents" | "fetchSkills" | "fetchMcps" | "fetchAgents" | "fetchPlugins" | "fetchProjectExtensions" | "getUnifiedItems">
+  Pick<KanbanStore, "skills" | "skillItems" | "projectSkillItems" | "selectedSkill" | "isSkillViewerOpen" | "globalSkillGroups" | "projectSkillGroups" | "mcps" | "agents" | "plugins" | "projectSkills" | "projectMcps" | "projectAgents" | "fetchSkills" | "openSkillPreview" | "closeSkillViewer" | "createSkillGroup" | "renameSkillGroup" | "deleteSkillGroup" | "moveSkillToGroup" | "fetchMcps" | "fetchAgents" | "fetchPlugins" | "fetchProjectExtensions" | "getUnifiedItems">
 > = (set, get) => ({
   skills: [],
+  skillItems: [],
+  projectSkillItems: [],
+  selectedSkill: null,
+  isSkillViewerOpen: false,
+  globalSkillGroups: [],
+  projectSkillGroups: {},
   mcps: [],
   agents: [],
   plugins: [],
@@ -16,11 +40,142 @@ export const createSkillsSlice: StoreSlice<
   fetchSkills: async () => {
     try {
       const response = await fetch("/api/skills");
-      const data = await parseJson<{ skills?: string[] }>(response);
-      set({ skills: data.skills || [] });
+      const data = await parseJson<{ skills?: string[]; items?: SkillListItem[] }>(response);
+      set({
+        skills: data.skills || [],
+        skillItems: data.items || [],
+      });
     } catch (error) {
       console.error("Failed to fetch skills:", error);
+      set({ skills: [], skillItems: [] });
     }
+  },
+
+  openSkillPreview: async (skill) => {
+    try {
+      const response = await fetch(
+        `/api/skills/content?path=${encodeURIComponent(skill.path)}`
+      );
+      const data = await parseJson<SkillPreview>(response);
+      if (!response.ok || typeof data.content !== "string") return;
+
+      set({
+        selectedSkill: {
+          ...skill,
+          content: data.content || "",
+          title: data.title || skill.title,
+          group: data.group ?? skill.group,
+          description: data.description ?? skill.description,
+          source: data.source || skill.source,
+        },
+        isSkillViewerOpen: true,
+      });
+    } catch (error) {
+      console.error("Failed to open skill:", error);
+    }
+  },
+
+  closeSkillViewer: () => {
+    set({
+      selectedSkill: null,
+      isSkillViewerOpen: false,
+    });
+  },
+
+  createSkillGroup: (name, source, projectId) => {
+    const normalizedName = normalizeGroupName(name);
+    if (!normalizedName) return null;
+
+    const state = get();
+    const currentGroups = getScopedGroups(state, source, projectId);
+    const { groups, groupId } = upsertSkillGroup(currentGroups, normalizedName);
+
+    if (source === "global") {
+      set({ globalSkillGroups: groups });
+      return groupId;
+    }
+
+    if (!projectId) return null;
+
+    set({
+      projectSkillGroups: {
+        ...state.projectSkillGroups,
+        [projectId]: groups,
+      },
+    });
+
+    return groupId;
+  },
+
+  renameSkillGroup: (groupId, name, source, projectId) => {
+    const normalizedName = normalizeGroupName(name);
+    if (!normalizedName) return;
+
+    const state = get();
+    const currentGroups = getScopedGroups(state, source, projectId);
+    const renamedGroups = renameSkillGroupInCollection(
+      currentGroups,
+      groupId,
+      normalizedName
+    );
+
+    if (source === "global") {
+      set({ globalSkillGroups: renamedGroups });
+      return;
+    }
+
+    if (!projectId) return;
+
+    set({
+      projectSkillGroups: {
+        ...state.projectSkillGroups,
+        [projectId]: renamedGroups,
+      },
+    });
+  },
+
+  deleteSkillGroup: (groupId, source, projectId) => {
+    const state = get();
+    const currentGroups = getScopedGroups(state, source, projectId);
+    const nextGroups = deleteSkillGroupFromCollection(currentGroups, groupId);
+
+    if (source === "global") {
+      set({ globalSkillGroups: nextGroups });
+      return;
+    }
+
+    if (!projectId) return;
+
+    set({
+      projectSkillGroups: {
+        ...state.projectSkillGroups,
+        [projectId]: nextGroups,
+      },
+    });
+  },
+
+  moveSkillToGroup: (skillName, groupId, source, projectId) => {
+    const state = get();
+    const currentGroups = getScopedGroups(state, source, projectId);
+    const nextGroups = assignSkillToGroupInCollection(
+      currentGroups,
+      skillName,
+      groupId
+    );
+
+    if (source === "global") {
+      set({ globalSkillGroups: nextGroups });
+      return;
+    }
+
+    if (!projectId) return;
+
+    set({
+      projectSkillGroups: {
+        ...state.projectSkillGroups,
+        [projectId]: nextGroups,
+      },
+    });
   },
 
   fetchMcps: async () => {
@@ -50,7 +205,12 @@ export const createSkillsSlice: StoreSlice<
 
   fetchProjectExtensions: async (projectId: string | null) => {
     if (!projectId) {
-      set({ projectSkills: [], projectMcps: [], projectAgents: [] });
+      set({
+        projectSkills: [],
+        projectSkillItems: [],
+        projectMcps: [],
+        projectAgents: [],
+      });
       return;
     }
 
@@ -62,19 +222,25 @@ export const createSkillsSlice: StoreSlice<
       ]);
 
       const [skillsData, mcpsData, agentsData] = await Promise.all([
-        parseJson<{ skills?: string[] }>(skillsRes),
+        parseJson<{ skills?: string[]; items?: SkillListItem[] }>(skillsRes),
         parseJson<{ mcps?: string[] }>(mcpsRes),
         parseJson<{ agents?: string[] }>(agentsRes),
       ]);
 
       set({
         projectSkills: skillsData.skills || [],
+        projectSkillItems: skillsData.items || [],
         projectMcps: mcpsData.mcps || [],
         projectAgents: agentsData.agents || [],
       });
     } catch (error) {
       console.error("Failed to fetch project extensions:", error);
-      set({ projectSkills: [], projectMcps: [], projectAgents: [] });
+      set({
+        projectSkills: [],
+        projectSkillItems: [],
+        projectMcps: [],
+        projectAgents: [],
+      });
     }
   },
 
@@ -82,6 +248,26 @@ export const createSkillsSlice: StoreSlice<
     const state = get();
     const items: UnifiedItem[] = [];
     const addedIds = new Set<string>();
+
+    buildSkillGroupUnifiedItems(state.skillItems, state.globalSkillGroups, "global").forEach(
+      (group) => {
+        if (!addedIds.has(`skillGroup-${group.id}`)) {
+          addedIds.add(`skillGroup-${group.id}`);
+          items.push(group);
+        }
+      }
+    );
+
+    buildSkillGroupUnifiedItems(
+      state.projectSkillItems,
+      state.activeProjectId ? state.projectSkillGroups[state.activeProjectId] || [] : [],
+      "project"
+    ).forEach((group) => {
+      if (!addedIds.has(`skillGroup-${group.id}`)) {
+        addedIds.add(`skillGroup-${group.id}`);
+        items.push(group);
+      }
+    });
 
     // Merge global + project skills (dedupe)
     const allSkills = Array.from(new Set([...state.skills, ...state.projectSkills]));

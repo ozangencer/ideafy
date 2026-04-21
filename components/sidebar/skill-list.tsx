@@ -1,22 +1,209 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
+import type { SkillListItem, SkillSource } from "@/lib/types";
+import {
+  findSkillGroupId,
+  resolveSkillGroups,
+  type ResolvedSkillGroup,
+} from "@/lib/skills/grouping";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Zap, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SkillGroupDialog } from "./skill-group-dialog";
+import { SkillMovePopover } from "./skill-move-popover";
+import {
+  ChevronRight,
+  Zap,
+  Check,
+  Copy,
+  FileText,
+  FolderPlus,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+
+type ScopeSection = {
+  label: string;
+  groups: ResolvedSkillGroup[];
+};
+
+type GroupDialogState =
+  | {
+      mode: "create";
+      source: SkillSource;
+      skillToAssign: SkillListItem | null;
+    }
+  | {
+      mode: "rename";
+      source: SkillSource;
+      groupId: string;
+      initialValue: string;
+    };
+
+function resolveLegacyGroups(
+  items: SkillListItem[],
+  source: SkillSource,
+  fallbackLabel: string
+): ResolvedSkillGroup[] {
+  const grouped = new Map<string, SkillListItem[]>();
+
+  items.forEach((item) => {
+    const groupName = item.group || fallbackLabel;
+    const existing = grouped.get(groupName) || [];
+    existing.push(item);
+    grouped.set(groupName, existing);
+  });
+
+  return Array.from(grouped.entries())
+    .sort(([groupA], [groupB]) => {
+      if (groupA === fallbackLabel) return 1;
+      if (groupB === fallbackLabel) return -1;
+      return groupA.localeCompare(groupB);
+    })
+    .map(([name, groupedItems]) => ({
+      id: null,
+      name,
+      items: groupedItems,
+      source,
+      isUngrouped: name === fallbackLabel,
+      canManage: false,
+    }));
+}
+
+function getSkillGroupKey(
+  group: ResolvedSkillGroup,
+  activeProjectId: string | null
+): string {
+  if (group.id) {
+    return group.source === "project" && activeProjectId
+      ? `project:${activeProjectId}:${group.id}`
+      : `global:${group.id}`;
+  }
+
+  return group.source === "project" && activeProjectId
+    ? `project:${activeProjectId}:legacy:${group.name}`
+    : `global:legacy:${group.name}`;
+}
 
 export function SkillList() {
-  const { skills, projectSkills } = useKanbanStore();
-  const [copiedSkill, setCopiedSkill] = useState<string | null>(null);
+  const {
+    skills,
+    projectSkills,
+    skillItems,
+    projectSkillItems,
+    selectedSkill,
+    openSkillPreview,
+    activeProjectId,
+    collapsedSkillGroups,
+    globalSkillGroups,
+    projectSkillGroups,
+    createSkillGroup,
+    renameSkillGroup,
+    deleteSkillGroup,
+    moveSkillToGroup,
+    toggleSkillGroupCollapse,
+  } = useKanbanStore();
 
-  // Merge global + project skills, remove duplicates
-  const allSkills = useMemo(() =>
-    Array.from(new Set([...skills, ...projectSkills])).sort(),
-    [skills, projectSkills]
+  const [copiedSkill, setCopiedSkill] = useState<string | null>(null);
+  const [isOrganizing, setIsOrganizing] = useState(false);
+  const [dialogState, setDialogState] = useState<GroupDialogState | null>(null);
+
+  const globalItems = useMemo(() => {
+    const deduped = new Map<string, SkillListItem>();
+    skillItems.forEach((item) => deduped.set(item.name, item));
+
+    const fallbackNames = Array.from(new Set(skills)).sort();
+    fallbackNames.forEach((name) => {
+      if (!deduped.has(name)) {
+        deduped.set(name, {
+          name,
+          title: name,
+          path: "",
+          group: null,
+          description: null,
+          source: "global",
+        });
+      }
+    });
+
+    return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [skillItems, skills]);
+
+  const currentProjectGroups = activeProjectId
+    ? projectSkillGroups[activeProjectId] || []
+    : [];
+
+  const projectItems = useMemo(() => {
+    const deduped = new Map<string, SkillListItem>();
+    projectSkillItems.forEach((item) => deduped.set(item.name, item));
+
+    const fallbackNames = Array.from(new Set(projectSkills)).sort();
+    fallbackNames.forEach((name) => {
+      if (!deduped.has(name)) {
+        deduped.set(name, {
+          name,
+          title: name,
+          path: "",
+          group: null,
+          description: null,
+          source: "project",
+        });
+      }
+    });
+
+    return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [projectSkillItems, projectSkills]);
+
+  const resolvedProjectGroups = useMemo(() => {
+    if (projectItems.length === 0) return [];
+    if (currentProjectGroups.length > 0) {
+      return resolveSkillGroups(
+        projectItems,
+        currentProjectGroups,
+        "project",
+        "Project Skills",
+        { includeEmptyGroups: isOrganizing }
+      );
+    }
+    return resolveLegacyGroups(projectItems, "project", "Project Skills");
+  }, [currentProjectGroups, isOrganizing, projectItems]);
+
+  const resolvedGlobalGroups = useMemo(() => {
+    if (globalItems.length === 0) return [];
+    if (globalSkillGroups.length > 0) {
+      return resolveSkillGroups(globalItems, globalSkillGroups, "global", "Ungrouped", {
+        includeEmptyGroups: isOrganizing,
+      });
+    }
+    return resolveLegacyGroups(globalItems, "global", "Ungrouped");
+  }, [globalItems, globalSkillGroups, isOrganizing]);
+
+  const scopeSections = useMemo<ScopeSection[]>(() => {
+    const sections: ScopeSection[] = [];
+
+    if (resolvedProjectGroups.length > 0) {
+      sections.push({ label: "Project", groups: resolvedProjectGroups });
+    }
+
+    if (resolvedGlobalGroups.length > 0) {
+      sections.push({
+        label: resolvedProjectGroups.length > 0 ? "Global" : "Skills",
+        groups: resolvedGlobalGroups,
+      });
+    }
+
+    return sections;
+  }, [resolvedGlobalGroups, resolvedProjectGroups]);
+
+  const allSkillCount = scopeSections.reduce(
+    (total, section) =>
+      total + section.groups.reduce((groupTotal, group) => groupTotal + group.items.length, 0),
+    0
   );
 
   const copyToClipboard = (skill: string) => {
@@ -25,38 +212,271 @@ export function SkillList() {
     setTimeout(() => setCopiedSkill(null), 1500);
   };
 
-  if (allSkills.length === 0) return null;
+  const openCreateDialog = (source: SkillSource, skillToAssign: SkillListItem | null = null) => {
+    setDialogState({
+      mode: "create",
+      source,
+      skillToAssign,
+    });
+  };
+
+  const handleDialogSubmit = (name: string) => {
+    if (!dialogState) return;
+
+    if (dialogState.mode === "create") {
+      const projectId = dialogState.source === "project" ? activeProjectId : null;
+      const groupId = createSkillGroup(name, dialogState.source, projectId);
+
+      if (groupId && dialogState.skillToAssign) {
+        moveSkillToGroup(
+          dialogState.skillToAssign.name,
+          groupId,
+          dialogState.source,
+          projectId
+        );
+      }
+      return;
+    }
+
+    const projectId = dialogState.source === "project" ? activeProjectId : null;
+    renameSkillGroup(dialogState.groupId, name, dialogState.source, projectId);
+  };
+
+  const globalGroupNames = globalSkillGroups.map((group) => group.name);
+  const projectGroupNames = currentProjectGroups.map((group) => group.name);
+
+  if (allSkillCount === 0) return null;
 
   return (
-    <Collapsible defaultOpen={false} className="px-2 mt-4">
-      <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-muted-foreground uppercase tracking-wider font-medium hover:text-foreground transition-colors group">
-        <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
-        <Zap className="h-3 w-3" />
-        <span>Skills</span>
-        <span className="ml-auto text-[10px] opacity-60">{allSkills.length}</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1 space-y-0.5">
-        {allSkills.map((skill) => (
-          <button
-            key={skill}
-            onClick={() => copyToClipboard(skill)}
-            className="w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2"
-            title="Click to copy"
+    <>
+      <Collapsible defaultOpen={false} className="px-2 mt-4">
+        <div className="flex items-center gap-2 pr-1">
+          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground group">
+            <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
+            <Zap className="h-3 w-3" />
+            <span>Skills</span>
+            <span className="ml-auto text-[10px] opacity-60">{allSkillCount}</span>
+          </CollapsibleTrigger>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => setIsOrganizing((current) => !current)}
           >
-            {copiedSkill === skill ? (
-              <>
-                <Check className="h-3 w-3 text-green-500" />
-                <span className="text-green-500 text-xs">Copied!</span>
-              </>
-            ) : (
-              <>
-                <span className="text-primary/70 font-mono text-xs">/</span>
-                <span className="truncate">{skill}</span>
-              </>
-            )}
-          </button>
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
+            {isOrganizing ? "Done" : "Organize"}
+          </Button>
+        </div>
+
+        <CollapsibleContent className="mt-1 space-y-2">
+          {isOrganizing && (
+            <div className="space-y-2 px-3 pb-2 pt-1">
+              <div className="text-[12px] leading-[1.2rem] text-muted-foreground/75">
+                Create groups and move skills without editing any files.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {globalItems.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openCreateDialog("global")}
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    New Group
+                  </Button>
+                )}
+                {activeProjectId && projectItems.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openCreateDialog("project")}
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    New Project Group
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {scopeSections.map((section) => {
+            const scopedGroups =
+              section.label === "Project" ? currentProjectGroups : globalSkillGroups;
+
+            return (
+              <div key={section.label}>
+                {scopeSections.length > 1 && (
+                  <div className="px-3 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/65">
+                    {section.label}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  {section.groups.map((group) => (
+                    <Collapsible
+                      key={`${section.label}-${group.name}-${group.id ?? "fallback"}`}
+                      open={!collapsedSkillGroups.includes(getSkillGroupKey(group, activeProjectId))}
+                      onOpenChange={() =>
+                        toggleSkillGroupCollapse(getSkillGroupKey(group, activeProjectId))
+                      }
+                    >
+                      <div className="flex items-center justify-between gap-2 px-3 pb-1.5 pt-1">
+                        <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-left transition-colors hover:text-foreground">
+                          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-90" />
+                          <div className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/65">
+                            {group.name}
+                          </div>
+                        </CollapsibleTrigger>
+
+                        {isOrganizing && group.canManage && group.id && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setDialogState({
+                                  mode: "rename",
+                                  source: group.source,
+                                  groupId: group.id!,
+                                  initialValue: group.name,
+                                });
+                              }}
+                              title="Rename group"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deleteSkillGroup(
+                                  group.id!,
+                                  group.source,
+                                  group.source === "project" ? activeProjectId : null
+                                );
+                              }}
+                              title="Delete group"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <CollapsibleContent className="space-y-0.5">
+                        {group.items.length === 0 && isOrganizing && (
+                          <div className="px-3 py-2 text-[12px] leading-[1.2rem] text-muted-foreground/70">
+                            No skills yet. Use the arrow action on a skill to move it here.
+                          </div>
+                        )}
+                        {group.items.map((skill) => {
+                          const isSelected =
+                            selectedSkill?.path === skill.path && skill.path !== "";
+                          const currentGroupId = group.source === "project"
+                            ? findSkillGroupId(currentProjectGroups, skill.name)
+                            : findSkillGroupId(globalSkillGroups, skill.name);
+
+                          return (
+                            <div
+                              key={`${group.name}-${skill.name}`}
+                              className={`flex items-start gap-1 rounded-md transition-colors ${
+                                isSelected ? "bg-muted text-foreground" : "hover:bg-muted/80"
+                              }`}
+                            >
+                              <button
+                                onClick={() => skill.path && openSkillPreview(skill)}
+                                disabled={!skill.path}
+                                className="flex min-w-0 flex-1 items-start gap-2 px-3 py-1.5 text-left text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-70"
+                                title={skill.path ? "Open SKILL.md" : "Skill file not found"}
+                              >
+                                <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                                <div className="min-w-0 pt-[1px]">
+                                  <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90">
+                                    {skill.name}
+                                  </div>
+                                  {skill.description && (
+                                    <div
+                                      className="overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68 whitespace-normal"
+                                      style={{
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: "vertical",
+                                      }}
+                                    >
+                                      {skill.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+
+                              <div className="mr-1 flex shrink-0 items-center gap-0.5 py-1">
+                                {isOrganizing && (
+                                  <SkillMovePopover
+                                    groups={scopedGroups}
+                                    currentGroupId={currentGroupId}
+                                    onMoveToGroup={(groupId) =>
+                                      moveSkillToGroup(
+                                        skill.name,
+                                        groupId,
+                                        group.source,
+                                        group.source === "project" ? activeProjectId : null
+                                      )
+                                    }
+                                    onCreateGroup={() => openCreateDialog(group.source, skill)}
+                                  />
+                                )}
+
+                                <button
+                                  onClick={() => copyToClipboard(skill.name)}
+                                  className="flex h-[26px] w-[26px] items-center justify-center rounded-md text-muted-foreground/80 transition-colors hover:bg-background hover:text-foreground"
+                                  title={`Copy /${skill.name}`}
+                                >
+                                  {copiedSkill === skill.name ? (
+                                    <Check className="h-3.5 w-3.5 text-green-500" />
+                                  ) : (
+                                    <Copy className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+
+      <SkillGroupDialog
+        open={dialogState !== null}
+        onOpenChange={(open) => {
+          if (!open) setDialogState(null);
+        }}
+        title={
+          dialogState?.mode === "rename"
+            ? "Rename Group"
+            : "Create Skill Group"
+        }
+        description={
+          dialogState?.mode === "rename"
+            ? "Update the group name shown in the sidebar."
+            : "Create a group to organize skills in the sidebar."
+        }
+        submitLabel={dialogState?.mode === "rename" ? "Save" : "Create"}
+        initialValue={dialogState?.mode === "rename" ? dialogState.initialValue : ""}
+        existingNames={
+          dialogState?.source === "project" ? projectGroupNames : globalGroupNames
+        }
+        onSubmit={handleDialogSubmit}
+      />
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import { KanbanBoard } from "@/components/board/kanban-board";
 import { CardModal } from "@/components/board/card-modal";
 import { DocumentEditor } from "@/components/editor/document-editor";
+import { SkillViewer } from "@/components/editor/skill-viewer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
@@ -29,6 +30,7 @@ export default function Home() {
     searchQuery,
     setSearchQuery,
     isDocumentEditorOpen,
+    isSkillViewerOpen,
     activeProjectId,
     projects,
   } = useKanbanStore();
@@ -68,7 +70,7 @@ export default function Home() {
 
   // Polling: Refresh data every 10 seconds (skip when modal/editor is open to prevent form reset)
   useEffect(() => {
-    if (isModalOpen || isDocumentEditorOpen) return;
+    if (isModalOpen || isDocumentEditorOpen || isSkillViewerOpen) return;
 
     const interval = setInterval(() => {
       // Skip the poll while any run is locally in-flight: the action handler
@@ -92,12 +94,17 @@ export default function Home() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen]);
 
   // Focus refresh: Refresh when tab becomes visible (skip when modal/editor is open)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && !isModalOpen && !isDocumentEditorOpen) {
+      if (
+        document.visibilityState === "visible" &&
+        !isModalOpen &&
+        !isDocumentEditorOpen &&
+        !isSkillViewerOpen
+      ) {
         fetchCards();
         fetchSkills();
         fetchMcps();
@@ -110,7 +117,7 @@ export default function Home() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen]);
 
   // Get active project name for display
   const activeProject = projects.find((p) => p.id === activeProjectId);
@@ -184,6 +191,7 @@ export default function Home() {
       {/* Modals */}
       {isModalOpen && <CardModal />}
       {isDocumentEditorOpen && <DocumentEditor />}
+      {isSkillViewerOpen && <SkillViewer />}
     </div>
   );
 }

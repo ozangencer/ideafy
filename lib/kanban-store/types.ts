@@ -9,8 +9,11 @@ import {
   MentionData,
   Project,
   SectionType,
+  SkillListItem,
+  SkillPreview,
   Status,
   UnifiedItem,
+  UserSkillGroup,
 } from "../types";
 
 export interface KanbanStore {
@@ -33,10 +36,17 @@ export interface KanbanStore {
   documentContent: string;
   isDocumentEditorOpen: boolean;
   expandedDocFolders: string[];
+  skillItems: SkillListItem[];
+  projectSkillItems: SkillListItem[];
+  selectedSkill: SkillPreview | null;
+  isSkillViewerOpen: boolean;
+  globalSkillGroups: UserSkillGroup[];
+  projectSkillGroups: Record<string, UserSkillGroup[]>;
 
   // Sidebar state
   isSidebarCollapsed: boolean;
   sidebarWidth: number;
+  collapsedSkillGroups: string[];
 
   // Column collapse state
   collapsedColumns: Status[];
@@ -119,6 +129,7 @@ export interface KanbanStore {
   // Sidebar actions
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
+  toggleSkillGroupCollapse: (groupKey: string) => void;
 
   // Column collapse actions
   toggleColumnCollapse: (columnId: Status) => void;
@@ -133,6 +144,30 @@ export interface KanbanStore {
 
   // Skills, MCPs, Agents & Plugins actions
   fetchSkills: () => Promise<void>;
+  openSkillPreview: (skill: SkillListItem) => Promise<void>;
+  closeSkillViewer: () => void;
+  createSkillGroup: (
+    name: string,
+    source: "global" | "project",
+    projectId?: string | null
+  ) => string | null;
+  renameSkillGroup: (
+    groupId: string,
+    name: string,
+    source: "global" | "project",
+    projectId?: string | null
+  ) => void;
+  deleteSkillGroup: (
+    groupId: string,
+    source: "global" | "project",
+    projectId?: string | null
+  ) => void;
+  moveSkillToGroup: (
+    skillName: string,
+    groupId: string | null,
+    source: "global" | "project",
+    projectId?: string | null
+  ) => void;
   fetchMcps: () => Promise<void>;
   fetchAgents: () => Promise<void>;
   fetchPlugins: () => Promise<void>;

@@ -85,6 +85,10 @@ export const createProjectsSlice: StoreSlice<
           : state.cards,
         activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
         documents: state.activeProjectId === id ? [] : state.documents,
+        projectSkillItems: state.activeProjectId === id ? [] : state.projectSkillItems,
+        projectSkillGroups: Object.fromEntries(
+          Object.entries(state.projectSkillGroups).filter(([projectId]) => projectId !== id)
+        ),
       }));
     } catch (error) {
       console.error("Failed to delete project:", error);
@@ -98,6 +102,9 @@ export const createProjectsSlice: StoreSlice<
       selectedDocument: null,
       documentContent: "",
       isDocumentEditorOpen: false,
+      projectSkillItems: [],
+      selectedSkill: null,
+      isSkillViewerOpen: false,
     });
     if (projectId) {
       get().fetchDocuments(projectId);

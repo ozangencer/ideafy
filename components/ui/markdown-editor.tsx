@@ -12,6 +12,7 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
+import { buildSkillGroupUnifiedItems } from "@/lib/skills/grouping";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
@@ -42,7 +43,19 @@ export function MarkdownEditor({
   const isUpdatingFromExternal = useRef(false);
   const lastSyncedValue = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { cards, projects, activeProjectId, documents, skills, mcps, agents } = useKanbanStore();
+  const {
+    cards,
+    projects,
+    activeProjectId,
+    documents,
+    skills,
+    mcps,
+    agents,
+    skillItems,
+    projectSkillItems,
+    globalSkillGroups,
+    projectSkillGroups,
+  } = useKanbanStore();
 
   // Local state for project-specific skills/mcps/agents
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
@@ -97,8 +110,64 @@ export function MarkdownEditor({
 
   // Create unified items getter that merges global + card's project items
   const getUnifiedItems = useCallback(() => {
-    const items: Array<{ id: string; label: string; type: "skill" | "mcp" | "agent" | "plugin" }> = [];
+    const items: Array<{
+      id: string;
+      label: string;
+      type: "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
+      description?: string;
+      children?: Array<{
+        id: string;
+        label: string;
+        type: "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
+        description?: string;
+      }>;
+    }> = [];
     const addedIds = new Set<string>();
+    const effectiveProjectId = projectId || activeProjectId;
+
+    const allGlobalSkillItems = skillItems.length
+      ? skillItems
+      : Array.from(new Set(skills)).map((name) => ({
+          name,
+          title: name,
+          path: "",
+          group: null,
+          description: null,
+          source: "global" as const,
+        }));
+
+    const allProjectSkillItems = projectSkillItems.length
+      ? projectSkillItems
+      : Array.from(new Set(localProjectSkills)).map((name) => ({
+          name,
+          title: name,
+          path: "",
+          group: null,
+          description: null,
+          source: "project" as const,
+        }));
+
+    buildSkillGroupUnifiedItems(allGlobalSkillItems, globalSkillGroups, "global").forEach(
+      (group) => {
+        if (!addedIds.has(`skillGroup-${group.id}`)) {
+          addedIds.add(`skillGroup-${group.id}`);
+          items.push(group);
+        }
+      }
+    );
+
+    if (effectiveProjectId) {
+      buildSkillGroupUnifiedItems(
+        allProjectSkillItems,
+        projectSkillGroups[effectiveProjectId] || [],
+        "project"
+      ).forEach((group) => {
+        if (!addedIds.has(`skillGroup-${group.id}`)) {
+          addedIds.add(`skillGroup-${group.id}`);
+          items.push(group);
+        }
+      });
+    }
 
     // Merge global + project skills
     const allSkills = Array.from(new Set([...skills, ...localProjectSkills]));
@@ -128,7 +197,20 @@ export function MarkdownEditor({
     });
 
     return items;
-  }, [skills, mcps, agents, localProjectSkills, localProjectMcps, localProjectAgents]);
+  }, [
+    activeProjectId,
+    agents,
+    globalSkillGroups,
+    localProjectAgents,
+    localProjectMcps,
+    localProjectSkills,
+    mcps,
+    projectId,
+    projectSkillGroups,
+    projectSkillItems,
+    skillItems,
+    skills,
+  ]);
 
   // Callback to get current documents (used by suggestion)
   const getDocuments = useCallback(() => documentsRef.current, []);

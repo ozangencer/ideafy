@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { listProjectSkills } from "@/lib/mcp-skills-installer";
+import { getActiveProvider } from "@/lib/platform/active";
+import { listProjectSkillItems } from "@/lib/skills/catalog";
 
 // List skills in project's .claude/commands/
 export async function GET(
@@ -22,13 +23,15 @@ export async function GET(
     }
 
     if (!project.folderPath) {
-      return NextResponse.json({ skills: [] });
+      return NextResponse.json({ skills: [], items: [] });
     }
 
-    const skills = listProjectSkills(project.folderPath);
-    return NextResponse.json({ skills });
+    const provider = getActiveProvider();
+    const items = listProjectSkillItems(project.folderPath, provider.id);
+    const skills = items.map((item) => item.name);
+    return NextResponse.json({ skills, items });
   } catch (error) {
     console.error("Failed to list project skills:", error);
-    return NextResponse.json({ skills: [] });
+    return NextResponse.json({ skills: [], items: [] });
   }
 }

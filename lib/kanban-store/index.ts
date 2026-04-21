@@ -36,8 +36,11 @@ export const useKanbanStore = create<KanbanStore>()(
         collapsedColumns: state.collapsedColumns,
         isSidebarCollapsed: state.isSidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
+        collapsedSkillGroups: state.collapsedSkillGroups,
         completedFilter: state.completedFilter,
         expandedDocFolders: state.expandedDocFolders,
+        globalSkillGroups: state.globalSkillGroups,
+        projectSkillGroups: state.projectSkillGroups,
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<KanbanStore>;
@@ -55,17 +58,32 @@ export const useKanbanStore = create<KanbanStore>()(
           persisted.sidebarWidth >= 200 && persisted.sidebarWidth <= 400
           ? persisted.sidebarWidth
           : currentState.sidebarWidth;
+        const collapsedSkillGroups = Array.isArray(persisted.collapsedSkillGroups)
+          ? persisted.collapsedSkillGroups
+          : currentState.collapsedSkillGroups;
         // Validate expandedDocFolders - ensure it's an array
         const expandedDocFolders = Array.isArray(persisted.expandedDocFolders)
           ? persisted.expandedDocFolders
           : currentState.expandedDocFolders;
+        const globalSkillGroups = Array.isArray(persisted.globalSkillGroups)
+          ? persisted.globalSkillGroups
+          : currentState.globalSkillGroups;
+        const projectSkillGroups =
+          persisted.projectSkillGroups &&
+          typeof persisted.projectSkillGroups === "object" &&
+          !Array.isArray(persisted.projectSkillGroups)
+            ? persisted.projectSkillGroups
+            : currentState.projectSkillGroups;
         return {
           ...currentState,
           ...persisted,
           collapsedColumns,
           completedFilter,
           sidebarWidth,
+          collapsedSkillGroups,
           expandedDocFolders,
+          globalSkillGroups,
+          projectSkillGroups,
         };
       },
     }
