@@ -95,7 +95,7 @@
     "@types/uuid": "10.0.0",
     "autoprefixer": "^10.4.23",
     "drizzle-kit": "^0.31.8",
-    "electron": "^33.0.0",
+    "electron": "^35.7.5",
     "electron-builder": "^25.1.8",
     "eslint": "8.57.1",
     "eslint-config-next": "^14.2.33",
