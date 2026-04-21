@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "# ideafy-pre-edit-check — deny edits that would land on the wrong branch for the bound card. Fails open if Ideafy is down.\ncurl -sf -X POST -H \"Content-Type: application/json\" --data-binary @- \"http://localhost:${IDEAFY_PORT:-3030}/api/pre-edit-check\" 2>/dev/null || true"
+            "command": "# ideafy-pre-edit-check\ncurl -sf -X POST -H \"Content-Type: application/json\" --data-binary @- \"http://localhost:${IDEAFY_PORT:-3030}/api/pre-edit-check\" 2>/dev/null || true"
           }
         ]
       }
