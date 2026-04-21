@@ -71,6 +71,17 @@ export default function Home() {
     if (isModalOpen || isDocumentEditorOpen) return;
 
     const interval = setInterval(() => {
+      // Skip the poll while any run is locally in-flight: the action handler
+      // refreshes on completion, and polling mid-run risks clobbering
+      // optimistic spinner state (defense-in-depth with fetchCards merge).
+      const s = useKanbanStore.getState();
+      if (
+        s.startingCardIds.length > 0 ||
+        s.quickFixingCardIds.length > 0 ||
+        s.evaluatingCardIds.length > 0
+      ) {
+        return;
+      }
       fetchCards();
       fetchSkills();
       fetchMcps();

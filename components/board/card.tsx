@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, getDisplayId, COLUMNS } from "@/lib/types";
@@ -110,16 +110,20 @@ interface TaskCardProps {
 
 type Phase = "planning" | "implementation" | "retest";
 
-function detectPhase(card: Card): Phase {
+function detectPhase(
+  card: Card,
+  solutionText: string,
+  testText: string
+): Phase {
   // In Progress sütunundaki kartlar için direkt implementation
   if (card.status === "progress") {
-    const hasTests = card.testScenarios && stripHtml(card.testScenarios) !== "";
+    const hasTests = !!testText;
     return hasTests ? "retest" : "implementation";
   }
 
   // Diğer sütunlar için mevcut mantık
-  const hasSolution = card.solutionSummary && stripHtml(card.solutionSummary) !== "";
-  const hasTests = card.testScenarios && stripHtml(card.testScenarios) !== "";
+  const hasSolution = !!solutionText;
+  const hasTests = !!testText;
 
   if (!hasSolution) return "planning";
   if (!hasTests) return "implementation";
@@ -146,8 +150,30 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
   }
 }
 
-export function TaskCard({ card, isDragging = false }: TaskCardProps) {
-  const { selectCard, openModal, projects, startTask, startingCardIds, openTerminal, openIdeationTerminal, openTestTerminal, moveCard, deleteCard, quickFixTask, quickFixingCardIds, evaluateIdea, evaluatingCardIds, lockedCardIds, unlockCard, updateCard, settings, startDevServer, stopDevServer } = useKanbanStore();
+function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
+  // Narrow selectors: boolean membership checks re-render this card only when
+  // ITS own flag flips, instead of on every store change (e.g. fetchCards
+  // replacing the cards array every 10s). Critical on boards with heavy cards.
+  const selectCard = useKanbanStore((s) => s.selectCard);
+  const openModal = useKanbanStore((s) => s.openModal);
+  const projects = useKanbanStore((s) => s.projects);
+  const startTask = useKanbanStore((s) => s.startTask);
+  const startingLocal = useKanbanStore((s) => s.startingCardIds.includes(card.id));
+  const openTerminal = useKanbanStore((s) => s.openTerminal);
+  const openIdeationTerminal = useKanbanStore((s) => s.openIdeationTerminal);
+  const openTestTerminal = useKanbanStore((s) => s.openTestTerminal);
+  const moveCard = useKanbanStore((s) => s.moveCard);
+  const deleteCard = useKanbanStore((s) => s.deleteCard);
+  const quickFixTask = useKanbanStore((s) => s.quickFixTask);
+  const quickFixingLocal = useKanbanStore((s) => s.quickFixingCardIds.includes(card.id));
+  const evaluateIdea = useKanbanStore((s) => s.evaluateIdea);
+  const evaluatingLocal = useKanbanStore((s) => s.evaluatingCardIds.includes(card.id));
+  const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
+  const unlockCard = useKanbanStore((s) => s.unlockCard);
+  const updateCard = useKanbanStore((s) => s.updateCard);
+  const settings = useKanbanStore((s) => s.settings);
+  const startDevServer = useKanbanStore((s) => s.startDevServer);
+  const stopDevServer = useKanbanStore((s) => s.stopDevServer);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -160,21 +186,28 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
     id: card.id,
   });
 
+  // Heavy HTML parses — cache per-string so board-wide re-renders don't re-strip
+  // hundreds of KB of markup on every tick.
+  const descriptionText = useMemo(() => stripHtml(card.description), [card.description]);
+  const solutionSummaryText = useMemo(() => stripHtml(card.solutionSummary), [card.solutionSummary]);
+  const testScenariosText = useMemo(() => stripHtml(card.testScenarios), [card.testScenarios]);
+  const aiOpinionText = useMemo(() => stripHtml(card.aiOpinion), [card.aiOpinion]);
+
   // Check both local state AND persisted processingType from database
-  const isStarting = startingCardIds.includes(card.id) || card.processingType === "autonomous";
-  const isQuickFixing = quickFixingCardIds.includes(card.id) || card.processingType === "quick-fix";
-  const isEvaluating = evaluatingCardIds.includes(card.id) || card.processingType === "evaluate";
-  const isLocked = lockedCardIds.includes(card.id) || !!card.processingType;
+  const isStarting = startingLocal || card.processingType === "autonomous";
+  const isQuickFixing = quickFixingLocal || card.processingType === "quick-fix";
+  const isEvaluating = evaluatingLocal || card.processingType === "evaluate";
+  const isLocked = lockedLocal || !!card.processingType;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
   const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "test" && card.status !== "ideation");
   const canQuickFix = card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
   const canEvaluate = card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
-  const canTestTogether = card.status === "test" && !!(card.testScenarios && stripHtml(card.testScenarios) !== "" && (card.projectId || card.projectFolder));
-  const hasAiOpinion = !!stripHtml(card.aiOpinion);
+  const canTestTogether = card.status === "test" && !!(card.testScenarios && testScenariosText !== "" && (card.projectId || card.projectFolder));
+  const hasAiOpinion = !!aiOpinionText;
 
   // Detect current phase for dynamic tooltips
-  const phase = detectPhase(card);
+  const phase = detectPhase(card, solutionSummaryText, testScenariosText);
   const phaseLabels = getPhaseLabels(phase);
 
   // Get project info for worktree path calculation
@@ -440,7 +473,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
 
             {card.description && (
               <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                {stripHtml(card.description)}
+                {descriptionText}
               </p>
             )}
 
@@ -673,7 +706,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     </TooltipContent>
                   </Tooltip>
                 )}
-                {stripHtml(card.solutionSummary) && !isBackgroundProcessing && (
+                {solutionSummaryText && !isBackgroundProcessing && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="p-1 rounded bg-green-500/15 text-green-500">
@@ -683,7 +716,7 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
                     <TooltipContent side="top">Has solution</TooltipContent>
                   </Tooltip>
                 )}
-                {stripHtml(card.testScenarios) && !isBackgroundProcessing && (() => {
+                {testScenariosText && !isBackgroundProcessing && (() => {
                   const progress = parseTestProgress(card.testScenarios);
                   const isComplete = progress && progress.checked === progress.total;
                   return (
@@ -970,3 +1003,15 @@ export function TaskCard({ card, isDragging = false }: TaskCardProps) {
     </>
   );
 }
+
+// Memoized: skip re-render when the card's data fingerprint (updatedAt) and
+// drag state are unchanged. Zustand subscriptions inside TaskCardImpl still
+// trigger their own re-renders when spinner flags flip.
+export const TaskCard = memo(TaskCardImpl, (prev, next) => {
+  return (
+    prev.isDragging === next.isDragging &&
+    prev.card.id === next.card.id &&
+    prev.card.updatedAt === next.card.updatedAt &&
+    prev.card.processingType === next.card.processingType
+  );
+});

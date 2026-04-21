@@ -1,3 +1,5 @@
+import { flushSync } from "react-dom";
+
 import { Card } from "../../types";
 import {
   addUniqueId,
@@ -7,6 +9,17 @@ import {
   updateCardById,
 } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
+
+// Force React to commit the spinner-on state synchronously. Without this, a
+// busy render (heavy markdown cards) can collapse the "starting" frame into
+// later updates, leaving the spinner invisible until the user refreshes.
+const flushSpinnerOn = (runSet: () => void) => {
+  if (typeof window === "undefined") {
+    runSet();
+    return;
+  }
+  flushSync(runSet);
+};
 
 export const createClaudeSlice: StoreSlice<
   Pick<
@@ -32,10 +45,19 @@ export const createClaudeSlice: StoreSlice<
   lockedCardIds: [],
 
   startTask: async (cardId) => {
-    set((state) => ({
-      startingCardIds: addUniqueId(state.startingCardIds, cardId),
-      lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
-    }));
+    // Optimistic: write processingType locally so the spinner survives a
+    // fetchCards poll landing between trigger and backend DB write.
+    flushSpinnerOn(() =>
+      set((state) => ({
+        startingCardIds: addUniqueId(state.startingCardIds, cardId),
+        lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType == null
+            ? { ...card, processingType: "autonomous" }
+            : card
+        ),
+      }))
+    );
 
     try {
       // Start the API call (process starts immediately on backend)
@@ -61,6 +83,11 @@ export const createClaudeSlice: StoreSlice<
         set((state) => ({
           startingCardIds: removeId(state.startingCardIds, cardId),
           lockedCardIds: removeId(state.lockedCardIds, cardId),
+          cards: state.cards.map((card) =>
+            card.id === cardId && card.processingType === "autonomous"
+              ? { ...card, processingType: null }
+              : card
+          ),
         }));
         return { success: false, error: data.error || "Failed to start task" };
       }
@@ -72,6 +99,7 @@ export const createClaudeSlice: StoreSlice<
           const updates: Partial<Card> = {
             status: data.newStatus,
             updatedAt: nowIso(),
+            processingType: null,
           };
 
           if (data.phase === "planning") {
@@ -101,6 +129,11 @@ export const createClaudeSlice: StoreSlice<
       set((state) => ({
         startingCardIds: removeId(state.startingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType === "autonomous"
+            ? { ...card, processingType: null }
+            : card
+        ),
       }));
       // Refresh background processes on error too
       get().fetchBackgroundProcesses();
@@ -231,10 +264,17 @@ export const createClaudeSlice: StoreSlice<
   },
 
   quickFixTask: async (cardId) => {
-    set((state) => ({
-      quickFixingCardIds: addUniqueId(state.quickFixingCardIds, cardId),
-      lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
-    }));
+    flushSpinnerOn(() =>
+      set((state) => ({
+        quickFixingCardIds: addUniqueId(state.quickFixingCardIds, cardId),
+        lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType == null
+            ? { ...card, processingType: "quick-fix" }
+            : card
+        ),
+      }))
+    );
 
     // Poll while the request is in-flight so the banner catches the process
     // as soon as it spawns (worktree setup may delay the spawn by several seconds).
@@ -262,6 +302,11 @@ export const createClaudeSlice: StoreSlice<
         set((state) => ({
           quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
           lockedCardIds: removeId(state.lockedCardIds, cardId),
+          cards: state.cards.map((card) =>
+            card.id === cardId && card.processingType === "quick-fix"
+              ? { ...card, processingType: null }
+              : card
+          ),
         }));
         return { success: false, error: data.error || "Failed to quick fix" };
       }
@@ -271,6 +316,7 @@ export const createClaudeSlice: StoreSlice<
           status: data.newStatus,
           solutionSummary: data.solutionSummary,
           testScenarios: data.testScenarios,
+          processingType: null,
           updatedAt: nowIso(),
         }),
         quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
@@ -287,6 +333,11 @@ export const createClaudeSlice: StoreSlice<
       set((state) => ({
         quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType === "quick-fix"
+            ? { ...card, processingType: null }
+            : card
+        ),
       }));
       // Refresh background processes on error too
       get().fetchBackgroundProcesses();
@@ -298,10 +349,17 @@ export const createClaudeSlice: StoreSlice<
   },
 
   evaluateIdea: async (cardId) => {
-    set((state) => ({
-      evaluatingCardIds: addUniqueId(state.evaluatingCardIds, cardId),
-      lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
-    }));
+    flushSpinnerOn(() =>
+      set((state) => ({
+        evaluatingCardIds: addUniqueId(state.evaluatingCardIds, cardId),
+        lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType == null
+            ? { ...card, processingType: "evaluate" }
+            : card
+        ),
+      }))
+    );
 
     // Poll while the request is in-flight so the banner catches the process
     // as soon as it spawns (CLI startup may delay the spawn by several seconds).
@@ -330,6 +388,11 @@ export const createClaudeSlice: StoreSlice<
         set((state) => ({
           evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
           lockedCardIds: removeId(state.lockedCardIds, cardId),
+          cards: state.cards.map((card) =>
+            card.id === cardId && card.processingType === "evaluate"
+              ? { ...card, processingType: null }
+              : card
+          ),
         }));
         return { success: false, error: data.error || "Failed to evaluate idea" };
       }
@@ -341,6 +404,7 @@ export const createClaudeSlice: StoreSlice<
           const updates: Partial<Card> = {
             aiOpinion: data.aiOpinion,
             aiVerdict: data.aiVerdict ?? null,
+            processingType: null,
             updatedAt: nowIso(),
           };
 
@@ -368,6 +432,11 @@ export const createClaudeSlice: StoreSlice<
       set((state) => ({
         evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType === "evaluate"
+            ? { ...card, processingType: null }
+            : card
+        ),
       }));
       // Refresh background processes on error too
       get().fetchBackgroundProcesses();

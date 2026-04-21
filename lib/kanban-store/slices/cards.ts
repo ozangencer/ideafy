@@ -70,16 +70,35 @@ export const createCardsSlice: StoreSlice<
       const response = await fetch("/api/cards");
       const cards = await parseJson<Card[]>(response);
 
+      // Defend optimistic spinner state: if a run is locally in-flight
+      // (id is in startingCardIds/quickFixingCardIds/evaluatingCardIds) but
+      // the server hasn't yet persisted processingType, keep the local value
+      // so the spinner doesn't flicker off mid-run.
+      const { startingCardIds, quickFixingCardIds, evaluatingCardIds, cards: prevCards } = get();
+      const prevById = new Map(prevCards.map((c) => [c.id, c]));
+      const mergedCards = cards.map((serverCard) => {
+        if (serverCard.processingType) return serverCard;
+        const prev = prevById.get(serverCard.id);
+        if (!prev?.processingType) return serverCard;
+        const stillStarting = startingCardIds.includes(serverCard.id) && prev.processingType === "autonomous";
+        const stillQuickFixing = quickFixingCardIds.includes(serverCard.id) && prev.processingType === "quick-fix";
+        const stillEvaluating = evaluatingCardIds.includes(serverCard.id) && prev.processingType === "evaluate";
+        if (stillStarting || stillQuickFixing || stillEvaluating) {
+          return { ...serverCard, processingType: prev.processingType };
+        }
+        return serverCard;
+      });
+
       const currentSelectedCard = get().selectedCard;
       let newSelectedCard = currentSelectedCard;
       if (currentSelectedCard) {
-        const updatedCard = cards.find((c) => c.id === currentSelectedCard.id);
+        const updatedCard = mergedCards.find((c) => c.id === currentSelectedCard.id);
         if (updatedCard) {
           newSelectedCard = updatedCard;
         }
       }
 
-      set({ cards, selectedCard: newSelectedCard, isLoading: false });
+      set({ cards: mergedCards, selectedCard: newSelectedCard, isLoading: false });
     } catch (error) {
       console.error("Failed to fetch cards:", error);
       set({ isLoading: false });
