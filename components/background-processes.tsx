@@ -182,24 +182,16 @@ export function BackgroundProcesses() {
     runningProcessesRef.current = currentRunning;
   }, [runningProcesses, toast]);
 
-  // Poll when any process is running (including chat — the store still needs to
-  // reflect its completion so the in-panel "thinking" placeholder clears).
-  const hasRunning = backgroundProcesses.some((p) => p.status === "running");
-
+  // Always-on heartbeat poll: avoids a chicken-and-egg where local state says
+  // "nothing running" but the server actually has a process (spawned via MCP,
+  // another session, or after a page reload mid-run). Cheap: one request / 10s.
   useEffect(() => {
-    // Initial fetch
     fetchBackgroundProcesses();
-  }, [fetchBackgroundProcesses]);
-
-  useEffect(() => {
-    if (!hasRunning) return;
-
     const interval = setInterval(() => {
       fetchBackgroundProcesses();
-    }, 5000);
-
+    }, 10000);
     return () => clearInterval(interval);
-  }, [hasRunning, fetchBackgroundProcesses]);
+  }, [fetchBackgroundProcesses]);
 
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;

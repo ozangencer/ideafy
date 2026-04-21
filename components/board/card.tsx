@@ -169,6 +169,24 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
   const evaluateIdea = useKanbanStore((s) => s.evaluateIdea);
   const evaluatingLocal = useKanbanStore((s) => s.evaluatingCardIds.includes(card.id));
   const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
+  // Third signal: the server-side backgroundProcesses list. Covers the edge
+  // case where neither local trigger state nor persisted processingType
+  // reflects an in-flight run (e.g. spawn from MCP / another session).
+  const autonomousInBg = useKanbanStore((s) =>
+    s.backgroundProcesses.some(
+      (p) => p.cardId === card.id && p.processType === "autonomous" && p.status === "running"
+    )
+  );
+  const quickFixInBg = useKanbanStore((s) =>
+    s.backgroundProcesses.some(
+      (p) => p.cardId === card.id && p.processType === "quick-fix" && p.status === "running"
+    )
+  );
+  const evaluateInBg = useKanbanStore((s) =>
+    s.backgroundProcesses.some(
+      (p) => p.cardId === card.id && p.processType === "evaluate" && p.status === "running"
+    )
+  );
   const unlockCard = useKanbanStore((s) => s.unlockCard);
   const updateCard = useKanbanStore((s) => s.updateCard);
   const settings = useKanbanStore((s) => s.settings);
@@ -193,10 +211,12 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
   const testScenariosText = useMemo(() => stripHtml(card.testScenarios), [card.testScenarios]);
   const aiOpinionText = useMemo(() => stripHtml(card.aiOpinion), [card.aiOpinion]);
 
-  // Check both local state AND persisted processingType from database
-  const isStarting = startingLocal || card.processingType === "autonomous";
-  const isQuickFixing = quickFixingLocal || card.processingType === "quick-fix";
-  const isEvaluating = evaluatingLocal || card.processingType === "evaluate";
+  // Three independent signals converge so the spinner is robust: local
+  // trigger state (instant), persisted processingType (DB), and the
+  // server-side backgroundProcesses list (catches cross-session spawns).
+  const isStarting = startingLocal || card.processingType === "autonomous" || autonomousInBg;
+  const isQuickFixing = quickFixingLocal || card.processingType === "quick-fix" || quickFixInBg;
+  const isEvaluating = evaluatingLocal || card.processingType === "evaluate" || evaluateInBg;
   const isLocked = lockedLocal || !!card.processingType;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
