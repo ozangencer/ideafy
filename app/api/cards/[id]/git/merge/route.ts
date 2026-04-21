@@ -9,9 +9,24 @@ import {
   getDefaultBranch,
   git,
 } from "@/lib/git";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, realpathSync } from "fs";
+import path from "path";
 import { stopDevServer, isProcessRunning } from "@/lib/dev-server";
 import type { Status } from "@/lib/types";
+
+function isCwdInsideWorktree(worktreePath: string): boolean {
+  const resolve = (p: string) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  const cwd = resolve(process.cwd());
+  const wt = resolve(worktreePath);
+  if (cwd === wt) return true;
+  return cwd.startsWith(wt + path.sep);
+}
 
 export async function POST(
   request: NextRequest,
@@ -51,6 +66,21 @@ export async function POST(
   if (!card.gitBranchName) {
     return NextResponse.json(
       { error: "Card has no git branch to merge" },
+      { status: 400 }
+    );
+  }
+
+  // Guard: refuse to merge when the request is served from inside the card's
+  // own worktree. Merge would kill this process and delete the directory it
+  // serves from, producing an opaque failure mid-flight.
+  if (card.gitWorktreePath && isCwdInsideWorktree(card.gitWorktreePath)) {
+    return NextResponse.json(
+      {
+        error:
+          "Merge & Complete cannot run from this card's isolated dev server. Open the main Ideafy instance (http://localhost:3030) and merge from there.",
+        ranFromWorktree: true,
+        worktreePath: card.gitWorktreePath,
+      },
       { status: 400 }
     );
   }
