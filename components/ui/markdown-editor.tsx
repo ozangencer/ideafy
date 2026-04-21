@@ -272,18 +272,42 @@ export function MarkdownEditor({
           ? card.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)
           : "";
 
+        // Build the tooltip via DOM APIs instead of innerHTML. card.title,
+        // project.name, and the description can originate from MCP callers
+        // (prompt-injected AI agents) with attacker-controlled markup.
+        // innerHTML here was a stored-XSS sink → RCE in the local-app origin.
         const content = document.createElement("div");
         content.className = "card-preview-tooltip";
         content.style.maxWidth = "320px";
-        content.innerHTML = `
-          <div class="tooltip-title">${displayId ? `<span class="tooltip-id">${displayId}</span>` : ""}${card.title}</div>
-          <div class="tooltip-meta">${card.status.replace("progress", "in progress")}${project ? ` · ${project.name}` : ""}</div>
-          ${descriptionPreview ? `<div class="tooltip-description">${descriptionPreview}${card.description.length > 120 ? "..." : ""}</div>` : ""}
-        `;
+
+        const titleDiv = document.createElement("div");
+        titleDiv.className = "tooltip-title";
+        if (displayId) {
+          const idSpan = document.createElement("span");
+          idSpan.className = "tooltip-id";
+          idSpan.textContent = displayId;
+          titleDiv.appendChild(idSpan);
+        }
+        titleDiv.append(card.title);
+        content.appendChild(titleDiv);
+
+        const metaDiv = document.createElement("div");
+        metaDiv.className = "tooltip-meta";
+        const statusText = card.status.replace("progress", "in progress");
+        metaDiv.textContent = project ? `${statusText} · ${project.name}` : statusText;
+        content.appendChild(metaDiv);
+
+        if (descriptionPreview) {
+          const descDiv = document.createElement("div");
+          descDiv.className = "tooltip-description";
+          descDiv.textContent =
+            descriptionPreview + (card.description.length > 120 ? "..." : "");
+          content.appendChild(descDiv);
+        }
 
         tippy(mention as HTMLElement, {
           content,
-          allowHTML: true,
+          allowHTML: false,
           placement: "top",
           theme: "card-preview",
           delay: [300, 0],

@@ -178,6 +178,32 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 // ============================================================================
+// Input validation
+// ============================================================================
+
+// Card titles render into tooltips / mention previews that feed the DOM.
+// Angle brackets and null bytes have no place in a kanban title and are the
+// exact primitives needed for a stored-XSS payload if a future caller forgets
+// to escape on render. Reject at the MCP boundary as defense-in-depth.
+function assertValidCardTitle(title: unknown): asserts title is string {
+  if (typeof title !== "string") {
+    throw new Error("Card title must be a string");
+  }
+  const trimmed = title.trim();
+  if (!trimmed) {
+    throw new Error("Card title cannot be empty");
+  }
+  if (trimmed.length > 500) {
+    throw new Error("Card title too long (max 500 characters)");
+  }
+  if (/[<>\0]/.test(title)) {
+    throw new Error(
+      "Card title cannot contain '<', '>' or null bytes (HTML injection guard)"
+    );
+  }
+}
+
+// ============================================================================
 // Card ID Resolution Helper
 // ============================================================================
 
@@ -596,6 +622,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           useWorktree: "use_worktree",
         };
 
+        if (updates.title !== undefined) {
+          assertValidCardTitle(updates.title);
+        }
+
         const setClauses: string[] = ["updated_at = ?"];
         const values: unknown[] = [new Date().toISOString()];
 
@@ -771,6 +801,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           priority?: string;
           projectId?: string | null;
         };
+
+        assertValidCardTitle(title);
 
         const now = new Date().toISOString();
         let taskNumber: number | null = null;
