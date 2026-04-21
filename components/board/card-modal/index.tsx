@@ -498,12 +498,6 @@ export function CardModal() {
       if (!response.ok) {
         const error = await response.json();
 
-        if (error.uncommittedInMain) {
-          setCommitFirstScope("main");
-          setShowCommitFirstDialog(true);
-          return;
-        }
-
         if (error.rebaseConflict) {
           setConflictInfo({
             conflictFiles: error.conflictFiles || [],
@@ -513,6 +507,13 @@ export function CardModal() {
           });
           setShowConflictDialog(true);
           await useKanbanStore.getState().fetchCards();
+          if (error.stashRestoreWarning) {
+            toast({
+              variant: "destructive",
+              title: "Stash Restore Warning",
+              description: error.stashRestoreWarning,
+            });
+          }
           return;
         }
 
@@ -527,14 +528,30 @@ export function CardModal() {
           title: "Merge Failed",
           description: error.error || "An error occurred during merge",
         });
+        if (error.stashRestoreWarning) {
+          toast({
+            variant: "destructive",
+            title: "Stash Restore Warning",
+            description: error.stashRestoreWarning,
+          });
+        }
         return;
       }
 
+      const data = await response.json().catch(() => ({}));
       await useKanbanStore.getState().fetchCards();
-      toast({
-        title: "Branch Merged",
-        description: "Successfully merged and moved to Completed",
-      });
+      if (data?.stashRestoreWarning) {
+        toast({
+          variant: "destructive",
+          title: "Branch Merged — Stash Restore Warning",
+          description: data.stashRestoreWarning,
+        });
+      } else {
+        toast({
+          title: "Branch Merged",
+          description: "Successfully merged and moved to Completed",
+        });
+      }
       handleClose();
     } catch (error) {
       toast({

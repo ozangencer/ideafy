@@ -92,6 +92,23 @@ export async function POST(
 
   const commitMessage = `feat(${displayId}): ${card.title}\n\nSquash merge from branch: ${card.gitBranchName}`;
 
+  let mainStashed = false;
+  const stashMessage = `kanban-merge-stash-${id}-${Date.now()}`;
+
+  const restoreMainStash = async (): Promise<string | null> => {
+    if (!mainStashed) return null;
+    try {
+      await git(workingDir, "stash", "pop");
+      mainStashed = false;
+      console.log(`[Merge] Main repo stashed changes restored`);
+      return null;
+    } catch (popError) {
+      const msg = popError instanceof Error ? popError.message : String(popError);
+      console.error(`[Merge] Stash pop failed: ${msg}`);
+      return `Stash could not be restored automatically. Changes remain in stash (message: "${stashMessage}"). Run 'git stash list' and resolve manually.`;
+    }
+  };
+
   try {
     // Step 0: Check if there's an ongoing rebase conflict in worktree
     if (card.gitWorktreePath && existsSync(card.gitWorktreePath)) {
@@ -230,26 +247,20 @@ export async function POST(
       // Continue anyway - we'll let the squash merge handle it
     }
 
-    // Step 3: Check for uncommitted changes in main repo
+    // Step 3: Stash uncommitted changes in main repo (restored after merge)
     const { stdout: mainStatus } = await git(workingDir, "status", "--porcelain");
     if (mainStatus.trim()) {
-      if (commitFirst) {
-        // User requested to commit first
-        console.log(`[Merge] Committing uncommitted changes in main repo...`);
-        await git(workingDir, "add", "-A");
-        await git(workingDir, "commit", "-m", "chore: Work in progress before merge");
-        console.log(`[Merge] Main repo changes committed`);
-      } else {
-        // Return error with option to commit
-        console.log(`[Merge] Uncommitted changes in main repo, asking user`);
-        return NextResponse.json(
-          {
-            error: "There are uncommitted changes in the main repository.",
-            uncommittedInMain: true,
-          },
-          { status: 400 }
-        );
-      }
+      console.log(`[Merge] Stashing uncommitted changes in main repo...`);
+      await git(
+        workingDir,
+        "stash",
+        "push",
+        "--include-untracked",
+        "-m",
+        stashMessage
+      );
+      mainStashed = true;
+      console.log(`[Merge] Main repo changes stashed as "${stashMessage}"`);
     }
 
     // Step 4: Rebase branch onto main (in worktree) to detect conflicts early
@@ -291,6 +302,7 @@ export async function POST(
 
           console.log(`[Merge] Conflict detected in files: ${conflictFiles.join(', ')}`);
 
+          const stashRestoreWarning = await restoreMainStash();
           return NextResponse.json(
             {
               error: "Rebase conflict detected",
@@ -300,6 +312,7 @@ export async function POST(
               branchName: card.gitBranchName,
               cardId: id,
               displayId,
+              stashRestoreWarning,
             },
             { status: 409 }
           );
@@ -312,8 +325,9 @@ export async function POST(
           // Ignore abort errors
         }
 
+        const stashRestoreWarning = await restoreMainStash();
         return NextResponse.json(
-          { error: `Rebase failed: ${errorMsg}` },
+          { error: `Rebase failed: ${errorMsg}`, stashRestoreWarning },
           { status: 500 }
         );
       }
@@ -325,8 +339,9 @@ export async function POST(
 
     if (!result.success) {
       console.error(`[Merge] Failed: ${result.error}`);
+      const stashRestoreWarning = await restoreMainStash();
       return NextResponse.json(
-        { error: `Merge failed: ${result.error}` },
+        { error: `Merge failed: ${result.error}`, stashRestoreWarning },
         { status: 500 }
       );
     }
@@ -378,18 +393,23 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
 
+    const stashRestoreWarning = await restoreMainStash();
+
     return NextResponse.json({
       success: true,
       cardId: id,
       newStatus,
       message: `Branch ${card.gitBranchName} merged, worktree removed, branch deleted`,
+      stashRestoreWarning,
     });
   } catch (error) {
     console.error("[Merge] Error:", error);
+    const stashRestoreWarning = await restoreMainStash();
     return NextResponse.json(
       {
         error: "Merge failed",
         details: error instanceof Error ? error.message : String(error),
+        stashRestoreWarning,
       },
       { status: 500 }
     );

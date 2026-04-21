@@ -78,7 +78,10 @@ export async function POST(
 
   // Detect current phase
   const phase = detectPhase(card);
-  let prompt = buildPhasePrompt(phase, card);
+  const promptDisplayId = project && card.taskNumber
+    ? `${project.idPrefix}-${card.taskNumber}`
+    : null;
+  let prompt = buildPhasePrompt(phase, card, promptDisplayId);
   const newStatus = getNewStatus(phase, card.status as Status);
 
   // Extract and save images for CLI context
