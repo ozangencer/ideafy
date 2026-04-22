@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { COLUMNS, Complexity, Priority, Status, AiPlatform } from "@/lib/types";
 import { STATUS_COLORS, PLATFORM_LABELS } from "../constants";
 import { Project } from "../types";
@@ -15,6 +16,7 @@ interface BadgesBarProps {
   onClearComplexity: () => void;
   aiPlatform: AiPlatform | null;
   onClearPlatform: () => void;
+  extraBadges?: ReactNode;
 }
 
 export function BadgesBar(props: BadgesBarProps) {
@@ -24,6 +26,7 @@ export function BadgesBar(props: BadgesBarProps) {
     status, statusExplicit, onClearStatus,
     complexity, onClearComplexity,
     aiPlatform, onClearPlatform,
+    extraBadges,
   } = props;
 
   const hasBadges =
@@ -31,7 +34,8 @@ export function BadgesBar(props: BadgesBarProps) {
     priority !== "medium" ||
     statusExplicit ||
     complexity !== "medium" ||
-    !!aiPlatform;
+    !!aiPlatform ||
+    !!extraBadges;
 
   if (!hasBadges) return null;
 
@@ -74,6 +78,7 @@ export function BadgesBar(props: BadgesBarProps) {
           onRemove={onClearPlatform}
         />
       )}
+      {extraBadges}
     </div>
   );
 }
