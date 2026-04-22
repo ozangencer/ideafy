@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useKanbanStore } from "@/lib/store";
 import {
   type Card,
@@ -48,8 +48,34 @@ import { ConversationPanel } from "./sections/conversation-panel";
 import { useCardModalForm } from "./hooks/use-card-modal-form";
 import { useCardModalAutoSave } from "./hooks/use-card-modal-auto-save";
 import { useCardModalFormReset } from "./hooks/use-card-modal-form-reset";
+import { CardModalContext, type CardModalContextValue } from "./card-modal-context";
 
-export function CardModal() {
+export interface CardModalProps {
+  /** Replaces the default header entirely. Slot consumer pulls state via `useCardModalContext()`. */
+  headerSlot?: ReactNode;
+  /** Replaces the default footer entirely. Slot consumer pulls state via `useCardModalContext()`. */
+  footerSlot?: ReactNode;
+  /** When true, default header/editor enter read-only mode and auto-save is suppressed. */
+  readOnly?: boolean;
+  /** Extra fields merged into the auto-save payload. Forwarded to `useCardModalAutoSave`. */
+  extraFields?: () => Record<string, unknown>;
+  /**
+   * Overrides the auto-save skip check. Evaluated when the effect runs. If omitted,
+   * `readOnly` drives the skip: readOnly true → auto-save suppressed.
+   */
+  skipCondition?: () => boolean;
+  /** Invoked after a non-draft save has dispatched. Forwarded to `useCardModalForm`. */
+  afterSave?: (savedCardId: string, updates: Partial<Card>) => void;
+}
+
+export function CardModal({
+  headerSlot,
+  footerSlot,
+  readOnly = false,
+  extraFields,
+  skipCondition,
+  afterSave,
+}: CardModalProps = {}) {
   const {
     selectedCard,
     closeModal,
@@ -92,6 +118,7 @@ export function CardModal() {
     discardDraft,
     closeModal,
     detachConversation,
+    afterSave,
   });
 
   const {
@@ -151,7 +178,8 @@ export function CardModal() {
   const project = projects.find((p) => p.id === projectId);
   const displayId = selectedCard ? getDisplayId(selectedCard, project) : null;
 
-  // Auto-save
+  // Auto-save. skipCondition falls back to `readOnly` when the caller didn't provide one.
+  const effectiveSkipCondition = skipCondition ?? (readOnly ? () => true : undefined);
   const { saveStatus, cancelPendingAutoSave, markExternalUpdate, autoSaveInFlightRef } = useCardModalAutoSave({
     selectedCard,
     isDraftMode,
@@ -169,6 +197,8 @@ export function CardModal() {
     aiPlatform,
     projects,
     updateCard,
+    extraFields,
+    skipCondition: effectiveSkipCondition,
   });
 
   // Git/dev-server setters bundled for the form-reset hook
@@ -547,7 +577,39 @@ export function CardModal() {
 
   if (!selectedCard) return null;
 
+  const contextValue: CardModalContextValue = {
+    selectedCard,
+    projects,
+    project,
+    displayId,
+    isDraftMode,
+    title, setTitle,
+    description, setDescription,
+    solutionSummary, setSolutionSummary,
+    testScenarios, setTestScenarios,
+    aiOpinion, setAiOpinion,
+    status, setStatus,
+    complexity, setComplexity,
+    priority, setPriority,
+    projectId, setProjectId,
+    aiPlatform, setAiPlatform,
+    isTitleValid,
+    canSave,
+    cardHistory,
+    isExpanded,
+    setIsExpanded,
+    readOnly,
+    saveStatus,
+    handleBack,
+    handleExport,
+    handleClose,
+    handleDelete,
+    handleWithdraw,
+    handleSave,
+  };
+
   return (
+    <CardModalContext.Provider value={contextValue}>
     <div
       className={`fixed inset-0 z-50 flex justify-end transition-colors duration-200 overscroll-none ${
         isVisible ? "bg-black/40" : "bg-transparent"
@@ -572,31 +634,34 @@ export function CardModal() {
         } ${isVisible ? "translate-x-0" : "translate-x-full"}`}
       >
         {/* Header */}
-        <CardModalHeader
-          title={title}
-          onTitleChange={setTitle}
-          displayId={displayId}
-          project={project}
-          status={status}
-          onStatusChange={setStatus}
-          projectId={projectId}
-          onProjectChange={setProjectId}
-          projects={projects}
-          complexity={complexity}
-          onComplexityChange={setComplexity}
-          priority={priority}
-          onPriorityChange={setPriority}
-          aiPlatform={aiPlatform}
-          onAiPlatformChange={setAiPlatform}
-          hasHistory={cardHistory.length > 0}
-          onBack={handleBack}
-          onExport={handleExport}
-          isExpanded={isExpanded}
-          onToggleExpand={() => setIsExpanded(!isExpanded)}
-          onClose={handleClose}
-          isTitleValid={isTitleValid}
-          autoFocusTitle={isDraftMode}
-        />
+        {headerSlot ?? (
+          <CardModalHeader
+            title={title}
+            onTitleChange={setTitle}
+            displayId={displayId}
+            project={project}
+            status={status}
+            onStatusChange={setStatus}
+            projectId={projectId}
+            onProjectChange={setProjectId}
+            projects={projects}
+            complexity={complexity}
+            onComplexityChange={setComplexity}
+            priority={priority}
+            onPriorityChange={setPriority}
+            aiPlatform={aiPlatform}
+            onAiPlatformChange={setAiPlatform}
+            hasHistory={cardHistory.length > 0}
+            onBack={handleBack}
+            onExport={handleExport}
+            isExpanded={isExpanded}
+            onToggleExpand={() => setIsExpanded(!isExpanded)}
+            onClose={handleClose}
+            isTitleValid={isTitleValid}
+            autoFocusTitle={isDraftMode}
+            isReadOnly={readOnly}
+          />
+        )}
 
         {/* Git Branch Actions for Human Test cards */}
         {status === "test" && gitBranchName && gitBranchStatus === "active" && (
@@ -731,6 +796,7 @@ export function CardModal() {
                 onChange={sectionSetters[activeTab]}
                 onCardClick={handleCardClick}
                 projectId={projectId}
+                readOnly={readOnly}
               />
             }
             rightPanel={
@@ -762,17 +828,19 @@ export function CardModal() {
         </div>
 
         {/* Footer */}
-        <CardModalFooter
-          title={title}
-          status={status}
-          isDraftMode={isDraftMode}
-          canSave={canSave}
-          saveStatus={saveStatus}
-          onDelete={handleDelete}
-          onWithdraw={handleWithdraw}
-          onCancel={handleClose}
-          onSave={handleSave}
-        />
+        {footerSlot ?? (
+          <CardModalFooter
+            title={title}
+            status={status}
+            isDraftMode={isDraftMode}
+            canSave={canSave}
+            saveStatus={saveStatus}
+            onDelete={handleDelete}
+            onWithdraw={handleWithdraw}
+            onCancel={handleClose}
+            onSave={handleSave}
+          />
+        )}
       </div>
 
       {/* Dialogs */}
@@ -953,5 +1021,6 @@ export function CardModal() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </CardModalContext.Provider>
   );
 }
