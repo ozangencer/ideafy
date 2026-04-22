@@ -16,6 +16,7 @@ import {
 } from "@/lib/suggestion";
 import { ImageAttachment } from "@/lib/image-attachment-extension";
 import { MentionData, SectionType } from "@/lib/types";
+import { buildDroppedFilePathText, getDroppedEditorFiles } from "@/lib/dropped-file-paths";
 import { usePastedImages } from "./conversation-input/use-pasted-images";
 import { useProjectMentions } from "./conversation-input/use-project-mentions";
 import { extractMentions } from "./conversation-input/extract-mentions";
@@ -56,6 +57,8 @@ export function ConversationInput({
   const { cards, projects, activeProjectId } = useKanbanStore();
   const [isEmpty, setIsEmpty] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const effectiveProjectId = projectId || activeProjectId;
+  const projectPath = projects.find((project) => project.id === effectiveProjectId)?.folderPath || null;
 
   const {
     pastedImages,
@@ -209,6 +212,64 @@ export function ConversationInput({
           return true;
         }
         return false;
+      },
+      handleDrop: (view, event) => {
+        const droppedFiles = getDroppedEditorFiles(event.dataTransfer, projectPath);
+        if (droppedFiles.length === 0) {
+          return false;
+        }
+
+        event.preventDefault();
+
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        const insertPos = coords?.pos ?? view.state.selection.from;
+        const imageFiles = droppedFiles.filter((file) => file.isImage);
+        const pathFiles = droppedFiles.filter((file) => !file.isImage);
+        const pathText = buildDroppedFilePathText(pathFiles);
+
+        if (pathFiles.length > 0) {
+          view.dispatch(view.state.tr.insertText(pathText, insertPos, insertPos).scrollIntoView());
+        }
+
+        if (imageFiles.length > 0) {
+          const oversizedImage = imageFiles.find((droppedFile) => droppedFile.file.size > 5 * 1024 * 1024);
+          if (oversizedImage) {
+            console.warn("Image too large (max 5MB)");
+            return true;
+          }
+
+          void Promise.all(
+            imageFiles.map(
+              (droppedFile) =>
+                new Promise<{ base64: string; type: string }>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () =>
+                    resolve({ base64: reader.result as string, type: droppedFile.file.type });
+                  reader.onerror = () => reject(reader.error);
+                  reader.readAsDataURL(droppedFile.file);
+                }),
+            ),
+          ).then((images) => {
+            const nodeType = view.state.schema.nodes.imageAttachment;
+            if (!nodeType) {
+              return;
+            }
+
+            let imageInsertPos = insertPos + pathText.length;
+            let tr = view.state.tr;
+            images.forEach((image) => {
+              const { id, index } = addImage(image.base64, image.type);
+              const node = nodeType.create({ id, index });
+              tr = tr.insert(imageInsertPos, node);
+              imageInsertPos += node.nodeSize;
+            });
+            view.dispatch(tr.scrollIntoView());
+          }).catch((error) => {
+            console.error("Failed to process dropped image:", error);
+          });
+        }
+
+        return true;
       },
       // Enter handling runs AFTER suggestion handlers. We use refs to avoid
       // recreating the editor instance when props change.

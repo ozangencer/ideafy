@@ -227,7 +227,7 @@ button:disabled {
 }
 
 .section-editor-wrapper .tiptap-editor .ProseMirror {
-  @apply min-h-0;
+  @apply min-h-full h-full;
 }
 
 .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
@@ -810,4 +810,3 @@ button:disabled {
 }
 
 /* Landing page utilities */
-

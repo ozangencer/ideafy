@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   onTriggerQuickEntry: (callback) => {
@@ -6,5 +6,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   onRefreshData: (callback) => {
     ipcRenderer.on("refresh-data", () => callback());
+  },
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return "";
+    }
   },
 });

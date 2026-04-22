@@ -10,12 +10,15 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
+import { TextSelection } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { buildSkillGroupUnifiedItems } from "@/lib/skills/grouping";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
+import { buildDroppedFilePathText, getDroppedEditorFiles } from "@/lib/dropped-file-paths";
 import tippy, { Instance } from "tippy.js";
 
 // Extend HTMLElement to include tippy instance
@@ -31,6 +34,7 @@ interface MarkdownEditorProps {
   placeholder?: string;
   onCardClick?: (cardId: string) => void;
   projectId?: string | null;
+  preferSelectionOnDrop?: boolean;
 }
 
 export function MarkdownEditor({
@@ -39,10 +43,13 @@ export function MarkdownEditor({
   placeholder = "Write here...",
   onCardClick,
   projectId,
+  preferSelectionOnDrop = false,
 }: MarkdownEditorProps) {
   const isUpdatingFromExternal = useRef(false);
   const lastSyncedValue = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastSelectionRef = useRef<number | null>(null);
+  const lastProcessedDropRef = useRef<number | null>(null);
   const {
     cards,
     projects,
@@ -61,14 +68,15 @@ export function MarkdownEditor({
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
   const [localProjectAgents, setLocalProjectAgents] = useState<string[]>([]);
+  const effectiveProjectId = projectId || activeProjectId;
+  const projectFolderPath =
+    projects.find((project) => project.id === effectiveProjectId)?.folderPath || null;
 
   // Ref to hold current documents for the callback
   const documentsRef = useRef<typeof documents>([]);
 
   // Fetch and maintain documents for the card's project
   useEffect(() => {
-    const effectiveProjectId = projectId || activeProjectId;
-
     if (effectiveProjectId && effectiveProjectId !== activeProjectId) {
       // Card has a project but sidebar shows "All Projects" - fetch card's project documents
       fetch(`/api/projects/${effectiveProjectId}/documents`)
@@ -87,8 +95,6 @@ export function MarkdownEditor({
 
   // Fetch project-specific skills/mcps based on card's project
   useEffect(() => {
-    const effectiveProjectId = projectId || activeProjectId;
-
     if (!effectiveProjectId) {
       setLocalProjectSkills([]);
       setLocalProjectMcps([]);
@@ -123,8 +129,6 @@ export function MarkdownEditor({
       }>;
     }> = [];
     const addedIds = new Set<string>();
-    const effectiveProjectId = projectId || activeProjectId;
-
     const allGlobalSkillItems = skillItems.length
       ? skillItems
       : Array.from(new Set(skills)).map((name) => ({
@@ -231,6 +235,81 @@ export function MarkdownEditor({
     [getDocuments]
   );
 
+  const handleEditorDrop = useCallback((view: EditorView, event: DragEvent): boolean => {
+    if (lastProcessedDropRef.current === event.timeStamp) {
+      return true;
+    }
+
+    const droppedFiles = getDroppedEditorFiles(event.dataTransfer, projectFolderPath);
+    if (droppedFiles.length === 0) {
+      return false;
+    }
+
+    lastProcessedDropRef.current = event.timeStamp;
+    event.preventDefault();
+    view.focus();
+
+    let insertPos = view.state.selection.from;
+    if (!preferSelectionOnDrop) {
+      const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (coords?.pos != null) {
+        insertPos = coords.pos;
+      }
+    } else if (lastSelectionRef.current != null) {
+      insertPos = Math.min(lastSelectionRef.current, view.state.doc.content.size);
+      const tr = view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(insertPos)));
+      view.dispatch(tr);
+      insertPos = view.state.selection.from;
+    }
+
+    const imageFiles = droppedFiles.filter((file) => file.isImage);
+    const pathFiles = droppedFiles.filter((file) => !file.isImage);
+    const pathText = buildDroppedFilePathText(pathFiles);
+
+    if (pathFiles.length > 0) {
+      view.dispatch(view.state.tr.insertText(pathText, insertPos, insertPos).scrollIntoView());
+      insertPos += pathText.length;
+    }
+
+    if (imageFiles.length > 0) {
+      const oversizedImage = imageFiles.find((droppedFile) => droppedFile.file.size > 5 * 1024 * 1024);
+      if (oversizedImage) {
+        console.warn("Image too large (max 5MB)");
+        return true;
+      }
+
+      void Promise.all(
+        imageFiles.map(
+          (droppedFile) =>
+            new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(droppedFile.file);
+            }),
+        ),
+      ).then((images) => {
+        const nodeType = view.state.schema.nodes.imageResize || view.state.schema.nodes.image;
+        if (!nodeType) {
+          return;
+        }
+
+        let imageInsertPos = insertPos;
+        let tr = view.state.tr;
+        images.forEach((base64) => {
+          const imageNode = nodeType.create({ src: base64 });
+          tr = tr.insert(imageInsertPos, imageNode);
+          imageInsertPos += imageNode.nodeSize;
+        });
+        view.dispatch(tr.scrollIntoView());
+      }).catch((error) => {
+        console.error("Failed to process dropped image:", error);
+      });
+    }
+
+    return true;
+  }, [preferSelectionOnDrop, projectFolderPath]);
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -308,6 +387,9 @@ export function MarkdownEditor({
         }
         return false;
       },
+      handleDrop: (view, event) => {
+        return handleEditorDrop(view, event);
+      },
     },
     onUpdate: ({ editor }) => {
       if (isUpdatingFromExternal.current) return;
@@ -315,6 +397,9 @@ export function MarkdownEditor({
       const html = editor.getHTML();
       lastSyncedValue.current = html;
       onChange(html);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      lastSelectionRef.current = editor.state.selection.from;
     },
   });
 
@@ -328,6 +413,11 @@ export function MarkdownEditor({
     lastSyncedValue.current = value;
     isUpdatingFromExternal.current = false;
   }, [value, editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    lastSelectionRef.current = editor.state.selection.from;
+  }, [editor]);
 
   // Setup hover tooltips for card mentions
   useEffect(() => {
@@ -422,6 +512,22 @@ export function MarkdownEditor({
       ref={containerRef}
       className="tiptap-editor h-full"
       onClick={handleContainerClick}
+      onDragOverCapture={(event) => {
+        if (!editor || !event.dataTransfer?.files?.length) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDropCapture={(event) => {
+        if (!editor) {
+          return;
+        }
+        if (event.dataTransfer?.files?.length) {
+          event.preventDefault();
+        }
+        handleEditorDrop(editor.view, event.nativeEvent);
+      }}
     >
       <EditorContent editor={editor} />
     </div>

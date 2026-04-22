@@ -43,13 +43,14 @@ export function SectionEditor({
 
   return (
     <div className="h-full flex flex-col p-4 overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto section-editor-wrapper">
+      <div className="flex-1 min-h-0 h-full overflow-y-auto section-editor-wrapper">
         <MarkdownEditor
           value={value}
           onChange={onChange}
           placeholder={config.placeholder}
           onCardClick={onCardClick}
           projectId={projectId}
+          preferSelectionOnDrop
         />
       </div>
     </div>
