@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -27,6 +28,8 @@ interface CardModalFooterProps {
   onWithdraw: () => void;
   onCancel: () => void;
   onSave: () => void;
+  deleteSlot?: ReactNode;
+  rightActionsSlot?: ReactNode;
 }
 
 export function CardModalFooter({
@@ -39,38 +42,42 @@ export function CardModalFooter({
   onWithdraw,
   onCancel,
   onSave,
+  deleteSlot,
+  rightActionsSlot,
 }: CardModalFooterProps) {
   return (
     <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
       <div className="flex gap-2">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
-              Delete
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete task?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the
-                task &quot;{title}&quot;.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={onDelete}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        {deleteSlot ?? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete task?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the
+                  task &quot;{title}&quot;.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={onDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
         {!isDraftMode && status !== "withdrawn" && (
           <Button
             variant="ghost"
@@ -83,6 +90,7 @@ export function CardModalFooter({
         )}
       </div>
       <div className="flex gap-2 items-center">
+        {rightActionsSlot}
         {isDraftMode ? (
           <>
             <Button variant="outline" onClick={onCancel}>
