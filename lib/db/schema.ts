@@ -108,3 +108,38 @@ export const chatSessions = sqliteTable("chat_sessions", {
 }, (table) => [
   uniqueIndex("chat_sessions_card_section_idx").on(table.cardId, table.sectionType),
 ]);
+
+export type ChatSessionRecord = typeof chatSessions.$inferSelect;
+export type NewChatSession = typeof chatSessions.$inferInsert;
+
+export const skillGroups = sqliteTable("skill_groups", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  scope: text("scope").notNull(), // "global" | "project"
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  order: integer("order").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type SkillGroupRecord = typeof skillGroups.$inferSelect;
+export type NewSkillGroup = typeof skillGroups.$inferInsert;
+
+export const skillGroupItems = sqliteTable(
+  "skill_group_items",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => skillGroups.id, { onDelete: "cascade" }),
+    skillName: text("skill_name").notNull(),
+    order: integer("order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("skill_group_items_group_skill_idx").on(table.groupId, table.skillName),
+  ]
+);
+
+export type SkillGroupItemRecord = typeof skillGroupItems.$inferSelect;
+export type NewSkillGroupItem = typeof skillGroupItems.$inferInsert;

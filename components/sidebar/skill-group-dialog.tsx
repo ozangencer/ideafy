@@ -21,7 +21,7 @@ type SkillGroupDialogProps = {
   submitLabel: string;
   initialValue?: string;
   existingNames?: string[];
-  onSubmit: (name: string) => void;
+  onSubmit: (name: string) => void | Promise<void>;
 };
 
 export function SkillGroupDialog({

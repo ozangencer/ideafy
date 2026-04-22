@@ -220,15 +220,15 @@ export function SkillList() {
     });
   };
 
-  const handleDialogSubmit = (name: string) => {
+  const handleDialogSubmit = async (name: string) => {
     if (!dialogState) return;
 
     if (dialogState.mode === "create") {
       const projectId = dialogState.source === "project" ? activeProjectId : null;
-      const groupId = createSkillGroup(name, dialogState.source, projectId);
+      const groupId = await createSkillGroup(name, dialogState.source, projectId);
 
       if (groupId && dialogState.skillToAssign) {
-        moveSkillToGroup(
+        await moveSkillToGroup(
           dialogState.skillToAssign.name,
           groupId,
           dialogState.source,
@@ -239,7 +239,7 @@ export function SkillList() {
     }
 
     const projectId = dialogState.source === "project" ? activeProjectId : null;
-    renameSkillGroup(dialogState.groupId, name, dialogState.source, projectId);
+    await renameSkillGroup(dialogState.groupId, name, dialogState.source, projectId);
   };
 
   const globalGroupNames = globalSkillGroups.map((group) => group.name);
@@ -353,7 +353,7 @@ export function SkillList() {
                               className="h-6 w-6 text-muted-foreground hover:text-destructive"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                deleteSkillGroup(
+                                void deleteSkillGroup(
                                   group.id!,
                                   group.source,
                                   group.source === "project" ? activeProjectId : null
@@ -419,7 +419,7 @@ export function SkillList() {
                                     groups={scopedGroups}
                                     currentGroupId={currentGroupId}
                                     onMoveToGroup={(groupId) =>
-                                      moveSkillToGroup(
+                                      void moveSkillToGroup(
                                         skill.name,
                                         groupId,
                                         group.source,

@@ -83,6 +83,11 @@ export interface UserSkillGroup {
   skillNames: string[];
 }
 
+export interface SkillGroupCollectionsResponse {
+  globalGroups: UserSkillGroup[];
+  projectGroups: Record<string, UserSkillGroup[]>;
+}
+
 export interface SkillPreview extends SkillListItem {
   rawContent: string;
   bodyContent: string;

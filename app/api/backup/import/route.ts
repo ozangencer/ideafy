@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     // Wrap entire import in a transaction for atomicity
     db.transaction((tx) => {
       // 1. Delete all existing data
+      tx.delete(schema.skillGroupItems).run();
+      tx.delete(schema.skillGroups).run();
       tx.delete(schema.cards).run();
       tx.delete(schema.projects).run();
       tx.delete(schema.settings).run();
@@ -82,6 +84,34 @@ export async function POST(request: NextRequest) {
           }).run();
         }
       }
+
+      // 5. Import skill groups
+      if (data.skillGroups) {
+        for (const group of data.skillGroups) {
+          tx.insert(schema.skillGroups).values({
+            id: group.id,
+            name: group.name,
+            scope: group.scope,
+            projectId: group.projectId,
+            order: group.order,
+            createdAt: group.createdAt,
+            updatedAt: group.updatedAt,
+          }).run();
+        }
+      }
+
+      // 6. Import skill group items
+      if (data.skillGroupItems) {
+        for (const item of data.skillGroupItems) {
+          tx.insert(schema.skillGroupItems).values({
+            id: item.id,
+            groupId: item.groupId,
+            skillName: item.skillName,
+            order: item.order,
+            createdAt: item.createdAt,
+          }).run();
+        }
+      }
     });
 
     return NextResponse.json({
@@ -90,6 +120,8 @@ export async function POST(request: NextRequest) {
         cards: data.cards.length,
         projects: data.projects.length,
         settings: data.settings?.length || 0,
+        skillGroups: data.skillGroups?.length || 0,
+        skillGroupItems: data.skillGroupItems?.length || 0,
       },
       preImportBackup: preImportBackup.filename,
     });

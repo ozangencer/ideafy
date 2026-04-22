@@ -47,6 +47,22 @@ export interface ExportData {
     value: string;
     updatedAt: string;
   }>;
+  skillGroups?: Array<{
+    id: string;
+    name: string;
+    scope: string;
+    projectId: string | null;
+    order: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  skillGroupItems?: Array<{
+    id: string;
+    groupId: string;
+    skillName: string;
+    order: number;
+    createdAt: string;
+  }>;
 }
 
 // GET /api/backup/export - Export all data as JSON
@@ -56,6 +72,8 @@ export async function GET() {
     const cards = db.select().from(schema.cards).all();
     const projects = db.select().from(schema.projects).all();
     const settings = db.select().from(schema.settings).all();
+    const skillGroups = db.select().from(schema.skillGroups).all();
+    const skillGroupItems = db.select().from(schema.skillGroupItems).all();
 
     const exportData: ExportData = {
       version: "1.0",
@@ -102,6 +120,22 @@ export async function GET() {
         key: setting.key,
         value: setting.value,
         updatedAt: setting.updatedAt,
+      })),
+      skillGroups: skillGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        scope: group.scope,
+        projectId: group.projectId,
+        order: group.order,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
+      })),
+      skillGroupItems: skillGroupItems.map((item) => ({
+        id: item.id,
+        groupId: item.groupId,
+        skillName: item.skillName,
+        order: item.order,
+        createdAt: item.createdAt,
       })),
     };
 

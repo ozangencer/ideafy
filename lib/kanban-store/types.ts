@@ -144,30 +144,31 @@ export interface KanbanStore {
 
   // Skills, MCPs, Agents & Plugins actions
   fetchSkills: () => Promise<void>;
+  fetchSkillGroups: () => Promise<void>;
   openSkillPreview: (skill: SkillListItem) => Promise<void>;
   closeSkillViewer: () => void;
   createSkillGroup: (
     name: string,
     source: "global" | "project",
     projectId?: string | null
-  ) => string | null;
+  ) => Promise<string | null>;
   renameSkillGroup: (
     groupId: string,
     name: string,
     source: "global" | "project",
     projectId?: string | null
-  ) => void;
+  ) => Promise<void>;
   deleteSkillGroup: (
     groupId: string,
     source: "global" | "project",
     projectId?: string | null
-  ) => void;
+  ) => Promise<void>;
   moveSkillToGroup: (
     skillName: string,
     groupId: string | null,
     source: "global" | "project",
     projectId?: string | null
-  ) => void;
+  ) => Promise<void>;
   fetchMcps: () => Promise<void>;
   fetchAgents: () => Promise<void>;
   fetchPlugins: () => Promise<void>;

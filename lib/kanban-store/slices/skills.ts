@@ -1,27 +1,18 @@
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 import {
-  assignSkillToGroupInCollection,
   buildSkillGroupUnifiedItems,
-  deleteSkillGroupFromCollection,
   normalizeGroupName,
-  renameSkillGroupInCollection,
-  upsertSkillGroup,
 } from "@/lib/skills/grouping";
-import { SkillListItem, SkillPreview, UnifiedItem, UserSkillGroup } from "@/lib/types";
-
-function getScopedGroups(
-  state: Pick<KanbanStore, "globalSkillGroups" | "projectSkillGroups">,
-  source: "global" | "project",
-  projectId?: string | null
-): UserSkillGroup[] {
-  if (source === "global") return state.globalSkillGroups;
-  if (!projectId) return [];
-  return state.projectSkillGroups[projectId] || [];
-}
+import {
+  SkillGroupCollectionsResponse,
+  SkillListItem,
+  SkillPreview,
+  UnifiedItem,
+} from "@/lib/types";
 
 export const createSkillsSlice: StoreSlice<
-  Pick<KanbanStore, "skills" | "skillItems" | "projectSkillItems" | "selectedSkill" | "isSkillViewerOpen" | "globalSkillGroups" | "projectSkillGroups" | "mcps" | "agents" | "plugins" | "projectSkills" | "projectMcps" | "projectAgents" | "fetchSkills" | "openSkillPreview" | "closeSkillViewer" | "createSkillGroup" | "renameSkillGroup" | "deleteSkillGroup" | "moveSkillToGroup" | "fetchMcps" | "fetchAgents" | "fetchPlugins" | "fetchProjectExtensions" | "getUnifiedItems">
+  Pick<KanbanStore, "skills" | "skillItems" | "projectSkillItems" | "selectedSkill" | "isSkillViewerOpen" | "globalSkillGroups" | "projectSkillGroups" | "mcps" | "agents" | "plugins" | "projectSkills" | "projectMcps" | "projectAgents" | "fetchSkills" | "fetchSkillGroups" | "openSkillPreview" | "closeSkillViewer" | "createSkillGroup" | "renameSkillGroup" | "deleteSkillGroup" | "moveSkillToGroup" | "fetchMcps" | "fetchAgents" | "fetchPlugins" | "fetchProjectExtensions" | "getUnifiedItems">
 > = (set, get) => ({
   skills: [],
   skillItems: [],
@@ -45,9 +36,28 @@ export const createSkillsSlice: StoreSlice<
         skills: data.skills || [],
         skillItems: data.items || [],
       });
+      await get().fetchSkillGroups();
     } catch (error) {
       console.error("Failed to fetch skills:", error);
       set({ skills: [], skillItems: [] });
+    }
+  },
+
+  fetchSkillGroups: async () => {
+    try {
+      const response = await fetch("/api/skill-groups");
+      const data = await parseJson<SkillGroupCollectionsResponse>(response);
+      if (!response.ok) return;
+
+      set({
+        globalSkillGroups: Array.isArray(data.globalGroups) ? data.globalGroups : [],
+        projectSkillGroups:
+          data.projectGroups && typeof data.projectGroups === "object"
+            ? data.projectGroups
+            : {},
+      });
+    } catch (error) {
+      console.error("Failed to fetch skill groups:", error);
     }
   },
 
@@ -85,100 +95,81 @@ export const createSkillsSlice: StoreSlice<
     });
   },
 
-  createSkillGroup: (name, source, projectId) => {
+  createSkillGroup: async (name, source, projectId) => {
     const normalizedName = normalizeGroupName(name);
     if (!normalizedName) return null;
 
-    const state = get();
-    const currentGroups = getScopedGroups(state, source, projectId);
-    const { groups, groupId } = upsertSkillGroup(currentGroups, normalizedName);
+    try {
+      const response = await fetch("/api/skill-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: normalizedName,
+          source,
+          projectId: source === "project" ? projectId : null,
+        }),
+      });
+      const data = await parseJson<{ groupId?: string }>(response);
+      if (!response.ok || typeof data.groupId !== "string") return null;
 
-    if (source === "global") {
-      set({ globalSkillGroups: groups });
-      return groupId;
+      await get().fetchSkillGroups();
+      return data.groupId;
+    } catch (error) {
+      console.error("Failed to create skill group:", error);
+      return null;
     }
-
-    if (!projectId) return null;
-
-    set({
-      projectSkillGroups: {
-        ...state.projectSkillGroups,
-        [projectId]: groups,
-      },
-    });
-
-    return groupId;
   },
 
-  renameSkillGroup: (groupId, name, source, projectId) => {
+  renameSkillGroup: async (groupId, name, source, projectId) => {
     const normalizedName = normalizeGroupName(name);
     if (!normalizedName) return;
 
-    const state = get();
-    const currentGroups = getScopedGroups(state, source, projectId);
-    const renamedGroups = renameSkillGroupInCollection(
-      currentGroups,
-      groupId,
-      normalizedName
-    );
-
-    if (source === "global") {
-      set({ globalSkillGroups: renamedGroups });
-      return;
+    try {
+      const response = await fetch(`/api/skill-groups/${groupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: normalizedName,
+          source,
+          projectId: source === "project" ? projectId : null,
+        }),
+      });
+      if (!response.ok) return;
+      await get().fetchSkillGroups();
+    } catch (error) {
+      console.error("Failed to rename skill group:", error);
     }
-
-    if (!projectId) return;
-
-    set({
-      projectSkillGroups: {
-        ...state.projectSkillGroups,
-        [projectId]: renamedGroups,
-      },
-    });
   },
 
-  deleteSkillGroup: (groupId, source, projectId) => {
-    const state = get();
-    const currentGroups = getScopedGroups(state, source, projectId);
-    const nextGroups = deleteSkillGroupFromCollection(currentGroups, groupId);
-
-    if (source === "global") {
-      set({ globalSkillGroups: nextGroups });
-      return;
+  deleteSkillGroup: async (groupId) => {
+    try {
+      const response = await fetch(`/api/skill-groups/${groupId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) return;
+      await get().fetchSkillGroups();
+    } catch (error) {
+      console.error("Failed to delete skill group:", error);
     }
-
-    if (!projectId) return;
-
-    set({
-      projectSkillGroups: {
-        ...state.projectSkillGroups,
-        [projectId]: nextGroups,
-      },
-    });
   },
 
-  moveSkillToGroup: (skillName, groupId, source, projectId) => {
-    const state = get();
-    const currentGroups = getScopedGroups(state, source, projectId);
-    const nextGroups = assignSkillToGroupInCollection(
-      currentGroups,
-      skillName,
-      groupId
-    );
-
-    if (source === "global") {
-      set({ globalSkillGroups: nextGroups });
-      return;
+  moveSkillToGroup: async (skillName, groupId, source, projectId) => {
+    try {
+      const response = await fetch("/api/skill-groups", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skillName,
+          groupId,
+          source,
+          projectId: source === "project" ? projectId : null,
+        }),
+      });
+      if (!response.ok) return;
+      await get().fetchSkillGroups();
+    } catch (error) {
+      console.error("Failed to move skill to group:", error);
     }
-
-    if (!projectId) return;
-
-    set({
-      projectSkillGroups: {
-        ...state.projectSkillGroups,
-        [projectId]: nextGroups,
-      },
-    });
   },
 
   fetchMcps: async () => {
