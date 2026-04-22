@@ -202,13 +202,37 @@ function iconPath(relative) {
   return path.join(REPO_ROOT, relative);
 }
 
+function resolveBrandVariant() {
+  const explicitVariant = process.env.IDEAFY_BRAND_VARIANT;
+  if (typeof explicitVariant === "string") {
+    const normalized = explicitVariant.trim().toLowerCase();
+    if (normalized.includes("team")) return "team";
+    if (normalized.includes("personal")) return "personal";
+  }
+
+  const productName = packageJson.build?.productName;
+  if (typeof productName === "string" && productName.toLowerCase().includes("team")) {
+    return "team";
+  }
+
+  return "personal";
+}
+
+function brandPublicAsset(relative) {
+  if (resolveBrandVariant() === "team") return relative;
+
+  const extension = path.extname(relative);
+  const basename = relative.slice(0, -extension.length);
+  return `${basename}-personal${extension}`;
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    icon: iconPath(path.join("public", "icon-512-dock.png")),
+    icon: iconPath(brandPublicAsset(path.join("public", "icon-512-dock.png"))),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 12 },
     backgroundColor: "#16140f",
@@ -426,7 +450,7 @@ function registerGlobalShortcut() {
 app.on("ready", async () => {
   // Set dock icon to ideafy logo
   if (process.platform === "darwin") {
-    const dockIconPath = iconPath(path.join("public", "icon-512-dock.png"));
+    const dockIconPath = iconPath(brandPublicAsset(path.join("public", "icon-512-dock.png")));
     if (fs.existsSync(dockIconPath)) {
       app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
     }

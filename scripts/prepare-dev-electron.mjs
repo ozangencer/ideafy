@@ -8,6 +8,21 @@ const APP_DISPLAY_NAME = packageJson.build?.productName || "Ideafy";
 const APP_BUNDLE_NAME = APP_DISPLAY_NAME;
 const EXECUTABLE_NAME = "Ideafy";
 
+function resolveBrandVariant() {
+  const explicitVariant = process.env.IDEAFY_BRAND_VARIANT;
+  if (typeof explicitVariant === "string") {
+    const normalized = explicitVariant.trim().toLowerCase();
+    if (normalized.includes("team")) return "team";
+    if (normalized.includes("personal")) return "personal";
+  }
+
+  if (typeof APP_DISPLAY_NAME === "string" && APP_DISPLAY_NAME.toLowerCase().includes("team")) {
+    return "team";
+  }
+
+  return "personal";
+}
+
 if (process.platform !== "darwin") {
   process.exit(0);
 }
@@ -59,7 +74,12 @@ if (fs.existsSync(plistPath)) {
   execFileSync("/usr/libexec/PlistBuddy", ["-c", `Set :CFBundleDisplayName ${APP_DISPLAY_NAME}`, plistPath]);
 }
 
-const sourceIconPath = path.join(projectRoot, "electron", "icons", "app-icon.icns");
+const sourceIconPath = path.join(
+  projectRoot,
+  "electron",
+  "icons",
+  resolveBrandVariant() === "team" ? "app-icon.icns" : "app-icon-personal.icns"
+);
 const targetIconPath = path.join(resourcesDir, "electron.icns");
 
 if (fs.existsSync(sourceIconPath)) {
