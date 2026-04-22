@@ -80,57 +80,84 @@ export const DocumentMentionPopup = forwardRef<DocumentMentionPopupRef, Document
 
     return (
       <div className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden min-w-[280px] max-h-[300px] overflow-y-auto">
-        {items.map((item, index) => (
-          <button
-            key={item.id}
-            ref={(el) => { itemRefs.current[index] = el; }}
-            onClick={() => selectItem(index)}
-            className={`w-full text-left px-3 py-2 flex items-center gap-3 transition-colors ${
-              index === selectedIndex
-                ? "bg-accent text-accent-foreground"
-                : "hover:bg-muted"
-            }`}
-          >
-            {item.isMemory ? (
-              <Brain className="w-4 h-4 flex-shrink-0 text-emerald-500" />
-            ) : item.isClaudeMd ? (
-              <FileText className="w-4 h-4 flex-shrink-0 text-orange-400" />
-            ) : (
-              <File className="w-4 h-4 flex-shrink-0 text-cyan-400" />
-            )}
+        {items.map((item, index) => {
+          const isSelected = index === selectedIndex;
+          return (
+            <button
+              key={item.id}
+              ref={(el) => { itemRefs.current[index] = el; }}
+              onClick={() => selectItem(index)}
+              className={`w-full text-left px-3 py-2 flex items-center gap-3 transition-colors ${
+                isSelected
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-muted"
+              }`}
+            >
+              {item.isMemory ? (
+                <Brain
+                  className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-current" : "text-emerald-500"}`}
+                />
+              ) : item.isClaudeMd ? (
+                <FileText
+                  className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-current" : "text-orange-400"}`}
+                />
+              ) : (
+                <File
+                  className={`w-4 h-4 flex-shrink-0 ${isSelected ? "text-current" : "text-cyan-400"}`}
+                />
+              )}
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  className={`font-medium text-sm break-all min-w-0 ${
-                    item.isClaudeMd
-                      ? "text-orange-400"
-                      : item.isMemory
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : ""
-                  }`}
-                >
-                  {item.name}
-                </span>
-                {item.isClaudeMd && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium shrink-0">
-                    CLAUDE
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`font-medium text-sm break-all min-w-0 ${
+                      isSelected
+                        ? "text-current"
+                        : item.isClaudeMd
+                          ? "text-orange-400"
+                          : item.isMemory
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : ""
+                    }`}
+                  >
+                    {item.name}
                   </span>
-                )}
-                {item.isMemory && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
-                    MEMORY
+                  {item.isClaudeMd && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                        isSelected
+                          ? "bg-accent-foreground/15 text-current"
+                          : "bg-orange-500/20 text-orange-400"
+                      }`}
+                    >
+                      CLAUDE
+                    </span>
+                  )}
+                  {item.isMemory && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                        isSelected
+                          ? "bg-accent-foreground/15 text-current"
+                          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      }`}
+                    >
+                      MEMORY
+                    </span>
+                  )}
+                </div>
+                {item.relativePath !== item.name && (
+                  <span
+                    className={`text-xs truncate block ${
+                      isSelected ? "text-current opacity-80" : "text-muted-foreground"
+                    }`}
+                  >
+                    {item.relativePath}
                   </span>
                 )}
               </div>
-              {item.relativePath !== item.name && (
-                <span className="text-xs text-muted-foreground truncate block">
-                  {item.relativePath}
-                </span>
-              )}
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
     );
   }
