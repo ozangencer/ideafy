@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -41,6 +42,8 @@ interface CardModalHeaderProps {
   onClose: () => void;
   isTitleValid: boolean;
   autoFocusTitle?: boolean;
+  isReadOnly?: boolean;
+  assigneeSlot?: ReactNode;
 }
 
 export function CardModalHeader({
@@ -67,6 +70,8 @@ export function CardModalHeader({
   onClose,
   isTitleValid,
   autoFocusTitle,
+  isReadOnly,
+  assigneeSlot,
 }: CardModalHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border">
@@ -105,9 +110,10 @@ export function CardModalHeader({
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
             autoFocus={autoFocusTitle}
+            readOnly={isReadOnly}
             className={`bg-transparent border-none outline-none w-full text-foreground p-0 ${
               !isTitleValid ? "placeholder:text-muted-foreground/50" : ""
-            }`}
+            } ${isReadOnly ? "cursor-default" : ""}`}
             style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.2 }}
             placeholder="New Title"
           />
@@ -153,11 +159,11 @@ export function CardModalHeader({
       </div>
 
       {/* Metadata row */}
-      <div className="px-6 pb-4 grid grid-cols-5 gap-3">
+      <div className={`px-6 pb-4 grid gap-3 ${assigneeSlot ? "grid-cols-6" : "grid-cols-5"}`}>
         {/* Status */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Status</label>
-          <Select value={status} onValueChange={(v) => onStatusChange(v as Status)}>
+          <Select value={status} onValueChange={(v) => onStatusChange(v as Status)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
@@ -179,6 +185,7 @@ export function CardModalHeader({
           <Select
             value={projectId || "none"}
             onValueChange={(v) => onProjectChange(v === "none" ? null : v)}
+            disabled={isReadOnly}
           >
             <SelectTrigger className={`h-8 text-sm ${!projectId ? "border-destructive" : ""}`}>
               <SelectValue placeholder="Select project">
@@ -216,7 +223,7 @@ export function CardModalHeader({
         {/* Complexity */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Complexity</label>
-          <Select value={complexity} onValueChange={(v) => onComplexityChange(v as Complexity)}>
+          <Select value={complexity} onValueChange={(v) => onComplexityChange(v as Complexity)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
                 <div className="flex items-center gap-2">
@@ -246,7 +253,7 @@ export function CardModalHeader({
         {/* Priority */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1.5">Priority</label>
-          <Select value={priority} onValueChange={(v) => onPriorityChange(v as Priority)}>
+          <Select value={priority} onValueChange={(v) => onPriorityChange(v as Priority)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
                 <div className="flex items-center gap-2">
@@ -279,6 +286,7 @@ export function CardModalHeader({
           <Select
             value={aiPlatform || "global"}
             onValueChange={(v) => onAiPlatformChange(v === "global" ? null : v as AiPlatform)}
+            disabled={isReadOnly}
           >
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
@@ -303,6 +311,8 @@ export function CardModalHeader({
             </SelectContent>
           </Select>
         </div>
+
+        {assigneeSlot}
       </div>
     </div>
   );
