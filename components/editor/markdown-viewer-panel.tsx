@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,6 +20,7 @@ type MarkdownViewerPanelProps = {
   content: string;
   path: string;
   onClose: () => void;
+  preface?: ReactNode;
 };
 
 export function MarkdownViewerPanel({
@@ -27,6 +29,7 @@ export function MarkdownViewerPanel({
   content,
   path,
   onClose,
+  preface,
 }: MarkdownViewerPanelProps) {
   const [isOpening, setIsOpening] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
@@ -140,6 +143,7 @@ export function MarkdownViewerPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto bg-background p-6">
+          {preface && <div className="mb-6">{preface}</div>}
           <article className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-code:bg-zinc-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-zinc-800 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-zinc-100 prose-pre:text-zinc-800 prose-pre:border prose-pre:border-zinc-300 dark:prose-code:bg-zinc-800 dark:prose-code:text-zinc-200 dark:prose-pre:bg-zinc-900 dark:prose-pre:text-zinc-200 dark:prose-pre:border-zinc-700">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           </article>

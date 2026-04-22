@@ -7,6 +7,7 @@ import { db, schema } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { getActiveProvider } from "@/lib/platform/active";
 import { listGlobalSkillItems, listProjectSkillItems } from "@/lib/skills/catalog";
+import { parseSkillDocument } from "@/lib/skills/frontmatter";
 
 function expandPath(filePath: string): string {
   if (filePath.startsWith("~")) {
@@ -53,16 +54,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    const content = fs.readFileSync(allowedItem.path, "utf-8");
+    const rawContent = fs.readFileSync(allowedItem.path, "utf-8");
+    const parsed = parseSkillDocument(rawContent, allowedItem.name);
 
     return NextResponse.json({
-      content,
+      rawContent: parsed.rawContent,
+      bodyContent: parsed.bodyContent,
+      frontmatter: parsed.frontmatter,
       path: allowedItem.path,
       name: allowedItem.name,
-      title: allowedItem.title,
-      group: allowedItem.group,
-      description: allowedItem.description,
+      title: parsed.displayTitle,
+      group: parsed.group ?? allowedItem.group,
+      description: parsed.description ?? allowedItem.description,
       source: allowedItem.source,
+      firstHeading: parsed.firstHeading,
     });
   } catch (error) {
     console.error("Failed to read skill:", error);

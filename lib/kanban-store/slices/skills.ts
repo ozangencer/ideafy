@@ -57,12 +57,15 @@ export const createSkillsSlice: StoreSlice<
         `/api/skills/content?path=${encodeURIComponent(skill.path)}`
       );
       const data = await parseJson<SkillPreview>(response);
-      if (!response.ok || typeof data.content !== "string") return;
+      if (!response.ok || typeof data.bodyContent !== "string") return;
 
       set({
         selectedSkill: {
           ...skill,
-          content: data.content || "",
+          rawContent: data.rawContent || "",
+          bodyContent: data.bodyContent || "",
+          frontmatter: data.frontmatter || {},
+          firstHeading: data.firstHeading ?? null,
           title: data.title || skill.title,
           group: data.group ?? skill.group,
           description: data.description ?? skill.description,

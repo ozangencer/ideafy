@@ -84,7 +84,10 @@ export interface UserSkillGroup {
 }
 
 export interface SkillPreview extends SkillListItem {
-  content: string;
+  rawContent: string;
+  bodyContent: string;
+  frontmatter: Record<string, string>;
+  firstHeading: string | null;
 }
 
 export interface TreeNode {

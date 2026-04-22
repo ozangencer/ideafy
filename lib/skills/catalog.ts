@@ -1,96 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AiPlatform, SkillListItem, SkillSource } from "@/lib/types";
-
-type SkillMetadata = {
-  title: string;
-  group: string | null;
-  description: string | null;
-};
+import { parseSkillDocument } from "./frontmatter";
 
 type GroupOverrides = Map<string, string>;
-
-function parseSimpleFrontmatter(content: string): Record<string, string> {
-  if (!content.startsWith("---\n")) return {};
-
-  const endIndex = content.indexOf("\n---\n", 4);
-  if (endIndex === -1) return {};
-
-  const frontmatter = content.slice(4, endIndex);
-  const result: Record<string, string> = {};
-
-  const lines = frontmatter.split("\n");
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex === -1) continue;
-
-    const key = line.slice(0, separatorIndex).trim().toLowerCase();
-    const rawValue = line.slice(separatorIndex + 1).trim();
-
-    if (!key) continue;
-
-    if (rawValue === ">" || rawValue === ">-" || rawValue === "|" || rawValue === "|-") {
-      const blockLines: string[] = [];
-      const foldLines = rawValue.startsWith(">");
-
-      while (index + 1 < lines.length) {
-        const nextLine = lines[index + 1];
-        if (!nextLine.startsWith(" ") && !nextLine.startsWith("\t")) break;
-        blockLines.push(nextLine.trim());
-        index += 1;
-      }
-
-      const value = foldLines
-        ? blockLines.join(" ").replace(/\s+/g, " ").trim()
-        : blockLines.join("\n").trim();
-
-      if (value) {
-        result[key] = value;
-      }
-      continue;
-    }
-
-    const value = rawValue.replace(/^['"]|['"]$/g, "").trim();
-    if (value) {
-      result[key] = value;
-    }
-  }
-
-  return result;
-}
-
-function humanizeSkillName(name: string): string {
-  return name
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function parseSkillMetadata(content: string, skillName: string): SkillMetadata {
-  const frontmatter = parseSimpleFrontmatter(content);
-
-  const headingMatch = content.match(/^#\s+(.+)$/m);
-  const title =
-    frontmatter.title ||
-    (headingMatch ? headingMatch[1].trim() : "") ||
-    humanizeSkillName(skillName);
-
-  const description =
-    frontmatter.description ||
-    frontmatter.summary ||
-    frontmatter.subtitle ||
-    null;
-
-  return {
-    title,
-    group: frontmatter.group || frontmatter.category || null,
-    description,
-  };
-}
 
 function readGroupOverrides(rootDir: string): GroupOverrides {
   const overrides = new Map<string, string>();
@@ -134,11 +47,11 @@ function createSkillItem(
 ): SkillListItem | null {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
-    const metadata = parseSkillMetadata(content, skillName);
+    const metadata = parseSkillDocument(content, skillName);
 
     return {
       name: skillName,
-      title: metadata.title,
+      title: metadata.displayTitle,
       path: path.resolve(filePath),
       group: metadata.group || groupOverrides.get(skillName) || null,
       description: metadata.description,
