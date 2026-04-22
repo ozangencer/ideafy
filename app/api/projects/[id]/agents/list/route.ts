@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { listProjectAgents } from "@/lib/mcp-skills-installer";
+import { getActiveProvider } from "@/lib/platform/active";
+import { listProjectAgentItems } from "@/lib/agents/catalog";
 
 export async function GET(
   request: NextRequest,
@@ -21,13 +22,14 @@ export async function GET(
     }
 
     if (!project.folderPath) {
-      return NextResponse.json({ agents: [] });
+      return NextResponse.json({ agents: [], items: [] });
     }
 
-    const agents = listProjectAgents(project.folderPath);
-    return NextResponse.json({ agents });
+    const items = listProjectAgentItems(project.folderPath, getActiveProvider().id);
+    const agents = items.map((item) => item.name);
+    return NextResponse.json({ agents, items });
   } catch (error) {
     console.error("Failed to list project agents:", error);
-    return NextResponse.json({ agents: [] });
+    return NextResponse.json({ agents: [], items: [] });
   }
 }

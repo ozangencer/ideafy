@@ -86,6 +86,10 @@ export const createProjectsSlice: StoreSlice<
         activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
         documents: state.activeProjectId === id ? [] : state.documents,
         projectSkillItems: state.activeProjectId === id ? [] : state.projectSkillItems,
+        projectAgents: state.activeProjectId === id ? [] : state.projectAgents,
+        projectAgentItems: state.activeProjectId === id ? [] : state.projectAgentItems,
+        selectedAgent: state.activeProjectId === id ? null : state.selectedAgent,
+        isAgentViewerOpen: state.activeProjectId === id ? false : state.isAgentViewerOpen,
         projectSkillGroups: Object.fromEntries(
           Object.entries(state.projectSkillGroups).filter(([projectId]) => projectId !== id)
         ),
@@ -103,8 +107,11 @@ export const createProjectsSlice: StoreSlice<
       documentContent: "",
       isDocumentEditorOpen: false,
       projectSkillItems: [],
+      projectAgentItems: [],
       selectedSkill: null,
       isSkillViewerOpen: false,
+      selectedAgent: null,
+      isAgentViewerOpen: false,
     });
     if (projectId) {
       get().fetchDocuments(projectId);

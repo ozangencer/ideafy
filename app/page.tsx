@@ -6,6 +6,7 @@ import { KanbanBoard } from "@/components/board/kanban-board";
 import { CardModal } from "@/components/board/card-modal";
 import { DocumentEditor } from "@/components/editor/document-editor";
 import { SkillViewer } from "@/components/editor/skill-viewer";
+import { AgentViewer } from "@/components/editor/agent-viewer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
@@ -31,6 +32,7 @@ export default function Home() {
     setSearchQuery,
     isDocumentEditorOpen,
     isSkillViewerOpen,
+    isAgentViewerOpen,
     activeProjectId,
     projects,
   } = useKanbanStore();
@@ -70,7 +72,7 @@ export default function Home() {
 
   // Polling: Refresh data every 10 seconds (skip when modal/editor is open to prevent form reset)
   useEffect(() => {
-    if (isModalOpen || isDocumentEditorOpen || isSkillViewerOpen) return;
+    if (isModalOpen || isDocumentEditorOpen || isSkillViewerOpen || isAgentViewerOpen) return;
 
     const interval = setInterval(() => {
       // Skip the poll while any run is locally in-flight: the action handler
@@ -94,7 +96,7 @@ export default function Home() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen, isAgentViewerOpen]);
 
   // Focus refresh: Refresh when tab becomes visible (skip when modal/editor is open)
   useEffect(() => {
@@ -103,7 +105,8 @@ export default function Home() {
         document.visibilityState === "visible" &&
         !isModalOpen &&
         !isDocumentEditorOpen &&
-        !isSkillViewerOpen
+        !isSkillViewerOpen &&
+        !isAgentViewerOpen
       ) {
         fetchCards();
         fetchSkills();
@@ -117,7 +120,7 @@ export default function Home() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen, isAgentViewerOpen]);
 
   // Get active project name for display
   const activeProject = projects.find((p) => p.id === activeProjectId);
@@ -192,6 +195,7 @@ export default function Home() {
       {isModalOpen && <CardModal />}
       {isDocumentEditorOpen && <DocumentEditor />}
       {isSkillViewerOpen && <SkillViewer />}
+      {isAgentViewerOpen && <AgentViewer />}
     </div>
   );
 }

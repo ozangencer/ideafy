@@ -95,6 +95,24 @@ export interface SkillPreview extends SkillListItem {
   firstHeading: string | null;
 }
 
+export type AgentFormat = "md" | "toml";
+
+export interface AgentListItem {
+  name: string;
+  title: string;
+  path: string;
+  description: string | null;
+  source: SkillSource;
+  format: AgentFormat;
+}
+
+export interface AgentPreview extends AgentListItem {
+  rawContent: string;
+  bodyContent: string;
+  frontmatter: Record<string, string>;
+  firstHeading: string | null;
+}
+
 export interface TreeNode {
   name: string;
   type: "folder" | "file";

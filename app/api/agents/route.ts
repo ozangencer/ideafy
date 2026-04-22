@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { readdirSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { db } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProvider } from "@/lib/platform/active";
+import { listGlobalAgentItems } from "@/lib/agents/catalog";
 
 function expandPath(path: string): string {
   if (path.startsWith("~")) {
@@ -23,27 +23,19 @@ export async function GET() {
       .get();
 
     if (setting !== undefined && setting.value === "") {
-      return NextResponse.json({ agents: [] });
+      return NextResponse.json({ agents: [], items: [] });
     }
 
     const provider = getActiveProvider();
     const configuredPath = setting?.value || provider.getDefaultAgentsPath();
     const agentsPath = expandPath(configuredPath);
 
-    const entries = readdirSync(agentsPath);
-    const agents = entries
-      .filter((entry) => {
-        if (entry.startsWith(".")) return false;
-        const full = join(agentsPath, entry);
-        if (!statSync(full).isFile()) return false;
-        return entry.endsWith(".md") || entry.endsWith(".toml");
-      })
-      .map((entry) => entry.replace(/\.(md|toml)$/, ""))
-      .sort((a, b) => a.localeCompare(b));
+    const items = listGlobalAgentItems(agentsPath);
+    const agents = items.map((item) => item.name);
 
-    return NextResponse.json({ agents });
+    return NextResponse.json({ agents, items });
   } catch (error) {
     console.error("Failed to read agents:", error);
-    return NextResponse.json({ agents: [] });
+    return NextResponse.json({ agents: [], items: [] });
   }
 }

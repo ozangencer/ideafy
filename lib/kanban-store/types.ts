@@ -1,5 +1,7 @@
 import { StateCreator } from "zustand";
 import {
+  AgentListItem,
+  AgentPreview,
   AppSettings,
   BackgroundProcess,
   Card,
@@ -36,6 +38,10 @@ export interface KanbanStore {
   documentContent: string;
   isDocumentEditorOpen: boolean;
   expandedDocFolders: string[];
+  agentItems: AgentListItem[];
+  projectAgentItems: AgentListItem[];
+  selectedAgent: AgentPreview | null;
+  isAgentViewerOpen: boolean;
   skillItems: SkillListItem[];
   projectSkillItems: SkillListItem[];
   selectedSkill: SkillPreview | null;
@@ -145,6 +151,8 @@ export interface KanbanStore {
   // Skills, MCPs, Agents & Plugins actions
   fetchSkills: () => Promise<void>;
   fetchSkillGroups: () => Promise<void>;
+  openAgentPreview: (agent: AgentListItem) => Promise<void>;
+  closeAgentViewer: () => void;
   openSkillPreview: (skill: SkillListItem) => Promise<void>;
   closeSkillViewer: () => void;
   createSkillGroup: (
