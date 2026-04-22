@@ -4,6 +4,12 @@ export interface Project {
   idPrefix: string;
   color: string;
   folderPath: string;
+  teamId?: string | null;
+}
+
+export interface TeamMemberInfo {
+  userId: string;
+  displayName: string;
 }
 
 export type AutocompleteType = "project" | "status" | "platform" | "complexity" | null;
