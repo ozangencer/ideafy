@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { Project } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
@@ -31,9 +31,18 @@ import { BasicInfoFields } from "./project-form/basic-info-fields";
 interface EditProjectModalProps {
   project: Project;
   onClose: () => void;
+  teamAssignmentSlot?: ReactNode;
+  extraSavePayload?: () => Record<string, unknown>;
+  modal?: boolean;
 }
 
-export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
+export function EditProjectModal({
+  project,
+  onClose,
+  teamAssignmentSlot,
+  extraSavePayload,
+  modal,
+}: EditProjectModalProps) {
   const { updateProject, deleteProject, cards } = useKanbanStore();
 
   // Form state initialized from project
@@ -129,6 +138,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
         documentPaths: documentPaths.length > 0 ? documentPaths : null,
         narrativePath: narrativePath.trim() || null,
         useWorktrees,
+        ...(extraSavePayload?.() ?? {}),
       });
       onClose();
     } catch (error) {
@@ -148,7 +158,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()} modal={modal}>
       <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
@@ -170,6 +180,8 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
           <p className="text-xs text-muted-foreground -mt-2">
             Task IDs: {idPrefix || "PRJ"}-1, {idPrefix || "PRJ"}-2...
           </p>
+
+          {teamAssignmentSlot}
 
           {/* Document Paths */}
           <div className="grid gap-2">
