@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FileText, File } from "lucide-react";
 
 export interface DocumentMentionItem {
@@ -22,6 +22,11 @@ export interface DocumentMentionPopupRef {
 export const DocumentMentionPopup = forwardRef<DocumentMentionPopupRef, DocumentMentionPopupProps>(
   ({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+    useEffect(() => {
+      itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" });
+    }, [selectedIndex, items]);
 
     const selectItem = (index: number) => {
       const item = items[index];
@@ -76,6 +81,7 @@ export const DocumentMentionPopup = forwardRef<DocumentMentionPopupRef, Document
         {items.map((item, index) => (
           <button
             key={item.id}
+            ref={(el) => { itemRefs.current[index] = el; }}
             onClick={() => selectItem(index)}
             className={`w-full text-left px-3 py-2 flex items-center gap-3 transition-colors ${
               index === selectedIndex
