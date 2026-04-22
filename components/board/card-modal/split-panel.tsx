@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, MessageSquare, ChevronDown, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface SplitPanelProps {
@@ -11,6 +11,18 @@ interface SplitPanelProps {
   minLeftWidth?: number; // pixels
   minRightWidth?: number; // pixels
   showToggle?: boolean;
+}
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
 }
 
 export function SplitPanel({
@@ -24,7 +36,9 @@ export function SplitPanel({
   const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   const handleMouseDown = useCallback(() => {
     setIsDragging(true);
@@ -74,8 +88,57 @@ export function SplitPanel({
     setIsCollapsed((prev) => !prev);
   }, []);
 
+  // Mobile layout: full-width section + full-screen chat overlay
+  if (isMobile) {
+    return (
+      <div ref={containerRef} className="flex flex-col h-full w-full overflow-hidden relative">
+        {/* Section content */}
+        <div className="w-full flex-1 overflow-y-auto">
+          {leftPanel}
+        </div>
+
+        {/* Chat toggle bar */}
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="shrink-0 flex items-center justify-between w-full px-4 py-3 border-t border-border bg-surface/80 backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">Chat</span>
+          </div>
+          <ChevronDown className="w-4 h-4 text-muted-foreground rotate-180" />
+        </button>
+
+        {/* Full-screen chat overlay */}
+        {isChatOpen && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-bottom duration-200">
+            {/* Chat header */}
+            <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border">
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="p-1.5 -ml-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Chat</span>
+              </div>
+            </div>
+
+            {/* Chat content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {rightPanel}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop layout: side-by-side split
   return (
-    <div ref={containerRef} className="flex h-full w-full overflow-hidden">
+    <div ref={containerRef} className="relative flex h-full w-full overflow-hidden">
       {/* Left Panel (Editor) */}
       <div
         className="h-full overflow-y-auto"
@@ -117,7 +180,7 @@ export function SplitPanel({
           variant="ghost"
           size="icon"
           onClick={toggleCollapse}
-          className="absolute top-2 right-2 h-7 w-7 z-10 text-muted-foreground hover:text-foreground"
+          className="absolute top-2 right-2 h-9 w-9 md:h-7 md:w-7 z-10 text-muted-foreground hover:text-foreground bg-surface/80 hover:bg-muted border border-border/50 rounded-md"
           title={isCollapsed ? "Show chat" : "Hide chat"}
         >
           {isCollapsed ? (
