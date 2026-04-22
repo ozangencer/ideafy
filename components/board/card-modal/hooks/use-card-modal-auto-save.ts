@@ -20,6 +20,17 @@ interface UseCardModalAutoSaveOptions {
   aiPlatform: AiPlatform | null;
   projects: Project[];
   updateCard: (id: string, updates: Partial<Card>) => Promise<void>;
+  /**
+   * Extra fields merged into the auto-save payload. Evaluated lazily at
+   * save time so consumers don't need to include these values in the
+   * effect dep array. Cloud wrapper returns { assignedTo, assignedToName }.
+   */
+  extraFields?: () => Record<string, unknown>;
+  /**
+   * Suppress the auto-save effect when truthy. Evaluated at effect run
+   * time. Cloud wrapper returns `() => isReadOnly` for pool-locked cards.
+   */
+  skipCondition?: () => boolean;
 }
 
 export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
@@ -40,7 +51,19 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
     aiPlatform,
     projects,
     updateCard,
+    extraFields,
+    skipCondition,
   } = options;
+
+  // Latest-value refs so option churn doesn't retrigger the debounce effect
+  const extraFieldsRef = useRef(extraFields);
+  const skipConditionRef = useRef(skipCondition);
+  useEffect(() => {
+    extraFieldsRef.current = extraFields;
+  }, [extraFields]);
+  useEffect(() => {
+    skipConditionRef.current = skipCondition;
+  }, [skipCondition]);
 
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
@@ -53,6 +76,9 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
 
   useEffect(() => {
     if (!selectedCard || isDraftMode || !canSave || !hasUnsavedChanges) {
+      return;
+    }
+    if (skipConditionRef.current?.()) {
       return;
     }
 
@@ -68,6 +94,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
       setSaveStatus("saving");
 
       const selectedProject = projects.find((p) => p.id === projectId);
+      const extras = extraFieldsRef.current?.() ?? {};
 
       autoSaveInFlightRef.current = true;
       updateCard(selectedCard.id, {
@@ -82,6 +109,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
         projectId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+        ...extras,
       }).finally(() => {
         setTimeout(() => {
           autoSaveInFlightRef.current = false;

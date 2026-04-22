@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AiPlatform, Card, Complexity, Priority, Project, Status } from "@/lib/types";
 
 interface UseCardModalFormOptions {
@@ -14,6 +14,12 @@ interface UseCardModalFormOptions {
   discardDraft: () => void;
   closeModal: () => void;
   detachConversation: () => void;
+  /**
+   * Called after a non-draft save has dispatched `updateCard(...)`.
+   * Consumers (e.g. cloud wrapper) use this for side-effects like
+   * assignment notifications. Invoked with the saved id and payload.
+   */
+  afterSave?: (savedCardId: string, updates: Partial<Card>) => void;
 }
 
 export function useCardModalForm(options: UseCardModalFormOptions) {
@@ -26,7 +32,14 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     discardDraft,
     closeModal,
     detachConversation,
+    afterSave,
   } = options;
+
+  // Latest-value ref so afterSave additions don't churn handleSave's deps
+  const afterSaveRef = useRef(afterSave);
+  useEffect(() => {
+    afterSaveRef.current = afterSave;
+  }, [afterSave]);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -165,6 +178,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
       };
       handleClose();
       updateCard(cardId, updates);
+      afterSaveRef.current?.(cardId, updates);
     }
   }, [
     selectedCard,
