@@ -106,6 +106,10 @@ function PriorityIcon({ priority }: { priority: string }) {
 interface TaskCardProps {
   card: Card;
   isDragging?: boolean;
+  extraBadges?: React.ReactNode;
+  extraContextMenuItems?: React.ReactNode;
+  extraWrapperClassName?: string;
+  softLock?: boolean;
 }
 
 type Phase = "planning" | "implementation" | "retest";
@@ -150,7 +154,14 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
   }
 }
 
-function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
+function TaskCardImpl({
+  card,
+  isDragging = false,
+  extraBadges,
+  extraContextMenuItems,
+  extraWrapperClassName,
+  softLock,
+}: TaskCardProps) {
   // Narrow selectors: boolean membership checks re-render this card only when
   // ITS own flag flips, instead of on every store change (e.g. fetchCards
   // replacing the cards array every 10s). Critical on boards with heavy cards.
@@ -217,7 +228,7 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
   const isStarting = startingLocal || card.processingType === "autonomous" || autonomousInBg;
   const isQuickFixing = quickFixingLocal || card.processingType === "quick-fix" || quickFixInBg;
   const isEvaluating = evaluatingLocal || card.processingType === "evaluate" || evaluateInBg;
-  const isLocked = lockedLocal || !!card.processingType;
+  const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
   const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "test" && card.status !== "ideation");
@@ -256,7 +267,7 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
   };
 
   const handleClick = () => {
-    if (!isDragging && !isBeingDragged && !isLocked) {
+    if (!isDragging && !isBeingDragged && (!isLocked || softLock)) {
       selectCard(card);
       openModal();
     }
@@ -453,11 +464,13 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
             } ${isBeingDragged ? "z-50" : ""} ${
               isLocked
                 ? "opacity-50 cursor-not-allowed"
+                : extraWrapperClassName
+                ? extraWrapperClassName
                 : "hover:border-ink/40"
             }`}
           >
-            {/* Unlock button - only for interactive locks (terminal), not background processing */}
-            {isLocked && !isBackgroundProcessing && (
+            {/* Unlock button - only for interactive locks (terminal), not background processing or soft locks */}
+            {isLocked && !isBackgroundProcessing && !softLock && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -701,6 +714,7 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
                     </TooltipContent>
                   </Tooltip>
                 )}
+                {extraBadges}
                 {card.gitWorktreeStatus === "active" && !isBackgroundProcessing && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -794,6 +808,7 @@ function TaskCardImpl({ card, isDragging = false }: TaskCardProps) {
             <FileDown className="w-4 h-4 mr-2" />
             Export as Markdown
           </ContextMenuItem>
+          {extraContextMenuItems}
           <ContextMenuSeparator />
           <ContextMenuItem
             onClick={() => setShowDeleteConfirm(true)}
@@ -1032,6 +1047,10 @@ export const TaskCard = memo(TaskCardImpl, (prev, next) => {
     prev.isDragging === next.isDragging &&
     prev.card.id === next.card.id &&
     prev.card.updatedAt === next.card.updatedAt &&
-    prev.card.processingType === next.card.processingType
+    prev.card.processingType === next.card.processingType &&
+    prev.softLock === next.softLock &&
+    prev.extraWrapperClassName === next.extraWrapperClassName &&
+    prev.extraBadges === next.extraBadges &&
+    prev.extraContextMenuItems === next.extraContextMenuItems
   );
 });
