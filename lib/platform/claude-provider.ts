@@ -41,6 +41,21 @@ function readSkill(name: string): string {
   return fs.readFileSync(path.join(SKILLS_DIR, `${name}.md`), "utf-8");
 }
 
+function parseSkillVersion(content: string): string | null {
+  const match = content.match(/^---[\s\S]*?version:\s*"([^"]+)"[\s\S]*?---/);
+  return match ? match[1] : null;
+}
+
+function shouldUpdateSkill(bundledContent: string, installedPath: string): boolean {
+  if (!fs.existsSync(installedPath)) return true;
+  const installed = fs.readFileSync(installedPath, "utf-8");
+  const bundledVersion = parseSkillVersion(bundledContent);
+  const installedVersion = parseSkillVersion(installed);
+  if (!bundledVersion) return false;
+  if (!installedVersion) return true;
+  return bundledVersion !== installedVersion;
+}
+
 // Cache the CLI path
 let cachedClaudePath: string | null = null;
 
@@ -206,9 +221,10 @@ class ClaudeProvider implements PlatformProvider {
 
       for (const file of SKILL_FILES) {
         const targetPath = path.join(commandsDir, file);
-        if (!fs.existsSync(targetPath)) {
-          const name = file.replace(/\.md$/, "");
-          fs.writeFileSync(targetPath, readSkill(name));
+        const name = file.replace(/\.md$/, "");
+        const bundledContent = readSkill(name);
+        if (shouldUpdateSkill(bundledContent, targetPath)) {
+          fs.writeFileSync(targetPath, bundledContent);
         }
       }
 
