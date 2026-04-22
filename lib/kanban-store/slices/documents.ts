@@ -6,11 +6,13 @@ export const createDocumentsSlice: StoreSlice<
   Pick<
     KanbanStore,
     | "documents"
+    | "memoryFiles"
     | "selectedDocument"
     | "documentContent"
     | "isDocumentEditorOpen"
     | "expandedDocFolders"
     | "fetchDocuments"
+    | "fetchMemory"
     | "openDocument"
     | "saveDocument"
     | "closeDocumentEditor"
@@ -19,6 +21,7 @@ export const createDocumentsSlice: StoreSlice<
   >
 > = (set, get) => ({
   documents: [],
+  memoryFiles: [],
   selectedDocument: null,
   documentContent: "",
   isDocumentEditorOpen: false,
@@ -32,6 +35,17 @@ export const createDocumentsSlice: StoreSlice<
     } catch (error) {
       console.error("Failed to fetch documents:", error);
       set({ documents: [] });
+    }
+  },
+
+  fetchMemory: async (projectId) => {
+    try {
+      const response = await fetch(`/api/projects/${projectId}/memory`);
+      const files = await parseJson<DocumentFile[]>(response);
+      set({ memoryFiles: Array.isArray(files) ? files : [] });
+    } catch (error) {
+      console.error("Failed to fetch memory files:", error);
+      set({ memoryFiles: [] });
     }
   },
 

@@ -34,6 +34,7 @@ export interface KanbanStore {
 
   // Documents state
   documents: DocumentFile[];
+  memoryFiles: DocumentFile[];
   selectedDocument: DocumentFile | null;
   documentContent: string;
   isDocumentEditorOpen: boolean;
@@ -126,6 +127,7 @@ export interface KanbanStore {
 
   // Document actions
   fetchDocuments: (projectId: string) => Promise<void>;
+  fetchMemory: (projectId: string) => Promise<void>;
   openDocument: (doc: DocumentFile) => Promise<void>;
   saveDocument: () => Promise<void>;
   closeDocumentEditor: () => void;

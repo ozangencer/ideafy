@@ -68,6 +68,7 @@ export const createSettingsSlice: StoreSlice<
         const activeProjectId = get().activeProjectId;
         if (activeProjectId) {
           get().fetchProjectExtensions(activeProjectId);
+          get().fetchMemory(activeProjectId);
         }
       }
     } catch (error) {

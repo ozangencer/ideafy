@@ -251,12 +251,20 @@ export function createDocumentSuggestion(
       const searchQuery = query.toLowerCase();
       return config
         .getDocuments()
-        .map((doc) => ({
-          id: doc.relativePath,
-          name: doc.name,
-          relativePath: doc.relativePath,
-          isClaudeMd: doc.isClaudeMd,
-        }))
+        .map((doc) => {
+          const isMemory = doc.source === "memory";
+          return {
+            // Memory files share filenames across projects; namespace the id
+            // with a prefix so dedupe and selection don't collide with a
+            // project-local doc of the same name.
+            id: isMemory ? `memory:${doc.path}` : doc.relativePath,
+            name: doc.name,
+            relativePath: doc.relativePath,
+            isClaudeMd: doc.isClaudeMd,
+            isMemory,
+            absolutePath: doc.path,
+          };
+        })
         .filter((item) => {
           if (!searchQuery) return true;
           return (
@@ -265,7 +273,10 @@ export function createDocumentSuggestion(
           );
         })
         .sort((a, b) => {
+          // CLAUDE.md always first
           if (a.isClaudeMd !== b.isClaudeMd) return a.isClaudeMd ? -1 : 1;
+          // Then project docs, then memory at the bottom
+          if (a.isMemory !== b.isMemory) return a.isMemory ? 1 : -1;
           return a.name.localeCompare(b.name);
         })
         .slice(0, 10);
@@ -283,6 +294,8 @@ export function createDocumentSuggestion(
               name: props.name,
               path: props.relativePath,
               isClaudeMd: props.isClaudeMd,
+              isMemory: props.isMemory ?? false,
+              absolutePath: props.absolutePath ?? "",
             },
           },
         ])

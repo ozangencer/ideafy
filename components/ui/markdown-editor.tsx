@@ -55,6 +55,7 @@ export function MarkdownEditor({
     projects,
     activeProjectId,
     documents,
+    memoryFiles,
     skills,
     mcps,
     agents,
@@ -74,6 +75,7 @@ export function MarkdownEditor({
 
   // Ref to hold current documents for the callback
   const documentsRef = useRef<typeof documents>([]);
+  const memoryRef = useRef<typeof memoryFiles>([]);
 
   // Fetch and maintain documents for the card's project
   useEffect(() => {
@@ -87,11 +89,20 @@ export function MarkdownEditor({
         .catch(() => {
           documentsRef.current = [];
         });
+      fetch(`/api/projects/${effectiveProjectId}/memory`)
+        .then(res => res.json())
+        .then(files => {
+          memoryRef.current = Array.isArray(files) ? files : [];
+        })
+        .catch(() => {
+          memoryRef.current = [];
+        });
     } else {
       // Use store's documents
       documentsRef.current = documents;
+      memoryRef.current = memoryFiles;
     }
-  }, [projectId, activeProjectId, documents]);
+  }, [projectId, activeProjectId, documents, memoryFiles]);
 
   // Fetch project-specific skills/mcps based on card's project
   useEffect(() => {
@@ -217,7 +228,10 @@ export function MarkdownEditor({
   ]);
 
   // Callback to get current documents (used by suggestion)
-  const getDocuments = useCallback(() => documentsRef.current, []);
+  const getDocuments = useCallback(
+    () => [...documentsRef.current, ...memoryRef.current],
+    []
+  );
 
   // Unified suggestion for / trigger (skills, MCPs, plugins)
   const unifiedSuggestion = useMemo(

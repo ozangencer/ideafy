@@ -269,6 +269,8 @@ export const DocumentMention = Node.create<DocumentMentionOptions>({
       name: dataAttr("name"),
       path: dataAttr("path"),
       isClaudeMd: boolDataAttr("isClaudeMd", "data-is-claude-md"),
+      isMemory: boolDataAttr("isMemory", "data-is-memory"),
+      absolutePath: dataAttr("absolutePath", "data-absolute-path"),
     };
   },
 
@@ -278,19 +280,29 @@ export const DocumentMention = Node.create<DocumentMentionOptions>({
 
   renderHTML({ node, HTMLAttributes }) {
     const isClaudeMd = node.attrs.isClaudeMd;
+    const isMemory = node.attrs.isMemory;
     return [
       "span",
       mergeAttributes(
         { "data-type": this.name },
         this.options.HTMLAttributes,
         HTMLAttributes,
-        { class: `mention document-mention${isClaudeMd ? " claude-md" : ""}` },
+        {
+          class: `mention document-mention${isClaudeMd ? " claude-md" : ""}${
+            isMemory ? " memory" : ""
+          }`,
+        },
       ),
       `@${node.attrs.name}`,
     ];
   },
 
   renderText({ node }) {
+    // Memory files live outside the project's cwd; emit the absolute path so
+    // Claude CLI can resolve the @-reference. Visible chip still shows @name.
+    if (node.attrs.isMemory && node.attrs.absolutePath) {
+      return `@${node.attrs.absolutePath}`;
+    }
     return `@${node.attrs.name}`;
   },
 

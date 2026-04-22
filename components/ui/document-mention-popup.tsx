@@ -1,13 +1,15 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { FileText, File } from "lucide-react";
+import { FileText, File, Brain } from "lucide-react";
 
 export interface DocumentMentionItem {
   id: string;
   name: string;
   relativePath: string;
   isClaudeMd: boolean;
+  isMemory?: boolean;
+  absolutePath?: string;
 }
 
 interface DocumentMentionPopupProps {
@@ -89,20 +91,35 @@ export const DocumentMentionPopup = forwardRef<DocumentMentionPopupRef, Document
                 : "hover:bg-muted"
             }`}
           >
-            {item.isClaudeMd ? (
+            {item.isMemory ? (
+              <Brain className="w-4 h-4 flex-shrink-0 text-emerald-500" />
+            ) : item.isClaudeMd ? (
               <FileText className="w-4 h-4 flex-shrink-0 text-orange-400" />
             ) : (
               <File className="w-4 h-4 flex-shrink-0 text-cyan-400" />
             )}
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className={`font-medium text-sm ${item.isClaudeMd ? "text-orange-400" : ""}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`font-medium text-sm break-all min-w-0 ${
+                    item.isClaudeMd
+                      ? "text-orange-400"
+                      : item.isMemory
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : ""
+                  }`}
+                >
                   {item.name}
                 </span>
                 {item.isClaudeMd && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium shrink-0">
                     CLAUDE
+                  </span>
+                )}
+                {item.isMemory && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
+                    MEMORY
                   </span>
                 )}
               </div>

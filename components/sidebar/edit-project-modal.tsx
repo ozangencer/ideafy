@@ -200,8 +200,9 @@ export function EditProjectModal({
               className="min-h-[80px] font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              One path per line. Leave empty for smart discovery (CLAUDE.md, README.md,
-              docs/, notes/, specs/, plans/, .github/, etc.)
+              One path per line. Your paths appear at the top, then smart discovery
+              fills in the rest (CLAUDE.md, README.md, docs/, notes/, specs/, plans/,
+              .github/, etc.).
             </p>
           </div>
 

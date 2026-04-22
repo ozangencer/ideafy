@@ -103,6 +103,7 @@ export const createProjectsSlice: StoreSlice<
     set({
       activeProjectId: projectId,
       documents: [],
+      memoryFiles: [],
       selectedDocument: null,
       documentContent: "",
       isDocumentEditorOpen: false,
@@ -115,6 +116,7 @@ export const createProjectsSlice: StoreSlice<
     });
     if (projectId) {
       get().fetchDocuments(projectId);
+      get().fetchMemory(projectId);
     }
   },
 

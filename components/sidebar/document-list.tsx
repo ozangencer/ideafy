@@ -10,15 +10,28 @@ import {
 } from "@/components/ui/collapsible";
 import { FileText, File, ChevronRight, FolderOpen, Folder } from "lucide-react";
 
+type TopLevelOrder = "alphabetical" | "preserved";
+
 // Build tree structure from flat document list
-function buildTree(documents: DocumentFile[]): TreeNode[] {
+function buildTree(
+  documents: DocumentFile[],
+  topLevelOrder: TopLevelOrder = "alphabetical"
+): TreeNode[] {
   const root: TreeNode[] = [];
   const folderMap = new Map<string, TreeNode>();
 
-  // Sort documents by relativePath for consistent ordering
-  const sortedDocs = [...documents].sort((a, b) =>
-    a.relativePath.localeCompare(b.relativePath)
-  );
+  // Track first-appearance index of top-level names (for preserved order)
+  const topLevelOrderMap = new Map<string, number>();
+  documents.forEach((doc, idx) => {
+    const top = doc.relativePath.split("/")[0];
+    if (!topLevelOrderMap.has(top)) topLevelOrderMap.set(top, idx);
+  });
+
+  // Iterate in user order when preserving; alphabetical otherwise
+  const sortedDocs =
+    topLevelOrder === "preserved"
+      ? documents
+      : [...documents].sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 
   for (const doc of sortedDocs) {
     const parts = doc.relativePath.split("/");
@@ -104,17 +117,28 @@ function buildTree(documents: DocumentFile[]): TreeNode[] {
     });
   }
 
-  function sortTree(nodes: TreeNode[]): TreeNode[] {
-    const sorted = sortNodes(nodes);
+  function sortTopLevelPreserved(nodes: TreeNode[]): TreeNode[] {
+    return nodes.sort((a, b) => {
+      const aOrder = topLevelOrderMap.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = topLevelOrderMap.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder;
+    });
+  }
+
+  function sortTree(nodes: TreeNode[], isRoot: boolean): TreeNode[] {
+    const sorted =
+      isRoot && topLevelOrder === "preserved"
+        ? sortTopLevelPreserved(nodes)
+        : sortNodes(nodes);
     for (const node of sorted) {
       if (node.type === "folder") {
-        node.children = sortTree(node.children);
+        node.children = sortTree(node.children, false);
       }
     }
     return sorted;
   }
 
-  return sortTree(root);
+  return sortTree(root, true);
 }
 
 // File item component
@@ -260,8 +284,18 @@ export function DocumentList() {
   } = useKanbanStore();
   const [isOpen, setIsOpen] = useState(true);
 
-  // Build tree from flat document list
-  const tree = useMemo(() => buildTree(documents), [documents]);
+  // Split by source: custom (user-specified) comes first, discovered fills gaps
+  const { customTree, discoveredTree } = useMemo(() => {
+    const customDocs = documents.filter((d) => d.source === "custom");
+    const discoveredDocs = documents.filter((d) => d.source !== "custom");
+    return {
+      customTree: buildTree(customDocs, "preserved"),
+      discoveredTree: buildTree(discoveredDocs, "alphabetical"),
+    };
+  }, [documents]);
+
+  const hasCustom = customTree.length > 0;
+  const hasDiscovered = discoveredTree.length > 0;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="px-2 relative z-0">
@@ -286,17 +320,33 @@ export function DocumentList() {
             No documents found
           </p>
         ) : (
-          tree.map((node) => (
-            <TreeNodeComponent
-              key={node.path}
-              node={node}
-              depth={0}
-              expandedDocFolders={expandedDocFolders}
-              toggleDocFolder={toggleDocFolder}
-              selectedDocument={selectedDocument}
-              openDocument={openDocument}
-            />
-          ))
+          <>
+            {customTree.map((node) => (
+              <TreeNodeComponent
+                key={`custom:${node.path}`}
+                node={node}
+                depth={0}
+                expandedDocFolders={expandedDocFolders}
+                toggleDocFolder={toggleDocFolder}
+                selectedDocument={selectedDocument}
+                openDocument={openDocument}
+              />
+            ))}
+            {hasCustom && hasDiscovered && (
+              <div className="my-1 border-t border-border/50" />
+            )}
+            {discoveredTree.map((node) => (
+              <TreeNodeComponent
+                key={`discovered:${node.path}`}
+                node={node}
+                depth={0}
+                expandedDocFolders={expandedDocFolders}
+                toggleDocFolder={toggleDocFolder}
+                selectedDocument={selectedDocument}
+                openDocument={openDocument}
+              />
+            ))}
+          </>
         )}
       </CollapsibleContent>
     </Collapsible>

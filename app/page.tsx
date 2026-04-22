@@ -24,6 +24,7 @@ export default function Home() {
     fetchMcps,
     fetchAgents,
     fetchDocuments,
+    fetchMemory,
     fetchBackgroundProcesses,
     isModalOpen,
     isLoading,
@@ -51,14 +52,17 @@ export default function Home() {
   useEffect(() => {
     const handler = () => {
       fetchCards();
-      if (activeProjectId) fetchDocuments(activeProjectId);
+      if (activeProjectId) {
+        fetchDocuments(activeProjectId);
+        fetchMemory(activeProjectId);
+      }
       // Quick-entry Ideate fires an evaluate POST before closing; give the
       // server a moment to register the process, then refresh the tray.
       setTimeout(() => fetchBackgroundProcesses(), 500);
     };
     window.addEventListener("refresh-data", handler);
     return () => window.removeEventListener("refresh-data", handler);
-  }, [fetchCards, fetchDocuments, fetchBackgroundProcesses, activeProjectId]);
+  }, [fetchCards, fetchDocuments, fetchMemory, fetchBackgroundProcesses, activeProjectId]);
 
   // Initial fetch
   useEffect(() => {
@@ -92,11 +96,12 @@ export default function Home() {
       fetchAgents();
       if (activeProjectId) {
         fetchDocuments(activeProjectId);
+        fetchMemory(activeProjectId);
       }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen, isAgentViewerOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, fetchMemory, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen, isAgentViewerOpen]);
 
   // Focus refresh: Refresh when tab becomes visible (skip when modal/editor is open)
   useEffect(() => {
@@ -114,13 +119,14 @@ export default function Home() {
         fetchAgents();
         if (activeProjectId) {
           fetchDocuments(activeProjectId);
+          fetchMemory(activeProjectId);
         }
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen, isAgentViewerOpen]);
+  }, [fetchCards, fetchSkills, fetchMcps, fetchAgents, fetchDocuments, fetchMemory, activeProjectId, isModalOpen, isDocumentEditorOpen, isSkillViewerOpen, isAgentViewerOpen]);
 
   // Get active project name for display
   const activeProject = projects.find((p) => p.id === activeProjectId);

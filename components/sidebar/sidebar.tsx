@@ -7,6 +7,7 @@ import { SkillList } from "./skill-list";
 import { McpList } from "./mcp-list";
 import { AgentList } from "./agent-list";
 import { DocumentList } from "./document-list";
+import { MemoryList } from "./memory-list";
 import { SettingsModal } from "./settings-modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -237,6 +238,7 @@ export function Sidebar() {
               <>
                 <Separator className="my-3 mx-4" />
                 <DocumentList />
+                <MemoryList />
               </>
             )}
           </div>

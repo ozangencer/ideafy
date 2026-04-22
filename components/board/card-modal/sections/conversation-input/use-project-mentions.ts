@@ -27,12 +27,14 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
     mcps,
     agents,
     documents,
+    memoryFiles,
     skillItems,
     projectSkillItems,
     globalSkillGroups,
     projectSkillGroups,
   } = useKanbanStore();
   const documentsRef = useRef<typeof documents>([]);
+  const memoryRef = useRef<typeof memoryFiles>([]);
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
   const [localProjectAgents, setLocalProjectAgents] = useState<string[]>([]);
@@ -49,10 +51,19 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
         .catch(() => {
           documentsRef.current = [];
         });
+      fetch(`/api/projects/${effectiveProjectId}/memory`)
+        .then((res) => res.json())
+        .then((files) => {
+          memoryRef.current = Array.isArray(files) ? files : [];
+        })
+        .catch(() => {
+          memoryRef.current = [];
+        });
     } else {
       documentsRef.current = documents;
+      memoryRef.current = memoryFiles;
     }
-  }, [projectId, activeProjectId, documents]);
+  }, [projectId, activeProjectId, documents, memoryFiles]);
 
   useEffect(() => {
     const effectiveProjectId = projectId || activeProjectId;
@@ -75,7 +86,10 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
     });
   }, [projectId, activeProjectId]);
 
-  const getDocuments = useCallback(() => documentsRef.current, []);
+  const getDocuments = useCallback(
+    () => [...documentsRef.current, ...memoryRef.current],
+    []
+  );
 
   const getUnifiedItems = useCallback((): UnifiedMentionItem[] => {
     const items: UnifiedMentionItem[] = [];

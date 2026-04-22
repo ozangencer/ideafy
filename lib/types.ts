@@ -64,6 +64,7 @@ export interface DocumentFile {
   path: string;
   relativePath: string;
   isClaudeMd: boolean;
+  source?: "custom" | "discovered" | "memory";
 }
 
 export type SkillSource = "global" | "project";

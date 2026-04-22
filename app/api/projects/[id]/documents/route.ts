@@ -149,82 +149,79 @@ export async function GET(
       return NextResponse.json([]);
     }
 
-    const documents: DocumentFile[] = [];
     const seen = new Set<string>();
+    const customDocs: DocumentFile[] = [];
+    const discoveredDocs: DocumentFile[] = [];
 
-    // Helper to add file without duplicates
-    const addFile = (file: DocumentFile) => {
-      if (!seen.has(file.path)) {
-        seen.add(file.path);
-        documents.push(file);
-      }
-    };
-
-    // Check if project has custom document paths
-    const customPaths = project.documentPaths
+    // Parse custom paths (preserves user order)
+    const customPaths: string[] | null = project.documentPaths
       ? JSON.parse(project.documentPaths)
       : null;
 
+    // 1. Custom paths — user-explicit, priority placement
     if (customPaths && customPaths.length > 0) {
-      // Use custom paths if configured
       const customFiles = findMarkdownFilesWithCustomPaths(
         project.folderPath,
         customPaths
       );
-      customFiles.forEach(addFile);
-    } else {
-      // Default: Smart Discovery
-
-      // 1. Find important root-level files
-      try {
-        const rootEntries = fs.readdirSync(project.folderPath, { withFileTypes: true });
-        for (const entry of rootEntries) {
-          if (entry.isFile() && entry.name.endsWith(".md")) {
-            // Only include important root files or all root .md files
-            const fullPath = path.join(project.folderPath, entry.name);
-            addFile({
-              name: entry.name,
-              path: fullPath,
-              relativePath: entry.name,
-              isClaudeMd: entry.name === "CLAUDE.md",
-            });
-          }
-        }
-      } catch (error) {
-        console.error("Error reading root directory:", error);
+      for (const file of customFiles) {
+        if (seen.has(file.path)) continue;
+        seen.add(file.path);
+        customDocs.push({ ...file, source: "custom" });
       }
+    }
 
-      // 2. Scan document directories
-      for (const dirName of DOCUMENT_DIRECTORIES) {
-        const dirPath = path.join(project.folderPath, dirName);
-        if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
-          const dirFiles = findMarkdownFiles(dirPath, project.folderPath);
-          dirFiles.forEach(addFile);
+    // 2. Smart discovery — always runs, fills gaps
+    const discoveredBuffer: DocumentFile[] = [];
+
+    try {
+      const rootEntries = fs.readdirSync(project.folderPath, { withFileTypes: true });
+      for (const entry of rootEntries) {
+        if (entry.isFile() && entry.name.endsWith(".md")) {
+          const fullPath = path.join(project.folderPath, entry.name);
+          if (seen.has(fullPath)) continue;
+          seen.add(fullPath);
+          discoveredBuffer.push({
+            name: entry.name,
+            path: fullPath,
+            relativePath: entry.name,
+            isClaudeMd: entry.name === "CLAUDE.md",
+            source: "discovered",
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error reading root directory:", error);
+    }
+
+    for (const dirName of DOCUMENT_DIRECTORIES) {
+      const dirPath = path.join(project.folderPath, dirName);
+      if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+        const dirFiles = findMarkdownFiles(dirPath, project.folderPath);
+        for (const file of dirFiles) {
+          if (seen.has(file.path)) continue;
+          seen.add(file.path);
+          discoveredBuffer.push({ ...file, source: "discovered" });
         }
       }
     }
 
-    // Sort: CLAUDE.md first, README.md second, then by importance, then alphabetically
-    documents.sort((a, b) => {
-      // CLAUDE.md always first
+    // Sort discovered: CLAUDE.md > README.md > other important root files > alphabetical
+    discoveredBuffer.sort((a, b) => {
       if (a.isClaudeMd) return -1;
       if (b.isClaudeMd) return 1;
-
-      // README.md second
       if (a.name === "README.md") return -1;
       if (b.name === "README.md") return 1;
-
-      // Important root files come before directory files
       const aIsImportant = IMPORTANT_ROOT_FILES.includes(a.name) && !a.relativePath.includes("/");
       const bIsImportant = IMPORTANT_ROOT_FILES.includes(b.name) && !b.relativePath.includes("/");
       if (aIsImportant && !bIsImportant) return -1;
       if (!aIsImportant && bIsImportant) return 1;
-
-      // Then alphabetically by path
       return a.relativePath.localeCompare(b.relativePath);
     });
 
-    return NextResponse.json(documents);
+    discoveredDocs.push(...discoveredBuffer);
+
+    return NextResponse.json([...customDocs, ...discoveredDocs]);
   } catch (error) {
     console.error("Failed to fetch documents:", error);
     return NextResponse.json(
