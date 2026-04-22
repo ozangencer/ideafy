@@ -42,9 +42,10 @@ interface SettingsModalProps {
   onClose: () => void;
   extraTabs?: SettingsExtraTab[];
   defaultTab?: string;
+  generalTabExtras?: ReactNode;
 }
 
-export function SettingsModal({ onClose, extraTabs = [], defaultTab }: SettingsModalProps) {
+export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabExtras }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<string>(defaultTab || "general");
   const hasExtraTabs = extraTabs.length > 0;
   const activeExtra = extraTabs.find((t) => t.value === activeTab);
@@ -482,6 +483,8 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab }: SettingsM
               </div>
             </>
           )}
+
+          {generalTabExtras}
     </div>
   );
 
