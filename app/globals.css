@@ -10,10 +10,15 @@
   margin: 0;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
   font-family: 'Inter', system-ui, sans-serif;
 }
 
@@ -74,6 +79,15 @@ body {
 
 .light ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Focus styles */
@@ -250,16 +264,20 @@ button:disabled {
   @apply bg-surface border border-border rounded-md;
 }
 
+.prose-kanban {
+  @apply text-sm;
+}
+
 .prose-kanban h1 {
-  @apply text-xl font-semibold mt-4 mb-2;
+  @apply text-lg font-semibold mt-4 mb-2;
 }
 
 .prose-kanban h2 {
-  @apply text-lg font-semibold mt-3 mb-2;
+  @apply text-base font-semibold mt-3 mb-2;
 }
 
 .prose-kanban h3 {
-  @apply text-base font-semibold mt-2 mb-1;
+  @apply text-sm font-semibold mt-2 mb-1;
 }
 
 /* Remove top margin for first child */
@@ -297,9 +315,17 @@ button:disabled {
 }
 
 .prose-kanban ul[data-type="taskList"] li input[type="checkbox"] {
-  @apply w-4 h-4 rounded border-2 border-muted-foreground cursor-pointer;
+  @apply w-4 h-4 rounded border-2 border-muted-foreground;
   @apply checked:bg-accent-blue checked:border-accent-blue;
   accent-color: #5e6ad2;
+  pointer-events: none;
+}
+
+/* Disable interactive elements in read-only prose (not inside editor wrapper) */
+.prose-kanban:not(.section-editor-wrapper .prose-kanban) input,
+.prose-kanban:not(.section-editor-wrapper .prose-kanban) select,
+.prose-kanban:not(.section-editor-wrapper .prose-kanban) textarea {
+  pointer-events: none;
 }
 
 .prose-kanban ul[data-type="taskList"] li > div {
@@ -596,7 +622,7 @@ button:disabled {
 }
 
 .chat-input-container .ProseMirror {
-  @apply outline-none px-3 py-2 text-sm min-h-[38px] overflow-y-auto;
+  @apply outline-none px-3 py-2 text-base md:text-sm min-h-[38px] overflow-y-auto;
   max-height: min(40vh, 420px);
   scroll-padding-block-end: 1.5rem;
   transition: max-height 150ms ease-out;
@@ -625,7 +651,7 @@ button:disabled {
 
 /* Chat Input Editor Prose */
 .chat-input-editor {
-  @apply text-sm;
+  @apply text-base md:text-sm;
 }
 
 .chat-input-editor p {
@@ -671,8 +697,8 @@ button:disabled {
   @apply my-1;
 }
 
-/* Tab Indicator Animation */
-[data-state="active"]::after {
+/* Tab Indicator Animation — scoped to app tabs only */
+.card-modal-tabs [data-state="active"]::after {
   content: "";
   @apply absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full;
   animation: tabIndicator 0.2s ease-out;
@@ -782,4 +808,6 @@ button:disabled {
 .quick-entry-editor blockquote {
   @apply border-l-2 border-border pl-3 italic text-muted-foreground my-1;
 }
+
+/* Landing page utilities */
 
