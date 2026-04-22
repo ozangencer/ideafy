@@ -1,17 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import {
-  Status,
+  type Card,
   getDisplayId,
-  Complexity,
-  Priority,
-  AiPlatform,
   GitBranchStatus,
   GitWorktreeStatus,
   SectionType,
-  SECTION_CONFIG,
   MentionData,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -48,6 +44,11 @@ import { SplitPanel } from "./split-panel";
 import { SectionEditor } from "./sections/section-editor";
 import { ConversationPanel } from "./sections/conversation-panel";
 
+// Hooks
+import { useCardModalForm } from "./hooks/use-card-modal-form";
+import { useCardModalAutoSave } from "./hooks/use-card-modal-auto-save";
+import { useCardModalFormReset } from "./hooks/use-card-modal-form-reset";
+
 export function CardModal() {
   const {
     selectedCard,
@@ -81,24 +82,44 @@ export function CardModal() {
   // Check if we're in draft mode (creating a new card)
   const isDraftMode = selectedCard?.id?.startsWith("draft-") ?? false;
 
-  // Form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [solutionSummary, setSolutionSummary] = useState("");
-  const [testScenarios, setTestScenarios] = useState("");
-  const [aiOpinion, setAiOpinion] = useState("");
-  const [status, setStatus] = useState<Status>("ideation");
-  const [complexity, setComplexity] = useState<Complexity>("medium");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
+  // Form + close-flow
+  const form = useCardModalForm({
+    selectedCard,
+    isDraftMode,
+    projects,
+    saveDraftCard,
+    updateCard,
+    discardDraft,
+    closeModal,
+    detachConversation,
+  });
 
-  // UI state
-  const [isVisible, setIsVisible] = useState(false);
+  const {
+    title, setTitle,
+    description, setDescription,
+    solutionSummary, setSolutionSummary,
+    testScenarios, setTestScenarios,
+    aiOpinion, setAiOpinion,
+    status, setStatus,
+    complexity, setComplexity,
+    priority, setPriority,
+    projectId, setProjectId,
+    aiPlatform, setAiPlatform,
+    isVisible,
+    cardHistory, setCardHistory,
+    showDiscardDraftDialog, setShowDiscardDraftDialog,
+    isTitleValid,
+    canSave,
+    hasUnsavedChanges,
+    handleSave,
+    handleClose,
+    handleForceClose,
+    applyCardToForm,
+  } = form;
+
+  // UI state not owned by the form hook
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<SectionType>("detail");
-  const [cardHistory, setCardHistory] = useState<string[]>([]);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   // Git state
   const [gitBranchName, setGitBranchName] = useState<string | null>(null);
@@ -110,7 +131,6 @@ export function CardModal() {
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [showCommitFirstDialog, setShowCommitFirstDialog] = useState(false);
   const [commitFirstScope, setCommitFirstScope] = useState<"main" | "worktree">("main");
-  const [showDiscardDraftDialog, setShowDiscardDraftDialog] = useState(false);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
   const [conflictInfo, setConflictInfo] = useState<{
@@ -125,99 +145,14 @@ export function CardModal() {
   const [devServerPid, setDevServerPid] = useState<number | null>(null);
   const [isServerLoading, setIsServerLoading] = useState(false);
 
-  // Track unsaved changes
-  const hasUnsavedChanges = selectedCard && (
-    title !== selectedCard.title ||
-    description !== selectedCard.description ||
-    solutionSummary !== selectedCard.solutionSummary ||
-    testScenarios !== selectedCard.testScenarios ||
-    aiOpinion !== selectedCard.aiOpinion ||
-    status !== selectedCard.status ||
-    complexity !== (selectedCard.complexity || "medium") ||
-    priority !== (selectedCard.priority || "medium") ||
-    projectId !== selectedCard.projectId ||
-    aiPlatform !== (selectedCard.aiPlatform ?? null)
-  );
-
-  // Check if draft has any user-entered content
-  const hasDraftChanges = isDraftMode && (
-    title.trim() !== "" ||
-    description.trim() !== "" ||
-    solutionSummary.trim() !== "" ||
-    testScenarios.trim() !== "" ||
-    aiOpinion.trim() !== ""
-  );
+  const overlayMouseDownRef = useRef(false);
 
   // Get project and displayId
   const project = projects.find((p) => p.id === projectId);
   const displayId = selectedCard ? getDisplayId(selectedCard, project) : null;
 
-  // Check if save should be disabled
-  const isTitleValid = (title || "").trim().length > 0;
-  const canSave = projectId !== null && isTitleValid;
-
-  // Auto-save debounce ref
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // Track when MCP tool updates arrive to prevent auto-save overwriting them
-  const lastMcpUpdateRef = useRef<number>(0);
-  const overlayMouseDownRef = useRef(false);
-
-  // Auto-save effect for edit mode
-  useEffect(() => {
-    // Only auto-save for existing cards (not drafts) with valid data
-    if (!selectedCard || isDraftMode || !canSave || !hasUnsavedChanges) {
-      return;
-    }
-
-    // Clear any existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    // Debounced save after 500ms
-    saveTimeoutRef.current = setTimeout(() => {
-      // Skip auto-save if an MCP tool update arrived recently (within 1000ms)
-      // This prevents overwriting values set by save_plan, save_tests, etc.
-      if (Date.now() - lastMcpUpdateRef.current < 1000) {
-        return;
-      }
-
-      setSaveStatus("saving");
-
-      const selectedProject = projects.find((p) => p.id === projectId);
-
-      updateCard(selectedCard.id, {
-        title,
-        description,
-        solutionSummary,
-        testScenarios,
-        aiOpinion,
-        status,
-        complexity,
-        priority,
-        projectId,
-        aiPlatform,
-        projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
-      });
-
-      setSaveStatus("saved");
-
-      // Clear saved status after 2 seconds
-      if (savedTimeoutRef.current) {
-        clearTimeout(savedTimeoutRef.current);
-      }
-      savedTimeoutRef.current = setTimeout(() => {
-        setSaveStatus("idle");
-      }, 2000);
-    }, 500);
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [
+  // Auto-save
+  const { saveStatus, cancelPendingAutoSave, markExternalUpdate, autoSaveInFlightRef } = useCardModalAutoSave({
     selectedCard,
     isDraftMode,
     canSave,
@@ -234,15 +169,31 @@ export function CardModal() {
     aiPlatform,
     projects,
     updateCard,
-  ]);
+  });
 
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
-    };
+  // Git/dev-server setters bundled for the form-reset hook
+  const applyCardToGit = useCallback((card: Card) => {
+    setGitBranchName(card.gitBranchName);
+    setGitBranchStatus(card.gitBranchStatus);
+    setGitWorktreePath(card.gitWorktreePath);
+    setGitWorktreeStatus(card.gitWorktreeStatus);
+    setDevServerPort(card.devServerPort);
+    setDevServerPid(card.devServerPid);
   }, []);
+
+  // Form resync when selectedCard changes (respects auto-save in-flight guard)
+  useCardModalFormReset({
+    selectedCard,
+    isDraftMode,
+    activeTab,
+    setActiveTab,
+    fetchConversation,
+    autoSaveInFlightRef,
+    cancelPendingAutoSave,
+    markExternalUpdate,
+    applyCardToForm,
+    applyCardToGit,
+  });
 
   // Section content mapping
   const sectionValues: Record<SectionType, string> = {
@@ -258,56 +209,6 @@ export function CardModal() {
     solution: setSolutionSummary,
     tests: setTestScenarios,
   };
-
-  // Load card data when selected
-  useEffect(() => {
-    if (selectedCard) {
-      requestAnimationFrame(() => setIsVisible(true));
-    } else {
-      setIsVisible(false);
-    }
-  }, [selectedCard]);
-
-  useEffect(() => {
-    if (selectedCard) {
-      // Cancel any pending auto-save when selectedCard changes externally
-      // This prevents auto-save from overwriting MCP tool updates
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-        setSaveStatus("idle");
-      }
-      // Mark this as an external update (possibly from MCP tool calls)
-      lastMcpUpdateRef.current = Date.now();
-
-      setTitle(selectedCard.title);
-      setDescription(selectedCard.description);
-      setSolutionSummary(selectedCard.solutionSummary);
-      setTestScenarios(selectedCard.testScenarios);
-      setAiOpinion(selectedCard.aiOpinion);
-      setStatus(selectedCard.status);
-      setComplexity(selectedCard.complexity || "medium");
-      setPriority(selectedCard.priority || "medium");
-      setProjectId(selectedCard.projectId);
-      setAiPlatform(selectedCard.aiPlatform ?? null);
-      setGitBranchName(selectedCard.gitBranchName);
-      setGitBranchStatus(selectedCard.gitBranchStatus);
-      setGitWorktreePath(selectedCard.gitWorktreePath);
-      setGitWorktreeStatus(selectedCard.gitWorktreeStatus);
-      setDevServerPort(selectedCard.devServerPort);
-      setDevServerPid(selectedCard.devServerPid);
-
-      // Auto-open Test tab when card is in Human Test column
-      if (selectedCard.status === "test") {
-        setActiveTab("tests");
-      }
-
-      // Fetch conversation for active tab
-      if (!isDraftMode) {
-        fetchConversation(selectedCard.id, activeTab);
-      }
-    }
-  }, [selectedCard, isDraftMode, fetchConversation]);
 
   // Fetch conversation when tab changes
   useEffect(() => {
@@ -345,7 +246,7 @@ export function CardModal() {
       selectCard(card);
       openModal();
     }
-  }, [cards, selectedCard, selectCard, openModal]);
+  }, [cards, selectedCard, selectCard, openModal, setCardHistory]);
 
   // Handle back navigation
   const handleBack = useCallback(() => {
@@ -361,34 +262,7 @@ export function CardModal() {
         }
       }
     }
-  }, [cardHistory, cards, selectCard]);
-
-  // Handle close
-  const handleClose = useCallback(() => {
-    if (showDiscardDraftDialog) return;
-    if (isDraftMode && hasDraftChanges) {
-      setShowDiscardDraftDialog(true);
-      return;
-    }
-    setCardHistory([]);
-    setIsVisible(false);
-    // Detach from conversation stream - process continues in background
-    detachConversation();
-    if (isDraftMode) {
-      setTimeout(() => discardDraft(), 200);
-    } else {
-      setTimeout(() => closeModal(), 200);
-    }
-  }, [isDraftMode, hasDraftChanges, showDiscardDraftDialog, discardDraft, closeModal, detachConversation]);
-
-  // Force close (used by discard confirmation dialog)
-  const handleForceClose = useCallback(() => {
-    setShowDiscardDraftDialog(false);
-    setCardHistory([]);
-    setIsVisible(false);
-    detachConversation();
-    setTimeout(() => discardDraft(), 200);
-  }, [discardDraft, detachConversation]);
+  }, [cardHistory, cards, selectCard, setCardHistory]);
 
   // Handle export
   const handleExport = useCallback(() => {
@@ -396,57 +270,6 @@ export function CardModal() {
       downloadCardAsMarkdown(selectedCard, project);
     }
   }, [selectedCard, project]);
-
-  // Handle save
-  const handleSave = useCallback(() => {
-    if (selectedCard) {
-      const selectedProject = projects.find((p) => p.id === projectId);
-
-      if (isDraftMode) {
-        saveDraftCard({
-          title,
-          description,
-          solutionSummary,
-          testScenarios,
-          aiOpinion,
-          aiVerdict: null,
-          status,
-          complexity,
-          priority,
-          projectId,
-          aiPlatform,
-          projectFolder: selectedProject?.folderPath || "",
-          gitBranchName: null,
-          gitBranchStatus: null,
-          gitWorktreePath: null,
-          gitWorktreeStatus: null,
-          devServerPort: null,
-          devServerPid: null,
-          rebaseConflict: null,
-          conflictFiles: null,
-          processingType: null,
-          useWorktree: null,
-        });
-      } else {
-        const cardId = selectedCard.id;
-        const updates = {
-          title,
-          description,
-          solutionSummary,
-          testScenarios,
-          aiOpinion,
-          status,
-          complexity,
-          priority,
-          projectId,
-          aiPlatform,
-          projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
-        };
-        handleClose();
-        updateCard(cardId, updates);
-      }
-    }
-  }, [selectedCard, projects, projectId, isDraftMode, title, description, solutionSummary, testScenarios, aiOpinion, status, complexity, priority, aiPlatform, saveDraftCard, updateCard, handleClose]);
 
   // Handle delete
   const handleDelete = useCallback(() => {
