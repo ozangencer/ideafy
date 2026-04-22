@@ -2,7 +2,6 @@ const {
   app,
   BrowserWindow,
   globalShortcut,
-  Tray,
   Menu,
   ipcMain,
   nativeImage,
@@ -22,7 +21,8 @@ const net = require("net");
 // launched via `electron .` on macOS. `process.defaultApp` stays true in dev.
 const isPackaged = app.isPackaged && !process.defaultApp;
 const REPO_ROOT = path.resolve(__dirname, "..");
-const APP_NAME = "Ideafy (Personal)";
+const packageJson = require(path.join(REPO_ROOT, "package.json"));
+const APP_NAME = packageJson.build?.productName || "Ideafy";
 
 const HOST = "127.0.0.1";
 let PORT = null; // resolved at startup via get-port
@@ -30,7 +30,6 @@ let DEV_URL = null;
 
 let mainWindow = null;
 let quickEntryWindow = null;
-let tray = null;
 let nextProcess = null;
 
 // ── Env + port helpers ────────────────────────────────────────────────
@@ -389,50 +388,6 @@ ipcMain.on("resize-quick-entry", (_event, height) => {
   }
 });
 
-// ── Tray ──────────────────────────────────────────────────────────────
-
-function createTray() {
-  const trayPath = path.join(__dirname, "icons", "tray-iconTemplate.png");
-
-  let trayIcon;
-  if (fs.existsSync(trayPath)) {
-    trayIcon = nativeImage.createFromPath(trayPath);
-    trayIcon.setTemplateImage(true);
-  } else {
-    trayIcon = nativeImage.createEmpty();
-  }
-
-  tray = new Tray(trayIcon);
-  tray.setToolTip("ideafy");
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: "Show ideafy",
-      click: () => showAndFocusMainWindow(),
-    },
-    {
-      label: "Quick Entry",
-      accelerator: "CommandOrControl+Shift+K",
-      click: () => showQuickEntry(),
-    },
-    { type: "separator" },
-    {
-      label: "Quit",
-      accelerator: "CommandOrControl+Q",
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
-
-  tray.on("click", () => {
-    showAndFocusMainWindow();
-  });
-}
-
 // ── Global Shortcut ───────────────────────────────────────────────────
 
 function registerGlobalShortcut() {
@@ -477,35 +432,12 @@ app.on("ready", async () => {
     }
   }
 
-  // Set app name and menu bar
   if (process.platform === "darwin") {
     app.setName(APP_NAME);
-    const appMenu = Menu.buildFromTemplate([
-      {
-        label: APP_NAME,
-        submenu: [
-          { role: "about", label: `About ${APP_NAME}` },
-          { type: "separator" },
-          { role: "hide", label: `Hide ${APP_NAME}` },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          {
-            label: `Quit ${APP_NAME}`,
-            accelerator: "CmdOrCtrl+Q",
-            click: () => {
-              app.isQuitting = true;
-              app.quit();
-            },
-          },
-        ],
-      },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-      { role: "windowMenu" },
-    ]);
-    Menu.setApplicationMenu(appMenu);
   }
+
+  // Suppress Electron's default app menu so the desktop app has no menubar.
+  Menu.setApplicationMenu(null);
 
   try {
     await mirrorSkillsToUserData();
@@ -518,7 +450,6 @@ app.on("ready", async () => {
 
   createMainWindow();
   createQuickEntryWindow();
-  createTray();
   registerGlobalShortcut();
 });
 

@@ -2,8 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-const APP_BUNDLE_NAME = "Ideafy";
-const APP_DISPLAY_NAME = "Ideafy (Personal)";
+const packageJsonPath = path.resolve(import.meta.dirname, "..", "package.json");
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+const APP_DISPLAY_NAME = packageJson.build?.productName || "Ideafy";
+const APP_BUNDLE_NAME = APP_DISPLAY_NAME;
 const EXECUTABLE_NAME = "Ideafy";
 
 if (process.platform !== "darwin") {
@@ -13,10 +15,13 @@ if (process.platform !== "darwin") {
 const projectRoot = path.resolve(import.meta.dirname, "..");
 const electronDist = path.join(projectRoot, "node_modules", "electron", "dist");
 const electronAppPath = path.join(electronDist, "Electron.app");
+const legacyAppBundlePath = path.join(electronDist, "Ideafy.app");
 const appBundlePath = path.join(electronDist, `${APP_BUNDLE_NAME}.app`);
-const sourceAppPath = fs.existsSync(appBundlePath) ? appBundlePath : electronAppPath;
+const sourceAppPath = [appBundlePath, legacyAppBundlePath, electronAppPath].find((candidate) =>
+  fs.existsSync(candidate)
+);
 
-if (!fs.existsSync(sourceAppPath)) {
+if (!sourceAppPath) {
   process.exit(0);
 }
 
