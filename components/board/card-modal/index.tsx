@@ -79,7 +79,7 @@ export function CardModal() {
   const { toast } = useToast();
 
   // Check if we're in draft mode (creating a new card)
-  const isDraftMode = selectedCard?.id.startsWith("draft-") ?? false;
+  const isDraftMode = selectedCard?.id?.startsWith("draft-") ?? false;
 
   // Form state
   const [title, setTitle] = useState("");
@@ -709,11 +709,24 @@ export function CardModal() {
     return () => window.removeEventListener("keydown", handleEsc);
   }, [handleClose]);
 
+  // Lock body scroll when modal is open (prevents iOS background scroll)
+  useEffect(() => {
+    if (!selectedCard) return;
+    const scrollY = window.scrollY;
+    document.body.classList.add("modal-open");
+    document.body.style.top = `-${scrollY}px`;
+    return () => {
+      document.body.classList.remove("modal-open");
+      document.body.style.top = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, [selectedCard]);
+
   if (!selectedCard) return null;
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex justify-end transition-colors duration-200 ${
+      className={`fixed inset-0 z-50 flex justify-end transition-colors duration-200 overscroll-none ${
         isVisible ? "bg-black/40" : "bg-transparent"
       }`}
       onMouseDown={(e) => {
@@ -725,9 +738,13 @@ export function CardModal() {
         }
         overlayMouseDownRef.current = false;
       }}
+      onTouchMove={(e) => e.preventDefault()}
+      onWheel={(e) => e.stopPropagation()}
     >
       <div
-        className={`bg-surface border-l border-border w-full h-full flex flex-col shadow-2xl transition-all duration-200 ease-out ${
+        onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        className={`bg-surface border-l border-border w-full h-full flex flex-col shadow-2xl transition-[transform,max-width] duration-200 ease-out overscroll-none ${
           isExpanded ? "max-w-[1400px]" : "max-w-[900px]"
         } ${isVisible ? "translate-x-0" : "translate-x-full"}`}
       >

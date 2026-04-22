@@ -17,6 +17,14 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
+/* Prevent background scroll when modal/slide-over is open */
+body.modal-open {
+  overflow: hidden !important;
+  position: fixed;
+  width: 100%;
+  touch-action: none;
+}
+
 /* Prevent Radix scroll-lock from causing layout shift when Select dropdowns
    open inside modals. Uses 'html body' for higher specificity to beat the
    runtime-injected styles from react-remove-scroll-bar (which also use !important).
