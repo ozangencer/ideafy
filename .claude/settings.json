@@ -5,7 +5,10 @@
       "args": [
         "tsx",
         "mcp-server/index.ts"
-      ]
+      ],
+      "env": {
+        "IDEAFY_USER_DATA": "/Users/ozangencer/Library/Application Support/ideafy"
+      }
     }
   },
   "hooks": {

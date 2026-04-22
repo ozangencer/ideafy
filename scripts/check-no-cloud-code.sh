@@ -16,6 +16,7 @@ EXCLUDED_FILES=(
   "scripts/check-no-cloud-code.sh"
   "scripts/CLAUDE-cloud-template.md"
   "CLAUDE.md"
+  "AGENTS.md"
   "README.md"
 )
 

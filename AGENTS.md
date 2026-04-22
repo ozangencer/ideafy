@@ -1,4 +1,4 @@
-# ideafy - Kanban for Claude Code
+# ideafy - Kanban for Codex
 
 Solo founder'lar için kanban. Task takibi, çözüm dokümantasyonu ve test senaryoları.
 
@@ -81,7 +81,7 @@ Bu repo Ideafy'nin open source solo versiyonudur. Cloud/team özellikleri BURAYA
 ### Bu repoya girmesi gereken kodlar:
 - Lokal kanban özellikleri (sütunlar, kartlar, projeler)
 - MCP lokal tools (list_cards, get_card, save_plan, save_tests, move_card, update_card)
-- Platform provider abstraction (Claude, Gemini, Codex)
+- Platform provider abstraction (Codex, Gemini, Codex)
 - Electron desteği
 - UI iyileştirmeleri (tema, dark mode, drag-drop vb.)
 
