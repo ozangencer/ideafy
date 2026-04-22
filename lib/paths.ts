@@ -1,5 +1,4 @@
 import path from "node:path";
-import os from "node:os";
 import fs from "node:fs";
 
 // Packaged DMG: resources like skills/, mcp-server/, drizzle/ live under
@@ -39,10 +38,4 @@ export function resolveUserSkillsDir(): string {
   }
   // Dev: use the repo skills/ directly (no mirror needed).
   return path.join(appResourcesRoot(), "skills");
-}
-
-// Home dir helper that also works when HOME is not set (rare, but Electron
-// sometimes launches with a stripped env).
-export function homeDir(): string {
-  return process.env.HOME ?? os.homedir();
 }

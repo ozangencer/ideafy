@@ -14,7 +14,17 @@ import type {
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { appResourcesRoot, resolveUserSkillsDir } from "../paths";
-import { buildMcpInvocation } from "./mcp-invocation";
+import { parseClaudeStreamLine } from "./claude-provider/parse-stream-line";
+import {
+  listProjectMcps as listProjectMcpsImpl,
+  listProjectSkills as listProjectSkillsImpl,
+  listProjectAgents as listProjectAgentsImpl,
+} from "./claude-provider/list-project-resources";
+import {
+  installIdeafyMcp as installIdeafyMcpImpl,
+  removeIdeafyMcp as removeIdeafyMcpImpl,
+  hasIdeafyMcp as hasIdeafyMcpImpl,
+} from "./claude-provider/ideafy-mcp";
 
 // In dev IDEAFY_ROOT is the repo (skills/ + mcp-server/index.ts live there);
 // in the packaged DMG the Electron shell exports IDEAFY_APP_RESOURCES pointing
@@ -144,56 +154,7 @@ class ClaudeProvider implements PlatformProvider {
   }
 
   parseStreamLine(line: string): StreamEvent[] {
-    if (!line.trim()) return [];
-
-    try {
-      const json = JSON.parse(line);
-      const events: StreamEvent[] = [];
-
-      // Handle assistant message with content (may have multiple blocks)
-      if (json.type === "assistant" && json.message?.content) {
-        for (const block of json.message.content) {
-          if (block.type === "text" && block.text) {
-            events.push({ type: "text", data: block.text });
-          }
-          if (block.type === "thinking" && block.thinking) {
-            events.push({ type: "thinking", data: block.thinking });
-          }
-          if (block.type === "tool_use") {
-            events.push({ type: "tool_use", data: { name: block.name, input: block.input } });
-          }
-        }
-      }
-
-      // Handle streaming content
-      if (json.type === "content_block_delta") {
-        if (json.delta?.text) {
-          events.push({ type: "text", data: json.delta.text });
-        }
-        if (json.delta?.thinking) {
-          events.push({ type: "thinking", data: json.delta.thinking });
-        }
-      }
-
-      // Handle tool results
-      if (json.type === "tool_result") {
-        events.push({ type: "tool_result", data: { name: json.name, output: json.output?.slice?.(0, 200) } });
-      }
-
-      // Handle final result - captures response text after tool use
-      if (json.type === "result" && json.result) {
-        events.push({ type: "result", data: String(json.result) });
-      }
-
-      // Handle system messages
-      if (json.type === "system" && json.subtype && json.subtype !== "init") {
-        events.push({ type: "system", data: { subtype: json.subtype, message: json.message } });
-      }
-
-      return events;
-    } catch {
-      return [];
-    }
+    return parseClaudeStreamLine(line);
   }
 
   getDefaultSkillsPath(): string {
@@ -215,135 +176,27 @@ class ClaudeProvider implements PlatformProvider {
   // ── Extension methods ──
 
   listProjectMcps(folderPath: string): string[] {
-    try {
-      const settingsPath = path.join(folderPath, ".claude", "settings.json");
-      if (!fs.existsSync(settingsPath)) return [];
-      const content = fs.readFileSync(settingsPath, "utf-8");
-      const settings = JSON.parse(content);
-      return Object.keys(settings.mcpServers || {}).sort((a, b) => a.localeCompare(b));
-    } catch {
-      return [];
-    }
+    return listProjectMcpsImpl(folderPath);
   }
 
   listProjectSkills(folderPath: string): string[] {
-    const skills = new Set<string>();
-
-    // .claude/commands/*.md (legacy)
-    try {
-      const commandsDir = path.join(folderPath, ".claude", "commands");
-      if (fs.existsSync(commandsDir)) {
-        fs.readdirSync(commandsDir)
-          .filter((entry) => {
-            if (entry.startsWith(".")) return false;
-            if (!entry.endsWith(".md")) return false;
-            return fs.statSync(path.join(commandsDir, entry)).isFile();
-          })
-          .forEach((entry) => skills.add(entry.replace(/\.md$/, "")));
-      }
-    } catch { /* ignore */ }
-
-    // .claude/skills/<name>/SKILL.md
-    try {
-      const skillsDir = path.join(folderPath, ".claude", "skills");
-      if (fs.existsSync(skillsDir)) {
-        fs.readdirSync(skillsDir)
-          .filter((entry) => {
-            if (entry.startsWith(".")) return false;
-            return fs.statSync(path.join(skillsDir, entry)).isDirectory();
-          })
-          .filter((entry) => fs.existsSync(path.join(skillsDir, entry, "SKILL.md")))
-          .forEach((entry) => skills.add(entry));
-      }
-    } catch { /* ignore */ }
-
-    return Array.from(skills).sort((a, b) => a.localeCompare(b));
+    return listProjectSkillsImpl(folderPath);
   }
 
   listProjectAgents(folderPath: string): string[] {
-    try {
-      const agentsDir = path.join(folderPath, ".claude", "agents");
-      if (!fs.existsSync(agentsDir)) return [];
-      return fs.readdirSync(agentsDir)
-        .filter((entry) => {
-          if (entry.startsWith(".")) return false;
-          if (!entry.endsWith(".md")) return false;
-          return fs.statSync(path.join(agentsDir, entry)).isFile();
-        })
-        .map((entry) => entry.replace(/\.md$/, ""))
-        .sort((a, b) => a.localeCompare(b));
-    } catch {
-      return [];
-    }
+    return listProjectAgentsImpl(folderPath);
   }
 
   installIdeafyMcp(folderPath: string): Result {
-    try {
-      const claudeDir = path.join(folderPath, ".claude");
-      const settingsPath = path.join(claudeDir, "settings.json");
-
-      if (!fs.existsSync(claudeDir)) {
-        fs.mkdirSync(claudeDir, { recursive: true });
-      }
-
-      let existingSettings: Record<string, unknown> = {};
-      if (fs.existsSync(settingsPath)) {
-        try {
-          existingSettings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-        } catch {
-          existingSettings = {};
-        }
-      }
-
-      const existingMcpServers = (existingSettings.mcpServers as Record<string, unknown>) || {};
-      if (existingMcpServers.ideafy) return { success: true };
-
-      const mergedSettings = {
-        ...existingSettings,
-        mcpServers: {
-          ...existingMcpServers,
-          ideafy: buildMcpInvocation(),
-        },
-      };
-
-      fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2));
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-    }
+    return installIdeafyMcpImpl(folderPath);
   }
 
   removeIdeafyMcp(folderPath: string): Result {
-    try {
-      const settingsPath = path.join(folderPath, ".claude", "settings.json");
-      if (!fs.existsSync(settingsPath)) return { success: true };
-
-      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      if (!settings.mcpServers?.ideafy) return { success: true };
-
-      delete settings.mcpServers.ideafy;
-      if (Object.keys(settings.mcpServers).length === 0) delete settings.mcpServers;
-
-      fs.writeFileSync(settingsPath,
-        Object.keys(settings).length === 0
-          ? JSON.stringify({}, null, 2)
-          : JSON.stringify(settings, null, 2)
-      );
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-    }
+    return removeIdeafyMcpImpl(folderPath);
   }
 
   hasIdeafyMcp(folderPath: string): boolean {
-    try {
-      const settingsPath = path.join(folderPath, ".claude", "settings.json");
-      if (!fs.existsSync(settingsPath)) return false;
-      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-      return !!settings.mcpServers?.ideafy;
-    } catch {
-      return false;
-    }
+    return hasIdeafyMcpImpl(folderPath);
   }
 
   installIdeafySkills(folderPath: string): Result {
