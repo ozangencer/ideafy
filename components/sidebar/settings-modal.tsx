@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useState, useEffect, useRef } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { TERMINAL_OPTIONS, DEFAULT_SETTINGS, AI_PLATFORM_OPTIONS } from "@/lib/types";
@@ -21,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
 import { useTheme } from "next-themes";
@@ -29,11 +31,25 @@ import {
   setPureWhiteEnabled,
 } from "@/components/theme-provider";
 
-interface SettingsModalProps {
-  onClose: () => void;
+export interface SettingsExtraTab {
+  value: string;
+  trigger: ReactNode;
+  content: ReactNode;
+  hideDefaultFooter?: boolean;
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+interface SettingsModalProps {
+  onClose: () => void;
+  extraTabs?: SettingsExtraTab[];
+  defaultTab?: string;
+}
+
+export function SettingsModal({ onClose, extraTabs = [], defaultTab }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<string>(defaultTab || "general");
+  const hasExtraTabs = extraTabs.length > 0;
+  const activeExtra = extraTabs.find((t) => t.value === activeTab);
+  const hideDefaultFooter = Boolean(activeExtra?.hideDefaultFooter);
+
   const { settings, updateSettings, fetchSettings } = useKanbanStore();
   const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);
@@ -242,14 +258,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const platformOption = AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform);
 
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[min(500px,calc(100vw-3rem))]">
-        <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
-
-        <div className="grid gap-6 py-4 overflow-y-auto max-h-[calc(85vh-10rem)] px-1">
+  const generalTabBody = (
+    <div className="grid gap-6 py-4 overflow-y-auto max-h-[calc(85vh-10rem)] px-1">
           {/* Appearance */}
           <div className="grid gap-2">
             <label className="text-sm font-medium">Appearance</label>
@@ -472,16 +482,50 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </div>
             </>
           )}
-        </div>
+    </div>
+  );
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save Changes"}
-          </Button>
-        </DialogFooter>
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(500px,calc(100vw-3rem))]">
+        <DialogHeader>
+          <DialogTitle>Settings</DialogTitle>
+        </DialogHeader>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          {hasExtraTabs && (
+            <TabsList className="w-full mb-2">
+              <TabsTrigger value="general" className="flex-1">
+                General
+              </TabsTrigger>
+              {extraTabs.map((t) => (
+                <TabsTrigger key={t.value} value={t.value} className="flex-1 gap-1.5">
+                  {t.trigger}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          )}
+
+          <TabsContent value="general" className="mt-0">
+            {generalTabBody}
+          </TabsContent>
+          {extraTabs.map((t) => (
+            <TabsContent key={t.value} value={t.value} className="mt-0">
+              {t.content}
+            </TabsContent>
+          ))}
+        </Tabs>
+
+        {!hideDefaultFooter && (
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
