@@ -9,6 +9,7 @@
     "node": ">=20.11"
   },
   "scripts": {
+    "postinstall": "node ./scripts/prepare-dev-electron.mjs",
     "dev": "next dev -H 127.0.0.1 -p ${PORT:-3030}",
     "dev:clean": "rm -rf .next && next dev -H 127.0.0.1 -p ${PORT:-3030}",
     "dev:turbo": "rm -rf .next && next dev -H 127.0.0.1 -p ${PORT:-3030} --turbo",
@@ -20,6 +21,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "preelectron": "node ./scripts/prepare-dev-electron.mjs",
     "electron": "electron .",
     "rebuild:electron": "electron-builder install-app-deps",
     "rebuild:system": "npm rebuild better-sqlite3 && cd mcp-server && npm rebuild better-sqlite3",
@@ -105,7 +107,7 @@
   },
   "build": {
     "appId": "com.ozangencer.ideafy",
-    "productName": "ideafy",
+    "productName": "Ideafy (Personal)",
     "copyright": "Copyright © 2026 Ozan Gencer",
     "afterPack": "./scripts/after-pack.mjs",
     "asar": true,

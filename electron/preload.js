@@ -7,7 +7,4 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onRefreshData: (callback) => {
     ipcRenderer.on("refresh-data", () => callback());
   },
-  notifyQuickEntryClosed: () => {
-    ipcRenderer.send("quick-entry-closed");
-  },
 });

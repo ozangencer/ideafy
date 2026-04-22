@@ -12,10 +12,4 @@ if (window.electronAPI) {
       window.dispatchEvent(new CustomEvent("refresh-data"));
     });
   }
-
-  window.addEventListener("quick-entry-closed", () => {
-    if (window.electronAPI.notifyQuickEntryClosed) {
-      window.electronAPI.notifyQuickEntryClosed();
-    }
-  });
 }

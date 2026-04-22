@@ -18,8 +18,11 @@ const net = require("net");
 // Paths differ between `npm run electron` in the repo and the packaged DMG.
 // In the DMG, __dirname is inside app.asar; PROJECT_ROOT makes no sense.
 // Branch on app.isPackaged and keep two code paths.
-const isPackaged = app.isPackaged;
+// Renaming the dev Electron bundle makes `app.isPackaged` unreliable when
+// launched via `electron .` on macOS. `process.defaultApp` stays true in dev.
+const isPackaged = app.isPackaged && !process.defaultApp;
 const REPO_ROOT = path.resolve(__dirname, "..");
+const APP_NAME = "Ideafy (Personal)";
 
 const HOST = "127.0.0.1";
 let PORT = null; // resolved at startup via get-port
@@ -476,19 +479,19 @@ app.on("ready", async () => {
 
   // Set app name and menu bar
   if (process.platform === "darwin") {
-    app.setName("ideafy");
+    app.setName(APP_NAME);
     const appMenu = Menu.buildFromTemplate([
       {
-        label: "ideafy",
+        label: APP_NAME,
         submenu: [
-          { role: "about", label: "About ideafy" },
+          { role: "about", label: `About ${APP_NAME}` },
           { type: "separator" },
-          { role: "hide", label: "Hide ideafy" },
+          { role: "hide", label: `Hide ${APP_NAME}` },
           { role: "hideOthers" },
           { role: "unhide" },
           { type: "separator" },
           {
-            label: "Quit ideafy",
+            label: `Quit ${APP_NAME}`,
             accelerator: "CmdOrCtrl+Q",
             click: () => {
               app.isQuitting = true;
