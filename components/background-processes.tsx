@@ -88,6 +88,7 @@ export function BackgroundProcesses() {
     fetchBackgroundProcesses,
     killBackgroundProcess,
     clearCompletedProcesses,
+    clearProcessing,
     cards,
     selectCard,
     openModal,
@@ -162,8 +163,12 @@ export function BackgroundProcesses() {
           ? `Chat (${sectionConfig.label.toLowerCase()})`
           : processConfig.label;
 
-        // Check if this process was killed
+        // Clear processing state on the card so spinner stops
         const wasKilled = killedIdsRef.current.has(id);
+        if (!wasKilled) {
+          clearProcessing(process.cardId);
+        }
+
         if (wasKilled) {
           killedIdsRef.current.delete(id);
           toast({
@@ -180,7 +185,7 @@ export function BackgroundProcesses() {
     });
 
     runningProcessesRef.current = currentRunning;
-  }, [runningProcesses, toast]);
+  }, [runningProcesses, toast, clearProcessing]);
 
   // Always-on heartbeat poll: avoids a chicken-and-egg where local state says
   // "nothing running" but the server actually has a process (spawned via MCP,
