@@ -177,8 +177,8 @@ export function ConversationPanel({
   return (
     <div className="flex flex-col h-full bg-background/50">
       {/* Header - pr-10 to account for split panel toggle button */}
-      <div className="flex items-center justify-between px-3 pr-10 py-2 border-b border-border/50 bg-surface/50">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-3 sm:pr-10 py-2 border-b border-border/50 bg-surface/50">
+        <div className="hidden sm:flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">Chat</span>
           {messages.length > 0 && (
@@ -187,7 +187,15 @@ export function ConversationPanel({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="sm:hidden flex items-center gap-2">
+          {messages.length > 0 && (
+            <span className="text-xs text-muted-foreground/60">
+              {messages.length} message{messages.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Generate Tests button - only show on tests tab when scenarios exist */}
           {sectionType === "tests" && hasTestScenarios && (
             <Tooltip>
               <TooltipTrigger asChild>
