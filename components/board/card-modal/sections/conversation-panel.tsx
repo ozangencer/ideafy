@@ -204,7 +204,7 @@ export function ConversationPanel({
                   size="sm"
                   onClick={openTestDialog}
                   disabled={isGeneratingTests}
-                  className="h-6 w-6 p-0 text-ink hover:bg-paper-cream"
+                  className="h-6 w-6 p-0 text-ink hover:bg-paper-cream hover:text-ink"
                 >
                   {isGeneratingTests ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -224,7 +224,7 @@ export function ConversationPanel({
                   size="sm"
                   onClick={handleResumeCli}
                   disabled={isResumingCli}
-                  className="h-6 w-6 p-0 text-ink hover:bg-paper-cream"
+                  className="h-6 w-6 p-0 text-ink hover:bg-paper-cream hover:text-ink"
                 >
                   {isResumingCli ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
