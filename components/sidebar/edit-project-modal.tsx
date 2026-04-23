@@ -43,7 +43,8 @@ export function EditProjectModal({
   extraSavePayload,
   modal,
 }: EditProjectModalProps) {
-  const { updateProject, deleteProject, cards } = useKanbanStore();
+  const { updateProject, deleteProject, cards, settings } = useKanbanStore();
+  const aiPlatform = settings?.aiPlatform ?? "claude";
 
   // Form state initialized from project
   const [name, setName] = useState(project.name);
@@ -339,58 +340,62 @@ export function EditProjectModal({
           {/* Divider */}
           <div className="border-t border-border" />
 
-          {/* Ideafy MCP & Skills */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <Plug className="h-4 w-4 text-muted-foreground" />
-                <label className="text-sm font-medium">Ideafy MCP & Skills</label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Install ideafy tools, phase-aware hook, and slash commands in this project
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isTogglingIdeafy && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-              <Switch
-                checked={ideafyInstalled ?? false}
-                onCheckedChange={handleToggleIdeafy}
-                disabled={isTogglingIdeafy || ideafyInstalled === null}
-              />
-            </div>
-          </div>
-
-          {/* Claude Code plugin (project scope) */}
-          <div className="space-y-1">
+          {/* Ideafy MCP & Skills — path-based install for non-Claude platforms */}
+          {aiPlatform !== "claude" && (
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <Plug className="h-4 w-4 text-muted-foreground" />
-                  <label className="text-sm font-medium">Claude Code plugin</label>
+                  <label className="text-sm font-medium">Ideafy MCP & Skills</label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {pluginProjectStatus?.installed
-                    ? `Enabled for this project${pluginProjectStatus.version ? ` (v${pluginProjectStatus.version})` : ""}`
-                    : "Install the Ideafy plugin only for this project (MCP + hooks + skills)"}
+                  Install ideafy tools, phase-aware hook, and slash commands in this project
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {isTogglingPluginProject && (
+                {isTogglingIdeafy && (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
                 <Switch
-                  checked={pluginProjectStatus?.installed ?? false}
-                  onCheckedChange={handleTogglePluginProject}
-                  disabled={isTogglingPluginProject || pluginProjectStatus === null}
+                  checked={ideafyInstalled ?? false}
+                  onCheckedChange={handleToggleIdeafy}
+                  disabled={isTogglingIdeafy || ideafyInstalled === null}
                 />
               </div>
             </div>
-            {pluginProjectError && (
-              <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
-            )}
-          </div>
+          )}
+
+          {/* Claude Code plugin — plugin-system install, Claude only */}
+          {aiPlatform === "claude" && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Plug className="h-4 w-4 text-muted-foreground" />
+                    <label className="text-sm font-medium">Claude Code plugin</label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {pluginProjectStatus?.installed
+                      ? `Enabled for this project${pluginProjectStatus.version ? ` (v${pluginProjectStatus.version})` : ""}`
+                      : "Install the Ideafy plugin only for this project (MCP + hooks + skills)"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isTogglingPluginProject && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                  <Switch
+                    checked={pluginProjectStatus?.installed ?? false}
+                    onCheckedChange={handleTogglePluginProject}
+                    disabled={isTogglingPluginProject || pluginProjectStatus === null}
+                  />
+                </div>
+              </div>
+              {pluginProjectError && (
+                <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
+              )}
+            </div>
+          )}
 
           {/* Git Worktrees */}
           <div className="flex items-center justify-between">
