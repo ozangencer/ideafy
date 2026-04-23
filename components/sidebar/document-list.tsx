@@ -282,7 +282,7 @@ export function DocumentList() {
     expandedDocFolders,
     toggleDocFolder,
   } = useKanbanStore();
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   // Split by source: custom (user-specified) comes first, discovered fills gaps
   const { customTree, discoveredTree } = useMemo(() => {

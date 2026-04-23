@@ -49,7 +49,7 @@ function MemoryFileItem({
 
 export function MemoryList() {
   const { memoryFiles, openDocument, selectedDocument } = useKanbanStore();
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   if (memoryFiles.length === 0) return null;
 
