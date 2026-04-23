@@ -63,6 +63,14 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const [hookResult, setHookResult] = useState<{ success: number; failed: number } | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
 
+  const [pluginStatus, setPluginStatus] = useState<{
+    installed: boolean;
+    enabled: boolean;
+    version: string | null;
+  } | null>(null);
+  const [isPluginBusy, setIsPluginBusy] = useState(false);
+  const [pluginError, setPluginError] = useState<string | null>(null);
+
   // Appearance
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [pureWhite, setPureWhite] = useState(false);
@@ -96,6 +104,23 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
       }
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (aiPlatform !== "claude") {
+      setPluginStatus(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/integrations/claude-code")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setPluginStatus(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [aiPlatform]);
 
   // Platform defaults for path and capabilities
   const PLATFORM_DEFAULTS: Record<AiPlatform, {
@@ -243,6 +268,27 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
       setHookResult({ success: 0, failed: -1 });
     } finally {
       setIsReinstallingHooks(false);
+    }
+  };
+
+  const handlePluginAction = async (action: "install" | "uninstall" | "enable" | "disable") => {
+    setIsPluginBusy(true);
+    setPluginError(null);
+    try {
+      const response = await fetch("/api/integrations/claude-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.success === false) {
+        setPluginError(data.error || `Action '${action}' failed`);
+      }
+      if (data.status) setPluginStatus(data.status);
+    } catch (error) {
+      setPluginError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsPluginBusy(false);
     }
   };
 
@@ -480,6 +526,81 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                     </div>
                   )}
                 </div>
+              </div>
+            </>
+          )}
+
+          {aiPlatform === "claude" && (
+            <>
+              <div className="border-t border-border" />
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Claude Code plugin</label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  {pluginStatus?.installed
+                    ? `Installed${pluginStatus.version ? ` v${pluginStatus.version}` : ""} · ${
+                        pluginStatus.enabled ? "enabled" : "disabled"
+                      }`
+                    : "MCP tools, phase-aware hooks, and workflow skills as a single Claude Code plugin."}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!pluginStatus?.installed ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handlePluginAction("install")}
+                      disabled={isPluginBusy}
+                      className="gap-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${isPluginBusy ? "animate-spin" : ""}`} />
+                      {isPluginBusy ? "Installing..." : "Install"}
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handlePluginAction("install")}
+                        disabled={isPluginBusy}
+                        className="gap-2"
+                        title="Reinstall / pull latest"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${isPluginBusy ? "animate-spin" : ""}`} />
+                        Update
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          handlePluginAction(pluginStatus.enabled ? "disable" : "enable")
+                        }
+                        disabled={isPluginBusy}
+                      >
+                        {pluginStatus.enabled ? "Disable" : "Enable"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handlePluginAction("uninstall")}
+                        disabled={isPluginBusy}
+                      >
+                        Uninstall
+                      </Button>
+                    </>
+                  )}
+                  {pluginStatus?.installed && !isPluginBusy && (
+                    <span className="text-xs text-green-500 flex items-center gap-1">
+                      <Check className="h-3.5 w-3.5" />
+                      Ready
+                    </span>
+                  )}
+                </div>
+                {pluginError && (
+                  <p className="text-xs text-destructive flex items-start gap-1 mt-1">
+                    <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                    <span>{pluginError}</span>
+                  </p>
+                )}
               </div>
             </>
           )}
