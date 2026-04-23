@@ -46,8 +46,10 @@ data/backups/
 .worktrees/
 
 # User-specific settings
+.claude/settings.json
 .claude/settings.local.json
 .claude/settings.json.bak-*
+.claude/settings.json.backup-*
 mcp-server/mcp-config.json
 
 # Electron
