@@ -4,6 +4,19 @@ import { db } from "@/lib/db";
 import { cards, projects, chatSessions } from "@/lib/db/schema";
 import { launchTerminal, getTerminalPreference } from "@/lib/terminal-launcher";
 import { getProviderForCard } from "@/lib/platform/active";
+import type { PlatformProvider } from "@/lib/platform/types";
+
+function buildResumeCliArgv(provider: PlatformProvider, sessionId: string): string[] {
+  switch (provider.id) {
+    case "codex":
+      return [provider.getCliPath(), "resume", "--include-non-interactive", sessionId];
+    case "gemini":
+      return [provider.getCliPath(), "--resume", sessionId];
+    case "claude":
+    default:
+      return [provider.getCliPath(), "--resume", sessionId];
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -23,9 +36,16 @@ export async function POST(
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
-  // Get session
+  const provider = getProviderForCard(card);
+
+  // Get session for the card's current provider. A card may switch providers
+  // after a chat, and session IDs are not portable across CLIs.
   const [session] = await db.select().from(chatSessions)
-    .where(and(eq(chatSessions.cardId, cardId), eq(chatSessions.sectionType, sectionType)));
+    .where(and(
+      eq(chatSessions.cardId, cardId),
+      eq(chatSessions.sectionType, sectionType),
+      eq(chatSessions.provider, provider.id)
+    ));
 
   if (!session) {
     return NextResponse.json({ error: "No CLI session found for this card. Send a message first." }, { status: 404 });
@@ -37,13 +57,12 @@ export async function POST(
     : null;
 
   const workingDir = project?.folderPath || card.projectFolder || process.cwd();
-  const provider = getProviderForCard(card);
   const terminal = getTerminalPreference();
 
   try {
     launchTerminal({
       cwd: workingDir,
-      argv: [provider.getCliPath(), "--resume", session.cliSessionId],
+      argv: buildResumeCliArgv(provider, session.cliSessionId),
       terminal,
       tag: "Resume CLI",
     });
