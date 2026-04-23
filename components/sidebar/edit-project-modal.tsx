@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, FileText, GitBranch, Plug, Terminal } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { BasicInfoFields } from "./project-form/basic-info-fields";
+import { PluginUpdateBadge } from "./plugin-update-badge";
 
 interface EditProjectModalProps {
   project: Project;
@@ -413,6 +414,13 @@ export function EditProjectModal({
                       Inherited
                     </span>
                   </div>
+                  <div className="pl-6">
+                    <PluginUpdateBadge
+                      installed={pluginUserStatus?.installed ?? false}
+                      scope="user"
+                      currentVersion={pluginUserStatus?.version ?? null}
+                    />
+                  </div>
                 </div>
               );
             }
@@ -442,6 +450,16 @@ export function EditProjectModal({
                     />
                   </div>
                 </div>
+                {!isTogglingPluginProject && (
+                  <div className="pl-6">
+                    <PluginUpdateBadge
+                      installed={pluginProjectStatus?.installed ?? false}
+                      scope="project"
+                      projectPath={project.folderPath}
+                      currentVersion={pluginProjectStatus?.version ?? null}
+                    />
+                  </div>
+                )}
                 {pluginProjectError && (
                   <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
                 )}

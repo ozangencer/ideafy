@@ -30,6 +30,7 @@ import {
   isPureWhiteEnabled,
   setPureWhiteEnabled,
 } from "@/components/theme-provider";
+import { PluginUpdateBadge } from "./plugin-update-badge";
 
 export interface SettingsExtraTab {
   value: string;
@@ -526,11 +527,12 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                       </Button>
                     </>
                   )}
-                  {pluginStatus?.installed && !isPluginBusy && (
-                    <span className="text-xs text-green-500 flex items-center gap-1">
-                      <Check className="h-3.5 w-3.5" />
-                      Ready
-                    </span>
+                  {!isPluginBusy && (
+                    <PluginUpdateBadge
+                      installed={pluginStatus?.installed ?? false}
+                      scope="user"
+                      currentVersion={pluginStatus?.version ?? null}
+                    />
                   )}
                 </div>
                 {pluginError && (
