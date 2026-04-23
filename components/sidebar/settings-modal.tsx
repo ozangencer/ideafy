@@ -295,7 +295,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const platformOption = AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform);
 
   const generalTabBody = (
-    <div className="grid gap-6 py-4 overflow-y-auto max-h-[calc(85vh-10rem)] px-1">
+    <div className="grid gap-6 py-4 px-1">
           {/* Appearance */}
           <div className="grid gap-2">
             <label className="text-sm font-medium">Appearance</label>
@@ -551,14 +551,14 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[min(500px,calc(100vw-3rem))]">
-        <DialogHeader>
+      <DialogContent className="max-w-[min(500px,calc(100vw-3rem))] h-[min(640px,85vh)] flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
           {hasExtraTabs && (
-            <TabsList className="w-full mb-2">
+            <TabsList className="w-full mb-2 shrink-0">
               <TabsTrigger value="general" className="flex-1">
                 General
               </TabsTrigger>
@@ -570,18 +570,20 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
             </TabsList>
           )}
 
-          <TabsContent value="general" className="mt-0">
-            {generalTabBody}
-          </TabsContent>
-          {extraTabs.map((t) => (
-            <TabsContent key={t.value} value={t.value} className="mt-0">
-              {t.content}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <TabsContent value="general" className="mt-0">
+              {generalTabBody}
             </TabsContent>
-          ))}
+            {extraTabs.map((t) => (
+              <TabsContent key={t.value} value={t.value} className="mt-0">
+                {t.content}
+              </TabsContent>
+            ))}
+          </div>
         </Tabs>
 
         {!hideDefaultFooter && (
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
