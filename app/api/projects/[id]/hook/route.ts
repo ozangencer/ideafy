@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { installIdeafyHook, removeIdeafyHook } from "@/lib/hooks";
+import { getActiveProvider } from "@/lib/platform/active";
 import * as fs from "fs";
 import * as path from "path";
+
+// Hook-less platforms (Codex, Gemini today) treat the hook as always
+// satisfied: no file is written, no file is read. installed:true keeps the
+// frontend AND-check on mcp/skills alone.
+const HOOK_NOT_APPLICABLE = { installed: true, applicable: false } as const;
 
 // Check if hook is installed
 export async function GET(
@@ -25,6 +31,10 @@ export async function GET(
 
     if (!project.folderPath) {
       return NextResponse.json({ installed: false, reason: "no_folder" });
+    }
+
+    if (!getActiveProvider().capabilities.supportsHooks) {
+      return NextResponse.json(HOOK_NOT_APPLICABLE);
     }
 
     const settingsPath = path.join(project.folderPath, ".claude", "settings.json");
@@ -93,6 +103,10 @@ export async function POST(
       );
     }
 
+    if (!getActiveProvider().capabilities.supportsHooks) {
+      return NextResponse.json({ success: true, ...HOOK_NOT_APPLICABLE });
+    }
+
     const result = installIdeafyHook(project.folderPath);
 
     if (result.success) {
@@ -135,6 +149,10 @@ export async function DELETE(
         { error: "Project has no folder path" },
         { status: 400 }
       );
+    }
+
+    if (!getActiveProvider().capabilities.supportsHooks) {
+      return NextResponse.json({ success: true, ...HOOK_NOT_APPLICABLE });
     }
 
     const result = removeIdeafyHook(project.folderPath);
