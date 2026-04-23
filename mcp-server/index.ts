@@ -96,15 +96,25 @@ function mergeTestCheckState(existingHtml: string, newHtml: string): string {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// DB path resolution — defaults to the macOS Electron userData location so
-// every consumer (Electron app, standalone Next.js dev, MCP server) lands on
-// one kanban.db. Override with IDEAFY_USER_DATA when pointing at an alternate
-// DB (packaged DMG still passes it explicitly from electron/main.js).
+// DB path resolution — defaults to the OS-standard Electron userData location
+// so every consumer (Electron app, standalone Next.js dev, MCP server) lands
+// on one kanban.db. Override with IDEAFY_USER_DATA when pointing at an
+// alternate DB (packaged DMG still passes it explicitly from electron/main.js).
+function getDefaultDataDir(): string {
+  const home = homedir();
+  switch (process.platform) {
+    case "darwin":
+      return resolve(home, "Library/Application Support/ideafy");
+    case "win32":
+      return resolve(process.env.APPDATA || resolve(home, "AppData/Roaming"), "ideafy");
+    default:
+      return resolve(process.env.XDG_CONFIG_HOME || resolve(home, ".config"), "ideafy");
+  }
+}
+
 function resolveDbPath(): string {
   const userDataEnv = process.env.IDEAFY_USER_DATA;
-  const dir = userDataEnv
-    ? resolve(userDataEnv)
-    : resolve(homedir(), "Library/Application Support/ideafy");
+  const dir = userDataEnv ? resolve(userDataEnv) : getDefaultDataDir();
   mkdirSync(dir, { recursive: true });
   return resolve(dir, "kanban.db");
 }
