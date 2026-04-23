@@ -26,6 +26,31 @@ export interface PluginStatus {
   marketplaceRegistered: boolean;
 }
 
+export type PluginScope = "user" | "project";
+
+export interface ScopeOptions {
+  scope?: PluginScope;
+  projectPath?: string;
+}
+
+function resolveSettingsFile(opts: ScopeOptions): string {
+  if (opts.scope === "project" && opts.projectPath) {
+    return path.join(opts.projectPath, ".claude", "settings.json");
+  }
+  return SETTINGS_FILE;
+}
+
+function matchesScope(
+  entry: { scope?: string; projectPath?: string } | undefined | null,
+  opts: ScopeOptions,
+): boolean {
+  if (!entry) return false;
+  const scope = opts.scope ?? "user";
+  if (entry.scope !== scope) return false;
+  if (scope === "project") return entry.projectPath === opts.projectPath;
+  return true;
+}
+
 function readJsonSafe<T>(filePath: string, fallback: T): T {
   try {
     if (!fs.existsSync(filePath)) return fallback;
@@ -92,28 +117,35 @@ function copyTree(src: string, dest: string, skip: Set<string>): void {
   }
 }
 
-export async function getPluginStatus(): Promise<PluginStatus> {
-  const installed = readJsonSafe<{ plugins?: Record<string, Array<{ version?: string; installPath?: string }>> }>(
-    INSTALLED_FILE,
-    {},
-  );
-  const settings = readJsonSafe<{ enabledPlugins?: Record<string, boolean> }>(SETTINGS_FILE, {});
+export async function getPluginStatus(opts: ScopeOptions = {}): Promise<PluginStatus> {
+  const installed = readJsonSafe<{
+    plugins?: Record<string, Array<{ version?: string; installPath?: string; scope?: string; projectPath?: string }>>;
+  }>(INSTALLED_FILE, {});
+  const settingsFile = resolveSettingsFile(opts);
+  const settings = readJsonSafe<{ enabledPlugins?: Record<string, boolean> }>(settingsFile, {});
   const marketplaces = readJsonSafe<Record<string, unknown>>(MARKETPLACES_FILE, {});
 
-  const entries = installed.plugins?.[PLUGIN_KEY];
-  const entry = entries && entries.length > 0 ? entries[0] : null;
+  const entries = installed.plugins?.[PLUGIN_KEY] ?? [];
+  const entry = entries.find((e) => matchesScope(e, opts)) ?? null;
 
   return {
     installed: !!entry,
     enabled: settings.enabledPlugins?.[PLUGIN_KEY] === true,
-    version: entry?.version ?? null,
-    installPath: entry?.installPath ?? null,
+    version: entry?.version ?? entries[0]?.version ?? null,
+    installPath: entry?.installPath ?? entries[0]?.installPath ?? null,
     marketplaceRegistered: MARKETPLACE_NAME in marketplaces,
   };
 }
 
-export async function installPlugin(options: { gitUrl?: string; localSource?: string } = {}): Promise<Result> {
+export async function installPlugin(
+  options: { gitUrl?: string; localSource?: string } & ScopeOptions = {},
+): Promise<Result> {
   try {
+    const scope: PluginScope = options.scope ?? "user";
+    if (scope === "project" && !options.projectPath) {
+      return { success: false, error: "projectPath is required when scope is 'project'" };
+    }
+
     if (options.localSource) {
       if (!fs.existsSync(options.localSource)) {
         return { success: false, error: `Local source not found: ${options.localSource}` };
@@ -159,29 +191,32 @@ export async function installPlugin(options: { gitUrl?: string; localSource?: st
     };
     writeJsonAtomic(MARKETPLACES_FILE, marketplaces);
 
-    const installed = readJsonSafe<{ version?: number; plugins?: Record<string, unknown> }>(
-      INSTALLED_FILE,
-      { version: 2, plugins: {} },
-    );
+    const installed = readJsonSafe<{
+      version?: number;
+      plugins?: Record<string, Array<Record<string, unknown>>>;
+    }>(INSTALLED_FILE, { version: 2, plugins: {} });
     if (typeof installed.version !== "number") installed.version = 2;
     if (!installed.plugins) installed.plugins = {};
     const now = new Date().toISOString();
-    installed.plugins[PLUGIN_KEY] = [
-      {
-        scope: "user",
-        installPath: cacheDir,
-        version,
-        installedAt: now,
-        lastUpdated: now,
-      },
-    ];
+    const existingEntries = installed.plugins[PLUGIN_KEY] ?? [];
+    const filtered = existingEntries.filter((e) => !matchesScope(e as { scope?: string; projectPath?: string }, { scope, projectPath: options.projectPath }));
+    const newEntry: Record<string, unknown> = {
+      scope,
+      installPath: cacheDir,
+      version,
+      installedAt: now,
+      lastUpdated: now,
+    };
+    if (scope === "project") newEntry.projectPath = options.projectPath;
+    installed.plugins[PLUGIN_KEY] = [...filtered, newEntry];
     writeJsonAtomic(INSTALLED_FILE, installed);
 
-    const settings = readJsonSafe<Record<string, unknown>>(SETTINGS_FILE, {});
+    const settingsFile = resolveSettingsFile({ scope, projectPath: options.projectPath });
+    const settings = readJsonSafe<Record<string, unknown>>(settingsFile, {});
     const enabled = (settings.enabledPlugins as Record<string, boolean>) ?? {};
     enabled[PLUGIN_KEY] = true;
     settings.enabledPlugins = enabled;
-    writeJsonAtomic(SETTINGS_FILE, settings);
+    writeJsonAtomic(settingsFile, settings);
 
     return { success: true };
   } catch (error) {
@@ -189,27 +224,45 @@ export async function installPlugin(options: { gitUrl?: string; localSource?: st
   }
 }
 
-export async function uninstallPlugin(options: { removeCache?: boolean } = {}): Promise<Result> {
+export async function uninstallPlugin(
+  options: { removeCache?: boolean } & ScopeOptions = {},
+): Promise<Result> {
   try {
-    const settings = readJsonSafe<Record<string, unknown>>(SETTINGS_FILE, {});
-    const enabled = (settings.enabledPlugins as Record<string, boolean>) ?? {};
-    if (PLUGIN_KEY in enabled) {
-      delete enabled[PLUGIN_KEY];
-      if (Object.keys(enabled).length === 0) delete settings.enabledPlugins;
-      else settings.enabledPlugins = enabled;
-      writeJsonAtomic(SETTINGS_FILE, settings);
+    const scope: PluginScope = options.scope ?? "user";
+    if (scope === "project" && !options.projectPath) {
+      return { success: false, error: "projectPath is required when scope is 'project'" };
     }
 
-    const installed = readJsonSafe<{ version?: number; plugins?: Record<string, unknown> }>(
-      INSTALLED_FILE,
-      { version: 2, plugins: {} },
+    const settingsFile = resolveSettingsFile({ scope, projectPath: options.projectPath });
+    const settings = readJsonSafe<Record<string, unknown>>(settingsFile, {});
+    const enabledMap = (settings.enabledPlugins as Record<string, boolean>) ?? {};
+    if (PLUGIN_KEY in enabledMap) {
+      delete enabledMap[PLUGIN_KEY];
+      if (Object.keys(enabledMap).length === 0) delete settings.enabledPlugins;
+      else settings.enabledPlugins = enabledMap;
+      if (Object.keys(settings).length === 0) {
+        if (fs.existsSync(settingsFile)) writeJsonAtomic(settingsFile, {});
+      } else {
+        writeJsonAtomic(settingsFile, settings);
+      }
+    }
+
+    const installed = readJsonSafe<{
+      version?: number;
+      plugins?: Record<string, Array<Record<string, unknown>>>;
+    }>(INSTALLED_FILE, { version: 2, plugins: {} });
+    const existing = installed.plugins?.[PLUGIN_KEY] ?? [];
+    const remaining = existing.filter(
+      (e) => !matchesScope(e as { scope?: string; projectPath?: string }, { scope, projectPath: options.projectPath }),
     );
-    if (installed.plugins && PLUGIN_KEY in installed.plugins) {
-      delete installed.plugins[PLUGIN_KEY];
+    if (remaining.length !== existing.length && installed.plugins) {
+      if (remaining.length === 0) delete installed.plugins[PLUGIN_KEY];
+      else installed.plugins[PLUGIN_KEY] = remaining;
       writeJsonAtomic(INSTALLED_FILE, installed);
     }
 
-    if (options.removeCache !== false) {
+    const allEntriesGone = (installed.plugins?.[PLUGIN_KEY]?.length ?? 0) === 0;
+    if (allEntriesGone && options.removeCache !== false) {
       fs.rmSync(CACHE_ROOT, { recursive: true, force: true });
     }
 
@@ -219,15 +272,20 @@ export async function uninstallPlugin(options: { removeCache?: boolean } = {}): 
   }
 }
 
-export async function setPluginEnabled(enabled: boolean): Promise<Result> {
+export async function setPluginEnabled(enabled: boolean, opts: ScopeOptions = {}): Promise<Result> {
   try {
-    const settings = readJsonSafe<Record<string, unknown>>(SETTINGS_FILE, {});
+    const scope: PluginScope = opts.scope ?? "user";
+    if (scope === "project" && !opts.projectPath) {
+      return { success: false, error: "projectPath is required when scope is 'project'" };
+    }
+    const settingsFile = resolveSettingsFile({ scope, projectPath: opts.projectPath });
+    const settings = readJsonSafe<Record<string, unknown>>(settingsFile, {});
     const map = (settings.enabledPlugins as Record<string, boolean>) ?? {};
     if (enabled) map[PLUGIN_KEY] = true;
     else delete map[PLUGIN_KEY];
     if (Object.keys(map).length === 0) delete settings.enabledPlugins;
     else settings.enabledPlugins = map;
-    writeJsonAtomic(SETTINGS_FILE, settings);
+    writeJsonAtomic(settingsFile, settings);
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };

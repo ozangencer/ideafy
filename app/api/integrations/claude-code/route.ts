@@ -4,14 +4,30 @@ import {
   installPlugin,
   uninstallPlugin,
   setPluginEnabled,
+  type PluginScope,
+  type ScopeOptions,
 } from "@/lib/platform/claude-provider/plugin-install";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+function parseScope(input: unknown): PluginScope | undefined {
+  if (input === "user" || input === "project") return input;
+  return undefined;
+}
+
+function readScopeFromQuery(url: URL): ScopeOptions {
+  return {
+    scope: parseScope(url.searchParams.get("scope")),
+    projectPath: url.searchParams.get("projectPath") ?? undefined,
+  };
+}
+
+export async function GET(request: Request) {
   try {
-    const status = await getPluginStatus();
+    const url = new URL(request.url);
+    const scopeOpts = readScopeFromQuery(url);
+    const status = await getPluginStatus(scopeOpts);
     return NextResponse.json(status);
   } catch (error) {
     return NextResponse.json(
@@ -25,6 +41,8 @@ interface ActionBody {
   action: "install" | "uninstall" | "enable" | "disable";
   gitUrl?: string;
   localSource?: string;
+  scope?: PluginScope;
+  projectPath?: string;
 }
 
 export async function POST(request: Request) {
@@ -35,29 +53,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  const scopeOpts: ScopeOptions = {
+    scope: parseScope(body.scope),
+    projectPath: body.projectPath,
+  };
+
   switch (body.action) {
     case "install": {
-      const result = await installPlugin({ gitUrl: body.gitUrl, localSource: body.localSource });
+      const result = await installPlugin({
+        gitUrl: body.gitUrl,
+        localSource: body.localSource,
+        ...scopeOpts,
+      });
       if (!result.success) return NextResponse.json(result, { status: 500 });
-      const status = await getPluginStatus();
+      const status = await getPluginStatus(scopeOpts);
       return NextResponse.json({ ...result, status });
     }
     case "uninstall": {
-      const result = await uninstallPlugin();
+      const result = await uninstallPlugin(scopeOpts);
       if (!result.success) return NextResponse.json(result, { status: 500 });
-      const status = await getPluginStatus();
+      const status = await getPluginStatus(scopeOpts);
       return NextResponse.json({ ...result, status });
     }
     case "enable": {
-      const result = await setPluginEnabled(true);
+      const result = await setPluginEnabled(true, scopeOpts);
       if (!result.success) return NextResponse.json(result, { status: 500 });
-      const status = await getPluginStatus();
+      const status = await getPluginStatus(scopeOpts);
       return NextResponse.json({ ...result, status });
     }
     case "disable": {
-      const result = await setPluginEnabled(false);
+      const result = await setPluginEnabled(false, scopeOpts);
       if (!result.success) return NextResponse.json(result, { status: 500 });
-      const status = await getPluginStatus();
+      const status = await getPluginStatus(scopeOpts);
       return NextResponse.json({ ...result, status });
     }
     default:

@@ -63,6 +63,13 @@ export function EditProjectModal({
   const [isLaunchingSkill, setIsLaunchingSkill] = useState(false);
   const [ideafyInstalled, setKanbanInstalled] = useState<boolean | null>(null);
   const [isTogglingIdeafy, setIsTogglingKanban] = useState(false);
+  const [pluginProjectStatus, setPluginProjectStatus] = useState<{
+    installed: boolean;
+    enabled: boolean;
+    version: string | null;
+  } | null>(null);
+  const [isTogglingPluginProject, setIsTogglingPluginProject] = useState(false);
+  const [pluginProjectError, setPluginProjectError] = useState<string | null>(null);
 
   // Check hook and MCP/Skills status on mount
   useEffect(() => {
@@ -113,6 +120,44 @@ export function EditProjectModal({
       console.error("Failed to toggle ideafy:", error);
     } finally {
       setIsTogglingKanban(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!project.folderPath) return;
+    let cancelled = false;
+    const url = `/api/integrations/claude-code?scope=project&projectPath=${encodeURIComponent(project.folderPath)}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setPluginProjectStatus(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [project.folderPath]);
+
+  const handleTogglePluginProject = async (enabled: boolean) => {
+    if (!project.folderPath) return;
+    setIsTogglingPluginProject(true);
+    setPluginProjectError(null);
+    try {
+      const action = enabled ? "install" : "uninstall";
+      const response = await fetch("/api/integrations/claude-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, scope: "project", projectPath: project.folderPath }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.success === false) {
+        setPluginProjectError(data.error || `Action '${action}' failed`);
+      }
+      if (data.status) setPluginProjectStatus(data.status);
+    } catch (error) {
+      setPluginProjectError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsTogglingPluginProject(false);
     }
   };
 
@@ -315,6 +360,36 @@ export function EditProjectModal({
                 disabled={isTogglingIdeafy || ideafyInstalled === null}
               />
             </div>
+          </div>
+
+          {/* Claude Code plugin (project scope) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Plug className="h-4 w-4 text-muted-foreground" />
+                  <label className="text-sm font-medium">Claude Code plugin</label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {pluginProjectStatus?.installed
+                    ? `Enabled for this project${pluginProjectStatus.version ? ` (v${pluginProjectStatus.version})` : ""}`
+                    : "Install the Ideafy plugin only for this project (MCP + hooks + skills)"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {isTogglingPluginProject && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                <Switch
+                  checked={pluginProjectStatus?.installed ?? false}
+                  onCheckedChange={handleTogglePluginProject}
+                  disabled={isTogglingPluginProject || pluginProjectStatus === null}
+                />
+              </div>
+            </div>
+            {pluginProjectError && (
+              <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
+            )}
           </div>
 
           {/* Git Worktrees */}
