@@ -8,6 +8,8 @@ import {
 import Database from "better-sqlite3";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { homedir } from "os";
+import { mkdirSync } from "fs";
 import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
 import { normalizeUseWorktree, serializeUseWorktreeForDb } from "./serialize-card.js";
@@ -94,16 +96,17 @@ function mergeTestCheckState(existingHtml: string, newHtml: string): string {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// DB path resolution — packaged DMG sets IDEAFY_USER_DATA to the app's
-// userData dir (same DB the Electron-spawned Next server uses). Dev /
-// standalone MCP usage falls back to the repo's data/kanban.db so
-// existing workflows keep working.
+// DB path resolution — defaults to the macOS Electron userData location so
+// every consumer (Electron app, standalone Next.js dev, MCP server) lands on
+// one kanban.db. Override with IDEAFY_USER_DATA when pointing at an alternate
+// DB (packaged DMG still passes it explicitly from electron/main.js).
 function resolveDbPath(): string {
   const userDataEnv = process.env.IDEAFY_USER_DATA;
-  if (userDataEnv) {
-    return resolve(userDataEnv, "kanban.db");
-  }
-  return resolve(__dirname, "../data/kanban.db");
+  const dir = userDataEnv
+    ? resolve(userDataEnv)
+    : resolve(homedir(), "Library/Application Support/ideafy");
+  mkdirSync(dir, { recursive: true });
+  return resolve(dir, "kanban.db");
 }
 
 const DB_PATH = resolveDbPath();

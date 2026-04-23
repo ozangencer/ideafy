@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 
 // Packaged DMG: resources like skills/, mcp-server/, drizzle/ live under
 // process.resourcesPath (set by Electron as IDEAFY_APP_RESOURCES before
@@ -12,19 +13,24 @@ export function appResourcesRoot(): string {
   );
 }
 
-// User-writable data dir. Packaged DMG: app.getPath("userData") → exported
-// via IDEAFY_USER_DATA from electron/main.js. Dev: falls back to repo/data/
-// so `npm run dev` keeps reading the same kanban.db a developer has been
-// iterating against.
+// User-writable data dir. Default is the macOS Electron userData location so
+// every consumer (Electron personal app, standalone Next.js dev, MCP server)
+// converges on one kanban.db without per-user absolute paths. Override with
+// IDEAFY_USER_DATA when a session needs to point at an alternate DB.
 export function resolveUserDataDir(): string {
   const fromEnv = process.env.IDEAFY_USER_DATA;
   if (fromEnv) {
     fs.mkdirSync(fromEnv, { recursive: true });
     return fromEnv;
   }
-  const devDir = path.join(process.cwd(), "data");
-  fs.mkdirSync(devDir, { recursive: true });
-  return devDir;
+  const defaultDir = path.join(
+    os.homedir(),
+    "Library",
+    "Application Support",
+    "ideafy"
+  );
+  fs.mkdirSync(defaultDir, { recursive: true });
+  return defaultDir;
 }
 
 // Per-user writable skills dir. Packaged builds mirror the bundled skills/
