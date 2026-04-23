@@ -53,6 +53,7 @@ export interface KanbanStore {
   // Sidebar state
   isSidebarCollapsed: boolean;
   sidebarWidth: number;
+  isProjectListExpanded: boolean;
   collapsedSkillGroups: string[];
 
   // Column collapse state
@@ -137,6 +138,7 @@ export interface KanbanStore {
   // Sidebar actions
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
+  toggleProjectListExpanded: () => void;
   toggleSkillGroupCollapse: (groupKey: string) => void;
 
   // Column collapse actions

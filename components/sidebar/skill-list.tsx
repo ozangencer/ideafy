@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
-import type { SkillListItem, SkillSource } from "@/lib/types";
+import type { SkillListItem, SkillSource, UserSkillGroup } from "@/lib/types";
 import {
   findSkillGroupId,
   resolveSkillGroups,
@@ -23,9 +23,21 @@ import {
   Copy,
   FileText,
   FolderPlus,
+  MoreHorizontal,
+  MoveRight,
   Pencil,
   Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ScopeSection = {
   label: string;
@@ -44,6 +56,209 @@ type GroupDialogState =
       groupId: string;
       initialValue: string;
     };
+
+const INLINE_SKILL_ACTIONS_MIN_WIDTH = 280;
+
+type GroupActionsProps = {
+  canInlineActions: boolean;
+  group: ResolvedSkillGroup;
+  onRename: () => void;
+  onDelete: () => void;
+};
+
+function GroupActions({
+  canInlineActions,
+  group,
+  onRename,
+  onDelete,
+}: GroupActionsProps) {
+  if (!group.canManage || !group.id) return null;
+
+  if (canInlineActions) {
+    return (
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRename();
+          }}
+          title="Rename group"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          title="Delete group"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+          onClick={(event) => event.stopPropagation()}
+          title="Group actions"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            onRename();
+          }}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Rename group
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          className="text-destructive focus:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete group
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+type SkillActionsProps = {
+  canInlineActions: boolean;
+  copiedSkill: string | null;
+  currentGroupId: string | null;
+  groups: UserSkillGroup[];
+  isOrganizing: boolean;
+  onCopy: () => void;
+  onCreateGroup: () => void;
+  onMoveToGroup: (groupId: string | null) => void;
+  skillName: string;
+};
+
+function SkillActions({
+  canInlineActions,
+  copiedSkill,
+  currentGroupId,
+  groups,
+  isOrganizing,
+  onCopy,
+  onCreateGroup,
+  onMoveToGroup,
+  skillName,
+}: SkillActionsProps) {
+  if (canInlineActions) {
+    return (
+      <div className="mr-1 flex h-full w-14 shrink-0 items-start justify-end gap-0.5 py-1">
+        {isOrganizing && (
+          <SkillMovePopover
+            groups={groups}
+            currentGroupId={currentGroupId}
+            onMoveToGroup={onMoveToGroup}
+            onCreateGroup={onCreateGroup}
+          />
+        )}
+
+        <button
+          onClick={onCopy}
+          className="flex h-[26px] w-[26px] items-center justify-center rounded-md text-muted-foreground/80 transition-colors hover:bg-background hover:text-foreground"
+          title={`Copy /${skillName}`}
+        >
+          {copiedSkill === skillName ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mr-1 w-8 shrink-0 py-1">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            title="Skill actions"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem onClick={onCopy}>
+            {copiedSkill === skillName ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+            Copy /{skillName}
+          </DropdownMenuItem>
+
+          {isOrganizing && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <MoveRight className="h-3.5 w-3.5" />
+                  Move to group
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-52">
+                  {groups.map((skillGroup) => {
+                    const isCurrent = currentGroupId === skillGroup.id;
+                    return (
+                      <DropdownMenuItem
+                        key={skillGroup.id}
+                        onClick={() => onMoveToGroup(skillGroup.id)}
+                      >
+                        <span className="truncate">{skillGroup.name}</span>
+                        {isCurrent && (
+                          <span className="ml-auto text-xs text-muted-foreground">Current</span>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                  <DropdownMenuItem onClick={() => onMoveToGroup(null)}>
+                    <span>Ungrouped</span>
+                    {currentGroupId === null && (
+                      <span className="ml-auto text-xs text-muted-foreground">Current</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onCreateGroup}>
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    New Group
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
 
 function resolveLegacyGroups(
   items: SkillListItem[],
@@ -99,6 +314,7 @@ export function SkillList() {
     selectedSkill,
     openSkillPreview,
     activeProjectId,
+    sidebarWidth,
     collapsedSkillGroups,
     globalSkillGroups,
     projectSkillGroups,
@@ -112,6 +328,7 @@ export function SkillList() {
   const [copiedSkill, setCopiedSkill] = useState<string | null>(null);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [dialogState, setDialogState] = useState<GroupDialogState | null>(null);
+  const canInlineActions = sidebarWidth >= INLINE_SKILL_ACTIONS_MIN_WIDTH;
 
   const globalItems = useMemo(() => {
     const deduped = new Map<string, SkillListItem>();
@@ -328,42 +545,26 @@ export function SkillList() {
                           </div>
                         </CollapsibleTrigger>
 
-                        {isOrganizing && group.canManage && group.id && (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setDialogState({
-                                  mode: "rename",
-                                  source: group.source,
-                                  groupId: group.id!,
-                                  initialValue: group.name,
-                                });
-                              }}
-                              title="Rename group"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void deleteSkillGroup(
-                                  group.id!,
-                                  group.source,
-                                  group.source === "project" ? activeProjectId : null
-                                );
-                              }}
-                              title="Delete group"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                        {isOrganizing && (
+                          <GroupActions
+                            canInlineActions={canInlineActions}
+                            group={group}
+                            onRename={() =>
+                              setDialogState({
+                                mode: "rename",
+                                source: group.source,
+                                groupId: group.id!,
+                                initialValue: group.name,
+                              })
+                            }
+                            onDelete={() =>
+                              void deleteSkillGroup(
+                                group.id!,
+                                group.source,
+                                group.source === "project" ? activeProjectId : null
+                              )
+                            }
+                          />
                         )}
                       </div>
 
@@ -383,7 +584,7 @@ export function SkillList() {
                           return (
                             <div
                               key={`${group.name}-${skill.name}`}
-                              className={`flex items-start gap-1 rounded-md transition-colors ${
+                              className={`flex items-start gap-2 overflow-hidden rounded-md transition-colors ${
                                 isSelected ? "bg-muted text-foreground" : "hover:bg-muted/80"
                               }`}
                             >
@@ -394,17 +595,15 @@ export function SkillList() {
                                 title={skill.path ? "Open SKILL.md" : "Skill file not found"}
                               >
                                 <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-                                <div className="min-w-0 pt-[1px]">
+                                <div className="min-w-0 overflow-hidden pt-[1px]">
                                   <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90">
                                     {skill.name}
                                   </div>
                                   {skill.description && (
                                     <div
-                                      className="overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68 whitespace-normal"
+                                      className="line-clamp-2 max-w-full overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68"
                                       style={{
-                                        display: "-webkit-box",
-                                        WebkitLineClamp: 2,
-                                        WebkitBoxOrient: "vertical",
+                                        overflowWrap: "anywhere",
                                       }}
                                     >
                                       {skill.description}
@@ -413,35 +612,24 @@ export function SkillList() {
                                 </div>
                               </button>
 
-                              <div className="mr-1 flex shrink-0 items-center gap-0.5 py-1">
-                                {isOrganizing && (
-                                  <SkillMovePopover
-                                    groups={scopedGroups}
-                                    currentGroupId={currentGroupId}
-                                    onMoveToGroup={(groupId) =>
-                                      void moveSkillToGroup(
-                                        skill.name,
-                                        groupId,
-                                        group.source,
-                                        group.source === "project" ? activeProjectId : null
-                                      )
-                                    }
-                                    onCreateGroup={() => openCreateDialog(group.source, skill)}
-                                  />
-                                )}
-
-                                <button
-                                  onClick={() => copyToClipboard(skill.name)}
-                                  className="flex h-[26px] w-[26px] items-center justify-center rounded-md text-muted-foreground/80 transition-colors hover:bg-background hover:text-foreground"
-                                  title={`Copy /${skill.name}`}
-                                >
-                                  {copiedSkill === skill.name ? (
-                                    <Check className="h-3.5 w-3.5 text-green-500" />
-                                  ) : (
-                                    <Copy className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                              </div>
+                              <SkillActions
+                                canInlineActions={canInlineActions}
+                                copiedSkill={copiedSkill}
+                                currentGroupId={currentGroupId}
+                                groups={scopedGroups}
+                                isOrganizing={isOrganizing}
+                                onCopy={() => copyToClipboard(skill.name)}
+                                onCreateGroup={() => openCreateDialog(group.source, skill)}
+                                onMoveToGroup={(groupId) =>
+                                  void moveSkillToGroup(
+                                    skill.name,
+                                    groupId,
+                                    group.source,
+                                    group.source === "project" ? activeProjectId : null
+                                  )
+                                }
+                                skillName={skill.name}
+                              />
                             </div>
                           );
                         })}

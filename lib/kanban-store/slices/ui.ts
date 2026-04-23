@@ -6,12 +6,14 @@ export const createUiSlice: StoreSlice<
     KanbanStore,
     | "isSidebarCollapsed"
     | "sidebarWidth"
+    | "isProjectListExpanded"
     | "collapsedSkillGroups"
     | "collapsedColumns"
     | "completedFilter"
     | "isQuickEntryOpen"
     | "toggleSidebar"
     | "setSidebarWidth"
+    | "toggleProjectListExpanded"
     | "toggleSkillGroupCollapse"
     | "toggleColumnCollapse"
     | "setCompletedFilter"
@@ -22,6 +24,7 @@ export const createUiSlice: StoreSlice<
 > = (set) => ({
   isSidebarCollapsed: false,
   sidebarWidth: 256, // Default width (same as w-64)
+  isProjectListExpanded: true,
   collapsedSkillGroups: [],
   collapsedColumns: ["withdrawn"] as Status[],
   completedFilter: "this_week",
@@ -31,6 +34,9 @@ export const createUiSlice: StoreSlice<
     set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
 
   setSidebarWidth: (width: number) => set({ sidebarWidth: width }),
+
+  toggleProjectListExpanded: () =>
+    set((state) => ({ isProjectListExpanded: !state.isProjectListExpanded })),
 
   toggleSkillGroupCollapse: (groupKey) =>
     set((state) => ({

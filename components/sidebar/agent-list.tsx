@@ -126,7 +126,7 @@ export function AgentList() {
                 return (
                   <div
                     key={`${section.label}-${agent.name}`}
-                    className={`flex items-start gap-1 rounded-md transition-colors ${
+                    className={`flex items-start gap-2 overflow-hidden rounded-md transition-colors ${
                       isSelected ? "bg-muted text-foreground" : "hover:bg-muted/80"
                     }`}
                   >
@@ -137,17 +137,15 @@ export function AgentList() {
                       title={agent.path ? "Open agent file" : "Agent file not found"}
                     >
                       <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-                      <div className="min-w-0 pt-[1px]">
+                      <div className="min-w-0 overflow-hidden pt-[1px]">
                         <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90">
                           {agent.name}
                         </div>
                         {agent.description && (
                           <div
-                            className="overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68 whitespace-normal"
+                            className="line-clamp-2 max-w-full overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68"
                             style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
+                              overflowWrap: "anywhere",
                             }}
                           >
                             {agent.description}
@@ -156,7 +154,7 @@ export function AgentList() {
                       </div>
                     </button>
 
-                    <div className="mr-1 flex shrink-0 items-center gap-0.5 py-1">
+                    <div className="mr-1 flex w-8 shrink-0 items-center justify-end gap-0.5 py-1">
                       <button
                         onClick={() => copyToClipboard(agent.name)}
                         className="flex h-[26px] w-[26px] items-center justify-center rounded-md text-muted-foreground/80 transition-colors hover:bg-background hover:text-foreground"

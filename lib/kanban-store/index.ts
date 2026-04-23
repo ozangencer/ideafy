@@ -36,6 +36,7 @@ export const useKanbanStore = create<KanbanStore>()(
         collapsedColumns: state.collapsedColumns,
         isSidebarCollapsed: state.isSidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
+        isProjectListExpanded: state.isProjectListExpanded,
         collapsedSkillGroups: state.collapsedSkillGroups,
         completedFilter: state.completedFilter,
         expandedDocFolders: state.expandedDocFolders,
@@ -56,6 +57,9 @@ export const useKanbanStore = create<KanbanStore>()(
           persisted.sidebarWidth >= 200 && persisted.sidebarWidth <= 400
           ? persisted.sidebarWidth
           : currentState.sidebarWidth;
+        const isProjectListExpanded = typeof persisted.isProjectListExpanded === "boolean"
+          ? persisted.isProjectListExpanded
+          : currentState.isProjectListExpanded;
         const collapsedSkillGroups = Array.isArray(persisted.collapsedSkillGroups)
           ? persisted.collapsedSkillGroups
           : currentState.collapsedSkillGroups;
@@ -69,6 +73,7 @@ export const useKanbanStore = create<KanbanStore>()(
           collapsedColumns,
           completedFilter,
           sidebarWidth,
+          isProjectListExpanded,
           collapsedSkillGroups,
           expandedDocFolders,
         };
