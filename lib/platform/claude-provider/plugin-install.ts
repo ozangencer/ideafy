@@ -9,6 +9,7 @@ const PLUGIN_NAME = "ideafy";
 const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
 const DEFAULT_GITHUB_REPO = "ozangencer/ideafy-claude-plugin";
 const DEFAULT_GIT_URL = `https://github.com/${DEFAULT_GITHUB_REPO}.git`;
+const DEFAULT_PLUGIN_JSON_URL = `https://raw.githubusercontent.com/${DEFAULT_GITHUB_REPO}/main/plugins/${PLUGIN_NAME}/.claude-plugin/plugin.json`;
 
 const CLAUDE_DIR = path.join(os.homedir(), ".claude");
 const PLUGINS_DIR = path.join(CLAUDE_DIR, "plugins");
@@ -289,5 +290,61 @@ export async function setPluginEnabled(enabled: boolean, opts: ScopeOptions = {}
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export interface UpdateCheckResult {
+  installed: boolean;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  hasUpdate: boolean;
+  error?: string;
+}
+
+/**
+ * Checks the marketplace's plugin.json on GitHub for a newer version without
+ * modifying anything locally. Uses raw.githubusercontent.com (no git clone,
+ * no auth, ~500ms). Returns {hasUpdate: true} when the remote version string
+ * differs from the installed entry's version for the given scope.
+ */
+export async function checkForUpdates(opts: ScopeOptions = {}): Promise<UpdateCheckResult> {
+  const status = await getPluginStatus(opts);
+  if (!status.installed) {
+    return {
+      installed: false,
+      currentVersion: null,
+      latestVersion: null,
+      hasUpdate: false,
+    };
+  }
+  try {
+    const response = await fetch(DEFAULT_PLUGIN_JSON_URL, {
+      headers: { "Cache-Control": "no-cache" },
+    });
+    if (!response.ok) {
+      return {
+        installed: true,
+        currentVersion: status.version,
+        latestVersion: null,
+        hasUpdate: false,
+        error: `Failed to fetch remote manifest: HTTP ${response.status}`,
+      };
+    }
+    const manifest = (await response.json()) as { version?: string };
+    const latestVersion = manifest.version ?? null;
+    return {
+      installed: true,
+      currentVersion: status.version,
+      latestVersion,
+      hasUpdate: !!latestVersion && latestVersion !== status.version,
+    };
+  } catch (error) {
+    return {
+      installed: true,
+      currentVersion: status.version,
+      latestVersion: null,
+      hasUpdate: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }

@@ -4,6 +4,7 @@ import {
   installPlugin,
   uninstallPlugin,
   setPluginEnabled,
+  checkForUpdates,
   type PluginScope,
   type ScopeOptions,
 } from "@/lib/platform/claude-provider/plugin-install";
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
 }
 
 interface ActionBody {
-  action: "install" | "uninstall" | "enable" | "disable";
+  action: "install" | "uninstall" | "enable" | "disable" | "check-updates";
   gitUrl?: string;
   localSource?: string;
   scope?: PluginScope;
@@ -86,6 +87,10 @@ export async function POST(request: Request) {
       if (!result.success) return NextResponse.json(result, { status: 500 });
       const status = await getPluginStatus(scopeOpts);
       return NextResponse.json({ ...result, status });
+    }
+    case "check-updates": {
+      const result = await checkForUpdates(scopeOpts);
+      return NextResponse.json({ success: !result.error, ...result });
     }
     default:
       return NextResponse.json({ error: `Unknown action: ${body.action}` }, { status: 400 });
