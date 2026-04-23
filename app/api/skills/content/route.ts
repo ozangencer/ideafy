@@ -8,6 +8,10 @@ import { settings } from "@/lib/db/schema";
 import { getActiveProvider } from "@/lib/platform/active";
 import { listGlobalSkillItems, listProjectSkillItems } from "@/lib/skills/catalog";
 import { parseSkillDocument } from "@/lib/skills/frontmatter";
+import {
+  listEnabledPluginEntries,
+  listPluginSkillItems,
+} from "@/lib/platform/claude-provider/plugin-scanner";
 
 function expandPath(filePath: string): string {
   if (filePath.startsWith("~")) {
@@ -42,7 +46,19 @@ export async function GET(request: NextRequest) {
       listProjectSkillItems(project.folderPath, provider.id)
     );
 
-    const allowedItem = [...globalItems, ...projectItems].find(
+    const pluginItems = provider.id === "claude"
+      ? [
+          ...listPluginSkillItems(listEnabledPluginEntries({ scope: "user" }), "global"),
+          ...projects.flatMap((project) =>
+            listPluginSkillItems(
+              listEnabledPluginEntries({ scope: "project", projectPath: project.folderPath }),
+              "project"
+            )
+          ),
+        ]
+      : [];
+
+    const allowedItem = [...globalItems, ...projectItems, ...pluginItems].find(
       (item) => item.path === requestedPath
     );
 

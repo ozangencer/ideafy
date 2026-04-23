@@ -100,6 +100,7 @@ export function createUnifiedSuggestion(
           label: item.label,
           type: item.type,
           description: item.description,
+          pluginKey: item.pluginKey ?? null,
           children: item.children,
         })),
 
@@ -142,8 +143,10 @@ interface CardSuggestionConfig {
 const COMPLETED_PREFIX = "completed:";
 
 export function createCardSuggestion(
-  config: CardSuggestionConfig,
+  input: CardSuggestionConfig | (() => CardSuggestionConfig),
 ): Omit<SuggestionOptions<CardMentionItem>, "editor"> {
+  const readConfig = typeof input === "function" ? input : () => input;
+
   return {
     char: "[",
     allowSpaces: true,
@@ -178,6 +181,7 @@ export function createCardSuggestion(
     },
 
     items: ({ query }) => {
+      const config = readConfig();
       const completedOnly = query.startsWith(COMPLETED_PREFIX);
       const searchQuery = completedOnly
         ? query.slice(COMPLETED_PREFIX.length).toLowerCase()

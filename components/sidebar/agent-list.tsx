@@ -8,7 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Bot, Check, Copy, FileText } from "lucide-react";
+import { ChevronRight, Bot, Check, Copy, FileText, Puzzle } from "lucide-react";
 
 type AgentSection = {
   label: string;
@@ -126,7 +126,7 @@ export function AgentList() {
                 return (
                   <div
                     key={`${section.label}-${agent.name}`}
-                    className={`flex items-start gap-2 overflow-hidden rounded-md transition-colors ${
+                    className={`group flex items-start gap-2 overflow-hidden rounded-md transition-colors ${
                       isSelected ? "bg-muted text-foreground" : "hover:bg-muted/80"
                     }`}
                   >
@@ -134,16 +134,26 @@ export function AgentList() {
                       onClick={() => agent.path && openAgentPreview(agent)}
                       disabled={!agent.path}
                       className="flex min-w-0 flex-1 items-start gap-2 px-3 py-1.5 text-left text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-70"
-                      title={agent.path ? "Open agent file" : "Agent file not found"}
+                      title={
+                        agent.pluginKey
+                          ? `From plugin: ${agent.pluginKey}`
+                          : agent.path
+                            ? "Open agent file"
+                            : "Agent file not found"
+                      }
                     >
-                      <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                      {agent.pluginKey ? (
+                        <Puzzle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-blue/90" />
+                      ) : (
+                        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                      )}
                       <div className="min-w-0 overflow-hidden pt-[1px]">
-                        <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90">
+                        <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90 group-hover:text-foreground">
                           {agent.name}
                         </div>
                         {agent.description && (
                           <div
-                            className="line-clamp-2 max-w-full overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68"
+                            className="line-clamp-2 max-w-full overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/70 transition-colors group-hover:text-muted-foreground"
                             style={{
                               overflowWrap: "anywhere",
                             }}

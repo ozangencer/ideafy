@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { db } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProvider } from "@/lib/platform/active";
+import {
+  listEnabledPluginEntries,
+  listPluginMcps,
+} from "@/lib/platform/claude-provider/plugin-scanner";
 
 // Expand ~ to home directory
 function expandPath(path: string): string {
@@ -19,6 +23,20 @@ function expandPath(path: string): string {
 function parseMcpNamesFromToml(content: string): string[] {
   const matches = content.matchAll(/\[mcp_servers\.(\w+)\]/g);
   return Array.from(matches, (m) => m[1]);
+}
+
+function readBaseMcps(configPath: string, format: "json" | "toml"): string[] {
+  try {
+    if (!existsSync(configPath)) return [];
+    const configContent = readFileSync(configPath, "utf-8");
+    if (format === "toml") {
+      return parseMcpNamesFromToml(configContent);
+    }
+    const config = JSON.parse(configContent);
+    return Object.keys(config.mcpServers || {});
+  } catch {
+    return [];
+  }
 }
 
 export async function GET() {
@@ -39,18 +57,20 @@ export async function GET() {
     const configuredPath = setting?.value || provider.getDefaultMcpConfigPath();
     const mcpConfigPath = expandPath(configuredPath);
 
-    const configContent = readFileSync(mcpConfigPath, "utf-8");
+    const baseMcps = readBaseMcps(
+      mcpConfigPath,
+      provider.capabilities.mcpConfigFormat === "toml" ? "toml" : "json"
+    );
 
-    let mcps: string[];
-    if (provider.capabilities.mcpConfigFormat === "toml") {
-      mcps = parseMcpNamesFromToml(configContent);
-    } else {
-      const config = JSON.parse(configContent);
-      mcps = Object.keys(config.mcpServers || {});
+    const mcpSet = new Set<string>(baseMcps);
+    if (provider.id === "claude") {
+      const entries = listEnabledPluginEntries({ scope: "user" });
+      for (const item of listPluginMcps(entries)) {
+        mcpSet.add(item.name);
+      }
     }
 
-    // Sort alphabetically
-    mcps.sort((a, b) => a.localeCompare(b));
+    const mcps = Array.from(mcpSet).sort((a, b) => a.localeCompare(b));
 
     return NextResponse.json({ mcps });
   } catch (error) {

@@ -125,21 +125,36 @@ export function ConversationInput({
     [pastedImagesRef],
   );
 
-  // Suggestion factories — memoised on their inputs so the editor's extension
-  // array stays stable across renders.
+  // The TipTap editor is created once and captures suggestion config via
+  // closure. Route suggestion providers through refs so lists fetched AFTER
+  // mount (project plugin skills, updated cards, new documents) are still
+  // visible when the user later opens the popup.
+  const getUnifiedItemsRef = useRef(getUnifiedItems);
+  const getDocumentsRef = useRef(getDocuments);
+  const cardSuggestionDataRef = useRef({ cards, projects, activeProjectId });
+  useLayoutEffect(() => {
+    getUnifiedItemsRef.current = getUnifiedItems;
+  }, [getUnifiedItems]);
+  useLayoutEffect(() => {
+    getDocumentsRef.current = getDocuments;
+  }, [getDocuments]);
+  useLayoutEffect(() => {
+    cardSuggestionDataRef.current = { cards, projects, activeProjectId };
+  }, [cards, projects, activeProjectId]);
+
   const unifiedSuggestion = useMemo(
-    () => createUnifiedSuggestion({ getItems: getUnifiedItems }),
-    [getUnifiedItems],
+    () => createUnifiedSuggestion({ getItems: () => getUnifiedItemsRef.current() }),
+    [],
   );
 
   const cardSuggestion = useMemo(
-    () => createCardSuggestion({ cards, projects, activeProjectId }),
-    [cards, projects, activeProjectId],
+    () => createCardSuggestion(() => cardSuggestionDataRef.current),
+    [],
   );
 
   const documentSuggestion = useMemo(
-    () => createDocumentSuggestion({ getDocuments }),
-    [getDocuments],
+    () => createDocumentSuggestion({ getDocuments: () => getDocumentsRef.current() }),
+    [],
   );
 
   const checkHasContent = useCallback((editor: ReturnType<typeof useEditor>) => {

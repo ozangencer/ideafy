@@ -7,7 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Plug, Check } from "lucide-react";
+import { ChevronRight, Plug, Check, Puzzle } from "lucide-react";
 
 export function McpList() {
   const { mcps, projectMcps } = useKanbanStore();
@@ -36,26 +36,33 @@ export function McpList() {
         <span className="ml-auto text-[10px] opacity-60">{allMcps.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 space-y-0.5">
-        {allMcps.map((mcp) => (
-          <button
-            key={mcp}
-            onClick={() => copyToClipboard(mcp)}
-            className="w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2"
-            title="Click to copy"
-          >
-            {copiedMcp === mcp ? (
-              <>
-                <Check className="h-3 w-3 text-green-500" />
-                <span className="text-green-500 text-xs">Copied!</span>
-              </>
-            ) : (
-              <>
-                <span className="text-ink/60 font-mono text-xs">/</span>
-                <span className="truncate">{mcp}</span>
-              </>
-            )}
-          </button>
-        ))}
+        {allMcps.map((mcp) => {
+          const isPluginMcp = mcp.includes(":");
+          return (
+            <button
+              key={mcp}
+              onClick={() => copyToClipboard(mcp)}
+              className="w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2"
+              title={isPluginMcp ? `Plugin MCP: ${mcp}` : "Click to copy"}
+            >
+              {copiedMcp === mcp ? (
+                <>
+                  <Check className="h-3 w-3 text-green-500" />
+                  <span className="text-green-500 text-xs">Copied!</span>
+                </>
+              ) : (
+                <>
+                  {isPluginMcp ? (
+                    <Puzzle className="h-3 w-3 shrink-0 text-accent-blue/90" />
+                  ) : (
+                    <span className="text-ink/60 font-mono text-xs">/</span>
+                  )}
+                  <span className="truncate">{mcp}</span>
+                </>
+              )}
+            </button>
+          );
+        })}
       </CollapsibleContent>
     </Collapsible>
   );

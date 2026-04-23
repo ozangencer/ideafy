@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   MoveRight,
   Pencil,
+  Puzzle,
   Trash2,
 } from "lucide-react";
 import {
@@ -584,7 +585,7 @@ export function SkillList() {
                           return (
                             <div
                               key={`${group.name}-${skill.name}`}
-                              className={`flex items-start gap-2 overflow-hidden rounded-md transition-colors ${
+                              className={`group flex items-start gap-2 overflow-hidden rounded-md transition-colors ${
                                 isSelected ? "bg-muted text-foreground" : "hover:bg-muted/80"
                               }`}
                             >
@@ -592,16 +593,26 @@ export function SkillList() {
                                 onClick={() => skill.path && openSkillPreview(skill)}
                                 disabled={!skill.path}
                                 className="flex min-w-0 flex-1 items-start gap-2 px-3 py-1.5 text-left text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-70"
-                                title={skill.path ? "Open SKILL.md" : "Skill file not found"}
+                                title={
+                                  skill.pluginKey
+                                    ? `From plugin: ${skill.pluginKey}`
+                                    : skill.path
+                                      ? "Open SKILL.md"
+                                      : "Skill file not found"
+                                }
                               >
-                                <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                                {skill.pluginKey ? (
+                                  <Puzzle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-blue/90" />
+                                ) : (
+                                  <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                                )}
                                 <div className="min-w-0 overflow-hidden pt-[1px]">
-                                  <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90">
+                                  <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90 group-hover:text-foreground">
                                     {skill.name}
                                   </div>
                                   {skill.description && (
                                     <div
-                                      className="line-clamp-2 max-w-full overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/68"
+                                      className="line-clamp-2 max-w-full overflow-hidden break-words pt-0.5 text-[12px] leading-[1.15rem] text-muted-foreground/70 transition-colors group-hover:text-muted-foreground"
                                       style={{
                                         overflowWrap: "anywhere",
                                       }}

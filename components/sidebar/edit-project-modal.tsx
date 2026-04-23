@@ -43,7 +43,17 @@ export function EditProjectModal({
   extraSavePayload,
   modal,
 }: EditProjectModalProps) {
-  const { updateProject, deleteProject, cards, settings } = useKanbanStore();
+  const {
+    updateProject,
+    deleteProject,
+    cards,
+    settings,
+    fetchProjectExtensions,
+    fetchSkills,
+    fetchMcps,
+    fetchAgents,
+    activeProjectId,
+  } = useKanbanStore();
   const aiPlatform = settings?.aiPlatform ?? "claude";
 
   // Form state initialized from project
@@ -65,6 +75,11 @@ export function EditProjectModal({
   const [ideafyInstalled, setKanbanInstalled] = useState<boolean | null>(null);
   const [isTogglingIdeafy, setIsTogglingKanban] = useState(false);
   const [pluginProjectStatus, setPluginProjectStatus] = useState<{
+    installed: boolean;
+    enabled: boolean;
+    version: string | null;
+  } | null>(null);
+  const [pluginUserStatus, setPluginUserStatus] = useState<{
     installed: boolean;
     enabled: boolean;
     version: string | null;
@@ -127,13 +142,18 @@ export function EditProjectModal({
   useEffect(() => {
     if (!project.folderPath) return;
     let cancelled = false;
-    const url = `/api/integrations/claude-code?scope=project&projectPath=${encodeURIComponent(project.folderPath)}`;
-    fetch(url)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled && data) setPluginProjectStatus(data);
-      })
-      .catch(() => {});
+    const projectUrl = `/api/integrations/claude-code?scope=project&projectPath=${encodeURIComponent(project.folderPath)}`;
+    const userUrl = `/api/integrations/claude-code?scope=user`;
+    // Fetch both scopes: user-scope dominates (enabled globally blocks
+    // project-level override), project-scope is the actual per-project bind.
+    Promise.all([
+      fetch(projectUrl).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(userUrl).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([projectData, userData]) => {
+      if (cancelled) return;
+      if (projectData) setPluginProjectStatus(projectData);
+      if (userData) setPluginUserStatus(userData);
+    });
     return () => {
       cancelled = true;
     };
@@ -155,6 +175,10 @@ export function EditProjectModal({
         setPluginProjectError(data.error || `Action '${action}' failed`);
       }
       if (data.status) setPluginProjectStatus(data.status);
+      if (activeProjectId === project.id) {
+        await fetchProjectExtensions(project.id);
+      }
+      await Promise.all([fetchSkills(), fetchMcps(), fetchAgents()]);
     } catch (error) {
       setPluginProjectError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -365,37 +389,65 @@ export function EditProjectModal({
             </div>
           )}
 
-          {/* Claude Code plugin — plugin-system install, Claude only */}
-          {aiPlatform === "claude" && (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Plug className="h-4 w-4 text-muted-foreground" />
-                    <label className="text-sm font-medium">Claude Code plugin</label>
+          {/* Claude Code plugin — plugin-system install, Claude only.
+              Global (user-scope) enable covers every project, so when it's
+              on we show an info-only row instead of a redundant toggle. */}
+          {aiPlatform === "claude" && (() => {
+            const globallyEnabled =
+              pluginUserStatus?.installed === true && pluginUserStatus.enabled === true;
+
+            if (globallyEnabled) {
+              return (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Plug className="h-4 w-4 text-muted-foreground" />
+                        <label className="text-sm font-medium">Claude Code plugin</label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {`Enabled globally${pluginUserStatus?.version ? ` (v${pluginUserStatus.version})` : ""} · applies to this project automatically`}
+                      </p>
+                    </div>
+                    <span className="rounded-md border border-border px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Inherited
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {pluginProjectStatus?.installed
-                      ? `Enabled for this project${pluginProjectStatus.version ? ` (v${pluginProjectStatus.version})` : ""}`
-                      : "Install the Ideafy plugin only for this project (MCP + hooks + skills)"}
-                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {isTogglingPluginProject && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                  <Switch
-                    checked={pluginProjectStatus?.installed ?? false}
-                    onCheckedChange={handleTogglePluginProject}
-                    disabled={isTogglingPluginProject || pluginProjectStatus === null}
-                  />
+              );
+            }
+
+            return (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Plug className="h-4 w-4 text-muted-foreground" />
+                      <label className="text-sm font-medium">Claude Code plugin</label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {pluginProjectStatus?.installed
+                        ? `Enabled for this project${pluginProjectStatus.version ? ` (v${pluginProjectStatus.version})` : ""}`
+                        : "Install the Ideafy plugin only for this project (MCP + hooks + skills)"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isTogglingPluginProject && (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={pluginProjectStatus?.installed ?? false}
+                      onCheckedChange={handleTogglePluginProject}
+                      disabled={isTogglingPluginProject || pluginProjectStatus === null}
+                    />
+                  </div>
                 </div>
+                {pluginProjectError && (
+                  <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
+                )}
               </div>
-              {pluginProjectError && (
-                <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* Git Worktrees */}
           <div className="flex items-center justify-between">

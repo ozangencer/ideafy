@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { buildSkillGroupUnifiedItems } from "@/lib/skills/grouping";
+import type { AgentListItem, SkillListItem } from "@/lib/types";
 
 type UnifiedItemKind = "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
 interface UnifiedMentionItem {
@@ -9,6 +10,7 @@ interface UnifiedMentionItem {
   type: UnifiedItemKind;
   description?: string;
   children?: UnifiedMentionItem[];
+  pluginKey?: string | null;
 }
 
 /**
@@ -30,14 +32,18 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
     memoryFiles,
     skillItems,
     projectSkillItems,
+    agentItems,
+    projectAgentItems,
     globalSkillGroups,
     projectSkillGroups,
   } = useKanbanStore();
   const documentsRef = useRef<typeof documents>([]);
   const memoryRef = useRef<typeof memoryFiles>([]);
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
+  const [localProjectSkillItems, setLocalProjectSkillItems] = useState<SkillListItem[]>([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
   const [localProjectAgents, setLocalProjectAgents] = useState<string[]>([]);
+  const [localProjectAgentItems, setLocalProjectAgentItems] = useState<AgentListItem[]>([]);
 
   useEffect(() => {
     const effectiveProjectId = projectId || activeProjectId;
@@ -70,8 +76,10 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
 
     if (!effectiveProjectId) {
       setLocalProjectSkills([]);
+      setLocalProjectSkillItems([]);
       setLocalProjectMcps([]);
       setLocalProjectAgents([]);
+      setLocalProjectAgentItems([]);
       return;
     }
 
@@ -81,8 +89,10 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
       fetch(`/api/projects/${effectiveProjectId}/agents/list`).then((r) => r.json()).catch(() => ({ agents: [] })),
     ]).then(([skillsData, mcpsData, agentsData]) => {
       setLocalProjectSkills(skillsData.skills || []);
+      setLocalProjectSkillItems(skillsData.items || []);
       setLocalProjectMcps(mcpsData.mcps || []);
       setLocalProjectAgents(agentsData.agents || []);
+      setLocalProjectAgentItems(agentsData.items || []);
     });
   }, [projectId, activeProjectId]);
 
@@ -118,12 +128,37 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
           source: "project" as const,
         }));
 
+    const skillPluginKeyByName = new Map<string, string>();
+    [...skillItems, ...projectSkillItems, ...localProjectSkillItems].forEach((item) => {
+      if (item.pluginKey) skillPluginKeyByName.set(item.name, item.pluginKey);
+    });
+    const agentPluginKeyByName = new Map<string, string>();
+    [...agentItems, ...projectAgentItems, ...localProjectAgentItems].forEach((item) => {
+      if (item.pluginKey) agentPluginKeyByName.set(item.name, item.pluginKey);
+    });
+    // MCPs come as strings (no `items` payload); the namespace prefix is the
+    // only signal that the entry originated from a plugin.
+    const mcpPluginKeyFromName = (name: string): string | null =>
+      name.includes(":") ? name.split(":")[0] : null;
+
+    const resolvePluginKey = (type: UnifiedItemKind, name: string): string | null => {
+      if (type === "skill") return skillPluginKeyByName.get(name) ?? null;
+      if (type === "agent") return agentPluginKeyByName.get(name) ?? null;
+      if (type === "mcp") return mcpPluginKeyFromName(name);
+      return null;
+    };
+
     const addAll = (values: string[], type: UnifiedItemKind) => {
       Array.from(new Set(values)).forEach((value) => {
         const key = `${type}-${value}`;
         if (addedIds.has(key)) return;
         addedIds.add(key);
-        items.push({ id: value, label: value, type });
+        items.push({
+          id: value,
+          label: value,
+          type,
+          pluginKey: resolvePluginKey(type, value),
+        });
       });
     };
 
@@ -159,10 +194,14 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
     mcps,
     agents,
     activeProjectId,
+    agentItems,
     globalSkillGroups,
+    localProjectAgentItems,
     localProjectAgents,
     localProjectMcps,
+    localProjectSkillItems,
     localProjectSkills,
+    projectAgentItems,
     projectId,
     projectSkillGroups,
     projectSkillItems,

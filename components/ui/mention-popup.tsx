@@ -16,6 +16,7 @@ export interface UnifiedMentionItem {
   label: string;
   type: UnifiedItemType;
   description?: string;
+  pluginKey?: string | null;
   children?: UnifiedMentionItem[];
 }
 
@@ -247,6 +248,15 @@ export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMen
             const Icon = config.icon;
             const isSelected = index === selectedIndex;
 
+            const isPluginItem = Boolean(item.pluginKey);
+            const borderClass = isPluginItem
+              ? "border-l-accent-blue/80"
+              : config.borderClass;
+            const iconClass = isPluginItem
+              ? "text-accent-blue"
+              : config.iconClass;
+            const LeadingIcon = isPluginItem ? Puzzle : Icon;
+
             return (
               <button
                 key={`${item.type}-${item.id}`}
@@ -255,22 +265,35 @@ export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMen
                 className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors border-l-2 ${
                   isSelected
                     ? "border-l-primary bg-muted/90 text-foreground"
-                    : `${config.borderClass} hover:bg-muted`
+                    : `${borderClass} text-foreground/90 hover:bg-muted hover:text-foreground`
                 }`}
+                title={isPluginItem ? `Plugin: ${item.pluginKey}` : undefined}
               >
-                <Icon
+                <LeadingIcon
                   className={`h-3.5 w-3.5 shrink-0 ${
-                    isSelected ? "text-foreground/80" : config.iconClass
+                    isSelected ? "text-foreground/85" : iconClass
                   }`}
                 />
                 <span className="truncate flex-1">{item.label}</span>
-                <span
-                  className={`shrink-0 text-xs ${
-                    isSelected ? "text-muted-foreground/90" : "text-muted-foreground"
-                  }`}
-                >
-                  {config.label}
-                </span>
+                {isPluginItem ? (
+                  <span
+                    className={`shrink-0 rounded-sm px-1.5 py-[1px] text-[10px] font-medium uppercase tracking-wide ${
+                      isSelected
+                        ? "bg-accent-blue/15 text-accent-blue"
+                        : "bg-accent-blue/10 text-accent-blue/90"
+                    }`}
+                  >
+                    Plugin
+                  </span>
+                ) : (
+                  <span
+                    className={`shrink-0 text-xs ${
+                      isSelected ? "text-muted-foreground/90" : "text-muted-foreground"
+                    }`}
+                  >
+                    {config.label}
+                  </span>
+                )}
               </button>
             );
           })}

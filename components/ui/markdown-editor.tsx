@@ -61,14 +61,22 @@ export function MarkdownEditor({
     agents,
     skillItems,
     projectSkillItems,
+    agentItems,
+    projectAgentItems,
     globalSkillGroups,
     projectSkillGroups,
   } = useKanbanStore();
 
   // Local state for project-specific skills/mcps/agents
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);
+  const [localProjectSkillItems, setLocalProjectSkillItems] = useState<
+    import("@/lib/types").SkillListItem[]
+  >([]);
   const [localProjectMcps, setLocalProjectMcps] = useState<string[]>([]);
   const [localProjectAgents, setLocalProjectAgents] = useState<string[]>([]);
+  const [localProjectAgentItems, setLocalProjectAgentItems] = useState<
+    import("@/lib/types").AgentListItem[]
+  >([]);
   const effectiveProjectId = projectId || activeProjectId;
   const projectFolderPath =
     projects.find((project) => project.id === effectiveProjectId)?.folderPath || null;
@@ -108,8 +116,10 @@ export function MarkdownEditor({
   useEffect(() => {
     if (!effectiveProjectId) {
       setLocalProjectSkills([]);
+      setLocalProjectSkillItems([]);
       setLocalProjectMcps([]);
       setLocalProjectAgents([]);
+      setLocalProjectAgentItems([]);
       return;
     }
 
@@ -120,8 +130,10 @@ export function MarkdownEditor({
       fetch(`/api/projects/${effectiveProjectId}/agents/list`).then(r => r.json()).catch(() => ({ agents: [] })),
     ]).then(([skillsData, mcpsData, agentsData]) => {
       setLocalProjectSkills(skillsData.skills || []);
+      setLocalProjectSkillItems(skillsData.items || []);
       setLocalProjectMcps(mcpsData.mcps || []);
       setLocalProjectAgents(agentsData.agents || []);
+      setLocalProjectAgentItems(agentsData.items || []);
     });
   }, [projectId, activeProjectId]);
 
@@ -132,14 +144,25 @@ export function MarkdownEditor({
       label: string;
       type: "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
       description?: string;
+      pluginKey?: string | null;
       children?: Array<{
         id: string;
         label: string;
         type: "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
         description?: string;
+        pluginKey?: string | null;
       }>;
     }> = [];
     const addedIds = new Set<string>();
+
+    const skillPluginKeyByName = new Map<string, string>();
+    [...skillItems, ...projectSkillItems, ...localProjectSkillItems].forEach((item) => {
+      if (item.pluginKey) skillPluginKeyByName.set(item.name, item.pluginKey);
+    });
+    const agentPluginKeyByName = new Map<string, string>();
+    [...agentItems, ...projectAgentItems, ...localProjectAgentItems].forEach((item) => {
+      if (item.pluginKey) agentPluginKeyByName.set(item.name, item.pluginKey);
+    });
     const allGlobalSkillItems = skillItems.length
       ? skillItems
       : Array.from(new Set(skills)).map((name) => ({
@@ -189,7 +212,12 @@ export function MarkdownEditor({
     allSkills.forEach((skill) => {
       if (!addedIds.has(`skill-${skill}`)) {
         addedIds.add(`skill-${skill}`);
-        items.push({ id: skill, label: skill, type: "skill" });
+        items.push({
+          id: skill,
+          label: skill,
+          type: "skill",
+          pluginKey: skillPluginKeyByName.get(skill) ?? null,
+        });
       }
     });
 
@@ -198,7 +226,12 @@ export function MarkdownEditor({
     allMcps.forEach((mcp) => {
       if (!addedIds.has(`mcp-${mcp}`)) {
         addedIds.add(`mcp-${mcp}`);
-        items.push({ id: mcp, label: mcp, type: "mcp" });
+        items.push({
+          id: mcp,
+          label: mcp,
+          type: "mcp",
+          pluginKey: mcp.includes(":") ? mcp.split(":")[0] : null,
+        });
       }
     });
 
@@ -207,19 +240,28 @@ export function MarkdownEditor({
     allAgents.forEach((agent) => {
       if (!addedIds.has(`agent-${agent}`)) {
         addedIds.add(`agent-${agent}`);
-        items.push({ id: agent, label: agent, type: "agent" });
+        items.push({
+          id: agent,
+          label: agent,
+          type: "agent",
+          pluginKey: agentPluginKeyByName.get(agent) ?? null,
+        });
       }
     });
 
     return items;
   }, [
     activeProjectId,
+    agentItems,
     agents,
     globalSkillGroups,
+    localProjectAgentItems,
     localProjectAgents,
     localProjectMcps,
+    localProjectSkillItems,
     localProjectSkills,
     mcps,
+    projectAgentItems,
     projectId,
     projectSkillGroups,
     projectSkillItems,
@@ -233,20 +275,36 @@ export function MarkdownEditor({
     []
   );
 
-  // Unified suggestion for / trigger (skills, MCPs, plugins)
+  // The TipTap editor is created once at mount and captures its extension
+  // options via closure. We route suggestion providers through refs so
+  // lists fetched AFTER mount (project skills, card list updates, new
+  // documents) are still visible when the user later opens the popup.
+  const getUnifiedItemsRef = useRef(getUnifiedItems);
+  const getDocumentsRef = useRef(getDocuments);
+  const cardSuggestionDataRef = useRef({ cards, projects, activeProjectId });
+  useEffect(() => {
+    getUnifiedItemsRef.current = getUnifiedItems;
+  }, [getUnifiedItems]);
+  useEffect(() => {
+    getDocumentsRef.current = getDocuments;
+  }, [getDocuments]);
+  useEffect(() => {
+    cardSuggestionDataRef.current = { cards, projects, activeProjectId };
+  }, [cards, projects, activeProjectId]);
+
   const unifiedSuggestion = useMemo(
-    () => createUnifiedSuggestion({ getItems: getUnifiedItems }),
-    [getUnifiedItems]
+    () => createUnifiedSuggestion({ getItems: () => getUnifiedItemsRef.current() }),
+    []
   );
 
   const cardSuggestion = useMemo(
-    () => createCardSuggestion({ cards, projects, activeProjectId }),
-    [cards, projects, activeProjectId]
+    () => createCardSuggestion(() => cardSuggestionDataRef.current),
+    []
   );
 
   const documentSuggestion = useMemo(
-    () => createDocumentSuggestion({ getDocuments }),
-    [getDocuments]
+    () => createDocumentSuggestion({ getDocuments: () => getDocumentsRef.current() }),
+    []
   );
 
   const handleEditorDrop = useCallback((view: EditorView, event: DragEvent): boolean => {

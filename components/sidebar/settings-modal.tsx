@@ -51,7 +51,16 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const activeExtra = extraTabs.find((t) => t.value === activeTab);
   const hideDefaultFooter = Boolean(activeExtra?.hideDefaultFooter);
 
-  const { settings, updateSettings, fetchSettings } = useKanbanStore();
+  const {
+    settings,
+    updateSettings,
+    fetchSettings,
+    fetchSkills,
+    fetchMcps,
+    fetchAgents,
+    fetchProjectExtensions,
+    activeProjectId,
+  } = useKanbanStore();
   const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);
   const [mcpConfigPath, setMcpConfigPath] = useState(DEFAULT_SETTINGS.mcpConfigPath);
@@ -59,8 +68,6 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingSkillsFolder, setIsPickingSkillsFolder] = useState(false);
   const [isPickingMcpFile, setIsPickingMcpFile] = useState(false);
-  const [isReinstallingHooks, setIsReinstallingHooks] = useState(false);
-  const [hookResult, setHookResult] = useState<{ success: number; failed: number } | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
 
   const [pluginStatus, setPluginStatus] = useState<{
@@ -250,27 +257,6 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
     }
   };
 
-  const handleReinstallHooks = async () => {
-    setIsReinstallingHooks(true);
-    setHookResult(null);
-    try {
-      const response = await fetch("/api/projects/reinstall-hooks", {
-        method: "POST",
-      });
-      const data = await response.json();
-      const results = data.results || [];
-      setHookResult({
-        success: results.filter((r: { success: boolean }) => r.success).length,
-        failed: results.filter((r: { success: boolean }) => !r.success).length,
-      });
-    } catch (error) {
-      console.error("Failed to reinstall hooks:", error);
-      setHookResult({ success: 0, failed: -1 });
-    } finally {
-      setIsReinstallingHooks(false);
-    }
-  };
-
   const handlePluginAction = async (action: "install" | "uninstall" | "enable" | "disable") => {
     setIsPluginBusy(true);
     setPluginError(null);
@@ -285,6 +271,8 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
         setPluginError(data.error || `Action '${action}' failed`);
       }
       if (data.status) setPluginStatus(data.status);
+      await Promise.all([fetchSkills(), fetchMcps(), fetchAgents()]);
+      if (activeProjectId) await fetchProjectExtensions(activeProjectId);
     } catch (error) {
       setPluginError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -479,56 +467,6 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                 : "Terminal to use for opening coding sessions"}
             </p>
           </div>
-
-          {/* Divider - only show if hooks are supported */}
-          {capabilities?.supportsHooks && (
-            <>
-              <div className="border-t border-border" />
-
-              {/* Hooks */}
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Hooks</label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Guides Claude through each card phase with a confirmation policy
-                </p>
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleReinstallHooks}
-                    disabled={isReinstallingHooks}
-                    className="gap-2"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isReinstallingHooks ? "animate-spin" : ""}`} />
-                    {isReinstallingHooks ? "Installing..." : "Install Hooks"}
-                  </Button>
-                  {hookResult && (
-                    <div className="flex items-center gap-2 text-sm">
-                      {hookResult.failed === -1 ? (
-                        <span className="text-destructive flex items-center gap-1">
-                          <AlertCircle className="h-4 w-4" />
-                          Error occurred
-                        </span>
-                      ) : (
-                        <>
-                          <span className="text-green-500 flex items-center gap-1">
-                            <Check className="h-4 w-4" />
-                            {hookResult.success} successful
-                          </span>
-                          {hookResult.failed > 0 && (
-                            <span className="text-destructive flex items-center gap-1">
-                              <AlertCircle className="h-4 w-4" />
-                              {hookResult.failed} failed
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
 
           {aiPlatform === "claude" && (
             <>

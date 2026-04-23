@@ -76,6 +76,7 @@ export interface SkillListItem {
   group: string | null;
   description: string | null;
   source: SkillSource;
+  pluginKey?: string | null;
 }
 
 export interface UserSkillGroup {
@@ -105,6 +106,7 @@ export interface AgentListItem {
   description: string | null;
   source: SkillSource;
   format: AgentFormat;
+  pluginKey?: string | null;
 }
 
 export interface AgentPreview extends AgentListItem {
@@ -245,6 +247,7 @@ export interface UnifiedItem {
   type: UnifiedItemType;
   description?: string;
   children?: UnifiedItem[];
+  pluginKey?: string | null;
 }
 
 // Tool call data from Claude responses
