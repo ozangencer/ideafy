@@ -87,6 +87,10 @@ export function EditProjectModal({
   } | null>(null);
   const [isTogglingPluginProject, setIsTogglingPluginProject] = useState(false);
   const [pluginProjectError, setPluginProjectError] = useState<string | null>(null);
+  const ideafyExtensionDescription =
+    aiPlatform === "codex"
+      ? "Install Ideafy MCP tools and project skills for Codex CLI"
+      : "Install Ideafy MCP tools and project skills for Gemini CLI";
 
   // Check hook and MCP/Skills status on mount
   useEffect(() => {
@@ -374,7 +378,7 @@ export function EditProjectModal({
                   <label className="text-sm font-medium">Ideafy MCP & Skills</label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Install ideafy tools, phase-aware hook, and slash commands in this project
+                  {ideafyExtensionDescription}
                 </p>
               </div>
               <div className="flex items-center gap-2">

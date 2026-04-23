@@ -80,49 +80,9 @@ export async function POST(
         for (const line of lines) {
           if (!line.trim()) continue;
 
-          try {
-            const json = JSON.parse(line);
-
-            // Handle assistant message with content
-            if (json.type === 'assistant' && json.message?.content) {
-              for (const block of json.message.content) {
-                if (block.type === 'text' && block.text) {
-                  sendEvent("text", block.text);
-                }
-                // Handle thinking blocks
-                if (block.type === 'thinking' && block.thinking) {
-                  sendEvent("thinking", block.thinking);
-                }
-                // Handle tool use
-                if (block.type === 'tool_use') {
-                  sendEvent("tool_use", { name: block.name, input: block.input });
-                }
-              }
-            }
-
-            // Handle streaming content
-            if (json.type === 'content_block_delta') {
-              if (json.delta?.text) {
-                sendEvent("text", json.delta.text);
-              }
-              if (json.delta?.thinking) {
-                sendEvent("thinking", json.delta.thinking);
-              }
-            }
-
-            // Handle tool results
-            if (json.type === 'tool_result') {
-              sendEvent("tool_result", { name: json.name, output: json.output?.slice?.(0, 200) });
-            }
-
-            // Handle system messages (like tool calls)
-            if (json.type === 'system' && json.subtype) {
-              if (json.subtype !== 'init') {
-                sendEvent("system", { subtype: json.subtype, message: json.message });
-              }
-            }
-          } catch {
-            // Invalid JSON, skip
+          const events = provider.parseStreamLine(line);
+          for (const event of events) {
+            sendEvent(event.type, event.data);
           }
         }
       });
@@ -135,6 +95,12 @@ export async function POST(
       });
 
       cliProcess.on("close", (code) => {
+        if (stdoutBuffer.trim()) {
+          const events = provider.parseStreamLine(stdoutBuffer);
+          for (const event of events) {
+            sendEvent(event.type, event.data);
+          }
+        }
         activeProcesses.delete(processKey);
         sendEvent("close", { code });
         if (!isClosed) {

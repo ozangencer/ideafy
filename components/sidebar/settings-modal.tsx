@@ -171,7 +171,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
       mcpConfigPath: "~/.codex/config.toml",
       capabilities: {
         supportsAutonomousMode: true,
-        supportsStreamJson: false,
+        supportsStreamJson: true,
         supportsPermissionModes: false,
         supportsHooks: false,
         supportsSkills: true,

@@ -13,11 +13,37 @@ import type {
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
-import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
+import {
+  convertSkillToCodexSkillMd,
+  isGeneratedCodexSkill,
+  isLegacyConvertedSkill,
+  SKILL_FILES,
+} from "./skill-converter";
 import { appResourcesRoot } from "../paths";
 import { buildMcpInvocation } from "./mcp-invocation";
 
 let cachedCodexPath: string | null = null;
+
+function tomlString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function removeTomlTableFamily(content: string, tableName: string): string {
+  const lines = content.split(/\r?\n/);
+  const output: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const match = line.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (match) {
+      const currentTable = match[1].trim();
+      skipping = currentTable === tableName || currentTable.startsWith(`${tableName}.`);
+    }
+    if (!skipping) output.push(line);
+  }
+
+  return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
 class CodexProvider implements PlatformProvider {
   id = "codex" as const;
@@ -75,10 +101,16 @@ class CodexProvider implements PlatformProvider {
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
+    const automationArgs = opts.skipPermissions
+      ? ["--full-auto"]
+      : ["--full-auto", "--sandbox", "read-only"];
+    const dirArgs = opts.addDirs?.flatMap((dir) => ["--add-dir", dir]) ?? [];
+
     if (opts.resumeSessionId) {
+      // `codex exec resume` does not currently accept `--sandbox` or `--add-dir`.
       return ["exec", "resume", opts.resumeSessionId, "--json", "--full-auto", opts.prompt];
     }
-    return ["exec", "--json", "--full-auto", opts.prompt];
+    return ["exec", "--json", ...automationArgs, ...dirArgs, opts.prompt];
   }
 
   parseJsonResponse(stdout: string): CliResponse {
@@ -236,16 +268,16 @@ class CodexProvider implements PlatformProvider {
       const mcp = buildMcpInvocation();
       // Codex config is TOML, so serialize the invocation by hand. Args is
       // always an array of strings and env is a flat string map.
-      const argsToml = mcp.args.map((a) => `"${a.replace(/"/g, '\\"')}"`).join(", ");
-      let tomlBlock = `\n[mcp_servers.ideafy]\ncommand = "${mcp.command.replace(/"/g, '\\"')}"\nargs = [${argsToml}]\n`;
+      const argsToml = mcp.args.map(tomlString).join(", ");
+      let tomlBlock = `\n[mcp_servers.ideafy]\ncommand = ${tomlString(mcp.command)}\nargs = [${argsToml}]\n`;
       if (mcp.env) {
         const envLines = Object.entries(mcp.env)
-          .map(([k, v]) => `${k} = "${v.replace(/"/g, '\\"')}"`)
+          .map(([k, v]) => `${k} = ${tomlString(v)}`)
           .join("\n");
         tomlBlock += `\n[mcp_servers.ideafy.env]\n${envLines}\n`;
       }
 
-      fs.writeFileSync(configPath, content + tomlBlock);
+      fs.writeFileSync(configPath, `${content.trimEnd()}${tomlBlock}`);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -257,10 +289,9 @@ class CodexProvider implements PlatformProvider {
       const configPath = path.join(folderPath, ".codex", "config.toml");
       if (!fs.existsSync(configPath)) return { success: true };
 
-      let content = fs.readFileSync(configPath, "utf-8");
-      // Remove the [mcp_servers.ideafy] block
-      content = content.replace(/\n?\[mcp_servers\.ideafy\][^\[]*/g, "");
-      fs.writeFileSync(configPath, content.trim() + "\n");
+      const content = fs.readFileSync(configPath, "utf-8");
+      const nextContent = removeTomlTableFamily(content, "mcp_servers.ideafy");
+      fs.writeFileSync(configPath, nextContent ? `${nextContent}\n` : "");
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
@@ -286,9 +317,18 @@ class CodexProvider implements PlatformProvider {
         const skillDir = path.join(skillsDir, skillName);
         const skillMdPath = path.join(skillDir, "SKILL.md");
 
-        if (!fs.existsSync(skillMdPath)) {
+        const nextContent = convertSkillToCodexSkillMd(skillName);
+        const existing = fs.existsSync(skillMdPath)
+          ? fs.readFileSync(skillMdPath, "utf-8")
+          : null;
+
+        if (
+          existing === null ||
+          isGeneratedCodexSkill(existing) ||
+          isLegacyConvertedSkill(existing)
+        ) {
           fs.mkdirSync(skillDir, { recursive: true });
-          fs.writeFileSync(skillMdPath, convertSkillToSkillMd(skillName));
+          fs.writeFileSync(skillMdPath, nextContent);
         }
       }
 

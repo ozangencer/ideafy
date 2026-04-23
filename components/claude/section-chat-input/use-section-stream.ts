@@ -97,6 +97,14 @@ export function useSectionStream(args: UseSectionStreamArgs) {
                   fullOutput += event.data;
                   setStreamingOutput(fullOutput);
                   break;
+                case "result": {
+                  const resultText = String(event.data);
+                  if (resultText.trim() && !fullOutput.includes(resultText.trim())) {
+                    fullOutput += (fullOutput ? "\n" : "") + resultText;
+                    setStreamingOutput(fullOutput);
+                  }
+                  break;
+                }
                 case "thinking":
                   appendActivity({ type: "thinking", content: event.data });
                   break;
