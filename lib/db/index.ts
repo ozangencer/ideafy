@@ -28,35 +28,25 @@ function resolveDbPath(): string {
   return target;
 }
 
-// Drizzle's migrate() expects a __drizzle_migrations table to exist or the DB
-// to be empty. Legacy dev installs were built via `drizzle-kit push`, so the
-// schema is present but the tracker table is not — running migrate() there
-// would re-CREATE tables and crash. Stamp the baseline as applied in that
-// case so future migrations layer on cleanly.
-function stampBaselineIfLegacy(sqlite: Database.Database, migrationsFolder: string): void {
-  const hasTracker = sqlite
-    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'`)
-    .get();
-  if (hasTracker) return;
-
-  const hasCards = sqlite
-    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='cards'`)
-    .get();
-  if (!hasCards) return;
-
+// Drizzle's migrate() expects every pending migration to be fresh — it will
+// replay the SQL and crash on "table already exists". Two legacy paths leave
+// a DB where migrations were applied out-of-band (via `drizzle-kit push` or
+// a previous hand-edit) but the tracker is missing or incomplete:
+//   1. No __drizzle_migrations table at all (pre-migration era).
+//   2. Tracker exists but later migrations' tables were created via push.
+// For every journal entry whose first CREATE TABLE target already exists on
+// disk and whose hash isn't recorded yet, stamp it as applied.
+function stampExistingMigrations(
+  sqlite: Database.Database,
+  migrationsFolder: string
+): void {
   const journalPath = path.join(migrationsFolder, "meta", "_journal.json");
   if (!fs.existsSync(journalPath)) return;
 
   const journal = JSON.parse(fs.readFileSync(journalPath, "utf-8")) as {
     entries: Array<{ tag: string; when: number }>;
   };
-  const baseline = journal.entries[0];
-  if (!baseline) return;
-
-  const sqlFile = path.join(migrationsFolder, `${baseline.tag}.sql`);
-  if (!fs.existsSync(sqlFile)) return;
-  const sql = fs.readFileSync(sqlFile, "utf-8");
-  const hash = require("node:crypto").createHash("sha256").update(sql).digest("hex");
+  if (!journal.entries?.length) return;
 
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS __drizzle_migrations (
@@ -65,10 +55,38 @@ function stampBaselineIfLegacy(sqlite: Database.Database, migrationsFolder: stri
       created_at NUMERIC
     );
   `);
-  sqlite
-    .prepare(`INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)`)
-    .run(hash, baseline.when);
-  console.log(`[db] stamped baseline migration ${baseline.tag} on legacy DB`);
+
+  const applied = new Set<string>(
+    sqlite
+      .prepare<[], { hash: string }>(`SELECT hash FROM __drizzle_migrations`)
+      .all()
+      .map((row) => row.hash)
+  );
+
+  const tableExists = sqlite.prepare<[string], { name: string }>(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name=?`
+  );
+
+  const crypto = require("node:crypto") as typeof import("node:crypto");
+  const insert = sqlite.prepare(
+    `INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)`
+  );
+
+  for (const entry of journal.entries) {
+    const sqlFile = path.join(migrationsFolder, `${entry.tag}.sql`);
+    if (!fs.existsSync(sqlFile)) continue;
+    const sql = fs.readFileSync(sqlFile, "utf-8");
+    const hash = crypto.createHash("sha256").update(sql).digest("hex");
+    if (applied.has(hash)) continue;
+
+    const match = sql.match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?/i);
+    if (!match) continue;
+    if (!tableExists.get(match[1])) continue;
+
+    insert.run(hash, entry.when);
+    applied.add(hash);
+    console.log(`[db] stamped existing migration ${entry.tag} (target table '${match[1]}' already present)`);
+  }
 }
 
 const dbPath = resolveDbPath();
@@ -82,7 +100,7 @@ sqlite.pragma("foreign_keys = ON");
 
 const migrationsFolder = path.join(appResourcesRoot(), "drizzle");
 if (fs.existsSync(migrationsFolder)) {
-  stampBaselineIfLegacy(sqlite, migrationsFolder);
+  stampExistingMigrations(sqlite, migrationsFolder);
   migrate(drizzle(sqlite), { migrationsFolder });
 }
 
