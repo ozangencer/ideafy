@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { getActiveProvider } from "@/lib/platform/active";
-import { listGlobalSkillItems, listProjectSkillItems } from "@/lib/skills/catalog";
+import { listGlobalSkillItems, listOpenCodeGlobalSkillItems, listProjectSkillItems } from "@/lib/skills/catalog";
 import { parseSkillDocument } from "@/lib/skills/frontmatter";
 import {
   listEnabledPluginEntries,
@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
       setting?.value || provider.getDefaultSkillsPath()
     );
 
-    const globalItems = listGlobalSkillItems(globalSkillsPath);
+    const globalItems = provider.id === "opencode"
+      ? listOpenCodeGlobalSkillItems(globalSkillsPath)
+      : listGlobalSkillItems(globalSkillsPath);
     const projects = db.select().from(schema.projects).all();
     const projectItems = projects.flatMap((project) =>
       listProjectSkillItems(project.folderPath, provider.id)

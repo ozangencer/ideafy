@@ -161,7 +161,7 @@ export const STATUS_COLORS: Record<Status, string> = {
 
 // Settings types
 export type TerminalApp = "iterm2" | "ghostty" | "terminal";
-export type AiPlatform = "claude" | "gemini" | "codex";
+export type AiPlatform = "claude" | "gemini" | "codex" | "opencode";
 
 export interface AppSettings {
   aiPlatform: AiPlatform;
@@ -183,6 +183,7 @@ export const AI_PLATFORM_OPTIONS: { value: AiPlatform; label: string; descriptio
   { value: "claude", label: "Claude Code", description: "Anthropic's coding CLI" },
   { value: "gemini", label: "Gemini CLI", description: "Google's AI coding CLI" },
   { value: "codex", label: "Codex CLI", description: "OpenAI's coding CLI" },
+  { value: "opencode", label: "OpenCode", description: "OpenCode CLI" },
 ];
 
 export const TERMINAL_OPTIONS: { value: TerminalApp; label: string }[] = [

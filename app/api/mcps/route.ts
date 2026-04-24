@@ -33,7 +33,7 @@ function readBaseMcps(configPath: string, format: "json" | "toml"): string[] {
       return parseMcpNamesFromToml(configContent);
     }
     const config = JSON.parse(configContent);
-    return Object.keys(config.mcpServers || {});
+    return Object.keys(config.mcpServers || config.mcp || {});
   } catch {
     return [];
   }

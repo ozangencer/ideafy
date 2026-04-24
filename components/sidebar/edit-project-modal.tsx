@@ -90,6 +90,8 @@ export function EditProjectModal({
   const ideafyExtensionDescription =
     aiPlatform === "codex"
       ? "Install Ideafy MCP tools and project skills for Codex CLI"
+      : aiPlatform === "opencode"
+        ? "Install Ideafy MCP tools and project skills for OpenCode"
       : "Install Ideafy MCP tools and project skills for Gemini CLI";
 
   // Check hook and MCP/Skills status on mount
@@ -136,6 +138,10 @@ export function EditProjectModal({
 
       if (hookRes.ok && mcpRes.ok && skillsRes.ok) {
         setKanbanInstalled(hookData.installed && mcpData.installed && skillsData.installed);
+        if (activeProjectId === project.id) {
+          await fetchProjectExtensions(project.id);
+        }
+        await Promise.all([fetchSkills(), fetchMcps(), fetchAgents()]);
       }
     } catch (error) {
       console.error("Failed to toggle ideafy:", error);

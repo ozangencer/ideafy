@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { homedir } from "node:os";
 import type { AiPlatform, SkillListItem, SkillSource } from "@/lib/types";
 import { parseSkillDocument } from "./frontmatter";
 
@@ -131,6 +132,15 @@ export function listGlobalSkillItems(skillsRoot: string): SkillListItem[] {
   ]);
 }
 
+export function listOpenCodeGlobalSkillItems(configuredSkillsRoot: string): SkillListItem[] {
+  const home = homedir();
+  return dedupeSkillItems([
+    ...scanDirectorySkills(configuredSkillsRoot, "global"),
+    ...scanDirectorySkills(path.join(home, ".claude", "skills"), "global"),
+    ...scanDirectorySkills(path.join(home, ".agents", "skills"), "global"),
+  ]);
+}
+
 export function listProjectSkillItems(
   folderPath: string,
   platform: AiPlatform
@@ -153,6 +163,18 @@ export function listProjectSkillItems(
   }
 
   if (platform === "codex") {
+    items.push(
+      ...scanDirectorySkills(path.join(folderPath, ".agents", "skills"), "project")
+    );
+  }
+
+  if (platform === "opencode") {
+    items.push(
+      ...scanDirectorySkills(path.join(folderPath, ".opencode", "skills"), "project")
+    );
+    items.push(
+      ...scanDirectorySkills(path.join(folderPath, ".claude", "skills"), "project")
+    );
     items.push(
       ...scanDirectorySkills(path.join(folderPath, ".agents", "skills"), "project")
     );

@@ -10,6 +10,7 @@ export const PLATFORM_BRAND_COLORS: Record<AiPlatform, string> = {
   claude: "#cc785c",
   gemini: "#4285f4",
   codex: "#10a37f",
+  opencode: "currentColor",
 };
 
 /** Claude (Anthropic) — Anthropic Clay/Coral brand mark */
@@ -47,6 +48,19 @@ function CodexIcon({ size, className }: { size: number; className?: string }) {
   );
 }
 
+/** OpenCode - official square-ring logomark */
+function OpenCodeIcon({ size, className }: { size: number; className?: string }) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill={PLATFORM_BRAND_COLORS.opencode}>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M6 3h12v18H6V3Zm4 4v10h4V7h-4Z"
+      />
+    </svg>
+  );
+}
+
 export function PlatformIcon({ platform, className, size = 16 }: PlatformIconProps) {
   switch (platform) {
     case "claude":
@@ -55,5 +69,7 @@ export function PlatformIcon({ platform, className, size = 16 }: PlatformIconPro
       return <GeminiIcon size={size} className={className} />;
     case "codex":
       return <CodexIcon size={size} className={className} />;
+    case "opencode":
+      return <OpenCodeIcon size={size} className={className} />;
   }
 }

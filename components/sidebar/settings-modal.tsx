@@ -181,6 +181,21 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
         mcpConfigFormat: "toml",
       },
     },
+    opencode: {
+      skillsPath: "~/.config/opencode/skills",
+      mcpConfigPath: "~/.config/opencode/opencode.json",
+      capabilities: {
+        supportsAutonomousMode: true,
+        supportsStreamJson: true,
+        supportsPermissionModes: true,
+        supportsHooks: false,
+        supportsSkills: true,
+        supportsMcp: true,
+        supportsAgents: true,
+        supportsSessionResume: true,
+        mcpConfigFormat: "json",
+      },
+    },
   };
 
   // Collect all known default paths to detect "not customized"

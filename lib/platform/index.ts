@@ -3,11 +3,13 @@ import type { PlatformProvider } from "./types";
 import { claudeProvider } from "./claude-provider";
 import { geminiProvider } from "./gemini-provider";
 import { codexProvider } from "./codex-provider";
+import { opencodeProvider } from "./opencode-provider";
 
 const providers: Record<AiPlatform, PlatformProvider> = {
   claude: claudeProvider,
   gemini: geminiProvider,
   codex: codexProvider,
+  opencode: opencodeProvider,
 };
 
 export function getPlatformProvider(platform: AiPlatform): PlatformProvider {

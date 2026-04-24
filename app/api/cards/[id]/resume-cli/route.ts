@@ -12,6 +12,8 @@ function buildResumeCliArgv(provider: PlatformProvider, sessionId: string): stri
       return [provider.getCliPath(), "resume", "--include-non-interactive", sessionId];
     case "gemini":
       return [provider.getCliPath(), "--resume", sessionId];
+    case "opencode":
+      return [provider.getCliPath(), "--session", sessionId];
     case "claude":
     default:
       return [provider.getCliPath(), "--resume", sessionId];

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getActiveProvider } from "@/lib/platform/active";
-import { listGlobalSkillItems } from "@/lib/skills/catalog";
+import { listGlobalSkillItems, listOpenCodeGlobalSkillItems } from "@/lib/skills/catalog";
 import {
   listEnabledPluginEntries,
   listPluginSkillItems,
@@ -49,7 +49,9 @@ export async function GET() {
     const provider = getActiveProvider();
     const configuredPath = setting?.value || provider.getDefaultSkillsPath();
     const skillsPath = expandPath(configuredPath);
-    const baseItems = listGlobalSkillItems(skillsPath);
+    const baseItems = provider.id === "opencode"
+      ? listOpenCodeGlobalSkillItems(skillsPath)
+      : listGlobalSkillItems(skillsPath);
 
     let pluginItems: SkillListItem[] = [];
     if (provider.id === "claude") {

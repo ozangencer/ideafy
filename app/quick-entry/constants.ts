@@ -27,12 +27,14 @@ export const PLATFORM_LABELS: Record<AiPlatform, { label: string; color: string 
   claude: { label: "Claude", color: "#cc785c" },
   gemini: { label: "Gemini", color: "#4285f4" },
   codex: { label: "Codex", color: "#10a37f" },
+  opencode: { label: "OpenCode", color: "#f97316" },
 };
 
 export const PLATFORM_OPTIONS = [
   { key: "claude" as AiPlatform, label: "Claude Code", color: "#cc785c", bracket: "[claude" },
   { key: "gemini" as AiPlatform, label: "Gemini CLI", color: "#4285f4", bracket: "[gemini" },
   { key: "codex" as AiPlatform, label: "Codex CLI", color: "#10a37f", bracket: "[codex" },
+  { key: "opencode" as AiPlatform, label: "OpenCode", color: "#f97316", bracket: "[opencode" },
 ];
 
 // Inline `ai:<name>` tokens in the title that immediately set platform (no autocomplete)
@@ -40,6 +42,7 @@ export const PLATFORM_INLINE_MAP: Record<string, AiPlatform> = {
   "ai:claude": "claude",
   "ai:gemini": "gemini",
   "ai:codex": "codex",
+  "ai:opencode": "opencode",
 };
 
 export type StatusOption = (typeof STATUS_OPTIONS)[number];

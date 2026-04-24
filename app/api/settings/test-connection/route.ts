@@ -17,7 +17,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     // CLI not found via provider, try which as fallback
-    const binaryName = platform === "claude" ? "claude" : platform === "gemini" ? "gemini" : "codex";
+    const binaryName = platform === "claude"
+      ? "claude"
+      : platform === "gemini"
+        ? "gemini"
+        : platform === "codex"
+          ? "codex"
+          : "opencode";
     try {
       // execFileSync keeps binaryName out of a shell even though it's currently
       // a closed enum; defense in depth against future refactors.

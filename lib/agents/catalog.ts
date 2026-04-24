@@ -88,6 +88,9 @@ export function listProjectAgentItems(
     case "codex":
       directoryPath = path.join(folderPath, ".codex", "agents");
       break;
+    case "opencode":
+      directoryPath = path.join(folderPath, ".opencode", "agents");
+      break;
     default:
       return [];
   }

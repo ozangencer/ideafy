@@ -7,6 +7,7 @@ const PLATFORM_DEFAULTS: Record<AiPlatform, { skillsPath: string; mcpConfigPath:
   claude: { skillsPath: "~/.claude/skills", mcpConfigPath: "~/.claude.json" },
   gemini: { skillsPath: "~/.gemini/skills", mcpConfigPath: "~/.gemini/settings.json" },
   codex: { skillsPath: "~/.codex/skills", mcpConfigPath: "~/.codex/config.toml" },
+  opencode: { skillsPath: "~/.config/opencode/skills", mcpConfigPath: "~/.config/opencode/opencode.json" },
 };
 
 export const createSettingsSlice: StoreSlice<
