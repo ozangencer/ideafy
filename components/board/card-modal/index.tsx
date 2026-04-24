@@ -219,6 +219,7 @@ export function CardModal({
     setActiveTab,
     fetchConversation,
     autoSaveInFlightRef,
+    hasUnsavedChanges,
     cancelPendingAutoSave,
     markExternalUpdate,
     applyCardToForm,
