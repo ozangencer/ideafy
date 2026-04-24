@@ -1,16 +1,20 @@
 import { stripHtml } from "./utils";
+import { buildTestStyleContract, detectCardLanguage } from "./test-style";
 
 /**
  * Interactive QA partner prompt: walks the user through manual test scenarios
  * one by one, helps debug failures, and updates/moves the card when done.
  */
 export function buildTestTogetherPrompt(
-  card: { id: string; title: string; testScenarios: string },
+  card: { id: string; title: string; testScenarios: string; description?: string },
   displayId: string | null,
 ): string {
   const title = stripHtml(card.title);
   const scenarios = stripHtml(card.testScenarios);
   const taskHeader = displayId ? `[${displayId}] ${title}` : title;
+  const styleContract = buildTestStyleContract({
+    language: detectCardLanguage({ title: card.title, description: card.description }),
+  });
 
   return `You are a QA Partner. Let's test "${taskHeader}" together step by step.
 
@@ -66,6 +70,8 @@ mcp__ideafy__move_card({ id: "${card.id}", status: "progress" })
 
 Card ID: ${card.id}
 
+${styleContract}
+
 Let's start testing! I'll read the card first and then walk you through each test scenario.`;
 }
 
@@ -75,7 +81,7 @@ Let's start testing! I'll read the card first and then walk you through each tes
  * test framework.
  */
 export function buildTestGenerationPrompt(
-  card: { id: string; title: string; testScenarios: string },
+  card: { id: string; title: string; testScenarios: string; description?: string },
   displayId: string | null,
   selectedScenarios?: string | null,
 ): string {
@@ -85,6 +91,9 @@ export function buildTestGenerationPrompt(
     ? `- ${selectedScenarios}`
     : allScenarios;
   const taskHeader = displayId ? `[${displayId}] ${title}` : title;
+  const styleContract = buildTestStyleContract({
+    language: detectCardLanguage({ title: card.title, description: card.description }),
+  });
 
   return `# ${taskHeader}
 
@@ -116,6 +125,8 @@ After generating tests AND verifying they pass (run the test command and confirm
 Use mcp__ideafy__save_tests to update the card with the new format.
 
 **Checkbox rule (mandatory):** If a manual scenario is now covered by a passing unit test, its checkbox MUST be \`[x]\` in the markdown you send to save_tests. Do not wait for the user to tell you to tick passing scenarios — ticking them is part of the job. Only leave \`[ ]\` for scenarios that genuinely still need human verification (UI, regressions, integration-level checks).
+
+${styleContract}
 
 Focus on:
 - Testing happy paths and edge cases from scenarios

@@ -5,6 +5,7 @@
 
 import type { SectionType, ConversationMessage } from "@/lib/types";
 import { testScenariosToMarkdown } from "@/lib/markdown";
+import { buildTestStyleContract, detectCardLanguage } from "@/lib/prompts/test-style";
 
 // Card context info
 export interface CardContext {
@@ -165,11 +166,17 @@ Current solution plan: ${ctx.sectionContent || "(none)"}
 
 Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution")}`,
 
-  tests: (ctx) => `You are a QA engineer helping write test scenarios for a development task.
+  tests: (ctx) => {
+    const lang = detectCardLanguage({ title: ctx.title, description: ctx.description });
+    const styleContract = buildTestStyleContract({ language: lang });
+    return `You are a manual tester walking a solo founder through this feature step by step. Your goal is to produce scenarios they can actually follow, not a spec of assertions.
 ${buildCardContext(ctx)}
 Current test scenarios: ${ctx.sectionContent || "(none)"}
 
-Suggest test cases covering happy paths, edge cases, and error conditions. Use checkbox format: - [ ] Test description${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests")}`,
+Cover happy paths, edge cases, and error conditions. Use checkbox format: \`- [ ] Step description\`.
+
+${styleContract}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests")}`;
+  },
 };
 
 // Strip HTML tags for cleaner prompts

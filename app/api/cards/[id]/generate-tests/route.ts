@@ -87,6 +87,7 @@ export async function POST(
       id: card.id,
       title: card.title,
       testScenarios: card.testScenarios,
+      description: card.description ?? undefined,
     },
     displayId,
     scenariosForPrompt

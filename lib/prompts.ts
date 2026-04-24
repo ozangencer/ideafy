@@ -30,6 +30,7 @@ export {
 // ------------------------------------------------------------------
 
 import { stripHtml } from "./prompts/utils";
+import { buildTestStyleContract, detectCardLanguage } from "./prompts/test-style";
 
 export type Phase = "planning" | "implementation" | "retest";
 
@@ -80,7 +81,10 @@ Must include at the end:
 IMPORTANT: Do NOT implement yet - plan only.
 IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output the complete plan directly as your response text. Your output will be automatically saved to the card.`;
 
-    case "implementation":
+    case "implementation": {
+      const styleContract = buildTestStyleContract({
+        language: detectCardLanguage({ title: card.title, description: card.description }),
+      });
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Follow the approved plan in solutionSummary.
@@ -124,7 +128,10 @@ Rules:
 - Do NOT include code summaries, file lists, or implementation details in your output
 - Your response text will be automatically saved as test scenarios
 
+${styleContract}
+
 IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results.`;
+    }
 
     case "retest":
       return `Ideafy: ${card.id}

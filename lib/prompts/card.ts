@@ -1,4 +1,5 @@
 import { stripHtml } from "./utils";
+import { buildTestStyleContract, detectCardLanguage } from "./test-style";
 
 /**
  * Evaluate prompt for cards entering the Ideation column.
@@ -80,6 +81,9 @@ Be direct. Don't sugarcoat. Point out both good and bad aspects.`;
 export function buildQuickFixPrompt(card: { title: string; description: string }): string {
   const title = stripHtml(card.title);
   const description = stripHtml(card.description);
+  const styleContract = buildTestStyleContract({
+    language: detectCardLanguage({ title: card.title, description: card.description }),
+  });
 
   return `You are a senior developer. Fix this bug quickly and efficiently.
 
@@ -107,6 +111,8 @@ After fixing the bug, provide a brief summary in this format:
 - [ ] Bug no longer reproduces
 - [ ] Related functionality still works
 - [ ] No regression in existing tests
+
+${styleContract}
 
 Focus on fixing the bug efficiently. Do NOT write extensive documentation or plans.`;
 }

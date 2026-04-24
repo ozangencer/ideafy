@@ -576,7 +576,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "save_tests",
-        description: "Save test scenarios to a card and move it to Human Test. Use this when you've completed implementation.",
+        description: `Save test scenarios to a card and move it to Human Test. Use this when you've completed implementation.
+
+STYLE CONTRACT (mandatory — match this voice regardless of where you're called from):
+
+Write scenarios as a manual tester walking a solo founder through the feature, not as a spec of assertions. Each scenario = one observable step the user performs and verifies.
+
+Format:
+- Group by feature area with \`## Heading\` per group.
+- Each \`- [ ]\` item is one imperative step in second person.
+- Prefer setup → action → expected outcome order.
+- Name UI elements by visible labels, not CSS selectors or internal symbols.
+- Mirror the card's language: Turkish card → Turkish scenarios; English → English. Do not mix.
+
+Good example:
+\`\`\`
+## Core flow
+- [ ] Open a card that already has 2-3 checked scenarios. Go to the Tests tab.
+- [ ] Ask the assistant to reword one checked item. Reload the modal — the reworded item must still be [x].
+\`\`\`
+
+Bad examples to avoid:
+- \`- [ ] Dropdown shows None + all teams.\` (spec, not a step)
+- \`- [ ] mergeTestCheckState preserves state.\` (abstract, no action)
+- \`- [ ] Works correctly.\` (unobservable)
+
+Shrink guard: if the card already has scenarios, your new list must retain ≥50% of them (fuzzy text match). Otherwise save_tests will reject your call with an error — always include existing scenarios plus your additions (append-only).`,
         inputSchema: {
           type: "object",
           properties: {
