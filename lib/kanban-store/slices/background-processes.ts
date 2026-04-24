@@ -28,6 +28,7 @@ export const createBackgroundProcessesSlice: StoreSlice<
       // Find the process to get cardId before killing
       const process = get().backgroundProcesses.find((p) => p.id === processKey);
       const cardId = process?.cardId;
+      const processType = process?.processType;
 
       const response = await fetch(
         `/api/processes?processKey=${encodeURIComponent(processKey)}`,
@@ -42,8 +43,10 @@ export const createBackgroundProcessesSlice: StoreSlice<
           ),
         }));
 
-        // Clear processing state on the card (updates DB and local state)
-        if (cardId) {
+        // Clear processing state on the card (updates DB and local state).
+        // Skip for chat: chat doesn't set card.processingType and may run
+        // alongside non-chat flows on the same card.
+        if (cardId && processType !== "chat") {
           await get().clearProcessing(cardId);
         }
       }

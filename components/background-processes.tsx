@@ -33,9 +33,9 @@ function ProcessItem({
   const processConfig = PROCESS_TYPE_CONFIG[process.processType];
   const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
 
-  // Build label: for chat show section, for others show process type
+  // Build label: for chat include section name, for others show process type
   const label = process.processType === "chat" && sectionConfig
-    ? sectionConfig.label
+    ? `Chat (${sectionConfig.label.toLowerCase()})`
     : processConfig.label;
 
   const handleKillClick = (e: React.MouseEvent) => {
@@ -101,20 +101,11 @@ export function BackgroundProcesses() {
   // Track killed process IDs to show correct toast
   const killedIdsRef = useRef<Set<string>>(new Set());
 
-  // Chat processes are foreground (user sees "Thinking..." in the chat panel itself)
-  // so they should never appear in the Background Processes banner. The store still
-  // keeps them because card-modal uses them to restore a "thinking" placeholder when
-  // a card is reopened mid-stream.
-  const visibleProcesses = useMemo(
-    () => backgroundProcesses.filter((p) => p.processType !== "chat"),
-    [backgroundProcesses]
-  );
-
   // Separate running and completed processes
   const { runningProcesses, completedProcesses } = useMemo(() => {
-    const running = visibleProcesses.filter((p) => p.status === "running");
+    const running = backgroundProcesses.filter((p) => p.status === "running");
     // Sort completed by completedAt descending (newest first)
-    const completed = visibleProcesses
+    const completed = backgroundProcesses
       .filter((p) => p.status === "completed")
       .sort((a, b) => {
         const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
@@ -122,7 +113,7 @@ export function BackgroundProcesses() {
         return bTime - aTime;
       });
     return { runningProcesses: running, completedProcesses: completed };
-  }, [visibleProcesses]);
+  }, [backgroundProcesses]);
 
   // Handle kill with tracking
   const handleKill = async (processId: string) => {
@@ -163,9 +154,11 @@ export function BackgroundProcesses() {
           ? `Chat (${sectionConfig.label.toLowerCase()})`
           : processConfig.label;
 
-        // Clear processing state on the card so spinner stops
+        // Clear processing state on the card so spinner stops.
+        // Chat processes don't set card.processingType and may run concurrently
+        // with non-chat flows on the same card — clearing would stomp those.
         const wasKilled = killedIdsRef.current.has(id);
-        if (!wasKilled) {
+        if (!wasKilled && process.processType !== "chat") {
           clearProcessing(process.cardId);
         }
 
@@ -201,9 +194,9 @@ export function BackgroundProcesses() {
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;
 
-  // Don't render the button if no visible (non-chat) processes, but keep the
-  // component mounted so polling continues for chat progress.
-  if (visibleProcesses.length === 0) {
+  // Don't render the button when nothing to show, but keep the component
+  // mounted so polling continues.
+  if (backgroundProcesses.length === 0) {
     return null;
   }
 
