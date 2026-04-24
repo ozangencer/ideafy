@@ -44,6 +44,37 @@ export function markdownToTiptapHtml(markdown: string): string {
 }
 
 /**
+ * Promote plain `<ul><li>…</li></ul>` content to Tiptap taskList (all items
+ * unchecked). Apply before reading/merging test-scenario HTML so callers that
+ * only know the taskItem schema (extractTaskItems, mergeTestCheckState) can
+ * still see items produced by markdown without `- [ ]` prefixes or by older
+ * writes that stored plain lists. Idempotent: lists already tagged
+ * `data-type="taskList"` (or containing any taskItem child) are left alone.
+ */
+export function normalizeTestsHtml(html: string): string {
+  if (!html) return html;
+  return html.replace(
+    /<ul\b([^>]*)>([\s\S]*?)<\/ul>/gi,
+    (match, attrs: string, inner: string) => {
+      if (/data-type\s*=\s*"taskList"/i.test(attrs)) return match;
+      if (/<li[^>]*data-type="taskItem"/i.test(inner)) return match;
+      if (!/<li\b/i.test(inner)) return match;
+      const taskItems = inner.replace(
+        /<li\b[^>]*>([\s\S]*?)<\/li>/gi,
+        (_m: string, body: string) => {
+          const trimmed = body.trim();
+          const paragraph = /<p\b/i.test(trimmed)
+            ? trimmed
+            : `<p>${trimmed}</p>`;
+          return `<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div>${paragraph}</div></li>`;
+        }
+      );
+      return `<ul data-type="taskList">${taskItems}</ul>`;
+    }
+  );
+}
+
+/**
  * Normalize task item text so minor rewording (casing, punctuation, whitespace,
  * trailing words) doesn't break checkbox-state preservation on merge.
  */
@@ -144,9 +175,10 @@ export interface TaskItemState {
  */
 export function extractTaskItems(html: string): TaskItemState[] {
   const items: TaskItemState[] = [];
+  const normalized = normalizeTestsHtml(html);
   const regex = /<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>/gi;
   let match;
-  while ((match = regex.exec(html)) !== null) {
+  while ((match = regex.exec(normalized)) !== null) {
     const checked = match[1] === "true";
     const rawText = match[2].trim();
     const normalized = normalizeTaskText(rawText);
@@ -227,13 +259,13 @@ export function mergeTestCheckState(existingHtml: string, newHtml: string): stri
   if (!existingHtml || !newHtml) return newHtml;
 
   const existingItems = extractTaskItems(existingHtml);
-  if (existingItems.length === 0) return newHtml;
+  if (existingItems.length === 0) return normalizeTestsHtml(newHtml);
 
   const existingKeys = existingItems.map((i) => i.normalized);
   const checkedMap = new Map<string, boolean>();
   for (const item of existingItems) checkedMap.set(item.normalized, item.checked);
 
-  return newHtml.replace(
+  return normalizeTestsHtml(newHtml).replace(
     /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
     (fullMatch, prefix, middle, text, suffix) => {
       const normalized = normalizeTaskText(text);

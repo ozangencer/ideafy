@@ -136,14 +136,41 @@ interface TaskItemState {
   checked: boolean;
 }
 
+// Promote plain <ul><li>…</li></ul> to Tiptap taskList (all unchecked). Keeps
+// extractTaskItems / mergeTestCheckState resilient to payloads that lack
+// `- [ ]` markdown prefixes or to historically-stored plain lists. Idempotent.
+function normalizeTestsHtml(html: string): string {
+  if (!html) return html;
+  return html.replace(
+    /<ul\b([^>]*)>([\s\S]*?)<\/ul>/gi,
+    (match, attrs: string, inner: string) => {
+      if (/data-type\s*=\s*"taskList"/i.test(attrs)) return match;
+      if (/<li[^>]*data-type="taskItem"/i.test(inner)) return match;
+      if (!/<li\b/i.test(inner)) return match;
+      const taskItems = inner.replace(
+        /<li\b[^>]*>([\s\S]*?)<\/li>/gi,
+        (_m: string, body: string) => {
+          const trimmed = body.trim();
+          const paragraph = /<p\b/i.test(trimmed)
+            ? trimmed
+            : `<p>${trimmed}</p>`;
+          return `<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div>${paragraph}</div></li>`;
+        }
+      );
+      return `<ul data-type="taskList">${taskItems}</ul>`;
+    }
+  );
+}
+
 function extractTaskItems(html: string): TaskItemState[] {
   const items: TaskItemState[] = [];
+  const normalized = normalizeTestsHtml(html);
   const regex = /<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>/gi;
   let match;
-  while ((match = regex.exec(html)) !== null) {
+  while ((match = regex.exec(normalized)) !== null) {
     const checked = match[1] === "true";
-    const normalized = normalizeTaskText(match[2]);
-    if (normalized) items.push({ normalized, checked });
+    const normalizedText = normalizeTaskText(match[2]);
+    if (normalizedText) items.push({ normalized: normalizedText, checked });
   }
   return items;
 }
@@ -195,13 +222,13 @@ function mergeTestCheckState(existingHtml: string, newHtml: string): string {
   if (!existingHtml || !newHtml) return newHtml;
 
   const existingItems = extractTaskItems(existingHtml);
-  if (existingItems.length === 0) return newHtml;
+  if (existingItems.length === 0) return normalizeTestsHtml(newHtml);
 
   const existingKeys = existingItems.map((i) => i.normalized);
   const checkedMap = new Map<string, boolean>();
   for (const item of existingItems) checkedMap.set(item.normalized, item.checked);
 
-  return newHtml.replace(
+  return normalizeTestsHtml(newHtml).replace(
     /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
     (fullMatch, prefix, middle, text, suffix) => {
       const normalized = normalizeTaskText(text);

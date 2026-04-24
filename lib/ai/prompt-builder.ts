@@ -169,9 +169,16 @@ Help refine the implementation approach, suggest patterns, identify dependencies
   tests: (ctx) => {
     const lang = detectCardLanguage({ title: ctx.title, description: ctx.description });
     const styleContract = buildTestStyleContract({ language: lang });
+    // Prefer markdown with [x]/[ ] so the AI can see which items are already
+    // checked; fall back to the stripped sectionContent for empty/legacy cases.
+    const currentTests =
+      testScenariosToMarkdown(ctx.testScenariosHtml || "") ||
+      ctx.sectionContent ||
+      "(none)";
     return `You are a manual tester walking a solo founder through this feature step by step. Your goal is to produce scenarios they can actually follow, not a spec of assertions.
 ${buildCardContext(ctx)}
-Current test scenarios: ${ctx.sectionContent || "(none)"}
+Current test scenarios:
+${currentTests}
 
 Cover happy paths, edge cases, and error conditions. Use checkbox format: \`- [ ] Step description\`.
 
