@@ -19,6 +19,51 @@ import { PlatformIcon } from "@/components/icons/platform-icons";
 import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS } from "@/lib/types";
 import { Project } from "@/lib/types";
 
+const SCALE_LEVEL: Record<"low" | "medium" | "high", 1 | 2 | 3> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+function ComplexityGlyph({ value }: { value: Complexity }) {
+  const level = SCALE_LEVEL[value];
+  return (
+    <span className="inline-flex flex-col items-start justify-center gap-[2px] shrink-0" aria-hidden>
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="block h-[2px] rounded-full transition-colors"
+          style={{
+            width: `${4 + i * 3}px`,
+            backgroundColor: i <= level ? "currentColor" : "transparent",
+            border: i <= level ? "none" : "1px solid currentColor",
+            opacity: i <= level ? 1 : 0.25,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function PriorityGlyph({ value }: { value: Priority }) {
+  const level = SCALE_LEVEL[value];
+  return (
+    <span className="inline-flex items-end gap-[2px] h-[10px] shrink-0" aria-hidden>
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="block w-[2px] rounded-[1px] transition-colors"
+          style={{
+            height: `${3 + i * 2}px`,
+            backgroundColor: "currentColor",
+            opacity: i <= level ? 1 : 0.25,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 interface CardModalHeaderProps {
   title: string;
   onTitleChange: (title: string) => void;
@@ -228,12 +273,7 @@ export function CardModalHeader({
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
                 <div className="flex items-center gap-2">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      backgroundColor: COMPLEXITY_OPTIONS.find((o) => o.value === complexity)?.color || "#eab308",
-                    }}
-                  />
+                  <ComplexityGlyph value={complexity} />
                   <span>{COMPLEXITY_OPTIONS.find((o) => o.value === complexity)?.label || "Medium"}</span>
                 </div>
               </SelectValue>
@@ -242,7 +282,7 @@ export function CardModalHeader({
               {COMPLEXITY_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
+                    <ComplexityGlyph value={opt.value} />
                     <span>{opt.label}</span>
                   </div>
                 </SelectItem>
@@ -258,12 +298,7 @@ export function CardModalHeader({
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
                 <div className="flex items-center gap-2">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      backgroundColor: PRIORITY_OPTIONS.find((o) => o.value === priority)?.color || "#3b82f6",
-                    }}
-                  />
+                  <PriorityGlyph value={priority} />
                   <span>{PRIORITY_OPTIONS.find((o) => o.value === priority)?.label || "Medium"}</span>
                 </div>
               </SelectValue>
@@ -272,7 +307,7 @@ export function CardModalHeader({
               {PRIORITY_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
+                    <PriorityGlyph value={opt.value} />
                     <span>{opt.label}</span>
                   </div>
                 </SelectItem>
