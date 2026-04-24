@@ -187,6 +187,7 @@ export async function POST(
       description: stripHtml(card.description || ""),
       solutionSummary: stripHtml(card.solutionSummary || ""),
       testScenarios: stripHtml(card.testScenarios || ""),
+      testScenariosHtml: card.testScenarios || "",
     };
     const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
     const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {

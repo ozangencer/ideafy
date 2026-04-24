@@ -2,8 +2,18 @@
 
 import { useState } from "react";
 import { ConversationMessage as Message, ToolCall, SectionType } from "@/lib/types";
-import { Brain, Wrench, User, Loader2, ArrowUpToLine } from "lucide-react";
+import { Brain, Wrench, User, Loader2, ArrowUpToLine, Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -108,33 +118,67 @@ function hadPersistToolCall(toolCalls?: ToolCall[]): boolean {
 }
 
 // Map section type to card field name for the API
-const SECTION_FIELD_MAP: Record<SectionType, string> = {
+const SECTION_FIELD_MAP: Record<SectionType, "solutionSummary" | "description" | "aiOpinion" | "testScenarios"> = {
   solution: "solutionSummary",
   detail: "description",
   opinion: "aiOpinion",
   tests: "testScenarios",
 };
 
-// Human-readable labels for the apply button
-const SECTION_APPLY_LABEL: Record<SectionType, string> = {
-  solution: "Apply to Solution",
-  detail: "Apply to Detail",
-  opinion: "Apply to AI Opinion",
-  tests: "Apply to Tests",
+// Human-readable labels for the section
+const SECTION_LABEL: Record<SectionType, string> = {
+  solution: "Solution",
+  detail: "Detail",
+  opinion: "AI Opinion",
+  tests: "Tests",
 };
+
+// Decide which apply mode fits the assistant message best: replace when the
+// message looks like a full rewrite (has headings, enough checkboxes, or
+// comparable length to the existing field), append when it looks like a patch.
+// Existing-empty always defaults to replace (first write).
+function pickDefaultMode(
+  messageContent: string,
+  existingText: string,
+  sectionType: SectionType,
+): "replace" | "append" {
+  const trimmed = messageContent.trim();
+  const existingLen = existingText.replace(/<[^>]*>/g, "").trim().length;
+  if (existingLen === 0) return "replace";
+
+  if (sectionType === "tests") {
+    const checkboxCount = (trimmed.match(/^\s*-\s*\[[ xX]\]/gm) || []).length;
+    return checkboxCount >= 3 ? "replace" : "append";
+  }
+
+  const hasHeading = /^\s*#{1,6}\s/m.test(trimmed);
+  if (hasHeading) return "replace";
+
+  const ratio = trimmed.length / Math.max(existingLen, 1);
+  return ratio >= 0.6 ? "replace" : "append";
+}
 
 interface ConversationMessageProps {
   message: Message;
   cardId?: string;
   sectionType?: SectionType;
+  /** Current field content from the form — used to pick Replace vs Append default. */
+  existingSectionContent?: string;
   onApplied?: () => void;
 }
 
-export function ConversationMessage({ message, cardId, sectionType, onApplied }: ConversationMessageProps) {
+export function ConversationMessage({
+  message,
+  cardId,
+  sectionType,
+  existingSectionContent,
+  onApplied,
+}: ConversationMessageProps) {
   const isUser = message.role === "user";
   const isStreaming = message.isStreaming;
-  const [isApplying, setIsApplying] = useState(false);
-  const [applied, setApplied] = useState(false);
+  const [isApplying, setIsApplying] = useState<"replace" | "append" | null>(null);
+  const [applied, setApplied] = useState<"replace" | "append" | null>(null);
+  const [confirmReplace, setConfirmReplace] = useState(false);
 
   // Show "Apply" button when: assistant message, not streaming, has content, no persist tool was called
   const showApplyButton =
@@ -145,25 +189,43 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
     sectionType &&
     !hadPersistToolCall(message.toolCalls);
 
-  const handleApply = async () => {
+  const defaultMode = sectionType && showApplyButton
+    ? pickDefaultMode(message.content, existingSectionContent || "", sectionType)
+    : "replace";
+
+  const sectionLabel = sectionType ? SECTION_LABEL[sectionType] : "";
+  const existingIsNonEmpty = (existingSectionContent || "").replace(/<[^>]*>/g, "").trim().length > 0;
+
+  const runApply = async (mode: "replace" | "append") => {
     if (!cardId || !sectionType) return;
-    setIsApplying(true);
+    setIsApplying(mode);
     try {
       const field = SECTION_FIELD_MAP[sectionType];
-      const res = await fetch(`/api/cards/${cardId}`, {
-        method: "PUT",
+      const res = await fetch(`/api/cards/${cardId}/apply-message`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: message.content }),
+        body: JSON.stringify({ field, mode, content: message.content }),
       });
       if (res.ok) {
-        setApplied(true);
+        setApplied(mode);
         onApplied?.();
       }
     } catch (error) {
       console.error("Failed to apply message to section:", error);
     } finally {
-      setIsApplying(false);
+      setIsApplying(null);
     }
+  };
+
+  const handleReplace = () => {
+    if (existingIsNonEmpty) {
+      setConfirmReplace(true);
+      return;
+    }
+    void runApply("replace");
+  };
+  const handleAppend = () => {
+    void runApply("append");
   };
 
   // Check if content contains HTML img tags
@@ -270,29 +332,82 @@ export function ConversationMessage({ message, cardId, sectionType, onApplied }:
           </div>
         )}
 
-        {/* Apply to section button */}
+        {/* Apply to section buttons: Replace + Append, default highlighted */}
         {showApplyButton && (
-          <div className="mt-2 pt-2 border-t border-border/50">
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleApply}
-              disabled={isApplying || applied}
+              onClick={handleAppend}
+              disabled={!!isApplying || !!applied}
               className={`h-6 px-2 text-xs ${
-                applied
+                applied === "append"
                   ? "text-[#16a34a]"
-                  : "text-ink hover:text-ink hover:bg-paper-cream"
+                  : defaultMode === "append"
+                    ? "text-ink bg-paper-cream hover:bg-paper-cream hover:text-ink"
+                    : "text-ink hover:text-ink hover:bg-paper-cream"
               }`}
+              title={existingIsNonEmpty
+                ? `Append to existing ${sectionLabel}`
+                : `Save as ${sectionLabel}`}
             >
-              {isApplying ? (
+              {isApplying === "append" ? (
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              ) : (
+                <Plus className="w-3 h-3 mr-1" />
+              )}
+              {applied === "append" ? "Appended" : `Append to ${sectionLabel}`}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleReplace}
+              disabled={!!isApplying || !!applied}
+              className={`h-6 px-2 text-xs ${
+                applied === "replace"
+                  ? "text-[#16a34a]"
+                  : defaultMode === "replace"
+                    ? "text-ink bg-paper-cream hover:bg-paper-cream hover:text-ink"
+                    : "text-ink hover:text-ink hover:bg-paper-cream"
+              }`}
+              title={existingIsNonEmpty
+                ? `Replace existing ${sectionLabel} (confirm)`
+                : `Save as ${sectionLabel}`}
+            >
+              {isApplying === "replace" ? (
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               ) : (
                 <ArrowUpToLine className="w-3 h-3 mr-1" />
               )}
-              {applied ? "Applied" : SECTION_APPLY_LABEL[sectionType!]}
+              {applied === "replace" ? "Replaced" : `Replace ${sectionLabel}`}
             </Button>
           </div>
         )}
+
+        <AlertDialog open={confirmReplace} onOpenChange={setConfirmReplace}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                Replace {sectionLabel}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This will overwrite the current {sectionLabel.toLowerCase()} with the assistant&apos;s reply. Use &ldquo;Append&rdquo; instead if you only want to add to the existing content.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirmReplace(false);
+                  void runApply("replace");
+                }}
+              >
+                Replace
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Timestamp */}
         <div

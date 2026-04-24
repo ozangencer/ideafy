@@ -811,6 +811,7 @@ export function CardModal({
                   projectPath={project.folderPath}
                   projectId={projectId}
                   testScenarios={testScenarios}
+                  sectionContent={sectionValues[activeTab]}
                   onSendMessage={handleSendMessage}
                   onClearHistory={handleClearConversation}
                   onCancel={cancelConversation}

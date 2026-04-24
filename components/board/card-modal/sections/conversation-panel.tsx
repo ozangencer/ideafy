@@ -26,6 +26,8 @@ interface ConversationPanelProps {
   projectPath: string;
   projectId: string | null;
   testScenarios?: string;
+  /** Current content of the active section — used by Apply buttons to decide replace vs append default. */
+  sectionContent?: string;
   onSendMessage: (content: string, mentions: Message["mentions"]) => void;
   onClearHistory: () => void;
   onCancel?: () => void;
@@ -41,6 +43,7 @@ export function ConversationPanel({
   projectPath: _projectPath,
   projectId,
   testScenarios,
+  sectionContent,
   onSendMessage,
   onClearHistory,
   onCancel,
@@ -275,6 +278,7 @@ export function ConversationPanel({
               message={message}
               cardId={cardId}
               sectionType={sectionType}
+              existingSectionContent={sectionContent}
               onApplied={() => {
                 // Refresh cards to pick up the updated field.
                 useKanbanStore.getState().fetchCards();

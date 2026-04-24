@@ -55,33 +55,159 @@ function markdownToTiptapHtml(markdown: string): string {
   return html;
 }
 
-// Extract task item texts and their checked states from Tiptap TaskList HTML
-function extractCheckStates(html: string): Map<string, boolean> {
-  const map = new Map<string, boolean>();
+// Normalize task item text for resilient merge matching (see lib/markdown.ts).
+function normalizeTaskText(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .toLowerCase()
+    // Blacklist common punctuation but keep letters (incl. Turkish) and digits.
+    .replace(/[.,;:!?/\\|()[\]{}<>@#$%^&*"'`~=+\-_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshtein(a: string, b: string, cap: number): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+
+  let prev = new Array(b.length + 1);
+  let curr = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    let rowMin = curr[0];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > cap) return cap + 1;
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length];
+}
+
+function tokenize(s: string): string[] {
+  return s.split(" ").filter((t) => t.length >= 3);
+}
+
+function tokenOverlap(a: string[], b: string[]): number {
+  if (!a.length || !b.length) return 0;
+  const setA = new Set(a);
+  let intersect = 0;
+  for (const t of b) if (setA.has(t)) intersect++;
+  return intersect / Math.max(a.length, b.length);
+}
+
+function findFuzzyMatch(target: string, candidates: string[]): string | null {
+  if (candidates.includes(target)) return target;
+  for (const c of candidates) {
+    if (c.length < 6 || target.length < 6) continue;
+    if (c.includes(target) || target.includes(c)) return c;
+  }
+  let best: { key: string; score: number } | null = null;
+  const targetTokens = tokenize(target);
+  for (const c of candidates) {
+    const maxLen = Math.max(c.length, target.length);
+    if (maxLen < 6) continue;
+
+    const cap = Math.max(2, Math.floor(maxLen * 0.2));
+    const d = levenshtein(target, c, cap);
+    if (d <= cap) {
+      const score = 1 - d / maxLen;
+      if (!best || score > best.score) best = { key: c, score };
+      continue;
+    }
+
+    const overlap = tokenOverlap(targetTokens, tokenize(c));
+    if (overlap >= 0.6) {
+      if (!best || overlap > best.score) best = { key: c, score: overlap };
+    }
+  }
+  return best?.key ?? null;
+}
+
+interface TaskItemState {
+  normalized: string;
+  checked: boolean;
+}
+
+function extractTaskItems(html: string): TaskItemState[] {
+  const items: TaskItemState[] = [];
   const regex = /<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>/gi;
   let match;
   while ((match = regex.exec(html)) !== null) {
     const checked = match[1] === "true";
-    const text = match[2].trim();
-    if (text) {
-      map.set(text, checked);
-    }
+    const normalized = normalizeTaskText(match[2]);
+    if (normalized) items.push({ normalized, checked });
   }
-  return map;
+  return items;
 }
 
-// Merge checked states from existing HTML into new HTML
+// Assess whether a rewrite would silently wipe or drastically shrink the list.
+// Returns `safe: false` when existing items are non-empty AND the new list
+// retains < 50% of them (fuzzy match). Empty new list against non-empty existing
+// is always unsafe.
+function assessTestRewrite(existingHtml: string, newHtml: string): {
+  safe: boolean;
+  reason?: string;
+  retained: number;
+  existing: number;
+} {
+  const existingItems = extractTaskItems(existingHtml);
+  if (!existingItems.length) return { safe: true, retained: 0, existing: 0 };
+
+  const newItems = extractTaskItems(newHtml);
+  if (!newItems.length) {
+    return {
+      safe: false,
+      reason: "new test scenarios are empty — refusing to wipe existing list",
+      retained: 0,
+      existing: existingItems.length,
+    };
+  }
+
+  const newKeys = newItems.map((i) => i.normalized);
+  let retained = 0;
+  for (const e of existingItems) {
+    if (findFuzzyMatch(e.normalized, newKeys)) retained++;
+  }
+
+  const ratio = retained / existingItems.length;
+  if (ratio < 0.5) {
+    return {
+      safe: false,
+      reason: `new content retains only ${retained}/${existingItems.length} existing items (< 50%)`,
+      retained,
+      existing: existingItems.length,
+    };
+  }
+  return { safe: true, retained, existing: existingItems.length };
+}
+
+// Merge checked states from existing HTML into new HTML using fuzzy normalized
+// matching, so minor rewordings don't reset checkboxes.
 function mergeTestCheckState(existingHtml: string, newHtml: string): string {
   if (!existingHtml || !newHtml) return newHtml;
 
-  const checkedMap = extractCheckStates(existingHtml);
-  if (checkedMap.size === 0) return newHtml;
+  const existingItems = extractTaskItems(existingHtml);
+  if (existingItems.length === 0) return newHtml;
+
+  const existingKeys = existingItems.map((i) => i.normalized);
+  const checkedMap = new Map<string, boolean>();
+  for (const item of existingItems) checkedMap.set(item.normalized, item.checked);
 
   return newHtml.replace(
     /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
     (fullMatch, prefix, middle, text, suffix) => {
-      const trimmed = text.trim();
-      const wasChecked = checkedMap.get(trimmed);
+      const normalized = normalizeTaskText(text);
+      if (!normalized) return fullMatch;
+      const matchedKey = findFuzzyMatch(normalized, existingKeys);
+      const wasChecked = matchedKey ? checkedMap.get(matchedKey) : false;
       if (wasChecked) {
         const result = `<li${prefix}true${middle}${text}${suffix}`;
         return result.replace(
@@ -309,7 +435,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "update_card",
-        description: "Update a kanban card. Use this to save solution summaries, test scenarios, or change status.",
+        description: "Update a kanban card fields (title, description, solutionSummary, status, complexity, priority, useWorktree). For testScenarios, use save_tests instead — update_card rejects it to protect checkbox states.",
         inputSchema: {
           type: "object",
           properties: {
@@ -328,10 +454,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             solutionSummary: {
               type: "string",
               description: "Detailed implementation summary in markdown. Should include: root cause analysis, current code flow, step-by-step changes with file paths and code snippets, changed files table, and notes. Write prose-level detail, not just headings.",
-            },
-            testScenarios: {
-              type: "string",
-              description: "Test scenarios in markdown format with checkboxes",
             },
             status: {
               type: "string",
@@ -620,15 +742,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // Reject testScenarios via update_card — always route through save_tests
+        // so checkbox states and shrink guard apply. Prevents silent list wipes.
+        if ("testScenarios" in updates) {
+          return {
+            content: [{
+              type: "text",
+              text: "update_card does not accept testScenarios. Use save_tests instead — it preserves existing checkbox states and guards against accidental wipes.",
+            }],
+            isError: true,
+          };
+        }
+
         // Fields that need markdown to HTML conversion
-        const markdownFields = ["description", "solutionSummary", "testScenarios"];
+        const markdownFields = ["description", "solutionSummary"];
 
         // Build SET clause dynamically
         const fieldMap: Record<string, string> = {
           title: "title",
           description: "description",
           solutionSummary: "solution_summary",
-          testScenarios: "test_scenarios",
           status: "status",
           complexity: "complexity",
           priority: "priority",
@@ -647,14 +780,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             setClauses.push(`${fieldMap[key]} = ?`);
             // Convert markdown to HTML for rich text fields
             if (markdownFields.includes(key) && typeof value === "string") {
-              let htmlValue = markdownToTiptapHtml(value);
-              // Preserve existing check states when overwriting test_scenarios
-              if (key === "testScenarios") {
-                const existing = db.prepare(`SELECT test_scenarios FROM cards WHERE id = ?`).get(id) as { test_scenarios: string } | undefined;
-                if (existing?.test_scenarios) {
-                  htmlValue = mergeTestCheckState(existing.test_scenarios, htmlValue);
-                }
-              }
+              const htmlValue = markdownToTiptapHtml(value);
               values.push(htmlValue);
             } else if (key === "useWorktree") {
               // SQLite integer column: true/false → 1/0, null passes through
@@ -910,8 +1036,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Convert markdown to Tiptap-compatible HTML with TaskList support
         const htmlContent = markdownToTiptapHtml(testScenarios);
 
-        // Preserve checked states from existing test scenarios
+        // Shrink guard: if existing list is non-empty, require the new content
+        // to retain ≥ 50% of items. This blocks silent wipes from AI mistakes.
         const existing = db.prepare(`SELECT test_scenarios FROM cards WHERE id = ?`).get(id) as { test_scenarios: string } | undefined;
+        if (existing?.test_scenarios) {
+          const assessment = assessTestRewrite(existing.test_scenarios, htmlContent);
+          if (!assessment.safe) {
+            return {
+              content: [{
+                type: "text",
+                text: `save_tests refused: ${assessment.reason}. Call save_tests again with the full existing list plus your new additions (append-only). Existing items: ${assessment.existing}, retained in your payload: ${assessment.retained}.`,
+              }],
+              isError: true,
+            };
+          }
+        }
+
         const mergedHtml = existing?.test_scenarios
           ? mergeTestCheckState(existing.test_scenarios, htmlContent)
           : htmlContent;

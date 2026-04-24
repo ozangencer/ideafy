@@ -4,6 +4,7 @@
  */
 
 import type { SectionType, ConversationMessage } from "@/lib/types";
+import { testScenariosToMarkdown } from "@/lib/markdown";
 
 // Card context info
 export interface CardContext {
@@ -17,6 +18,12 @@ export interface CardContext {
   description?: string;
   solutionSummary?: string;
   testScenarios?: string;
+  /**
+   * Raw Tiptap HTML for testScenarios. When present, the builder renders
+   * scenarios as markdown with [x]/[ ] preserved so the AI sees checkbox
+   * state. Falls back to `testScenarios` (stripped text) when absent.
+   */
+  testScenariosHtml?: string;
 }
 
 // Get allowed tools for non-test sections (test section uses --dangerously-skip-permissions)
@@ -78,7 +85,10 @@ When you make code changes and need to update test scenarios, you MUST only APPE
       actionContext += `\nImplementation Plan: ${ctx.solutionSummary}`;
     }
     if (ctx.testScenarios) {
-      actionContext += `\nTest Scenarios: ${ctx.testScenarios}`;
+      // Feed markdown (with [x]/[ ]) instead of stripped text so the AI can
+      // see which scenarios are already checked and must stay [x] on rewrite.
+      const scenariosMd = testScenariosToMarkdown(ctx.testScenariosHtml || "") || ctx.testScenarios;
+      actionContext += `\nTest Scenarios (preserve checkbox state verbatim when regenerating):\n${scenariosMd}`;
     }
 
     return actionContext;
