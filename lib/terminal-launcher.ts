@@ -1,6 +1,6 @@
-import { spawn, spawnSync } from "child_process";
-import { existsSync, writeFileSync, unlinkSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { spawn } from "child_process";
+import { writeFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
@@ -27,21 +27,6 @@ function assertValidEnvName(name: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
     throw new Error(`Invalid env var name: ${name}`);
   }
-}
-
-function resolveGhosttyBinary(): string | null {
-  const which = spawnSync("/usr/bin/which", ["ghostty"], { encoding: "utf8" });
-  const fromPath = which.stdout?.trim();
-  if (which.status === 0 && fromPath && existsSync(fromPath)) {
-    return fromPath;
-  }
-  const candidates = [
-    "/Applications/Ghostty.app/Contents/MacOS/ghostty",
-    join(homedir(), "Applications/Ghostty.app/Contents/MacOS/ghostty"),
-    "/opt/homebrew/bin/ghostty",
-    "/usr/local/bin/ghostty",
-  ];
-  return candidates.find((p) => existsSync(p)) ?? null;
 }
 
 export function getTerminalPreference(): TerminalApp {
@@ -86,22 +71,30 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
   writeFileSync(scriptPath, scriptBody, { mode: 0o700 });
 
   if (terminal === "ghostty") {
-    // Invoke the Ghostty binary directly. `open -na Ghostty.app --args -e <script>`
-    // stopped reliably passing `-e` to an already-running Ghostty instance — the
-    // new window would just land in a login shell. Spawning the binary detached
-    // forks a proper child that Ghostty parses as a fresh `-e` invocation.
-    const ghostty = resolveGhosttyBinary();
-    if (!ghostty) {
-      try { unlinkSync(scriptPath); } catch {}
-      throw new Error(
-        "Ghostty binary not found. Install Ghostty or switch terminal preference in Settings.",
-      );
-    }
-    const child = spawn(ghostty, ["-e", scriptPath], {
-      detached: true,
-      stdio: "ignore",
+    // Launch Ghostty via LaunchServices (`open -na`) so a proper GUI window is
+    // created, but pass the script through Ghostty's config flag
+    // `--command=<path>` instead of the shorthand `-e <path>`. The shorthand
+    // stopped being honored when forwarded through `open --args` against an
+    // already-running Ghostty instance, leaving the user in a plain login
+    // shell. `--command=` is parsed during applicationDidFinishLaunching and
+    // survives the round-trip reliably.
+    const child = spawn(
+      "open",
+      ["-na", "Ghostty.app", "--args", `--command=${scriptPath}`],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stderrBuf = "";
+    child.stderr?.on("data", (d) => { stderrBuf += d.toString(); });
+    child.on("error", (err) => {
+      console.error(`[${tag}] Ghostty launch failed: ${err.message}`);
     });
-    child.unref();
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        console.error(
+          `[${tag}] Ghostty launch exited with code ${code}: ${stderrBuf.trim()}`,
+        );
+      }
+    });
     return { success: true };
   }
 
