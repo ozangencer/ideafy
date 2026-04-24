@@ -258,6 +258,13 @@ export interface ToolCall {
   output?: string;
 }
 
+export type SessionStatusStep =
+  | { step: "checking" }
+  | { step: "session_found"; sessionId: string }
+  | { step: "session_missing" }
+  | { step: "resuming"; sessionId: string }
+  | { step: "creating"; sessionId: string };
+
 // Conversation message interface
 export interface ConversationMessage {
   id: string;
@@ -268,6 +275,7 @@ export interface ConversationMessage {
   mentions: MentionData[];
   toolCalls?: ToolCall[];
   activeToolCall?: { name: string; status: "running" | "completed" };
+  statusSteps?: SessionStatusStep[];
   createdAt: string;
   isStreaming?: boolean;
 }

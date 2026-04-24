@@ -1,4 +1,4 @@
-import { ConversationMessage, SectionType } from "../../types";
+import { ConversationMessage, SectionType, SessionStatusStep } from "../../types";
 import { nowIso, parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 
@@ -149,6 +149,20 @@ export const createConversationSlice: StoreSlice<
                   // Refresh background processes list
                   get().fetchBackgroundProcesses();
                   break;
+                case "status": {
+                  const step = event.data as SessionStatusStep;
+                  set((state) => {
+                    if (!state.streamingMessage) return state;
+                    const existing = state.streamingMessage.statusSteps ?? [];
+                    return {
+                      streamingMessage: {
+                        ...state.streamingMessage,
+                        statusSteps: [...existing, step],
+                      },
+                    };
+                  });
+                  break;
+                }
                 case "text":
                   fullContent += event.data as string;
                   get().appendToStreamingMessage(event.data as string);

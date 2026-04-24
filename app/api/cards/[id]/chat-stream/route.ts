@@ -256,6 +256,17 @@ export async function POST(
         }
       };
 
+      // Emit the session-decision trail before the LLM starts streaming so
+      // the UI can show "Checking… / Session found / Resuming" instead of a
+      // silent gap between the user message and the first token.
+      const shortId = (id: string) => id.slice(0, 8);
+      sendEvent("status", { step: "checking" });
+      if (existingSession) {
+        sendEvent("status", { step: "session_found", sessionId: shortId(existingSession.cliSessionId) });
+      } else {
+        sendEvent("status", { step: "session_missing" });
+      }
+
       let activeProcess: ReturnType<typeof spawn> | null = null;
       let didFreshRetry = false;
       let freshRetrySessionId: string | undefined;
@@ -273,6 +284,7 @@ export async function POST(
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             resumeSessionId: existingSession.cliSessionId,
           });
+          sendEvent("status", { step: "resuming", sessionId: shortId(existingSession.cliSessionId) });
           console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType} (skipPermissions=${isTestAction})`);
         } else {
           freshSpawnSessionId = mode === "fresh" && provider.capabilities.supportsSessionResume && provider.id === "claude"
@@ -288,6 +300,11 @@ export async function POST(
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             newSessionId: freshSpawnSessionId,
           });
+          if (freshSpawnSessionId) {
+            sendEvent("status", { step: "creating", sessionId: shortId(freshSpawnSessionId) });
+          } else {
+            sendEvent("status", { step: "creating", sessionId: "pending" });
+          }
           if (mode === "fresh") {
             console.log(`[chat-stream] fresh retry after resume failure for ${cardId}/${sectionType}`);
           }

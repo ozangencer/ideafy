@@ -137,7 +137,8 @@ export function ConversationPanel({
         toast({ variant: "destructive", title: "Resume Failed", description: data.error });
         return;
       }
-      toast({ title: "Terminal Opened", description: data.message });
+      const title = data.mode === "fresh" ? "New CLI Session" : "Resumed in CLI";
+      toast({ title, description: data.message });
     } catch (error) {
       toast({
         variant: "destructive",

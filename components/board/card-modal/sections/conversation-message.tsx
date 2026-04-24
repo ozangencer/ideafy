@@ -295,6 +295,35 @@ export function ConversationMessage({
             : "bg-surface border border-border/50"
         }`}
       >
+        {/* Session decision trail (streaming only) */}
+        {isStreaming && message.statusSteps && message.statusSteps.length > 0 && (
+          <div className="mb-2 pb-2 border-b border-border/50 space-y-0.5 font-mono text-[11px] text-muted-foreground">
+            {message.statusSteps.map((step, idx) => {
+              let label: string;
+              switch (step.step) {
+                case "checking":
+                  label = "Checking for existing session…";
+                  break;
+                case "session_found":
+                  label = `Session found: ${step.sessionId}`;
+                  break;
+                case "session_missing":
+                  label = "No prior session";
+                  break;
+                case "resuming":
+                  label = `Resuming session ${step.sessionId}`;
+                  break;
+                case "creating":
+                  label = step.sessionId === "pending"
+                    ? "Creating new session with full context"
+                    : `Creating new session ${step.sessionId} with full context`;
+                  break;
+              }
+              return <div key={idx}>⎯ {label}</div>;
+            })}
+          </div>
+        )}
+
         {/* Message content */}
         <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0 max-w-none text-sm">
           {renderContent()}
