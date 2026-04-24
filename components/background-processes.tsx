@@ -33,15 +33,34 @@ function ProcessItem({
   const processConfig = PROCESS_TYPE_CONFIG[process.processType];
   const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
 
-  // Build label: for chat include section name, for others show process type
-  const label = process.processType === "chat" && sectionConfig
+  const isAborted = process.status === "completed" && process.endReason === "aborted";
+
+  // Build label: for chat include section name, for others show process type.
+  // Append an "· Interrupted on reload" suffix for aborted entries so users
+  // can tell a reload-killed chat apart from a cleanly finished one.
+  const baseLabel = process.processType === "chat" && sectionConfig
     ? `Chat (${sectionConfig.label.toLowerCase()})`
     : processConfig.label;
+  const label = isAborted ? `${baseLabel} · Interrupted on reload` : baseLabel;
 
   const handleKillClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card modal from opening
     onKill();
   };
+
+  const dotClass = process.status === "running"
+    ? `${processConfig.bgColor} animate-pulse`
+    : isAborted
+    ? "bg-amber-500"
+    : process.status === "completed"
+    ? "bg-green-500"
+    : "bg-red-500";
+
+  const subLabelClass = process.status === "running"
+    ? processConfig.color
+    : isAborted
+    ? "text-amber-500"
+    : "text-muted-foreground";
 
   return (
     <div
@@ -49,21 +68,13 @@ function ProcessItem({
       onClick={onCardClick}
     >
       <div className="flex gap-2 min-w-0 flex-1">
-        <span
-          className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
-            process.status === "running"
-              ? `${processConfig.bgColor} animate-pulse`
-              : process.status === "completed"
-              ? "bg-green-500"
-              : "bg-red-500"
-          }`}
-        />
+        <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${dotClass}`} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1.5">
             <span className="text-xs font-medium text-muted-foreground shrink-0">{displayName}</span>
             <span className="text-sm font-medium truncate">{process.cardTitle}</span>
           </div>
-          <span className={`text-xs ${process.status === "running" ? processConfig.color : "text-muted-foreground"}`}>
+          <span className={`text-xs ${subLabelClass}`}>
             {label}
           </span>
         </div>

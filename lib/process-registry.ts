@@ -14,6 +14,8 @@ interface ProcessEntry {
   };
 }
 
+export type EndReason = "completed" | "aborted";
+
 // Completed process metadata (no ChildProcess ref)
 interface CompletedEntry {
   id: string;
@@ -24,6 +26,7 @@ interface CompletedEntry {
   displayId: string | null;
   startedAt: string;
   completedAt: string;
+  endReason: EndReason;
 }
 
 // Use globalThis to ensure the same Map instance is shared across all
@@ -58,7 +61,10 @@ export function unregisterProcess(processKey: string): void {
 }
 
 // Move process from active to completed registry
-export function completeProcess(processKey: string): void {
+export function completeProcess(
+  processKey: string,
+  endReason: EndReason = "completed"
+): void {
   const entry = processRegistry.get(processKey);
   if (entry) {
     // Add to completed registry with timestamp
@@ -71,6 +77,7 @@ export function completeProcess(processKey: string): void {
       displayId: entry.metadata.displayId,
       startedAt: entry.metadata.startedAt,
       completedAt: new Date().toISOString(),
+      endReason,
     };
     completedProcessRegistry.set(processKey, completedEntry);
 
@@ -141,6 +148,7 @@ export function getAllProcesses(): BackgroundProcess[] {
       status: "completed",
       startedAt: entry.startedAt,
       completedAt: entry.completedAt,
+      endReason: entry.endReason,
     });
   });
 

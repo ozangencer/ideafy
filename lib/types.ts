@@ -283,6 +283,8 @@ export interface ConversationMessage {
 // Background process tracking
 export type ProcessType = "chat" | "autonomous" | "quick-fix" | "evaluate";
 
+export type ProcessEndReason = "completed" | "aborted";
+
 export interface BackgroundProcess {
   id: string;              // `${cardId}-${sectionType}` or `${cardId}-${processType}`
   cardId: string;
@@ -294,6 +296,7 @@ export interface BackgroundProcess {
   status: "running" | "completed" | "error";
   startedAt: string;
   completedAt?: string;    // When the process finished
+  endReason?: ProcessEndReason; // Present when status === "completed"
 }
 
 // Completed column filter - Updated in main for conflict test

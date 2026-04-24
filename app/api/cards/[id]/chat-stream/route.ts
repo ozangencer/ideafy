@@ -538,7 +538,10 @@ export async function POST(
         isClosed = true;
         if (activeProcess && !activeProcess.killed) {
           activeProcess.kill();
-          completeProcess(processKey);
+          // Mark as aborted (reload / tab close) so the UI can distinguish
+          // reload-aborts from a clean completion. The subsequent close
+          // handler's completeProcess() call is a no-op — first call wins.
+          completeProcess(processKey, "aborted");
         }
       });
     },
