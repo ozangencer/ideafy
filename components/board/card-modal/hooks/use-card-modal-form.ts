@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AiPlatform, Card, Complexity, Priority, Project, Status } from "@/lib/types";
+import type { CardUpdatePayload } from "@/lib/kanban-store/types";
 
 interface UseCardModalFormOptions {
   selectedCard: Card | null;
@@ -10,7 +11,7 @@ interface UseCardModalFormOptions {
   saveDraftCard: (
     cardData: Omit<Card, "id" | "createdAt" | "updatedAt" | "taskNumber" | "completedAt">
   ) => Promise<void>;
-  updateCard: (id: string, updates: Partial<Card>) => Promise<void>;
+  updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
   discardDraft: () => void;
   closeModal: () => void;
   detachConversation: () => void;
@@ -175,6 +176,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         projectId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+        baseUpdatedAt: selectedCard.updatedAt,
       };
       handleClose();
       updateCard(cardId, updates);
