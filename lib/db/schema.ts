@@ -106,7 +106,7 @@ export const chatSessions = sqliteTable("chat_sessions", {
   createdAt: text("created_at").notNull(),
   lastUsedAt: text("last_used_at").notNull(),
 }, (table) => [
-  uniqueIndex("chat_sessions_card_section_idx").on(table.cardId, table.sectionType),
+  uniqueIndex("chat_sessions_card_section_provider_idx").on(table.cardId, table.sectionType, table.provider),
 ]);
 
 export type ChatSessionRecord = typeof chatSessions.$inferSelect;

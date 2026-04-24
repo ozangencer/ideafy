@@ -1,11 +1,25 @@
-import { writeFileSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
+import { tmpdir, homedir } from "os";
 
 export interface SavedImage {
   id: string;
   path: string;
   fieldName: string;
+}
+
+/**
+ * Per-card persistent directory for chat attachments. `tmpdir()` is
+ * periodically cleaned up by macOS and is scoped to a single Next.js dev
+ * run — both break resumed chat sessions that reference old image paths
+ * in their conversation history.
+ */
+export function getCardImageDir(cardId: string): string {
+  const dir = join(homedir(), ".ideafy", "images", cardId);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return dir;
 }
 
 /**
@@ -68,10 +82,11 @@ export function extractConversationImages(
   const imgRegex = /<img[^>]*src=["']data:(image\/[^;]+);base64,([^"']+)["'][^>]*>/gi;
 
   let index = 0;
+  const imageDir = getCardImageDir(cardId);
   const cleanContent = content.replace(imgRegex, (_match, mimeType: string, base64Data: string) => {
     const ext = mimeType.split("/")[1] || "png";
-    const filename = `kanban-${cardId.slice(0, 8)}-chat-${messageIndex}-${index}-${timestamp}.${ext}`;
-    const filepath = join(tmpdir(), filename);
+    const filename = `chat-${messageIndex}-${index}-${timestamp}.${ext}`;
+    const filepath = join(imageDir, filename);
 
     const buffer = Buffer.from(base64Data, "base64");
     writeFileSync(filepath, buffer);

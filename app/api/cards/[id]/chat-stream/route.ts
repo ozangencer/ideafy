@@ -16,7 +16,7 @@ import {
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
 import { resolveSessionId } from "@/lib/platform/session-resolver";
-import { extractConversationImages, generateImageReferences } from "@/lib/prompts";
+import { extractConversationImages, generateImageReferences, getCardImageDir } from "@/lib/prompts";
 import {
   type CardContext,
   getAllowedTools,
@@ -164,38 +164,41 @@ export async function POST(
   // Process mentions: strip / from MCP mentions to prevent CLI skill interpretation
   userMessage = processMentions(userMessage, mentions);
 
-  // Check for existing CLI session to resume
+  // Check for existing CLI session to resume. Sessions are provider-specific:
+  // switching AI platforms must not wipe another platform's session row.
   const provider = getProviderForCard(card);
   const [existingSession] = await db.select().from(chatSessions)
-    .where(and(eq(chatSessions.cardId, cardId), eq(chatSessions.sectionType, sectionType)));
+    .where(and(
+      eq(chatSessions.cardId, cardId),
+      eq(chatSessions.sectionType, sectionType),
+      eq(chatSessions.provider, provider.id),
+    ));
 
-  const canResume = !!(existingSession
-    && provider.capabilities.supportsSessionResume
-    && existingSession.provider === provider.id);
+  const canResume = !!(existingSession && provider.capabilities.supportsSessionResume);
 
-  // Build full prompt only when not resuming (fresh session needs full context)
-  let fullPrompt = "";
-  if (!canResume) {
-    const cardContext: CardContext = {
-      uuid: cardId,
-      displayId,
-      title: card.title,
-      projectName,
-      sectionContent: stripHtml(currentSectionContent || ""),
-      narrativeContent,
-      status: card.status,
-      description: stripHtml(card.description || ""),
-      solutionSummary: stripHtml(card.solutionSummary || ""),
-      testScenarios: stripHtml(card.testScenarios || ""),
-      testScenariosHtml: card.testScenarios || "",
-    };
-    const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
-    const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {
-      const { cleanContent, savedImages } = extractConversationImages(content, cardId, msgIndex);
-      return { cleanContent, imageRefs: generateImageReferences(savedImages) };
-    });
-    fullPrompt = `${systemPrompt}${conversationContext}\n\nUser: ${userMessage}`;
-  }
+  // Always precompute the full prompt. When canResume is true we send only
+  // the new user message to the resumed CLI; if that resume turns out to be
+  // stale the close handler falls back to a fresh spawn using this prompt,
+  // avoiding a second HTTP round-trip and a duplicated user message.
+  const cardContext: CardContext = {
+    uuid: cardId,
+    displayId,
+    title: card.title,
+    projectName,
+    sectionContent: stripHtml(currentSectionContent || ""),
+    narrativeContent,
+    status: card.status,
+    description: stripHtml(card.description || ""),
+    solutionSummary: stripHtml(card.solutionSummary || ""),
+    testScenarios: stripHtml(card.testScenarios || ""),
+    testScenariosHtml: card.testScenarios || "",
+  };
+  const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
+  const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {
+    const { cleanContent, savedImages } = extractConversationImages(content, cardId, msgIndex);
+    return { cleanContent, imageRefs: generateImageReferences(savedImages) };
+  });
+  const fullPrompt = `${systemPrompt}${conversationContext}\n\nUser: ${userMessage}`;
 
   const cwd = projectPath || process.cwd();
 
@@ -208,9 +211,18 @@ export async function POST(
 
   const encoder = new TextEncoder();
   let isClosed = false;
+  let wasAborted = false;
   let fullResponse = "";
   let streamSessionId: string | null = null;
+  let stderrBuffer = "";
   const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+  const isSessionNotFoundError = (stderr: string): boolean => {
+    if (!stderr) return false;
+    return /session\s+(not\s+found|expired|invalid|does\s+not\s+exist)|no\s+(such\s+)?(session|conversation)|conversation\s+not\s+found|could\s+not\s+resume|failed\s+to\s+resume/i.test(
+      stderr,
+    );
+  };
 
   // Generate assistant message ID for database
   const assistantMessageId = uuidv4();
@@ -226,9 +238,11 @@ export async function POST(
     );
   }
 
-  // Prepare session ID for fresh sessions (Claude uses --session-id to control it)
-  const newSessionId = (!canResume && provider.capabilities.supportsSessionResume && provider.id === "claude")
+  // Prepare session ID for the first fresh spawn (Claude uses --session-id to control it)
+  const initialNewSessionId = (!canResume && provider.capabilities.supportsSessionResume && provider.id === "claude")
     ? uuidv4() : undefined;
+
+  const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
 
   const stream = new ReadableStream({
     start(controller) {
@@ -242,225 +256,271 @@ export async function POST(
         }
       };
 
-      const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
+      let activeProcess: ReturnType<typeof spawn> | null = null;
+      let didFreshRetry = false;
+      let freshRetrySessionId: string | undefined;
 
-      let cliArgs: string[];
-      if (canResume && existingSession) {
-        // RESUME MODE — only send the new user message, no system prompt or history
-        cliArgs = provider.buildStreamArgs({
-          prompt: userMessage,
-          skipPermissions: isTestAction,
-          addDirs: [tmpdir()],
-          resumeSessionId: existingSession.cliSessionId,
-        });
-        console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType} (skipPermissions=${isTestAction})`);
-      } else {
-        // FRESH MODE — full context (system prompt + conversation history + user message)
-        cliArgs = provider.buildStreamArgs({
-          prompt: fullPrompt,
-          skipPermissions: isTestAction,
-          allowedTools: isTestAction ? undefined : getAllowedTools(mentions),
-          addDirs: [tmpdir()],
-          newSessionId,
-        });
-      }
+      const runSpawn = (mode: "resume" | "fresh") => {
+        let cliArgs: string[];
+        let resumeTargetSessionId: string | undefined;
+        let freshSpawnSessionId: string | undefined;
 
-      const spawnEnv = provider.getEnv();
-      console.log(`[chat-stream] spawning ${provider.id}:`, provider.getCliPath(), JSON.stringify(cliArgs.slice(0, 3)), `(${cliArgs.length} args, cwd: ${cwd}, HOME: ${spawnEnv.HOME}, OPENAI_API_KEY: ${spawnEnv.OPENAI_API_KEY ? 'SET' : 'unset'})`);
-
-      const cliProcess = spawn(provider.getCliPath(), cliArgs, {
-        cwd,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: spawnEnv,
-      });
-
-      // Register process with metadata
-      registerProcess(processKey, cliProcess, {
-        cardId,
-        sectionType: sectionType as SectionType,
-        processType: "chat",
-        cardTitle: card.title,
-        displayId: displayId !== cardId ? displayId : null,
-        startedAt: new Date().toISOString(),
-      });
-      sendEvent("start", { pid: cliProcess.pid, messageId: assistantMessageId });
-
-      let stdoutBuffer = "";
-
-      cliProcess.stdout?.on("data", (data: Buffer) => {
-        const raw = data.toString();
-        stdoutBuffer += raw;
-        const lines = stdoutBuffer.split('\n');
-        stdoutBuffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          const events = provider.parseStreamLine(line);
-          for (const event of events) {
-            switch (event.type) {
-              case "text":
-                fullResponse += event.data as string;
-                sendEvent("text", event.data);
-                break;
-              case "thinking":
-                sendEvent("thinking", event.data);
-                break;
-              case "tool_use":
-                toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
-                sendEvent("tool_use", event.data);
-                break;
-              case "tool_result":
-                sendEvent("tool_result", event.data);
-                break;
-              case "result": {
-                const resultText = String(event.data);
-                if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
-                  fullResponse += (fullResponse ? '\n' : '') + resultText;
-                  sendEvent("text", resultText);
-                }
-                break;
-              }
-              case "system":
-                sendEvent("system", event.data);
-                break;
-              case "session_id":
-                if (!streamSessionId) {
-                  streamSessionId = String(event.data);
-                }
-                break;
-            }
+        if (mode === "resume" && existingSession) {
+          resumeTargetSessionId = existingSession.cliSessionId;
+          cliArgs = provider.buildStreamArgs({
+            prompt: userMessage,
+            skipPermissions: isTestAction,
+            addDirs: [tmpdir(), getCardImageDir(cardId)],
+            resumeSessionId: existingSession.cliSessionId,
+          });
+          console.log(`[chat-stream] resuming session ${existingSession.cliSessionId} for ${cardId}/${sectionType} (skipPermissions=${isTestAction})`);
+        } else {
+          freshSpawnSessionId = mode === "fresh" && provider.capabilities.supportsSessionResume && provider.id === "claude"
+            ? uuidv4()
+            : initialNewSessionId;
+          if (mode === "fresh") {
+            freshRetrySessionId = freshSpawnSessionId;
+          }
+          cliArgs = provider.buildStreamArgs({
+            prompt: fullPrompt,
+            skipPermissions: isTestAction,
+            allowedTools: isTestAction ? undefined : getAllowedTools(mentions),
+            addDirs: [tmpdir(), getCardImageDir(cardId)],
+            newSessionId: freshSpawnSessionId,
+          });
+          if (mode === "fresh") {
+            console.log(`[chat-stream] fresh retry after resume failure for ${cardId}/${sectionType}`);
           }
         }
-      });
 
-      cliProcess.stderr?.on("data", (data: Buffer) => {
-        const text = data.toString();
-        if (text.includes("error") || text.includes("Error")) {
-          sendEvent("stderr", text);
+        const spawnEnv = provider.getEnv();
+        console.log(`[chat-stream] spawning ${provider.id} (${mode}):`, provider.getCliPath(), JSON.stringify(cliArgs.slice(0, 3)), `(${cliArgs.length} args, cwd: ${cwd}, HOME: ${spawnEnv.HOME}, OPENAI_API_KEY: ${spawnEnv.OPENAI_API_KEY ? 'SET' : 'unset'})`);
+
+        const cliProcess = spawn(provider.getCliPath(), cliArgs, {
+          cwd,
+          stdio: ["ignore", "pipe", "pipe"],
+          env: spawnEnv,
+        });
+        activeProcess = cliProcess;
+
+        registerProcess(processKey, cliProcess, {
+          cardId,
+          sectionType: sectionType as SectionType,
+          processType: "chat",
+          cardTitle: card.title,
+          displayId: displayId !== cardId ? displayId : null,
+          startedAt: new Date().toISOString(),
+        });
+
+        if (mode === "resume") {
+          sendEvent("start", { pid: cliProcess.pid, messageId: assistantMessageId });
         }
-      });
 
-      cliProcess.on("close", async (code) => {
-        console.log(`[chat-stream] ${provider.id} closed with code ${code}, fullResponse length: ${fullResponse.length}`);
-        // Process any remaining data in stdout buffer
-        if (stdoutBuffer.trim()) {
-          const events = provider.parseStreamLine(stdoutBuffer);
-          for (const event of events) {
-            switch (event.type) {
-              case "text":
-                fullResponse += event.data as string;
-                sendEvent("text", event.data);
-                break;
-              case "tool_use":
-                toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
-                sendEvent("tool_use", event.data);
-                break;
-              case "result": {
-                const resultText = String(event.data);
-                if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
-                  fullResponse += (fullResponse ? '\n' : '') + resultText;
-                  sendEvent("text", resultText);
+        let stdoutBuffer = "";
+
+        cliProcess.stdout?.on("data", (data: Buffer) => {
+          const raw = data.toString();
+          stdoutBuffer += raw;
+          const lines = stdoutBuffer.split('\n');
+          stdoutBuffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+
+            const events = provider.parseStreamLine(line);
+            for (const event of events) {
+              switch (event.type) {
+                case "text":
+                  fullResponse += event.data as string;
+                  sendEvent("text", event.data);
+                  break;
+                case "thinking":
+                  sendEvent("thinking", event.data);
+                  break;
+                case "tool_use":
+                  toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
+                  sendEvent("tool_use", event.data);
+                  break;
+                case "tool_result":
+                  sendEvent("tool_result", event.data);
+                  break;
+                case "result": {
+                  const resultText = String(event.data);
+                  if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
+                    fullResponse += (fullResponse ? '\n' : '') + resultText;
+                    sendEvent("text", resultText);
+                  }
+                  break;
                 }
-                break;
+                case "system":
+                  sendEvent("system", event.data);
+                  break;
+                case "session_id":
+                  if (!streamSessionId) {
+                    streamSessionId = String(event.data);
+                  }
+                  break;
               }
-              case "session_id":
-                if (!streamSessionId) {
-                  streamSessionId = String(event.data);
-                }
-                break;
             }
           }
-          stdoutBuffer = "";
-        }
+        });
 
-        completeProcess(processKey);
+        cliProcess.stderr?.on("data", (data: Buffer) => {
+          const text = data.toString();
+          stderrBuffer += text;
+          if (stderrBuffer.length > 16_384) {
+            stderrBuffer = stderrBuffer.slice(-16_384);
+          }
+          if (text.includes("error") || text.includes("Error")) {
+            sendEvent("stderr", text);
+          }
+        });
 
-        // Save assistant message to database
-        if (fullResponse.trim()) {
+        cliProcess.on("close", async (code, signal) => {
+          console.log(`[chat-stream] ${provider.id} (${mode}) closed with code ${code} (signal=${signal}, aborted=${wasAborted}), fullResponse length: ${fullResponse.length}`);
+          if (stdoutBuffer.trim()) {
+            const events = provider.parseStreamLine(stdoutBuffer);
+            for (const event of events) {
+              switch (event.type) {
+                case "text":
+                  fullResponse += event.data as string;
+                  sendEvent("text", event.data);
+                  break;
+                case "tool_use":
+                  toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
+                  sendEvent("tool_use", event.data);
+                  break;
+                case "result": {
+                  const resultText = String(event.data);
+                  if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
+                    fullResponse += (fullResponse ? '\n' : '') + resultText;
+                    sendEvent("text", resultText);
+                  }
+                  break;
+                }
+                case "session_id":
+                  if (!streamSessionId) {
+                    streamSessionId = String(event.data);
+                  }
+                  break;
+              }
+            }
+            stdoutBuffer = "";
+          }
+
+          // Decide whether this was a stale-session failure — only meaningful
+          // for the resume leg; fresh spawns don't have a prior session to blame.
+          const aborted = wasAborted || signal === "SIGTERM" || signal === "SIGINT" || signal === "SIGKILL";
+          const sessionError = mode === "resume" && isSessionNotFoundError(stderrBuffer);
+          const shouldFreshRetry = mode === "resume" && sessionError && !aborted && !didFreshRetry && code !== 0;
+
+          if (shouldFreshRetry && resumeTargetSessionId) {
+            // Stale resume session. Delete the DB record, reset stream-local
+            // buffers, and spawn a fresh CLI in-band so the user sees one
+            // continuous response instead of an error.
+            try {
+              await db.delete(chatSessions).where(eq(chatSessions.id, existingSession!.id));
+              console.log(`[chat-stream] genuine session failure detected, deleted stale session ${resumeTargetSessionId} and retrying fresh`);
+            } catch (delErr) {
+              console.error("[chat-stream] failed to delete stale session:", delErr);
+            }
+            sendEvent("resume_failed", { message: "Session expired, continuing with full context" });
+            didFreshRetry = true;
+            fullResponse = "";
+            streamSessionId = null;
+            stderrBuffer = "";
+            toolCalls.length = 0;
+            runSpawn("fresh");
+            return;
+          }
+
+          completeProcess(processKey);
+
+          if (fullResponse.trim()) {
+            try {
+              await db.insert(conversations).values({
+                id: assistantMessageId,
+                cardId,
+                sectionType,
+                role: "assistant",
+                content: fullResponse.trim(),
+                mentions: null,
+                toolCalls: toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
+                createdAt: new Date().toISOString(),
+              });
+            } catch (error) {
+              console.error("Failed to save assistant message:", error);
+            }
+          }
+
           try {
-            await db.insert(conversations).values({
-              id: assistantMessageId,
-              cardId,
-              sectionType,
-              role: "assistant",
-              content: fullResponse.trim(),
-              mentions: null,
-              toolCalls: toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
-              createdAt: new Date().toISOString(),
-            });
-          } catch (error) {
-            console.error("Failed to save assistant message:", error);
-          }
-        }
-
-        // Session management after process completes
-        try {
-          if (code === 0) {
-            if (canResume && existingSession) {
-              // Successful resume — update lastUsedAt
-              await db.update(chatSessions)
-                .set({ lastUsedAt: new Date().toISOString() })
-                .where(eq(chatSessions.id, existingSession.id));
-            } else if (provider.capabilities.supportsSessionResume) {
-              // Fresh session succeeded — save session ID
-              // Claude: we set it upfront via --session-id
-              // Codex/Gemini: captured from stream events (thread.started / init)
-              // Filesystem resolver kept as a last-resort fallback
-              let sessionId = newSessionId ?? streamSessionId ?? undefined;
-              if (!sessionId) {
-                sessionId = resolveSessionId(provider.id, cwd) ?? undefined;
-              }
-              if (sessionId) {
-                await db.insert(chatSessions).values({
-                  id: uuidv4(),
-                  cardId,
-                  sectionType,
-                  cliSessionId: sessionId,
-                  provider: provider.id,
-                  createdAt: new Date().toISOString(),
-                  lastUsedAt: new Date().toISOString(),
-                }).onConflictDoUpdate({
-                  target: [chatSessions.cardId, chatSessions.sectionType],
-                  set: {
-                    cliSessionId: sessionId,
+            const wasResumeLeg = mode === "resume" && !didFreshRetry;
+            if (code === 0) {
+              if (wasResumeLeg && existingSession) {
+                await db.update(chatSessions)
+                  .set({ lastUsedAt: new Date().toISOString() })
+                  .where(eq(chatSessions.id, existingSession.id));
+              } else if (provider.capabilities.supportsSessionResume) {
+                const persistedSessionId =
+                  freshRetrySessionId ?? initialNewSessionId ?? streamSessionId ?? resolveSessionId(provider.id, cwd) ?? undefined;
+                if (persistedSessionId) {
+                  await db.insert(chatSessions).values({
+                    id: uuidv4(),
+                    cardId,
+                    sectionType,
+                    cliSessionId: persistedSessionId,
                     provider: provider.id,
+                    createdAt: new Date().toISOString(),
                     lastUsedAt: new Date().toISOString(),
-                  },
-                });
-                console.log(`[chat-stream] saved session ${sessionId} for ${cardId}/${sectionType}`);
+                  }).onConflictDoUpdate({
+                    target: [chatSessions.cardId, chatSessions.sectionType, chatSessions.provider],
+                    set: {
+                      cliSessionId: persistedSessionId,
+                      lastUsedAt: new Date().toISOString(),
+                    },
+                  });
+                  console.log(`[chat-stream] saved session ${persistedSessionId} for ${cardId}/${sectionType}`);
+                }
+              }
+            } else if (wasResumeLeg && existingSession) {
+              // Non-zero exit but not a detected session failure (and not an
+              // abort) — still preserve the session. Rate limits, network
+              // blips, and transient CLI crashes should be retried, not
+              // invalidated.
+              if (aborted) {
+                console.log(`[chat-stream] resumed stream aborted (signal=${signal}), preserving session ${existingSession.cliSessionId}`);
+              } else {
+                console.log(`[chat-stream] resumed stream exited non-zero (code=${code}, signal=${signal}) but stderr shows no session error — preserving session ${existingSession.cliSessionId}`);
               }
             }
-          } else if (canResume && existingSession) {
-            // Resume failed — delete stale session, send error so client can retry
-            await db.delete(chatSessions).where(eq(chatSessions.id, existingSession.id));
-            console.log(`[chat-stream] resume failed (code ${code}), deleted stale session ${existingSession.cliSessionId}`);
-            sendEvent("resume_failed", { message: "Session expired, retrying with full context" });
+          } catch (sessionMgmtError) {
+            console.error("[chat-stream] session management error:", sessionMgmtError);
           }
-        } catch (sessionError) {
-          console.error("[chat-stream] session management error:", sessionError);
-        }
 
-        sendEvent("close", { code, messageId: assistantMessageId });
-        if (!isClosed) {
-          isClosed = true;
-          controller.close();
-        }
-      });
+          sendEvent("close", { code, messageId: assistantMessageId });
+          if (!isClosed) {
+            isClosed = true;
+            controller.close();
+          }
+        });
 
-      cliProcess.on("error", (error) => {
-        completeProcess(processKey);
-        sendEvent("error", error.message);
-        if (!isClosed) {
-          isClosed = true;
-          controller.close();
-        }
-      });
+        cliProcess.on("error", (error) => {
+          completeProcess(processKey);
+          sendEvent("error", error.message);
+          if (!isClosed) {
+            isClosed = true;
+            controller.close();
+          }
+        });
+      };
+
+      runSpawn(canResume ? "resume" : "fresh");
 
       request.signal.addEventListener("abort", () => {
+        wasAborted = true;
         isClosed = true;
-        if (cliProcess && !cliProcess.killed) {
-          cliProcess.kill();
+        if (activeProcess && !activeProcess.killed) {
+          activeProcess.kill();
           completeProcess(processKey);
         }
       });

@@ -15,6 +15,13 @@
       "when": 1776884025474,
       "tag": "0001_minor_midnight",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777037440772,
+      "tag": "0002_aromatic_moira_mactaggert",
+      "breakpoints": true
     }
   ]
 }

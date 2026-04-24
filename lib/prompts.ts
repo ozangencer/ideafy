@@ -16,6 +16,7 @@ export {
   saveCardImagesToTemp,
   extractConversationImages,
   generateImageReferences,
+  getCardImageDir,
 } from "./prompts/images";
 export { buildEvaluatePrompt, buildQuickFixPrompt, buildIdeationPrompt } from "./prompts/card";
 export { buildTestTogetherPrompt, buildTestGenerationPrompt } from "./prompts/testing";

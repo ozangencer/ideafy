@@ -805,7 +805,7 @@ export function CardModal({
                   cardId={selectedCard.id}
                   sectionType={activeTab}
                   messages={currentMessages}
-                  isLoading={isConversationLoading}
+                  isLoading={isConversationLoading && streamingMessage?.cardId === selectedCard.id && streamingMessage?.sectionType === activeTab}
                   isBackgroundProcessing={isBackgroundProcessing}
                   streamingMessage={streamingMessage?.cardId === selectedCard.id && streamingMessage?.sectionType === activeTab ? streamingMessage : null}
                   projectPath={project.folderPath}
