@@ -88,6 +88,26 @@ function exec(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: num
   });
 }
 
+// After `npm ci` some environments silently skip native compilation for
+// better-sqlite3 (prebuilt download failure, missing node-gyp toolchain, etc.)
+// leaving the MCP server unable to start. Verify the .node binary exists;
+// if not, force a rebuild and fail loudly if that also fails.
+async function ensureBetterSqlite3Binary(cacheDir: string): Promise<void> {
+  const pkgDir = path.join(cacheDir, "node_modules", "better-sqlite3");
+  if (!fs.existsSync(pkgDir)) return;
+  const binary = path.join(pkgDir, "build", "Release", "better_sqlite3.node");
+  if (fs.existsSync(binary)) return;
+  await exec("npm", ["rebuild", "better-sqlite3"], {
+    cwd: cacheDir,
+    timeoutMs: 300_000,
+  });
+  if (!fs.existsSync(binary)) {
+    throw new Error(
+      `better-sqlite3 native binary missing after rebuild (${binary}); plugin MCP server will not start`,
+    );
+  }
+}
+
 async function cloneOrUpdateMarketplace(gitUrl: string): Promise<void> {
   if (fs.existsSync(path.join(MARKETPLACE_DIR, ".git"))) {
     await exec("git", ["fetch", "--depth=1", "origin", "HEAD"], {
@@ -182,6 +202,7 @@ export async function installPlugin(
         cwd: cacheDir,
         timeoutMs: 300_000,
       });
+      await ensureBetterSqlite3Binary(cacheDir);
     }
 
     const marketplaces = readJsonSafe<Record<string, unknown>>(MARKETPLACES_FILE, {});
