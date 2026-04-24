@@ -35,9 +35,21 @@ export function useAutoScrollToBottom<T extends HTMLElement>(
   useEffect(() => {
     const isNewMessage = messageCount > prevCountRef.current;
     prevCountRef.current = messageCount;
+    const el = scrollRef.current;
+    if (!el) return;
 
-    if (scrollRef.current && (isNewMessage || isStreaming) && !userScrolledUpRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (isNewMessage) {
+      // A new message just arrived — always pull to the bottom and
+      // reset the "user scrolled up" bit. Without this reset the scroll
+      // event that fires from the layout shift can flip userScrolledUp
+      // to true before this effect runs, so the very message you just
+      // sent drops below the fold and waits for a manual scroll.
+      el.scrollTop = el.scrollHeight;
+      userScrolledUpRef.current = false;
+    } else if (isStreaming && !userScrolledUpRef.current) {
+      // Streaming updates: keep following the tail, but only if the
+      // user hasn't scrolled up to read history.
+      el.scrollTop = el.scrollHeight;
     }
   }, [messageCount, isStreaming, scrollRef]);
 
