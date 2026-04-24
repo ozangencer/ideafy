@@ -14,7 +14,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2 } from "lucide-react";
+import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2, Settings2 } from "lucide-react";
+import { PlatformIcon } from "@/components/icons/platform-icons";
 import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS } from "@/lib/types";
 import { Project } from "@/lib/types";
 
@@ -290,20 +291,31 @@ export function CardModalHeader({
           >
             <SelectTrigger className="h-8 text-sm">
               <SelectValue>
-                <span className={aiPlatform ? "text-foreground" : "text-muted-foreground"}>
-                  {aiPlatform
-                    ? AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform)?.label || aiPlatform
-                    : "Global Default"}
-                </span>
+                <div className={`flex items-center gap-2 ${aiPlatform ? "text-foreground" : "text-muted-foreground"}`}>
+                  {aiPlatform ? (
+                    <PlatformIcon platform={aiPlatform} size={14} />
+                  ) : (
+                    <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <span>
+                    {aiPlatform
+                      ? AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform)?.label || aiPlatform
+                      : "Global Default"}
+                  </span>
+                </div>
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="global">
-                <span className="text-muted-foreground">Global Default</span>
+                <div className="flex items-center gap-2 text-muted-foreground group-focus:text-current group-data-[highlighted]:text-current">
+                  <Settings2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>Global Default</span>
+                </div>
               </SelectItem>
               {AI_PLATFORM_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
-                  <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <PlatformIcon platform={opt.value} size={14} />
                     <span>{opt.label}</span>
                   </div>
                 </SelectItem>
