@@ -33,6 +33,16 @@ export {
 import { stripHtml } from "./prompts/utils";
 import { buildTestStyleContract, detectCardLanguage } from "./prompts/test-style";
 
+const NO_SAVE_TOOLS_RULE =
+  "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
+
+function buildCommitInstructions(commitRef: string, defaultType: "feat" | "fix"): string {
+  return `Commit your work in this feature-branch worktree before finishing (Merge & Complete will squash later):
+1. Stage only the files you touched — \`git add <file>\` or \`git add -u\`. NEVER \`git add -A\` (worktree contains a node_modules symlink that must stay untracked).
+2. Conventional commit referencing the card: \`git commit -m "${defaultType}(${commitRef}): <short imperative description>"\` (use \`feat\`/\`fix\`/\`refactor\`/\`chore\` as appropriate).
+3. \`git status\` should show a clean tracked tree (untracked node_modules symlink is expected).`;
+}
+
 export type Phase = "planning" | "implementation" | "retest";
 
 export interface CardForPrompt {
@@ -79,8 +89,7 @@ Must include at the end:
 [COMPLEXITY: trivial/low/medium/high/very_high]
 [PRIORITY: low/medium/high]
 
-IMPORTANT: Do NOT implement yet - plan only.
-IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output the complete plan directly as your response text. Your output will be automatically saved to the card.`;
+Plan only — do NOT implement. ${NO_SAVE_TOOLS_RULE}`;
 
     case "implementation": {
       const styleContract = buildTestStyleContract({
@@ -92,20 +101,11 @@ Read card via MCP (mcp__ideafy__get_card). Follow the approved plan in solutionS
 
 Task: Implement "${title}".
 
-## After implementing the code — COMMIT YOUR CHANGES
+## After implementing — commit before outputting tests
 
-You are working inside a feature-branch git worktree. Merge & Complete will later squash these commits into main, so you MUST commit your work here. Do this BEFORE outputting test scenarios:
+${buildCommitInstructions(commitRef, "feat")}
 
-1. Stage ONLY files you actually modified or created for this task. Do NOT run \`git add -A\` — this worktree contains a \`node_modules\` symlink and other untracked artifacts that must NOT be staged. Use one of:
-   - \`git add <file1> <file2> ...\` (explicit list — preferred)
-   - \`git add -u\` (only already-tracked modifications; use if you did not create any new files)
-2. Commit with a conventional commits message referencing the card:
-   \`git commit -m "<type>(${commitRef}): <short imperative description>"\`
-   - Type: \`feat\` for new functionality, \`fix\` for bug fixes, \`refactor\` for non-behavioral changes, \`chore\` for tooling.
-   - Example: \`feat(${commitRef}): stash and restore main-repo uncommitted changes on merge\`
-3. Verify: run \`git status\` and confirm the worktree is clean (no modified tracked files). The node_modules symlink staying as \`??\` untracked is fine and expected.
-
-If you created multiple logically separate changes, use multiple commits.
+Use multiple commits if changes are logically separate.
 
 ## FINAL response format
 
@@ -126,12 +126,11 @@ After committing, your FINAL response must be ONLY manual test scenarios in this
 Rules:
 - Every line must be a markdown checkbox (- [ ])
 - Write actionable manual test steps, NOT a summary of code changes
-- Do NOT include code summaries, file lists, or implementation details in your output
-- Your response text will be automatically saved as test scenarios
+- Do NOT include code summaries, file lists, or implementation details
 
 ${styleContract}
 
-IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results.`;
+${NO_SAVE_TOOLS_RULE}`;
     }
 
     case "retest":
@@ -141,12 +140,11 @@ Read card via MCP (mcp__ideafy__get_card). Review previous implementation and te
 
 Task: "${title}" failed during testing.
 
-User will describe the error - wait and fix. If you make code changes, you MUST commit them in this worktree before finishing:
-- Stage only files you modified: \`git add <file>\` or \`git add -u\` (never \`git add -A\`).
-- Commit message format: \`fix(${commitRef}): <short description of the fix>\`.
-- Verify worktree is clean with \`git status\` after commit (untracked \`node_modules\` symlink is expected).
+User will describe the error — wait, then fix. If you change code:
 
-IMPORTANT: Do NOT call save_plan, save_tests, save_opinion, or any MCP tools to save results. Do NOT ask whether to save. Output your response directly as text. Your output will be automatically saved to the card.`;
+${buildCommitInstructions(commitRef, "fix")}
+
+${NO_SAVE_TOOLS_RULE}`;
   }
 }
 
