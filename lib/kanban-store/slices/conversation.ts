@@ -1,6 +1,18 @@
-import { ConversationMessage, SectionType, SessionStatusStep } from "../../types";
+import {
+  ConversationActivityEntry,
+  ConversationMessage,
+  SectionType,
+  SessionStatusStep,
+} from "../../types";
 import { nowIso, parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
+
+function appendActivityEntry(
+  existing: ConversationActivityEntry[] | undefined,
+  entry: ConversationActivityEntry,
+): ConversationActivityEntry[] {
+  return [...(existing ?? []), entry].slice(-5);
+}
 
 export const createConversationSlice: StoreSlice<
   Pick<
@@ -17,6 +29,7 @@ export const createConversationSlice: StoreSlice<
     | "sendMessage"
     | "cancelConversation"
     | "detachConversation"
+    | "attachLiveStream"
     | "clearConversation"
     | "setStreamingMessage"
     | "appendToStreamingMessage"
@@ -91,6 +104,7 @@ export const createConversationSlice: StoreSlice<
         role: "assistant",
         content: "",
         mentions: [],
+        activityLog: [],
         createdAt: nowIso(),
         isStreaming: true,
       },
@@ -174,6 +188,34 @@ export const createConversationSlice: StoreSlice<
                   fullContent += event.data as string;
                   get().appendToStreamingMessage(event.data as string);
                   break;
+                case "text_replace": {
+                  const snapshot = String(event.data ?? "");
+                  fullContent = snapshot;
+                  set((state) => {
+                    if (!state.streamingMessage) return state;
+                    return {
+                      streamingMessage: { ...state.streamingMessage, content: snapshot },
+                    };
+                  });
+                  break;
+                }
+                case "thinking": {
+                  const content = String(event.data || "").trim();
+                  if (!content) break;
+                  set((state) => {
+                    if (!state.streamingMessage) return state;
+                    return {
+                      streamingMessage: {
+                        ...state.streamingMessage,
+                        activityLog: appendActivityEntry(
+                          state.streamingMessage.activityLog,
+                          { type: "thinking", content },
+                        ),
+                      },
+                    };
+                  });
+                  break;
+                }
                 case "tool_use": {
                   hadToolCalls = true;
                   const toolData = event.data as { name: string };
@@ -182,6 +224,10 @@ export const createConversationSlice: StoreSlice<
                     return {
                       streamingMessage: {
                         ...state.streamingMessage,
+                        activityLog: appendActivityEntry(
+                          state.streamingMessage.activityLog,
+                          { type: "tool_use", content: `Using: ${toolData.name}` },
+                        ),
                         activeToolCall: { name: toolData.name, status: "running" },
                       },
                     };
@@ -190,11 +236,16 @@ export const createConversationSlice: StoreSlice<
                 }
                 case "tool_result": {
                   hadToolCalls = true;
+                  const toolData = event.data as { name?: string };
                   set((state) => {
                     if (!state.streamingMessage) return state;
                     return {
                       streamingMessage: {
                         ...state.streamingMessage,
+                        activityLog: appendActivityEntry(
+                          state.streamingMessage.activityLog,
+                          { type: "tool_result", content: `Result from: ${toolData.name || "tool"}` },
+                        ),
                         activeToolCall: state.streamingMessage.activeToolCall
                           ? { ...state.streamingMessage.activeToolCall, status: "completed" }
                           : undefined,
@@ -245,6 +296,172 @@ export const createConversationSlice: StoreSlice<
     // Modal closed while streaming — keep stream alive so it continues
     // in background. The finally block in sendMessage will clean up
     // when the stream naturally completes.
+  },
+
+  attachLiveStream: async (cardId, sectionType) => {
+    // Reattach to an in-flight chat stream after the original POST connection
+    // was interrupted (modal close, HMR reload). The server keeps the CLI
+    // running and mirrors every event into a shared buffer; this action
+    // replays buffered events into a fresh streamingMessage and tails new
+    // events until the stream finishes.
+
+    const current = get().streamingMessage;
+    if (current && current.cardId === cardId && current.sectionType === sectionType) {
+      // Already attached (sendMessage's loop is still running in this tab).
+      return;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `/api/cards/${cardId}/chat-stream/live?section=${sectionType}`,
+      );
+    } catch {
+      return;
+    }
+    if (response.status === 404 || !response.ok || !response.body) {
+      return;
+    }
+
+    set({
+      streamingMessage: {
+        id: `streaming-${Date.now()}`,
+        cardId,
+        sectionType,
+        role: "assistant",
+        content: "",
+        mentions: [],
+        activityLog: [],
+        createdAt: nowIso(),
+        isStreaming: true,
+      },
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let hadToolCalls = false;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const messages = buffer.split("\n\n");
+        buffer = messages.pop() || "";
+
+        for (const message of messages) {
+          if (!message.trim()) continue;
+          const match = message.match(/^data:\s*(.+)$/m);
+          if (!match) continue;
+          let event: { type: string; data: unknown };
+          try {
+            event = JSON.parse(match[1]);
+          } catch {
+            continue;
+          }
+
+          switch (event.type) {
+            case "text":
+              get().appendToStreamingMessage(event.data as string);
+              break;
+            case "text_replace": {
+              const snapshot = String(event.data ?? "");
+              set((state) => {
+                if (!state.streamingMessage) return state;
+                return {
+                  streamingMessage: { ...state.streamingMessage, content: snapshot },
+                };
+              });
+              break;
+            }
+            case "thinking": {
+              const content = String(event.data || "").trim();
+              if (!content) break;
+              set((state) => {
+                if (!state.streamingMessage) return state;
+                return {
+                  streamingMessage: {
+                    ...state.streamingMessage,
+                    activityLog: appendActivityEntry(
+                      state.streamingMessage.activityLog,
+                      { type: "thinking", content },
+                    ),
+                  },
+                };
+              });
+              break;
+            }
+            case "tool_use": {
+              hadToolCalls = true;
+              const toolData = event.data as { name: string };
+              set((state) => {
+                if (!state.streamingMessage) return state;
+                return {
+                  streamingMessage: {
+                    ...state.streamingMessage,
+                    activityLog: appendActivityEntry(
+                      state.streamingMessage.activityLog,
+                      { type: "tool_use", content: `Using: ${toolData.name}` },
+                    ),
+                    activeToolCall: { name: toolData.name, status: "running" },
+                  },
+                };
+              });
+              break;
+            }
+            case "tool_result": {
+              hadToolCalls = true;
+              const toolData = event.data as { name?: string };
+              set((state) => {
+                if (!state.streamingMessage) return state;
+                return {
+                  streamingMessage: {
+                    ...state.streamingMessage,
+                    activityLog: appendActivityEntry(
+                      state.streamingMessage.activityLog,
+                      { type: "tool_result", content: `Result from: ${toolData.name || "tool"}` },
+                    ),
+                    activeToolCall: state.streamingMessage.activeToolCall
+                      ? { ...state.streamingMessage.activeToolCall, status: "completed" }
+                      : undefined,
+                  },
+                };
+              });
+              break;
+            }
+            case "status": {
+              const step = event.data as SessionStatusStep;
+              set((state) => {
+                if (!state.streamingMessage) return state;
+                const existing = state.streamingMessage.statusSteps ?? [];
+                return {
+                  streamingMessage: {
+                    ...state.streamingMessage,
+                    statusSteps: [...existing, step],
+                  },
+                };
+              });
+              break;
+            }
+            case "close":
+              await get().fetchConversation(cardId, sectionType);
+              if (hadToolCalls) {
+                await get().fetchCards();
+                set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1 }));
+              }
+              get().fetchBackgroundProcesses();
+              break;
+          }
+        }
+      }
+    } catch {
+      // Reader interrupted — keep streamingMessage as-is so the next
+      // attach can pick up where this one left off.
+      return;
+    } finally {
+      set({ streamingMessage: null });
+    }
   },
 
   clearConversation: async (cardId, sectionType) => {

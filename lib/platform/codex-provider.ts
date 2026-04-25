@@ -101,12 +101,13 @@ class CodexProvider implements PlatformProvider {
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
-    // Codex non-interactive exec mode does not honor `--full-auto` for MCP
-    // approvals the same way the interactive CLI does. Use the explicit
-    // dangerous auto-approve flag so MCP tool calls can complete in card chat.
-    const automationArgs = opts.skipPermissions
-      ? ["--dangerously-auto-approve-everything"]
-      : ["--dangerously-auto-approve-everything", "--sandbox", "read-only"];
+    // `--full-auto` allows shell commands but still prompts for MCP tool
+    // approvals in non-interactive exec. When the caller opts into
+    // skipPermissions (e.g. test runs that need MCP), bypass approvals fully.
+    const automationFlag = opts.skipPermissions
+      ? "--dangerously-bypass-approvals-and-sandbox"
+      : "--full-auto";
+    const sandboxArgs = opts.skipPermissions ? [] : ["--sandbox", "read-only"];
     const dirArgs = opts.addDirs?.flatMap((dir) => ["--add-dir", dir]) ?? [];
 
     if (opts.resumeSessionId) {
@@ -116,11 +117,11 @@ class CodexProvider implements PlatformProvider {
         "resume",
         opts.resumeSessionId,
         "--json",
-        "--dangerously-auto-approve-everything",
+        automationFlag,
         opts.prompt,
       ];
     }
-    return ["exec", "--json", ...automationArgs, ...dirArgs, opts.prompt];
+    return ["exec", "--json", automationFlag, ...sandboxArgs, ...dirArgs, opts.prompt];
   }
 
   parseJsonResponse(stdout: string): CliResponse {

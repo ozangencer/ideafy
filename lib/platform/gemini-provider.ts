@@ -55,11 +55,13 @@ class GeminiProvider implements PlatformProvider {
   }
 
   getEnv(): NodeJS.ProcessEnv {
-    return buildEnv();
+    // Headless Gemini refuses to run in untrusted folders unless this env or
+    // --skip-trust is set. Card chat always runs against arbitrary project dirs.
+    return { ...buildEnv(), GEMINI_CLI_TRUST_WORKSPACE: "true" };
   }
 
   getCIEnv(): NodeJS.ProcessEnv {
-    return buildCIEnv();
+    return { ...buildCIEnv(), GEMINI_CLI_TRUST_WORKSPACE: "true" };
   }
 
   buildAutonomousArgs(opts: AutonomousOptions): string[] {
@@ -75,11 +77,26 @@ class GeminiProvider implements PlatformProvider {
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
-    // Gemini CLI doesn't support allowedTools or addDirs flags
+    // Gemini CLI doesn't support allowedTools or addDirs flags.
+    // Approval modes: yolo auto-approves every tool/MCP call; default prompts
+    // (which would hang headless), so when not bypassing we still need
+    // auto_edit at minimum to keep edits unattended.
+    const approvalArgs = opts.skipPermissions
+      ? ["--yolo"]
+      : ["--approval-mode", "auto_edit"];
+
     if (opts.resumeSessionId) {
-      return ["--resume", opts.resumeSessionId, "-p", opts.prompt, "--output-format", "stream-json"];
+      return [
+        "--resume",
+        opts.resumeSessionId,
+        ...approvalArgs,
+        "-p",
+        opts.prompt,
+        "--output-format",
+        "stream-json",
+      ];
     }
-    return ["-p", opts.prompt, "--output-format", "stream-json"];
+    return [...approvalArgs, "-p", opts.prompt, "--output-format", "stream-json"];
   }
 
   parseJsonResponse(stdout: string): CliResponse {
@@ -112,19 +129,37 @@ class GeminiProvider implements PlatformProvider {
       }
       if (json.type === "message" && json.role === "user") return [];
 
-      // Handle assistant message events - content is a string
+      // Gemini emits each assistant chunk as `{delta:true, content:<full text
+      // so far>}` — content is an accumulated snapshot, not a delta. Treating
+      // it as a delta and appending would cascade-duplicate the response, so
+      // we emit `text_replace` and the consumer overwrites instead. The
+      // optional `delta:false` consolidated tail repeats the same snapshot,
+      // skip it.
       if (json.type === "message" && json.role === "assistant" && json.content) {
-        events.push({ type: "text", data: String(json.content) });
+        if (json.delta === false) return [];
+        events.push({ type: "text_replace", data: String(json.content) });
       }
 
       // Handle tool use events
       if (json.type === "tool_use") {
-        events.push({ type: "tool_use", data: { name: json.tool_name || json.name, input: json.parameters || json.input } });
+        events.push({
+          type: "tool_use",
+          data: {
+            name: json.tool_name || json.name || json.tool_id || "tool",
+            input: json.parameters || json.input,
+          },
+        });
       }
 
       // Handle tool result events
       if (json.type === "tool_result") {
-        events.push({ type: "tool_result", data: { name: json.tool_id || "", output: String(json.output || "").slice(0, 200) } });
+        events.push({
+          type: "tool_result",
+          data: {
+            name: json.tool_name || json.name || json.tool_id || "tool",
+            output: String(json.output || "").slice(0, 200),
+          },
+        });
       }
 
       // Handle result event (final stats/status)

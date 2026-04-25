@@ -1,0 +1,4 @@
+
+[mcp_servers.ideafy]
+command = "node"
+args = ["/Users/ozangencer/vibecode/ideafy/mcp-server/dist/index.js"]

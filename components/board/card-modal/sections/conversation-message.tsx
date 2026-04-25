@@ -343,6 +343,30 @@ export function ConversationMessage({
           </div>
         )}
 
+        {isStreaming && message.activityLog && message.activityLog.length > 0 && (
+          <div className="mb-2 pb-2 border-b border-border/50 space-y-1">
+            <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+              <Brain className="w-3 h-3" />
+              <span>Live Activity</span>
+            </div>
+            {message.activityLog.map((entry, idx) => (
+              <div
+                key={`${entry.type}-${idx}`}
+                className="flex items-start gap-2 text-[11px] text-muted-foreground"
+              >
+                {entry.type === "thinking" ? (
+                  <Brain className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Wrench className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                )}
+                <span className={entry.type === "thinking" ? "italic" : ""}>
+                  {entry.content}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Message content */}
         <div className="prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0 max-w-none text-sm">
           {renderContent()}

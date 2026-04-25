@@ -16,6 +16,12 @@ import {
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
 import { resolveSessionId } from "@/lib/platform/session-resolver";
+import {
+  startLiveStream,
+  pushLiveStreamEvent,
+  completeLiveStream,
+  liveStreamKey,
+} from "@/lib/live-stream-buffer";
 import { extractConversationImages, generateImageReferences, getCardImageDir } from "@/lib/prompts";
 import {
   type CardContext,
@@ -218,6 +224,22 @@ export async function POST(
   let stderrBuffer = "";
   const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
 
+  // Gemini emits each chunk as a full snapshot of the *current* message; when
+  // the assistant starts a new message after a tool call, the next snapshot
+  // is short and unrelated. Track frozen prior messages so a fresh snapshot
+  // doesn't blow away the response we already streamed.
+  const frozenSnapshots: string[] = [];
+  let currentSnapshot = "";
+  const applyTextReplace = (snapshot: string): string => {
+    if (snapshot.startsWith(currentSnapshot)) {
+      currentSnapshot = snapshot;
+    } else {
+      if (currentSnapshot) frozenSnapshots.push(currentSnapshot);
+      currentSnapshot = snapshot;
+    }
+    return [...frozenSnapshots, currentSnapshot].filter(Boolean).join("\n\n");
+  };
+
   const isSessionNotFoundError = (stderr: string): boolean => {
     if (!stderr) return false;
     return /session\s+(not\s+found|expired|invalid|does\s+not\s+exist)|no\s+(such\s+)?(session|conversation)|conversation\s+not\s+found|could\s+not\s+resume|failed\s+to\s+resume/i.test(
@@ -245,9 +267,15 @@ export async function POST(
 
   const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
 
+  const bufferKey = liveStreamKey(cardId, sectionType);
+  startLiveStream(bufferKey);
+
   const stream = new ReadableStream({
     start(controller) {
       const sendEvent = (type: string, data: unknown) => {
+        // Mirror to the live buffer first so reopened modals can replay even
+        // events the original POST connection never delivered.
+        pushLiveStreamEvent(bufferKey, { type, data });
         if (isClosed) return;
         try {
           const event = `data: ${JSON.stringify({ type, data })}\n\n`;
@@ -365,6 +393,12 @@ export async function POST(
                   fullResponse += event.data as string;
                   sendEvent("text", event.data);
                   break;
+                case "text_replace": {
+                  const combined = applyTextReplace(String(event.data ?? ""));
+                  fullResponse = combined;
+                  sendEvent("text_replace", combined);
+                  break;
+                }
                 case "thinking":
                   sendEvent("thinking", event.data);
                   break;
@@ -417,6 +451,12 @@ export async function POST(
                   fullResponse += event.data as string;
                   sendEvent("text", event.data);
                   break;
+                case "text_replace": {
+                  const combined = applyTextReplace(String(event.data ?? ""));
+                  fullResponse = combined;
+                  sendEvent("text_replace", combined);
+                  break;
+                }
                 case "tool_use":
                   toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
                   sendEvent("tool_use", event.data);
@@ -529,6 +569,7 @@ export async function POST(
           }
 
           sendEvent("close", { code, messageId: assistantMessageId });
+          completeLiveStream(bufferKey);
           if (!isClosed) {
             isClosed = true;
             controller.close();
@@ -538,6 +579,7 @@ export async function POST(
         cliProcess.on("error", (error) => {
           completeProcess(processKey);
           sendEvent("error", error.message);
+          completeLiveStream(bufferKey);
           if (!isClosed) {
             isClosed = true;
             controller.close();
@@ -548,15 +590,15 @@ export async function POST(
       runSpawn(canResume ? "resume" : "fresh");
 
       request.signal.addEventListener("abort", () => {
-        wasAborted = true;
+        // Client disconnected (modal closed, HMR reload, tab close). Stop
+        // writing to the dead controller, but keep the CLI process alive so
+        // sendEvent keeps mirroring to the live buffer; a reopened modal can
+        // attach via /chat-stream/live to replay history and tail new events.
+        // The CLI's close handler will save the assistant message to the DB
+        // when it finishes naturally. Explicit cancellation still works
+        // through the dedicated /api/cards/[id]/chat-stream/cancel route.
         isClosed = true;
-        if (activeProcess && !activeProcess.killed) {
-          activeProcess.kill();
-          // Mark as aborted (reload / tab close) so the UI can distinguish
-          // reload-aborts from a clean completion. The subsequent close
-          // handler's completeProcess() call is a no-op — first call wins.
-          completeProcess(processKey, "aborted");
-        }
+        console.log(`[chat-stream] client disconnected for ${cardId}/${sectionType}, keeping CLI alive for live-buffer replay`);
       });
     },
   });

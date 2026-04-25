@@ -233,6 +233,7 @@ export interface KanbanStore {
   ) => Promise<void>;
   cancelConversation: () => void;
   detachConversation: () => void;
+  attachLiveStream: (cardId: string, sectionType: SectionType) => Promise<void>;
   clearConversation: (cardId: string, sectionType: SectionType) => Promise<void>;
   setStreamingMessage: (message: ConversationMessage | null) => void;
   appendToStreamingMessage: (text: string) => void;

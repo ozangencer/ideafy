@@ -12,28 +12,32 @@ export function parseClaudeStreamLine(line: string): StreamEvent[] {
     const json = JSON.parse(line);
     const events: StreamEvent[] = [];
 
-    // Assistant messages may carry multiple content blocks (text, thinking, tool_use).
+    // With --include-partial-messages Claude emits incremental SSE-style
+    // chunks wrapped as {type:"stream_event", event:{...}}. Unwrap and emit
+    // text/thinking deltas plus an early tool_use signal on content_block_start.
+    if (json.type === "stream_event" && json.event) {
+      const inner = json.event;
+      if (inner.type === "content_block_delta") {
+        const delta = inner.delta;
+        if (delta?.type === "text_delta" && delta.text) {
+          events.push({ type: "text", data: delta.text });
+        }
+        if (delta?.type === "thinking_delta" && delta.thinking) {
+          events.push({ type: "thinking", data: delta.thinking });
+        }
+      }
+      return events;
+    }
+
+    // Consolidated assistant message: skip text/thinking (already streamed via
+    // partials above to avoid duplication) but capture tool_use with the full
+    // input payload — content_block_start fires before input streams in, so
+    // the consolidated block is the only source with complete input.
     if (json.type === "assistant" && json.message?.content) {
       for (const block of json.message.content) {
-        if (block.type === "text" && block.text) {
-          events.push({ type: "text", data: block.text });
-        }
-        if (block.type === "thinking" && block.thinking) {
-          events.push({ type: "thinking", data: block.thinking });
-        }
         if (block.type === "tool_use") {
           events.push({ type: "tool_use", data: { name: block.name, input: block.input } });
         }
-      }
-    }
-
-    // Incremental deltas while an assistant block is streaming.
-    if (json.type === "content_block_delta") {
-      if (json.delta?.text) {
-        events.push({ type: "text", data: json.delta.text });
-      }
-      if (json.delta?.thinking) {
-        events.push({ type: "thinking", data: json.delta.thinking });
       }
     }
 

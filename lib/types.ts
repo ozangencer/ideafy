@@ -258,6 +258,11 @@ export interface ToolCall {
   output?: string;
 }
 
+export interface ConversationActivityEntry {
+  type: "thinking" | "tool_use" | "tool_result";
+  content: string;
+}
+
 export type SessionStatusStep =
   | { step: "checking" }
   | { step: "session_found"; sessionId: string }
@@ -274,6 +279,7 @@ export interface ConversationMessage {
   content: string;
   mentions: MentionData[];
   toolCalls?: ToolCall[];
+  activityLog?: ConversationActivityEntry[];
   activeToolCall?: { name: string; status: "running" | "completed" };
   statusSteps?: SessionStatusStep[];
   createdAt: string;

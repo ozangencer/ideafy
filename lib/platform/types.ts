@@ -45,7 +45,11 @@ export interface CliResponse {
 }
 
 export interface StreamEvent {
-  type: "text" | "thinking" | "tool_use" | "tool_result" | "result" | "system" | "session_id";
+  // `text` is an additive delta (Claude/Codex). `text_replace` carries an
+  // accumulated snapshot (Gemini emits the full message-so-far on every
+  // chunk) and the consumer must overwrite, not append, to avoid quadratic
+  // duplication when chunks pile up.
+  type: "text" | "text_replace" | "thinking" | "tool_use" | "tool_result" | "result" | "system" | "session_id";
   data: unknown;
 }
 

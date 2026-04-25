@@ -98,6 +98,7 @@ export function CardModal({
     sendMessage,
     cancelConversation,
     detachConversation,
+    attachLiveStream,
     clearConversation,
     // Background processes
     backgroundProcesses,
@@ -268,6 +269,20 @@ export function CardModal({
       (p) => p.id === processKey && p.status === "running"
     );
   }, [selectedCard, activeTab, backgroundProcesses]);
+
+  // Reattach to a still-running stream when this card+section was active
+  // before the modal was closed (or HMR reset the in-flight fetch). Server
+  // keeps the CLI alive and mirrors events into a buffer the live endpoint
+  // replays + tails.
+  useEffect(() => {
+    if (!selectedCard || isDraftMode) return;
+    if (!isBackgroundProcessing) return;
+    const isAlreadyAttached =
+      streamingMessage?.cardId === selectedCard.id &&
+      streamingMessage?.sectionType === activeTab;
+    if (isAlreadyAttached) return;
+    void attachLiveStream(selectedCard.id, activeTab);
+  }, [selectedCard, activeTab, isDraftMode, isBackgroundProcessing, streamingMessage, attachLiveStream]);
 
   // Handle card mention click
   const handleCardClick = useCallback((cardId: string) => {

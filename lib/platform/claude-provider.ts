@@ -129,6 +129,10 @@ class ClaudeProvider implements PlatformProvider {
       "--print",
       "--output-format", "stream-json",
       "--verbose",
+      // Stream content_block_delta chunks as they arrive so the UI sees
+      // text/thinking flow live instead of arriving as one consolidated
+      // assistant message at the end.
+      "--include-partial-messages",
     ];
 
     if (opts.skipPermissions) {
