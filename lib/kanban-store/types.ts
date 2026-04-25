@@ -18,6 +18,10 @@ import {
   UserSkillGroup,
 } from "../types";
 
+export type CardUpdatePayload = Partial<Card> & {
+  baseUpdatedAt?: string;
+};
+
 export interface KanbanStore {
   // Cards state
   cards: Card[];
@@ -90,6 +94,17 @@ export interface KanbanStore {
   isConversationLoading: boolean;
   conversationAbortController: AbortController | null;
   conversationError: string | null;
+  // Bumped after a chat-stream that ran MCP tools finishes and fetchCards has
+  // returned. Modals watch this to force-resync form fields with the freshly
+  // written card, bypassing the "skip if user has unsaved changes" guard
+  // (server-driven differences should win over the form's stale snapshot).
+  mcpWriteVersion: number;
+  // Bumped after the user clicks Append/Replace on an assistant message and
+  // the apply-message API has merged the new HTML into the card. Modals
+  // watch this to force-resync form fields with the freshly written content,
+  // bypassing the unsaved-changes guard.
+  applyMessageVersion: number;
+  bumpApplyMessageVersion: () => void;
 
   // Background processes state
   backgroundProcesses: BackgroundProcess[];
@@ -108,7 +123,7 @@ export interface KanbanStore {
     cardData: Omit<Card, "id" | "createdAt" | "updatedAt" | "taskNumber" | "completedAt">
   ) => Promise<void>;
   discardDraft: () => void;
-  updateCard: (id: string, updates: Partial<Card>) => Promise<void>;
+  updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
   deleteCard: (id: string) => Promise<void>;
   moveCard: (id: string, newStatus: Status) => Promise<void>;
   selectCard: (card: Card | null) => void;
