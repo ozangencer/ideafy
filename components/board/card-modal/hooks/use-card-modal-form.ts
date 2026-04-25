@@ -42,6 +42,13 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     afterSaveRef.current = afterSave;
   }, [afterSave]);
 
+  // Tracks the `updatedAt` of the card state the form is currently showing.
+  // Auto-save must use this (not selectedCard.updatedAt) as `baseUpdatedAt`
+  // so that when an external write (MCP save_tests, sibling tab) bumps the
+  // card under an open modal with unsynced form state, the server still
+  // detects the auto-save as a stale write and preserves existing content.
+  const formBaseUpdatedAtRef = useRef<string | null>(null);
+
   // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -105,6 +112,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     setPriority(card.priority || "medium");
     setProjectId(card.projectId);
     setAiPlatform(card.aiPlatform ?? null);
+    formBaseUpdatedAtRef.current = card.updatedAt;
   }, []);
 
   const handleClose = useCallback(() => {
@@ -176,7 +184,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         projectId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
-        baseUpdatedAt: selectedCard.updatedAt,
+        baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
       };
       handleClose();
       updateCard(cardId, updates);
@@ -241,5 +249,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     handleForceClose,
     // reset helper
     applyCardToForm,
+    // snapshot ref for optimistic-concurrency on auto-save
+    formBaseUpdatedAtRef,
   };
 }

@@ -142,6 +142,7 @@ export function CardModal({
     handleClose,
     handleForceClose,
     applyCardToForm,
+    formBaseUpdatedAtRef,
   } = form;
 
   // UI state not owned by the form hook
@@ -197,6 +198,7 @@ export function CardModal({
     aiPlatform,
     projects,
     updateCard,
+    formBaseUpdatedAtRef,
     extraFields,
     skipCondition: effectiveSkipCondition,
   });

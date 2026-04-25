@@ -137,6 +137,24 @@ const SECTION_LABEL: Record<SectionType, string> = {
 // message looks like a full rewrite (has headings, enough checkboxes, or
 // comparable length to the existing field), append when it looks like a patch.
 // Existing-empty always defaults to replace (first write).
+// Strip trailing assistant sign-off paragraphs that tell the user to click
+// Append/Replace. These are meta-instructions about the UI, not content the
+// user wants persisted into the card field.
+function stripApplySignoff(content: string): string {
+  let text = content.replace(/\s+$/, "");
+  // Repeatedly peel the last paragraph as long as it looks like a meta sign-off.
+  for (let i = 0; i < 3; i++) {
+    const match = text.match(/(^|\n\n)([^\n][^\n]*?)$/);
+    if (!match) break;
+    const lastPara = match[2];
+    const mentionsApply =
+      /\bAppend\b/i.test(lastPara) && /\bReplace\b/i.test(lastPara);
+    if (!mentionsApply) break;
+    text = text.slice(0, match.index!).replace(/\s+$/, "");
+  }
+  return text;
+}
+
 function pickDefaultMode(
   messageContent: string,
   existingText: string,
@@ -201,10 +219,11 @@ export function ConversationMessage({
     setIsApplying(mode);
     try {
       const field = SECTION_FIELD_MAP[sectionType];
+      const cleanedContent = stripApplySignoff(message.content);
       const res = await fetch(`/api/cards/${cardId}/apply-message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field, mode, content: message.content }),
+        body: JSON.stringify({ field, mode, content: cleanedContent }),
       });
       if (res.ok) {
         setApplied(mode);
@@ -363,7 +382,7 @@ export function ConversationMessage({
 
         {/* Apply to section buttons: Replace + Append, default highlighted */}
         {showApplyButton && (
-          <div className="mt-2 pt-2 border-t border-border/50 flex items-center gap-1">
+          <div className="mt-2 pt-2 border-t border-border/50 flex flex-wrap items-center gap-1 min-w-0">
             <Button
               variant="ghost"
               size="sm"

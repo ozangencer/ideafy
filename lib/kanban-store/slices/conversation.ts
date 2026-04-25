@@ -10,6 +10,9 @@ export const createConversationSlice: StoreSlice<
     | "isConversationLoading"
     | "conversationAbortController"
     | "conversationError"
+    | "mcpWriteVersion"
+    | "applyMessageVersion"
+    | "bumpApplyMessageVersion"
     | "fetchConversation"
     | "sendMessage"
     | "cancelConversation"
@@ -25,6 +28,10 @@ export const createConversationSlice: StoreSlice<
   isConversationLoading: false,
   conversationAbortController: null,
   conversationError: null,
+  mcpWriteVersion: 0,
+  applyMessageVersion: 0,
+  bumpApplyMessageVersion: () =>
+    set((state) => ({ applyMessageVersion: state.applyMessageVersion + 1 })),
 
   fetchConversation: async (cardId, sectionType) => {
     const key = `${cardId}-${sectionType}`;
@@ -200,6 +207,11 @@ export const createConversationSlice: StoreSlice<
                   await get().fetchConversation(cardId, sectionType as SectionType);
                   if (hadToolCalls) {
                     await get().fetchCards();
+                    // Signal to open card modals that the latest selectedCard
+                    // refresh is server-driven (MCP write) and should win over
+                    // any local form state, even if the form thinks it has
+                    // unsaved edits (the diff IS the MCP write).
+                    set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1 }));
                   }
                   // Refresh background processes list
                   get().fetchBackgroundProcesses();

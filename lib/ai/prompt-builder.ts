@@ -29,6 +29,7 @@ export interface CardContext {
 
 // Get allowed tools for non-test sections (test section uses --dangerously-skip-permissions)
 export function getAllowedTools(
+  section: SectionType,
   mentions?: Array<{ type: string; id: string; label: string }>
 ): string[] {
   const base = ["Read", "Grep", "Glob"];
@@ -37,12 +38,27 @@ export function getAllowedTools(
   if (mentions?.length) {
     for (const m of mentions) {
       if (m.type === "mcp" || m.type === "plugin") {
-        base.push(`mcp__${m.id}__*`);
+        if (section === "tests") {
+          base.push(`mcp__${m.id}__*`);
+          continue;
+        }
+
+        // Outside the Tests tab, never expose save_tests/move_card/etc.
+        // Restrict the model to read-only inspection plus the field-appropriate
+        // persistence tools for the active section.
+        base.push(`mcp__${m.id}__get_card`);
+        // Detail/Solution/Opinion intentionally exclude their write tools
+        // (update_card / save_plan / save_opinion). All content writes go
+        // through the chat-UI Apply buttons (append/replace) so the user
+        // controls when existing content is overwritten. Letting the model
+        // call write tools from here re-introduces the silent-overwrite bug.
+        // Status transition (→ in progress on Solution apply) and verdict
+        // parsing (on Opinion apply) are handled by the apply-message route.
       }
     }
   }
 
-  return base;
+  return Array.from(new Set(base));
 }
 
 // Build card context string
@@ -103,7 +119,8 @@ You are in the "${sectionType}" section. In this section you can ONLY:
 - Update the card field using the appropriate MCP tool (update_card, save_plan, save_opinion)
 - Read files for context if needed
 
-You MUST NOT edit, write, or modify any code files. If the user asks you to make code changes, politely explain that code changes can only be made from the "Tests" tab chat. Redirect them there.`;
+You MUST NOT edit, write, or modify any code files. If the user asks you to make code changes, politely explain that code changes can only be made from the "Tests" tab chat. Redirect them there.
+You MUST NOT edit test scenarios from this section. If the user asks to add/remove/change tests, tell them to switch to the "Tests" tab chat and do not call save_tests from here.`;
 }
 
 // Shared MCP tool usage instructions
@@ -111,11 +128,11 @@ export function buildToolUsageContext(section: SectionType): string {
   return `
 
 ## Available MCP Tools
-You have access to these MCP tools for updating this card:
-- save_plan: Save solution plan (markdown) and move card to In Progress
+${section === "tests"
+  ? `You have access to these MCP tools for updating this card:
 - save_tests: Save test scenarios (markdown with checkboxes) and move card to Human Test
-- save_opinion: Save AI opinion with verdict (positive/negative)
-- update_card: Update card fields (title, description, status, complexity, priority, solutionSummary). Do NOT use this for testScenarios — always use save_tests instead, so existing checkbox states are preserved.
+- update_card: Update card fields (title, status, complexity, priority). Do NOT use this for testScenarios — always use save_tests instead, so existing checkbox states are preserved.`
+  : `Content writes for this section happen through the chat-UI Apply buttons (Append / Replace) — not through MCP tools. You do not have a write tool for this field; just respond with your content as markdown and let the user click Apply.`}
 
 ## CRITICAL: Persisting Content
 When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
@@ -123,9 +140,10 @@ Do NOT just respond with text — persist it to the card so it appears in the UI
 This includes when you agree with, refine, or expand on the user's ideas — always save the resulting content.
 Only skip saving for pure clarifying questions or very brief acknowledgments without new content.
 ${section === "solution" ? `
-Do NOT automatically generate test scenarios when saving a solution plan. Only generate tests if the user explicitly asks for it.` : ""}${section === "detail" ? `
-When you refine or improve the description, call update_card with the updated description field.` : ""}${section === "opinion" ? `
-When you produce a complete evaluation/opinion, call save_opinion with the opinion content and verdict.` : ""}${section === "tests" ? `
+Do NOT call save_plan. The user reviews your plan and clicks Append or Replace via the Apply buttons in the chat UI; clicking Apply also moves the card to In Progress automatically when appropriate. If you call save_plan you will silently overwrite their existing solution — that is the destructive bug Apply was built to prevent. Respond with your plan as normal markdown text and let the user click Apply.
+Do NOT automatically generate test scenarios when producing a plan. Only generate tests if the user explicitly asks for it.` : ""}${section === "detail" ? `
+Do NOT call update_card to write the description. The user reviews your reply and decides whether to Append or Replace via the Apply buttons in the chat UI. If you call update_card with a description, you will silently overwrite their existing content — that is the destructive bug Apply was built to prevent. Respond with your refined content as normal markdown text and let the user click Apply.` : ""}${section === "opinion" ? `
+Do NOT call save_opinion. The user reviews your evaluation and clicks Append or Replace via the Apply buttons in the chat UI; the verdict is parsed from your "## Summary Verdict (...)" line automatically when Apply is clicked. If you call save_opinion you will silently overwrite their existing opinion — that is the destructive bug Apply was built to prevent. Respond with your evaluation as normal markdown (include the Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections) and let the user click Apply.` : ""}${section === "tests" ? `
 When you produce test scenarios, call save_tests with the test content in markdown checkbox format. NEVER use update_card for testScenarios — it bypasses checkbox state preservation.
 IMPORTANT: Always APPEND new test scenarios to the existing ones. Never remove existing test scenarios unless the user explicitly asks. Preserve the EXACT markdown format and checked state ([x]) of existing items. Include all existing scenarios plus new additions when calling save_tests. When you only need to append new items after a code change, still call save_tests with the full existing list plus the new items — save_tests will merge checkbox states automatically.` : ""}`;
 }

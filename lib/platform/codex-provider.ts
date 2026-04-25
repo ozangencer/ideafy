@@ -101,14 +101,24 @@ class CodexProvider implements PlatformProvider {
   }
 
   buildStreamArgs(opts: StreamOptions): string[] {
+    // Codex non-interactive exec mode does not honor `--full-auto` for MCP
+    // approvals the same way the interactive CLI does. Use the explicit
+    // dangerous auto-approve flag so MCP tool calls can complete in card chat.
     const automationArgs = opts.skipPermissions
-      ? ["--full-auto"]
-      : ["--full-auto", "--sandbox", "read-only"];
+      ? ["--dangerously-auto-approve-everything"]
+      : ["--dangerously-auto-approve-everything", "--sandbox", "read-only"];
     const dirArgs = opts.addDirs?.flatMap((dir) => ["--add-dir", dir]) ?? [];
 
     if (opts.resumeSessionId) {
       // `codex exec resume` does not currently accept `--sandbox` or `--add-dir`.
-      return ["exec", "resume", opts.resumeSessionId, "--json", "--full-auto", opts.prompt];
+      return [
+        "exec",
+        "resume",
+        opts.resumeSessionId,
+        "--json",
+        "--dangerously-auto-approve-everything",
+        opts.prompt,
+      ];
     }
     return ["exec", "--json", ...automationArgs, ...dirArgs, opts.prompt];
   }

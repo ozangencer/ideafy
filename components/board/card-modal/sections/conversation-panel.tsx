@@ -280,9 +280,12 @@ export function ConversationPanel({
               cardId={cardId}
               sectionType={sectionType}
               existingSectionContent={sectionContent}
-              onApplied={() => {
-                // Refresh cards to pick up the updated field.
-                useKanbanStore.getState().fetchCards();
+              onApplied={async () => {
+                // Refresh cards so selectedCard reflects the merged HTML, then
+                // bump applyMessageVersion to force the modal form to resync
+                // even when there are stale unsaved changes in the editor.
+                await useKanbanStore.getState().fetchCards();
+                useKanbanStore.getState().bumpApplyMessageVersion();
               }}
             />
           ))

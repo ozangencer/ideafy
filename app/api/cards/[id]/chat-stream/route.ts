@@ -24,6 +24,7 @@ import {
   stripHtml,
   buildConversationContext,
 } from "@/lib/ai/prompt-builder";
+import { testScenariosToMarkdown } from "@/lib/markdown";
 
 function processMentions(
   message: string,
@@ -278,8 +279,21 @@ export async function POST(
 
         if (mode === "resume" && existingSession) {
           resumeTargetSessionId = existingSession.cliSessionId;
+          // Resumed sessions only receive the new user message, so the AI
+          // still sees the testScenarios snapshot captured when the session
+          // first spawned. If the user toggled checkboxes (or save_tests ran
+          // via merge) since then, the cached view is stale and the AI
+          // answers questions like "which items are checked?" incorrectly.
+          // Prepend a fresh snapshot on the tests tab so state stays current.
+          let resumeMessage = userMessage;
+          if (sectionType === "tests") {
+            const snapshot = testScenariosToMarkdown(card.testScenarios || "");
+            if (snapshot) {
+              resumeMessage = `[Current test scenarios state — use this, not any earlier version you remember]\n${snapshot}\n\n---\n\n${userMessage}`;
+            }
+          }
           cliArgs = provider.buildStreamArgs({
-            prompt: userMessage,
+            prompt: resumeMessage,
             skipPermissions: isTestAction,
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             resumeSessionId: existingSession.cliSessionId,
@@ -296,7 +310,7 @@ export async function POST(
           cliArgs = provider.buildStreamArgs({
             prompt: fullPrompt,
             skipPermissions: isTestAction,
-            allowedTools: isTestAction ? undefined : getAllowedTools(mentions),
+            allowedTools: isTestAction ? undefined : getAllowedTools(sectionType as SectionType, mentions),
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             newSessionId: freshSpawnSessionId,
           });
