@@ -282,16 +282,10 @@ class OpenCodeProvider implements PlatformProvider {
           }
         }
 
-        if (part.type === "step-finish") {
-          events.push({
-            type: "result",
-            data: JSON.stringify({
-              reason: part.reason,
-              cost: part.cost,
-              tokens: part.tokens,
-            }),
-          });
-        }
+        // step-finish carries per-step usage stats (reason, cost, tokens).
+        // It is metadata, not user-visible content — emitting as "result"
+        // would let the route concatenate the raw JSON into the assistant
+        // message body. Drop it.
 
         return events;
       }
@@ -305,17 +299,7 @@ class OpenCodeProvider implements PlatformProvider {
       }
 
       if (event.type === "step_finish") {
-        const part = event.properties.part as Record<string, unknown> | undefined;
-        if (part?.type === "step-finish") {
-          events.push({
-            type: "result",
-            data: JSON.stringify({
-              reason: part.reason,
-              cost: part.cost,
-              tokens: part.tokens,
-            }),
-          });
-        }
+        // Same reasoning as the message.part.updated step-finish branch above.
         return events;
       }
 

@@ -285,11 +285,22 @@ export const createConversationSlice: StoreSlice<
   },
 
   cancelConversation: () => {
+    // Stop = user-initiated kill. The chat-stream POST's signal-abort handler
+    // intentionally no longer kills the CLI (so modal close / HMR don't drop
+    // the stream), so an explicit DELETE is needed to actually terminate the
+    // backend process. Abort the local fetch afterward to release the reader.
+    const streaming = get().streamingMessage;
+    if (streaming) {
+      const params = new URLSearchParams({ sectionType: streaming.sectionType });
+      void fetch(`/api/cards/${streaming.cardId}/chat-stream?${params.toString()}`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+    }
     const controller = get().conversationAbortController;
     if (controller) {
       controller.abort();
-      set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
     }
+    set({ isConversationLoading: false, streamingMessage: null, conversationAbortController: null });
   },
 
   detachConversation: () => {
