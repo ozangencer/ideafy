@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 import { appResourcesRoot } from "../paths";
 
 export interface McpInvocation {
@@ -34,7 +35,17 @@ export function buildMcpInvocation(): McpInvocation {
     };
   }
 
-  // Dev: tsx runs the TS source directly, reading the repo data/kanban.db.
+  // Dev: prefer the compiled JS runtime so Claude plugin, Codex, Gemini, and
+  // OpenCode all exercise the same MCP artifact. Fall back to tsx only when
+  // the dist bundle is missing during local development.
+  const distEntry = path.resolve(appResourcesRoot(), "mcp-server", "dist", "index.js");
+  if (fs.existsSync(distEntry)) {
+    return {
+      command: "node",
+      args: [distEntry],
+    };
+  }
+
   return {
     command: "npx",
     args: ["tsx", path.resolve(appResourcesRoot(), "mcp-server/index.ts")],
