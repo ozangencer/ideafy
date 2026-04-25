@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import {
   ensureHtml,
+  ensureTestScenariosHtml,
   markdownToTiptapHtml,
   mergeTestCheckState,
   testScenariosToMarkdown,
@@ -60,7 +61,7 @@ export async function POST(
 
   let nextHtml: string;
   if (mode === "replace") {
-    nextHtml = ensureHtml(content);
+    nextHtml = field === "testScenarios" ? ensureTestScenariosHtml(content) : ensureHtml(content);
   } else {
     // Append: reconstruct a markdown payload that represents existing + new,
     // then convert once so formatting stays consistent.
@@ -69,7 +70,7 @@ export async function POST(
       const combined = existingMd
         ? `${existingMd}\n\n${content}`
         : content;
-      nextHtml = markdownToTiptapHtml(combined);
+      nextHtml = ensureTestScenariosHtml(combined);
     } else {
       const existingHtml = (existing as Record<string, string | null>)[field] || "";
       const appendedHtml = markdownToTiptapHtml(content);
@@ -84,15 +85,47 @@ export async function POST(
   }
 
   const now = new Date().toISOString();
-  db.update(schema.cards)
-    .set({ [field]: nextHtml, updatedAt: now })
-    .where(eq(schema.cards.id, id))
-    .run();
+  const updates: Record<string, unknown> = { [field]: nextHtml, updatedAt: now };
+
+  // Status auto-transition: applying a Solution plan (the canonical "I have
+  // a plan" moment) bumps a still-planning card into In Progress, mirroring
+  // the side-effect that save_plan used to provide. Skip when the card is
+  // already past planning so we don't bounce a finished card back.
+  if (field === "solutionSummary" && ["ideation", "backlog", "bugs"].includes(existing.status)) {
+    updates.status = "progress";
+  }
+
+  // Verdict parsing: applying an Opinion populates aiVerdict from the
+  // "## Summary Verdict (...)" line in the markdown content. Mirrors the
+  // verdict-derivation save_opinion used to do server-side. Leaves verdict
+  // untouched when the content has no recognizable verdict line.
+  if (field === "aiOpinion") {
+    const verdict = parseVerdict(content);
+    if (verdict) updates.aiVerdict = verdict;
+  }
+
+  db.update(schema.cards).set(updates).where(eq(schema.cards.id, id)).run();
 
   return NextResponse.json({
     success: true,
     field,
     mode,
     label: FIELD_LABEL[field],
+    statusChangedTo: updates.status,
+    verdictSet: updates.aiVerdict,
   });
+}
+
+/**
+ * Extract verdict from "## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No)"
+ * style markdown headings. Maps Strong Yes/Yes → positive, No/Strong No →
+ * negative. "Maybe" alone is ambiguous (depends on score) so we leave it null;
+ * the user can flip the verdict manually if they want.
+ */
+function parseVerdict(markdown: string): "positive" | "negative" | null {
+  const headingMatch = markdown.match(/##\s*Summary\s*Verdict[^\n]*/i);
+  const line = headingMatch?.[0] ?? "";
+  if (/strong\s*yes|(^|[^a-z])yes([^a-z]|$)/i.test(line)) return "positive";
+  if (/strong\s*no|(^|[^a-z])no([^a-z]|$)/i.test(line)) return "negative";
+  return null;
 }

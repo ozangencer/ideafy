@@ -6,6 +6,41 @@ marked.setOptions({
   breaks: true,
 });
 
+function convertCheckboxListHtmlToTaskList(html: string): string {
+  if (!html) return html;
+
+  return html.replace(
+    /<ul\b([^>]*)>\s*((?:<li\b[^>]*>\s*<input[^>]*type="checkbox"[^>]*>[\s\S]*?<\/li>\s*)+)<\/ul>/gi,
+    (_match, attrs: string, items: string) => {
+      if (/data-type\s*=\s*"taskList"/i.test(attrs)) {
+        return `<ul${attrs}>${items}</ul>`;
+      }
+
+      const taskItems = items.replace(
+        /<li\b([^>]*)>\s*<input([^>]*)type="checkbox"([^>]*)>\s*([\s\S]*?)<\/li>/gi,
+        (
+          _itemMatch: string,
+          liAttrs: string,
+          before: string,
+          after: string,
+          text: string
+        ) => {
+          if (/data-type\s*=\s*"taskItem"/i.test(liAttrs)) {
+            return `<li${liAttrs}><input${before}type="checkbox"${after}>${text}</li>`;
+          }
+          const isChecked =
+            /\bchecked\b/i.test(before) || /\bchecked\b/i.test(after);
+          const trimmed = text.trim();
+          const paragraph = /<p\b/i.test(trimmed) ? trimmed : `<p>${trimmed}</p>`;
+          return `<li data-type="taskItem" data-checked="${isChecked}"><label><input type="checkbox"${isChecked ? ' checked="checked"' : ""}><span></span></label><div>${paragraph}</div></li>`;
+        }
+      );
+
+      return `<ul data-type="taskList">${taskItems}</ul>`;
+    }
+  );
+}
+
 /**
  * Convert markdown to Tiptap-compatible HTML with TaskList support
  * Used for description, solutionSummary, and testScenarios fields
@@ -18,29 +53,7 @@ export function markdownToTiptapHtml(markdown: string): string {
   // Convert with marked
   let html = marked.parse(markdown) as string;
 
-  // Convert standard checkbox lists to Tiptap TaskList format
-  // Match: <ul> containing <li><input ...checkbox...> items
-  html = html.replace(
-    /<ul>\s*((?:<li><input[^>]*type="checkbox"[^>]*>\s*[^<]*<\/li>\s*)+)<\/ul>/gi,
-    (match, items) => {
-      const taskItems = items.replace(
-        /<li><input([^>]*)type="checkbox"([^>]*)>\s*([^<]*)<\/li>/gi,
-        (
-          _itemMatch: string,
-          before: string,
-          after: string,
-          text: string
-        ) => {
-          const isChecked =
-            before.includes("checked") || after.includes("checked");
-          return `<li data-type="taskItem" data-checked="${isChecked}"><label><input type="checkbox"${isChecked ? ' checked="checked"' : ""}><span></span></label><div><p>${text.trim()}</p></div></li>`;
-        }
-      );
-      return `<ul data-type="taskList">${taskItems}</ul>`;
-    }
-  );
-
-  return html;
+  return convertCheckboxListHtmlToTaskList(html);
 }
 
 /**
@@ -53,7 +66,7 @@ export function markdownToTiptapHtml(markdown: string): string {
  */
 export function normalizeTestsHtml(html: string): string {
   if (!html) return html;
-  return html.replace(
+  return convertCheckboxListHtmlToTaskList(html).replace(
     /<ul\b([^>]*)>([\s\S]*?)<\/ul>/gi,
     (match, attrs: string, inner: string) => {
       if (/data-type\s*=\s*"taskList"/i.test(attrs)) return match;
@@ -285,6 +298,60 @@ export function mergeTestCheckState(existingHtml: string, newHtml: string): stri
 }
 
 /**
+ * Union-merge a stale form write with the latest stored test scenarios.
+ * Use when a client submits testScenarios with a stale `baseUpdatedAt`: the
+ * form couldn't have seen items added after it loaded, so missing-from-form
+ * items must be preserved. For items the form DOES know about, it may have
+ * toggled the checkbox — adopt that state. Items present only in the form
+ * are appended at the end (rare: user manually added while offline).
+ */
+export function mergeStaleTestWrite(existingHtml: string, formHtml: string): string {
+  const existingItems = extractTaskItems(existingHtml);
+  if (existingItems.length === 0) return normalizeTestsHtml(formHtml);
+  if (!formHtml) return existingHtml;
+
+  const formItems = extractTaskItems(formHtml);
+  const formKeys = formItems.map((i) => i.normalized);
+  const formByKey = new Map(formItems.map((i) => [i.normalized, i] as const));
+
+  const existingNormalized = normalizeTestsHtml(existingHtml);
+
+  const updatedExisting = existingNormalized.replace(
+    /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
+    (fullMatch, prefix, middle, text, suffix) => {
+      const normalized = normalizeTaskText(text);
+      if (!normalized) return fullMatch;
+      const matchedKey = findFuzzyMatch(normalized, formKeys);
+      if (!matchedKey) return fullMatch;
+      const formState = formByKey.get(matchedKey);
+      if (!formState) return fullMatch;
+      const result = `<li${prefix}${formState.checked}${middle}${text}${suffix}`;
+      return result.replace(
+        /<input type="checkbox"(?:\s+checked="checked")?>/,
+        formState.checked
+          ? '<input type="checkbox" checked="checked">'
+          : '<input type="checkbox">'
+      );
+    }
+  );
+
+  const existingKeys = existingItems.map((i) => i.normalized);
+  const toAppend = formItems.filter(
+    (f) => !findFuzzyMatch(f.normalized, existingKeys)
+  );
+  if (toAppend.length === 0) return updatedExisting;
+
+  const appendHtml = toAppend
+    .map((f) => {
+      const checkedAttr = f.checked ? ' checked="checked"' : "";
+      return `<li data-type="taskItem" data-checked="${f.checked}"><label><input type="checkbox"${checkedAttr}><span></span></label><div><p>${f.rawText}</p></div></li>`;
+    })
+    .join("\n");
+
+  return updatedExisting.replace(/<\/ul>\s*$/i, `${appendHtml}</ul>`);
+}
+
+/**
  * Convert Tiptap-flavored test scenario HTML back to markdown with checkbox
  * state preserved. Used to feed test scenarios into AI prompts without losing
  * [x]/[ ] information — `stripHtml` flattens everything to plain text and the
@@ -298,19 +365,24 @@ export function testScenariosToMarkdown(html: string): string {
   if (!html) return "";
 
   const parts: string[] = [];
-  const tokenRegex = /<h([1-6])[^>]*>([\s\S]*?)<\/h[1-6]>|<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>([\s\S]*?)<\/li>|<p[^>]*>([\s\S]*?)<\/p>/gi;
+  // Match any taskItem li regardless of attribute order; extract checked state
+  // from the data-checked attribute in a separate scan so callers don't depend
+  // on data-type appearing before data-checked.
+  const tokenRegex = /<h([1-6])[^>]*>([\s\S]*?)<\/h[1-6]>|<li([^>]*data-type="taskItem"[^>]*)>([\s\S]*?)<\/li>|<p[^>]*>([\s\S]*?)<\/p>/gi;
 
   let match;
   while ((match = tokenRegex.exec(html)) !== null) {
-    const [, hLevel, hText, checked, liBody, pText] = match;
+    const [, hLevel, hText, liAttrs, liBody, pText] = match;
     if (hLevel) {
       const level = Math.min(parseInt(hLevel, 10), 6);
       const text = hText.replace(/<[^>]*>/g, "").trim();
       if (text) parts.push(`${"#".repeat(level)} ${text}`);
-    } else if (checked !== undefined) {
+    } else if (liAttrs !== undefined) {
+      const checkedMatch = liAttrs.match(/data-checked="(true|false)"/i);
+      const checked = checkedMatch ? checkedMatch[1] === "true" : false;
       const inner = liBody.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
       const text = (inner ? inner[1] : liBody).replace(/<[^>]*>/g, "").trim();
-      if (text) parts.push(`- [${checked === "true" ? "x" : " "}] ${text}`);
+      if (text) parts.push(`- [${checked ? "x" : " "}] ${text}`);
     } else if (pText) {
       // Skip paragraphs emitted inside taskItem <div><p>…</p></div> — those are
       // already handled by the li branch. We detect via tokenRegex ordering:
@@ -347,4 +419,21 @@ export function ensureHtml(content: string): string {
     return content;
   }
   return markdownToTiptapHtml(content);
+}
+
+/**
+ * Test scenarios are especially sensitive because a temporary fallback to
+ * plain checkbox HTML or plain <ul>/<li> would make checkbox-preservation
+ * logic blind. Always normalize incoming HTML to TipTap's taskList schema.
+ */
+export function ensureTestScenariosHtml(content: string): string {
+  if (!content || content.trim() === "") {
+    return "";
+  }
+
+  if (!isHtml(content)) {
+    return normalizeTestsHtml(markdownToTiptapHtml(content));
+  }
+
+  return normalizeTestsHtml(convertCheckboxListHtmlToTaskList(content));
 }

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { eq, desc, isNotNull, and, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
-import { ensureHtml } from "@/lib/markdown";
+import { ensureHtml, ensureTestScenariosHtml } from "@/lib/markdown";
 
 // Processing timeout in milliseconds (30 minutes)
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     title,
     description: ensureHtml(body.description || ""),
     solutionSummary: ensureHtml(body.solutionSummary || ""),
-    testScenarios: ensureHtml(body.testScenarios || ""),
+    testScenarios: ensureTestScenariosHtml(body.testScenarios || ""),
     aiOpinion: ensureHtml(body.aiOpinion || ""),
     aiVerdict: body.aiVerdict || null,
     status: body.status || "backlog",

@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
-import { ensureHtml, mergeTestCheckState } from "@/lib/markdown";
+import {
+  ensureHtml,
+  ensureTestScenariosHtml,
+  mergeStaleTestWrite,
+  mergeTestCheckState,
+} from "@/lib/markdown";
 
 export async function GET(
   _request: NextRequest,
@@ -83,6 +88,9 @@ export async function PUT(
   }
 
   const now = new Date().toISOString();
+  const baseUpdatedAt =
+    typeof body.baseUpdatedAt === "string" ? body.baseUpdatedAt : null;
+  const isStaleWrite = !!(baseUpdatedAt && baseUpdatedAt !== existing.updatedAt);
   const newProjectId = body.projectId !== undefined ? body.projectId : existing.projectId;
   let taskNumber = existing.taskNumber;
 
@@ -124,13 +132,35 @@ export async function PUT(
     taskNumber = null;
   }
 
+  const nextTestsHtml =
+    body.testScenarios !== undefined
+      ? ensureTestScenariosHtml(body.testScenarios)
+      : existing.testScenarios;
+
+  let resolvedTestScenarios = existing.testScenarios;
+  if (body.testScenarios !== undefined) {
+    if (isStaleWrite && existing.testScenarios) {
+      // Stale client couldn't have seen items added after its read — union-
+      // merge so we keep every existing item (even ones missing from the
+      // form) while still accepting checkbox toggles the form made on items
+      // it did know about.
+      resolvedTestScenarios = mergeStaleTestWrite(
+        existing.testScenarios,
+        nextTestsHtml
+      );
+    } else {
+      resolvedTestScenarios = mergeTestCheckState(
+        existing.testScenarios || "",
+        nextTestsHtml
+      );
+    }
+  }
+
   const updatedCard = {
     title: body.title ?? existing.title,
     description: body.description !== undefined ? ensureHtml(body.description) : existing.description,
     solutionSummary: body.solutionSummary !== undefined ? ensureHtml(body.solutionSummary) : existing.solutionSummary,
-    testScenarios: body.testScenarios !== undefined
-      ? mergeTestCheckState(existing.testScenarios || "", ensureHtml(body.testScenarios))
-      : existing.testScenarios,
+    testScenarios: resolvedTestScenarios,
     aiOpinion: body.aiOpinion !== undefined ? ensureHtml(body.aiOpinion) : existing.aiOpinion,
     aiVerdict: body.aiVerdict !== undefined ? body.aiVerdict : existing.aiVerdict,
     status: body.status ?? existing.status,

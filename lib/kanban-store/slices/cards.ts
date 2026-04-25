@@ -1,6 +1,6 @@
 import { Card, Status } from "../../types";
 import { nowIso, parseJson, replaceCardById, updateCardById } from "../helpers";
-import { KanbanStore, StoreSlice } from "../types";
+import { CardUpdatePayload, KanbanStore, StoreSlice } from "../types";
 
 const createDraftCard = (status: Status, projectId: string | null, projectFolder: string): Card => ({
   id: `draft-${Date.now()}`,
@@ -174,10 +174,12 @@ export const createCardsSlice: StoreSlice<
   discardDraft: () => set({ draftCard: null, selectedCard: null, isModalOpen: false }),
 
   updateCard: async (id, updates) => {
+    const { baseUpdatedAt: _baseUpdatedAt, ...optimisticUpdates } =
+      updates as CardUpdatePayload;
     const previousCards = get().cards;
     set((state) => ({
       cards: updateCardById(state.cards, id, {
-        ...updates,
+        ...optimisticUpdates,
         updatedAt: nowIso(),
       }),
     }));

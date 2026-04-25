@@ -90,8 +90,11 @@ export function useCardModalFormReset(options: UseCardModalFormResetOptions) {
       applyCardToForm(selectedCard);
       applyCardToGit(selectedCard);
 
-      // Auto-open Test tab when card is in Human Test column
-      if (selectedCard.status === "test") {
+      // Auto-open Test tab when card is in Human Test column — but only on
+      // initial open. Re-running this on every resync (e.g. after Append/
+      // Replace bumps applyMessageVersion) would yank the user out of the
+      // tab they're actively working in.
+      if (isNewCard && selectedCard.status === "test") {
         setActiveTab("tests");
       }
 

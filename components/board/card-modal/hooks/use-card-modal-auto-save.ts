@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { AiPlatform, Card, Complexity, Priority, Project, Status } from "@/lib/types";
+import type { CardUpdatePayload } from "@/lib/kanban-store/types";
 
 interface UseCardModalAutoSaveOptions {
   selectedCard: Card | null;
@@ -19,7 +20,14 @@ interface UseCardModalAutoSaveOptions {
   projectId: string | null;
   aiPlatform: AiPlatform | null;
   projects: Project[];
-  updateCard: (id: string, updates: Partial<Card>) => Promise<void>;
+  updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
+  /**
+   * Ref holding the `updatedAt` of the card state currently reflected in
+   * the form. Use this (not the live selectedCard.updatedAt) as
+   * `baseUpdatedAt` so external writes under an unsynced modal still look
+   * stale to the server.
+   */
+  formBaseUpdatedAtRef: MutableRefObject<string | null>;
   /**
    * Extra fields merged into the auto-save payload. Evaluated lazily at
    * save time so consumers don't need to include these values in the
@@ -51,6 +59,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
     aiPlatform,
     projects,
     updateCard,
+    formBaseUpdatedAtRef,
     extraFields,
     skipCondition,
   } = options;
@@ -109,6 +118,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
         projectId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+        baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
         ...extras,
       }).finally(() => {
         setTimeout(() => {
