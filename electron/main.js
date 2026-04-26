@@ -87,6 +87,25 @@ function resolveStandaloneServer() {
   return path.join(process.resourcesPath, "app-next", "server.js");
 }
 
+// Electron always ships a "<ProductName> Helper.app" inside Contents/Frameworks
+// for renderer/utility processes. Its Info.plist has LSUIElement=1, so any
+// child we spawn through it stays out of the dock. We piggyback on this for
+// our Next server + MCP child processes — no custom helper bundle required.
+function resolvePackagedHelperBinary() {
+  if (!isPackaged) return null;
+  const productFilename = path.basename(process.execPath);
+  const helperBundle = `${productFilename} Helper`;
+  return path.join(
+    process.resourcesPath,
+    "..",
+    "Frameworks",
+    `${helperBundle}.app`,
+    "Contents",
+    "MacOS",
+    helperBundle
+  );
+}
+
 async function startNextServer() {
   PORT = String(await pickPort());
   DEV_URL = `http://${HOST}:${PORT}`;
@@ -110,10 +129,21 @@ async function startNextServer() {
     // Packaged: run the standalone server under Electron's bundled Node.
     // ELECTRON_RUN_AS_NODE disables Chromium init for this child process.
     const serverPath = resolveStandaloneServer();
-    // Drizzle migrations + skills are small, read-only files — bundle them
-    // alongside the server outside asar so fs.readFileSync just works.
     const packagedResources = path.join(process.resourcesPath, "app-next");
-    nextProcess = spawn(process.execPath, [serverPath], {
+
+    // Use the renderer/utility Helper bundle's binary as the spawn target
+    // instead of the parent app binary. Both share the same Electron Mach-O,
+    // but the Helper.app's Info.plist already has LSUIElement=1 — so the
+    // child process never registers a dock entry. process.execPath would
+    // bring up a generic "exec" icon next to the main app icon for as long
+    // as the Next server runs. Falls back to process.execPath when the
+    // helper binary is missing (very old custom builds).
+    const helperBinary = resolvePackagedHelperBinary();
+    const spawnTarget = helperBinary && fs.existsSync(helperBinary)
+      ? helperBinary
+      : process.execPath;
+
+    nextProcess = spawn(spawnTarget, [serverPath], {
       cwd: path.dirname(serverPath),
       stdio: "inherit",
       env: buildChildEnv({
@@ -127,10 +157,10 @@ async function startNextServer() {
         // without relying on asar-suffix heuristics.
         IDEAFY_PACKAGED: "1",
         // Absolute path to the Electron binary + the compiled MCP server,
-        // used when we generate MCP invocation config for Claude Desktop.
-        // Paths are stable: Electron is at Contents/MacOS/, MCP at
-        // Contents/Resources/mcp-server/dist/index.js.
-        IDEAFY_ELECTRON_EXEC: process.execPath,
+        // used when we generate MCP invocation config for Claude Code,
+        // Codex, Gemini, and OpenCode. Pointing at the Helper bundle keeps
+        // those MCP children out of the dock too.
+        IDEAFY_ELECTRON_EXEC: spawnTarget,
         IDEAFY_MCP_ENTRY: path.join(process.resourcesPath, "mcp-server", "dist", "index.js"),
       }),
     });
