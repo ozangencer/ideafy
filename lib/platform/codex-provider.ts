@@ -149,11 +149,23 @@ class CodexProvider implements PlatformProvider {
         return [];
       }
 
-      // Handle item.started - command execution starting (tool use indicator)
+      // Surface tool starts as soon as Codex announces them so the UI's
+      // Live Activity strip lights up while the tool is still running.
       if (json.type === "item.started" && json.item) {
         const item = json.item;
         if (item.type === "command_execution" && item.command) {
           events.push({ type: "tool_use", data: { name: "command", input: item.command } });
+        }
+        if (item.type === "mcp_tool_call") {
+          const name = item.tool || item.name || "mcp";
+          const server = item.server ? `${item.server}.` : "";
+          events.push({
+            type: "tool_use",
+            data: { name: `${server}${name}`, input: item.arguments || {} },
+          });
+        }
+        if (item.type === "web_search") {
+          events.push({ type: "tool_use", data: { name: "web_search", input: { query: item.query || "" } } });
         }
       }
 
@@ -187,6 +199,31 @@ class CodexProvider implements PlatformProvider {
         // Function call output (tool result)
         if (item.type === "function_call_output") {
           events.push({ type: "tool_result", data: { name: item.name || "", output: (item.output || "").slice(0, 200) } });
+        }
+
+        // MCP tool call completion. Codex emits a single item.completed for the
+        // whole call (no separate function_call_output), so this is also where
+        // the tool finishes — carry over the server-prefixed name so the slice
+        // can match it against the tool_use we emitted at item.started.
+        if (item.type === "mcp_tool_call") {
+          const name = item.tool || item.name || "mcp";
+          const server = item.server ? `${item.server}.` : "";
+          const output = item.error?.message
+            ? `error: ${item.error.message}`
+            : typeof item.result === "string"
+              ? item.result
+              : JSON.stringify(item.result ?? "");
+          events.push({
+            type: "tool_result",
+            data: { name: `${server}${name}`, output: output.slice(0, 200) },
+          });
+        }
+
+        if (item.type === "web_search") {
+          events.push({
+            type: "tool_result",
+            data: { name: "web_search", output: (item.action?.query || "").slice(0, 200) },
+          });
         }
       }
 
