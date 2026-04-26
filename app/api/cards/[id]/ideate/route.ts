@@ -57,7 +57,7 @@ export async function POST(
     );
   }
 
-  let prompt = buildIdeationPrompt(card);
+  let prompt = buildIdeationPrompt(card, project?.voice as never);
 
   // Extract and save images for CLI context
   const savedImages = saveCardImagesToTemp(card.id, card);

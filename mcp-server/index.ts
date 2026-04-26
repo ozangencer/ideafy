@@ -643,7 +643,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "save_plan",
-        description: "Save a solution plan to a card and move it to In Progress. Use this when you've completed planning a task.",
+        description: `Save a solution plan to a card and move it to In Progress. Use this when you've completed planning a task.
+
+VOICE CONTRACT (mandatory — adapt your prose to match the project's voice):
+
+Before drafting the plan, call get_card to read the project's voice. Voice changes ONLY the tone, never the technical content — file paths, change lists, and trade-offs MUST appear in all three voices.
+
+- entrepreneur — Plain prose. Lead with user impact and "why". Name the files/areas that change in human terms ("the login flow, the session check"), but skip line numbers and snippets. Trade-offs in one sentence each.
+- builder (default) — Plain technical paragraphs grouped by feature area. Name file paths inline. End with a short Files line. No spec bullets unless a step has 5+ sub-changes.
+- engineer — Numbered spec steps with file:line scope, function/symbol names, code snippets where they clarify, and explicit trade-offs. End with a Changed Files table (| File | Change |).
+
+Pass the voice you used as the optional voice parameter so the server can record provenance.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -653,7 +663,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             solutionSummary: {
               type: "string",
-              description: "Detailed implementation plan in markdown. MUST include: (1) Brief summary of the approach, (2) Current architecture understanding with relevant code flow (e.g. `Settings UI → POST /api/... → provider.method()`), (3) Step-by-step implementation with specific file paths, function names, and code snippets showing the planned changes, (4) Changed files table (| File | Change |), (5) Important notes or caveats. Write prose-level detail with code examples, not just headings or bullet points.",
+              description: "Detailed implementation plan in markdown. MUST include: (1) Brief summary of the approach, (2) Current architecture understanding with relevant code flow (e.g. `Settings UI → POST /api/... → provider.method()`), (3) Step-by-step implementation with specific file paths, function names, and code snippets showing the planned changes, (4) Changed files table (| File | Change |), (5) Important notes or caveats. Write prose-level detail with code examples, not just headings or bullet points. Adapt the tone to the project's voice (see tool description).",
+            },
+            voice: {
+              type: "string",
+              enum: ["entrepreneur", "builder", "engineer"],
+              description: "Optional. The voice you used when writing this plan. Should match the project's voice (read via get_card). Defaults to 'builder' if omitted.",
             },
           },
           required: ["id", "solutionSummary"],
@@ -686,6 +701,11 @@ Bad examples to avoid:
 - \`- [ ] mergeTestCheckState preserves state.\` (abstract, no action)
 - \`- [ ] Works correctly.\` (unobservable)
 
+VOICE ACCENT (apply on top of the style contract — read project's voice via get_card):
+- entrepreneur — keep step descriptions in plain language, reference UI labels users see, skip implementation jargon entirely.
+- builder (default) — UI labels with the occasional technical hint when it helps reproduction. Still imperative manual steps.
+- engineer — after each manual scenario you may add the related code path or function name in parentheses if it speeds debugging, but the step itself stays a manual instruction.
+
 Shrink guard: if the card already has scenarios, your new list must retain ≥50% of them (fuzzy text match). Otherwise save_tests will reject your call with an error — always include existing scenarios plus your additions (append-only).`,
         inputSchema: {
           type: "object",
@@ -696,7 +716,12 @@ Shrink guard: if the card already has scenarios, your new list must retain ≥50
             },
             testScenarios: {
               type: "string",
-              description: "Test scenarios in markdown format with checkboxes (- [ ] format)",
+              description: "Test scenarios in markdown format with checkboxes (- [ ] format). Adapt the voice accent to the project (see tool description).",
+            },
+            voice: {
+              type: "string",
+              enum: ["entrepreneur", "builder", "engineer"],
+              description: "Optional. The voice you used when writing these scenarios. Should match the project's voice (read via get_card). Defaults to 'builder' if omitted.",
             },
           },
           required: ["id", "testScenarios"],
@@ -704,7 +729,19 @@ Shrink guard: if the card already has scenarios, your new list must retain ≥50
       },
       {
         name: "save_opinion",
-        description: "Save AI opinion to a card after interactive ideation session. MUST include all required sections.",
+        description: `Save AI opinion to a card after interactive ideation session. MUST include all required sections.
+
+VOICE CONTRACT (mandatory — adapt the lens AND the prose to the project's voice):
+
+Before drafting, call get_card to read the project's voice. The required section structure is identical across voices, but what each section emphasizes changes:
+
+- entrepreneur — Lead with user impact, scope creep, MVP fit, friction. Concerns and Recommendations focus on what users will or won't notice, not on race conditions or refactor opportunities. Plain prose; no file paths.
+- builder (default) — Balance product and technical lenses. Name key risks (race conditions, schema drift) as 1-line callouts; mention rough complexity in plain words. File names appear inline only when they meaningfully shape the verdict.
+- engineer — Lead with technical risk: race conditions, n+1, schema drift, API contract breaks, perf cliffs, refactor opportunities, testability and dependency cost. File:line references welcome. Product framing is secondary.
+
+All three voices still produce the same Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections — voice changes the prose inside, not the schema.
+
+Pass the voice you used as the optional voice parameter so the server can record provenance.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -714,12 +751,17 @@ Shrink guard: if the card already has scenarios, your new list must retain ≥50
             },
             aiOpinion: {
               type: "string",
-              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low/medium/high] - reasoning), ## Final Score ([X/10] - justification)",
+              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low/medium/high] - reasoning), ## Final Score ([X/10] - justification). Adapt the prose inside each section to the project's voice (see tool description).",
             },
             aiVerdict: {
               type: "string",
               enum: ["positive", "negative"],
               description: "The verdict based on Summary Verdict: positive (Strong Yes, Yes, Maybe with score >= 6) or negative (No, Strong No, Maybe with score < 6)",
+            },
+            voice: {
+              type: "string",
+              enum: ["entrepreneur", "builder", "engineer"],
+              description: "Optional. The voice you used when writing this opinion. Should match the project's voice (read via get_card). Defaults to 'builder' if omitted.",
             },
           },
           required: ["id", "aiOpinion"],
@@ -821,6 +863,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const rawUseWorktree = (card as unknown as { useWorktree: number | null }).useWorktree;
         (card as unknown as { useWorktree: boolean | null }).useWorktree =
           normalizeUseWorktree(rawUseWorktree);
+
+        // Attach the project's voice so the calling AI can match its tone
+        // without a second tool call. Defaults to 'builder' when missing.
+        const projectRow = card.projectId
+          ? (db.prepare(`SELECT voice FROM projects WHERE id = ?`).get(card.projectId) as { voice: string | null } | undefined)
+          : undefined;
+        const voice = (projectRow?.voice ?? "builder") as "entrepreneur" | "builder" | "engineer";
+        (card as unknown as { project: { voice: string } }).project = { voice };
 
         // Extract images from HTML fields
         const { cleanedCard, images } = extractCardImages(card);
@@ -1538,7 +1588,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const project = db.prepare(`
           SELECT
             id, name, folder_path as folderPath, id_prefix as idPrefix,
-            color, next_task_number as nextTaskNumber
+            color, next_task_number as nextTaskNumber,
+            voice
           FROM projects
           WHERE folder_path = ?
         `).get(folderPath) as {
@@ -1548,6 +1599,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           idPrefix: string;
           color: string;
           nextTaskNumber: number;
+          voice: string | null;
         } | undefined;
 
         if (!project) {

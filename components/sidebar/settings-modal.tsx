@@ -310,10 +310,26 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const platformOption = AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform);
 
   const generalTabBody = (
-    <div className="grid gap-6 py-4 px-1">
+    <div className="grid gap-3 py-3 px-1">
           {/* Appearance */}
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Appearance</label>
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-sm font-medium">Appearance</label>
+              {activeTheme === "light" && (
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={pureWhite}
+                    onChange={(e) => {
+                      setPureWhite(e.target.checked);
+                      setPureWhiteEnabled(e.target.checked);
+                    }}
+                    className="h-3.5 w-3.5 cursor-pointer"
+                  />
+                  Pure white
+                </label>
+              )}
+            </div>
             <Select
               value={activeTheme === "light" ? "paper" : "dark"}
               onValueChange={(value) => setTheme(value === "paper" ? "light" : "dark")}
@@ -326,32 +342,16 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                 <SelectItem value="dark">Warm dark</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Paper is Ideafy&apos;s default light mode — a warm cream tone tuned for thinking sessions.
-            </p>
-            {activeTheme === "light" && (
-              <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={pureWhite}
-                  onChange={(e) => {
-                    setPureWhite(e.target.checked);
-                    setPureWhiteEnabled(e.target.checked);
-                  }}
-                  className="h-3.5 w-3.5 cursor-pointer"
-                />
-                Use pure white instead of paper cream
-              </label>
-            )}
           </div>
 
-          <div className="border-t border-border" />
-
           {/* AI Platform */}
-          <div className="grid gap-2">
-            <label htmlFor="aiPlatform" className="text-sm font-medium">
-              AI Platform
-            </label>
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="aiPlatform" className="text-sm font-medium">AI Platform</label>
+              <span className="text-xs text-muted-foreground truncate">
+                {platformOption?.description || ""}
+              </span>
+            </div>
             <div className="flex gap-2">
               <Select
                 value={aiPlatform}
@@ -390,78 +390,73 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                 )}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {platformOption?.description || "Select the AI coding CLI to use"}
-            </p>
           </div>
 
-          {/* Skills Path - only if platform supports skills */}
-          {capabilities?.supportsSkills && (
-            <div className="grid gap-2">
-              <label htmlFor="skillsPath" className="text-sm font-medium">
-                Skills Directory
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  id="skillsPath"
-                  value={skillsPath}
-                  onChange={(e) => setSkillsPath(e.target.value)}
-                  placeholder="~/.claude/skills"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleFolderPick("skills")}
-                  disabled={isPickingSkillsFolder}
-                  title="Browse folders"
-                >
-                  <Folder className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Path to skills directory
-              </p>
+          {/* Skills + MCP paths in 2-col grid when both present */}
+          {(capabilities?.supportsSkills || capabilities?.supportsMcp) && (
+            <div className={`grid gap-3 ${capabilities?.supportsSkills && capabilities?.supportsMcp ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+              {capabilities?.supportsSkills && (
+                <div className="grid gap-1.5 min-w-0">
+                  <label htmlFor="skillsPath" className="text-sm font-medium">Skills Directory</label>
+                  <div className="flex gap-1.5">
+                    <Input
+                      id="skillsPath"
+                      value={skillsPath}
+                      onChange={(e) => setSkillsPath(e.target.value)}
+                      placeholder="~/.claude/skills"
+                      className="flex-1 min-w-0"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleFolderPick("skills")}
+                      disabled={isPickingSkillsFolder}
+                      title="Browse folders"
+                    >
+                      <Folder className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {capabilities?.supportsMcp && (
+                <div className="grid gap-1.5 min-w-0">
+                  <label htmlFor="mcpConfigPath" className="text-sm font-medium">
+                    MCP Config <span className="text-xs text-muted-foreground font-normal">({capabilities.mcpConfigFormat === "toml" ? "TOML" : "JSON"})</span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    <Input
+                      id="mcpConfigPath"
+                      value={mcpConfigPath}
+                      onChange={(e) => setMcpConfigPath(e.target.value)}
+                      placeholder={mcpConfigPath}
+                      className="flex-1 min-w-0"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleFolderPick("mcp")}
+                      disabled={isPickingMcpFile}
+                      title="Browse files"
+                    >
+                      <Folder className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* MCP Config Path - only if platform supports MCP */}
-          {capabilities?.supportsMcp && (
-            <div className="grid gap-2">
-              <label htmlFor="mcpConfigPath" className="text-sm font-medium">
-                MCP Configuration File
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  id="mcpConfigPath"
-                  value={mcpConfigPath}
-                  onChange={(e) => setMcpConfigPath(e.target.value)}
-                  placeholder={mcpConfigPath}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleFolderPick("mcp")}
-                  disabled={isPickingMcpFile}
-                  title="Browse files"
-                >
-                  <Folder className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Path to MCP configuration {capabilities.mcpConfigFormat === "toml" ? "TOML" : "JSON"} file
-              </p>
+          {/* Terminal App */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="terminalApp" className="text-sm font-medium">Terminal Application</label>
+              {terminalApp === "ghostty" && (
+                <span className="text-xs text-muted-foreground truncate">Opens via AppleScript</span>
+              )}
             </div>
-          )}
-
-          {/* Terminal App Selection */}
-          <div className="grid gap-2">
-            <label htmlFor="terminalApp" className="text-sm font-medium">
-              Terminal Application
-            </label>
             <Select
               value={terminalApp}
               onValueChange={(value) => setTerminalApp(value as TerminalApp)}
@@ -477,87 +472,80 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {terminalApp === "ghostty"
-                ? "Ghostty will open a new window and run the command via AppleScript"
-                : "Terminal to use for opening coding sessions"}
-            </p>
           </div>
 
           {aiPlatform === "claude" && (
-            <>
-              <div className="border-t border-border" />
-
-              <div className="grid gap-2">
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3">
                 <label className="text-sm font-medium">Claude Code plugin</label>
-                <p className="text-xs text-muted-foreground mb-2">
+                <span className="text-xs text-muted-foreground truncate">
                   {pluginStatus?.installed
-                    ? `Installed${pluginStatus.version ? ` v${pluginStatus.version}` : ""} · ${
-                        pluginStatus.enabled ? "enabled" : "disabled"
-                      }`
-                    : "MCP tools, phase-aware hooks, and workflow skills as a single Claude Code plugin."}
-                </p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {!pluginStatus?.installed ? (
+                    ? `Installed${pluginStatus.version ? ` v${pluginStatus.version}` : ""} · ${pluginStatus.enabled ? "enabled" : "disabled"}`
+                    : "MCP + hooks + skills bundle"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {!pluginStatus?.installed ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePluginAction("install")}
+                    disabled={isPluginBusy}
+                    className="gap-1.5"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isPluginBusy ? "animate-spin" : ""}`} />
+                    {isPluginBusy ? "Installing…" : "Install"}
+                  </Button>
+                ) : (
+                  <>
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={() => handlePluginAction("install")}
                       disabled={isPluginBusy}
-                      className="gap-2"
+                      className="gap-1.5"
+                      title="Reinstall / pull latest"
                     >
-                      <RefreshCw className={`h-4 w-4 ${isPluginBusy ? "animate-spin" : ""}`} />
-                      {isPluginBusy ? "Installing..." : "Install"}
+                      <RefreshCw className={`h-3.5 w-3.5 ${isPluginBusy ? "animate-spin" : ""}`} />
+                      Update
                     </Button>
-                  ) : (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => handlePluginAction("install")}
-                        disabled={isPluginBusy}
-                        className="gap-2"
-                        title="Reinstall / pull latest"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${isPluginBusy ? "animate-spin" : ""}`} />
-                        Update
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          handlePluginAction(pluginStatus.enabled ? "disable" : "enable")
-                        }
-                        disabled={isPluginBusy}
-                      >
-                        {pluginStatus.enabled ? "Disable" : "Enable"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => handlePluginAction("uninstall")}
-                        disabled={isPluginBusy}
-                      >
-                        Uninstall
-                      </Button>
-                    </>
-                  )}
-                  {!isPluginBusy && (
-                    <PluginUpdateBadge
-                      installed={pluginStatus?.installed ?? false}
-                      scope="user"
-                      currentVersion={pluginStatus?.version ?? null}
-                    />
-                  )}
-                </div>
-                {pluginError && (
-                  <p className="text-xs text-destructive flex items-start gap-1 mt-1">
-                    <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                    <span>{pluginError}</span>
-                  </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePluginAction(pluginStatus.enabled ? "disable" : "enable")}
+                      disabled={isPluginBusy}
+                    >
+                      {pluginStatus.enabled ? "Disable" : "Enable"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePluginAction("uninstall")}
+                      disabled={isPluginBusy}
+                    >
+                      Uninstall
+                    </Button>
+                  </>
+                )}
+                {!isPluginBusy && (
+                  <PluginUpdateBadge
+                    installed={pluginStatus?.installed ?? false}
+                    scope="user"
+                    currentVersion={pluginStatus?.version ?? null}
+                  />
                 )}
               </div>
-            </>
+              {pluginError && (
+                <p className="text-xs text-destructive flex items-start gap-1">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <span>{pluginError}</span>
+                </p>
+              )}
+            </div>
           )}
 
           {generalTabExtras}
@@ -566,7 +554,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[min(500px,calc(100vw-3rem))] h-[min(640px,85vh)] flex flex-col">
+      <DialogContent className="max-w-[min(620px,calc(100vw-3rem))] h-[min(640px,85vh)] flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>

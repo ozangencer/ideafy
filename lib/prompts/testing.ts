@@ -1,5 +1,8 @@
+import type { Voice } from "@/lib/types";
+import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
-import { buildTestStyleContract, detectCardLanguage } from "./test-style";
+import { detectCardLanguage } from "./test-style";
+import { buildVoicePrompt } from "./voice-style";
 
 /**
  * Interactive QA partner prompt: walks the user through manual test scenarios
@@ -8,11 +11,12 @@ import { buildTestStyleContract, detectCardLanguage } from "./test-style";
 export function buildTestTogetherPrompt(
   card: { id: string; title: string; testScenarios: string; description?: string },
   displayId: string | null,
+  voice: Voice = DEFAULT_VOICE,
 ): string {
   const title = stripHtml(card.title);
   const scenarios = stripHtml(card.testScenarios);
   const taskHeader = displayId ? `[${displayId}] ${title}` : title;
-  const styleContract = buildTestStyleContract({
+  const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
   });
 
@@ -84,6 +88,7 @@ export function buildTestGenerationPrompt(
   card: { id: string; title: string; testScenarios: string; description?: string },
   displayId: string | null,
   selectedScenarios?: string | null,
+  voice: Voice = DEFAULT_VOICE,
 ): string {
   const title = stripHtml(card.title);
   const allScenarios = stripHtml(card.testScenarios);
@@ -91,7 +96,7 @@ export function buildTestGenerationPrompt(
     ? `- ${selectedScenarios}`
     : allScenarios;
   const taskHeader = displayId ? `[${displayId}] ${title}` : title;
-  const styleContract = buildTestStyleContract({
+  const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
   });
 

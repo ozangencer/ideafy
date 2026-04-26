@@ -44,6 +44,31 @@ export interface Card {
   completedAt: string | null;
 }
 
+export type Voice = "entrepreneur" | "builder" | "engineer";
+
+export const DEFAULT_VOICE: Voice = "builder";
+
+export const VOICE_OPTIONS: { value: Voice; label: string; description: string }[] = [
+  {
+    value: "entrepreneur",
+    label: "Entrepreneur",
+    description:
+      "Product-first language. No file paths or code references. Focuses on user impact and trade-offs.",
+  },
+  {
+    value: "builder",
+    label: "Builder",
+    description:
+      "Plain-language technical. Names files and changes but skips spec bullets. Best for solo founders who code.",
+  },
+  {
+    value: "engineer",
+    label: "Engineer",
+    description:
+      "Terse, spec-style. Includes file:line, snippets, and trade-offs. Optimized for SWE workflow.",
+  },
+];
+
 export interface Project {
   id: string;
   name: string;
@@ -55,6 +80,7 @@ export interface Project {
   documentPaths: string[] | null; // Custom document paths, null = smart discovery
   narrativePath: string | null; // Relative path to narrative file, null = docs/product-narrative.md
   useWorktrees: boolean; // Whether to use git worktrees for isolation (default: true)
+  voice: Voice; // Project-level voice for AI outputs (default: 'builder')
   createdAt: string;
   updatedAt: string;
 }

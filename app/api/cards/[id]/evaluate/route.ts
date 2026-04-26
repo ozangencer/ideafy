@@ -85,7 +85,7 @@ export async function POST(
     .run();
 
   try {
-    const prompt = buildEvaluatePrompt(card, narrativePath);
+    const prompt = buildEvaluatePrompt(card, narrativePath, project?.voice as never);
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 

@@ -63,7 +63,7 @@ export async function POST(
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
 
-  let prompt = buildTestTogetherPrompt(card, displayId);
+  let prompt = buildTestTogetherPrompt(card, displayId, project?.voice as never);
 
   // Extract and save images for CLI context
   const savedImages = saveCardImagesToTemp(card.id, card);

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { Project } from "@/lib/types";
+import { Project, VOICE_OPTIONS, DEFAULT_VOICE, type Voice } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
+import { MessageSquare } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +70,7 @@ export function EditProjectModal({
     project.narrativePath || ""
   );
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
+  const [voice, setVoice] = useState<Voice>(project.voice ?? DEFAULT_VOICE);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteWithCards, setDeleteWithCards] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
@@ -219,6 +221,7 @@ export function EditProjectModal({
         documentPaths: documentPaths.length > 0 ? documentPaths : null,
         narrativePath: narrativePath.trim() || null,
         useWorktrees,
+        voice,
         ...(extraSavePayload?.() ?? {}),
       });
       onClose();
@@ -240,12 +243,12 @@ export function EditProjectModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} modal={modal}>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-3 py-4">
           <BasicInfoFields
             name={name}
             onNameChange={setName}
@@ -261,6 +264,50 @@ export function EditProjectModal({
           <p className="text-xs text-muted-foreground -mt-2">
             Task IDs: {idPrefix || "PRJ"}-1, {idPrefix || "PRJ"}-2...
           </p>
+
+          {/* Voice */}
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Voice</label>
+              <span className="text-xs text-muted-foreground">— tone for AI plans, tests, opinions, chat</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Voice">
+              {VOICE_OPTIONS.map((opt) => {
+                const isSelected = voice === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => setVoice(opt.value)}
+                    className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                          isSelected ? "border-primary" : "border-muted-foreground/40"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full transition-all ${
+                            isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                          }`}
+                        />
+                      </span>
+                      <span className="font-medium text-sm text-foreground">{opt.label}</span>
+                    </span>
+                    <span className="block text-xs text-muted-foreground leading-snug">{opt.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {teamAssignmentSlot}
 
@@ -278,7 +325,7 @@ export function EditProjectModal({
               value={documentPathsText}
               onChange={(e) => setDocumentPathsText(e.target.value)}
               placeholder="docs/&#10;specs/&#10;README.md&#10;ARCHITECTURE.md"
-              className="min-h-[80px] font-mono text-sm"
+              className="min-h-[56px] font-mono text-sm"
             />
             <p className="text-xs text-muted-foreground">
               One path per line. Your paths appear at the top, then smart discovery
@@ -495,6 +542,7 @@ export function EditProjectModal({
               onCheckedChange={setUseWorktrees}
             />
           </div>
+
         </div>
 
         <DialogFooter className="flex-row justify-between sm:justify-between">

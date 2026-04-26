@@ -90,7 +90,8 @@ export async function POST(
       description: card.description ?? undefined,
     },
     displayId,
-    scenariosForPrompt
+    scenariosForPrompt,
+    project?.voice as never
   );
 
   try {

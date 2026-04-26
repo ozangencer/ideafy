@@ -152,7 +152,7 @@ export async function POST(
   }
 
   try {
-    let prompt = buildQuickFixPrompt(card);
+    let prompt = buildQuickFixPrompt(card, project?.voice as never);
 
     // Extract and save images for CLI context
     const savedImages = saveCardImagesToTemp(card.id, card);

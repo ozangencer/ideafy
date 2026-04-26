@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { removeIdeafyHook } from "@/lib/hooks";
+import { DEFAULT_VOICE, type Voice } from "@/lib/types";
+
+const VALID_VOICES: Voice[] = ["entrepreneur", "builder", "engineer"];
+const normalizeVoice = (v: unknown, fallback: Voice = DEFAULT_VOICE): Voice =>
+  typeof v === "string" && (VALID_VOICES as string[]).includes(v) ? (v as Voice) : fallback;
 
 export async function PUT(
   request: NextRequest,
@@ -39,6 +44,12 @@ export async function PUT(
       useWorktrees = body.useWorktrees;
     }
 
+    // Handle voice
+    let voice: Voice = normalizeVoice(existing.voice);
+    if (body.voice !== undefined) {
+      voice = normalizeVoice(body.voice, voice);
+    }
+
     const updatedProject = {
       name: body.name ?? existing.name,
       folderPath: body.folderPath ?? existing.folderPath,
@@ -48,6 +59,7 @@ export async function PUT(
       documentPaths,
       narrativePath,
       useWorktrees,
+      voice,
       updatedAt: new Date().toISOString(),
     };
 
@@ -65,6 +77,7 @@ export async function PUT(
         : null,
       narrativePath: updatedProject.narrativePath,
       useWorktrees: updatedProject.useWorktrees,
+      voice: updatedProject.voice,
     });
   } catch (error) {
     console.error("Failed to update project:", error);

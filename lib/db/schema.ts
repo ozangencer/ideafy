@@ -12,6 +12,7 @@ export const projects = sqliteTable("projects", {
   documentPaths: text("document_paths"), // JSON array of custom document paths, null = smart discovery
   narrativePath: text("narrative_path"), // Relative path to narrative file, null = use default (docs/product-narrative.md)
   useWorktrees: integer("use_worktrees", { mode: "boolean" }).notNull().default(true), // Whether to use git worktrees for isolation
+  voice: text("voice").notNull().default("builder"), // "entrepreneur" | "builder" | "engineer" — project-level voice for AI outputs
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

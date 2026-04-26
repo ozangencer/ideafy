@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { db, schema } from "@/lib/db";
-import { Project } from "@/lib/types";
+import { Project, DEFAULT_VOICE, type Voice } from "@/lib/types";
 import { installIdeafyHook } from "@/lib/hooks";
+
+const VALID_VOICES: Voice[] = ["entrepreneur", "builder", "engineer"];
+const normalizeVoice = (v: unknown): Voice =>
+  typeof v === "string" && (VALID_VOICES as string[]).includes(v) ? (v as Voice) : DEFAULT_VOICE;
 
 export async function GET() {
   try {
@@ -20,6 +24,7 @@ export async function GET() {
         documentPaths: row.documentPaths ? JSON.parse(row.documentPaths) : null,
         narrativePath: row.narrativePath,
         useWorktrees: row.useWorktrees ?? true,
+        voice: normalizeVoice(row.voice),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       }))
@@ -62,6 +67,7 @@ export async function POST(request: NextRequest) {
       documentPaths: body.documentPaths ? JSON.stringify(body.documentPaths) : null,
       narrativePath: body.narrativePath || null,
       useWorktrees: body.useWorktrees ?? true,
+      voice: normalizeVoice(body.voice),
       createdAt: now,
       updatedAt: now,
     };
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest) {
       documentPaths: body.documentPaths || null,
       narrativePath: body.narrativePath || null,
       useWorktrees: newProject.useWorktrees,
+      voice: newProject.voice,
     };
     return NextResponse.json(responseProject, { status: 201 });
   } catch (error) {
