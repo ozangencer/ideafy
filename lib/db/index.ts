@@ -89,31 +89,57 @@ function stampExistingMigrations(
   }
 }
 
-const dbPath = resolveDbPath();
-const sqlite = new Database(dbPath);
+type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 
-// WAL lets the Next server and the MCP server read/write the same file
-// concurrently without blocking each other. Without it the MCP process
-// would throw SQLITE_BUSY whenever the UI is saving.
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-// Next.js production build spawns multiple workers that all import this
-// module while statically analysing API routes; without a busy timeout the
-// concurrent migrate() writes race and one of them throws "database is
-// locked", failing the whole build.
-sqlite.pragma("busy_timeout = 5000");
+let cachedDb: DrizzleDb | null = null;
 
-// During `next build`, route modules get loaded for static-analysis but
-// never actually serve a request. Skip migrations there — they're write
-// operations that don't belong in the build phase, and running them in
-// parallel from many workers is what triggers the SQLite lock on CI.
-const isNextBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
-const migrationsFolder = path.join(appResourcesRoot(), "drizzle");
-if (!isNextBuildPhase && fs.existsSync(migrationsFolder)) {
-  stampExistingMigrations(sqlite, migrationsFolder);
-  migrate(drizzle(sqlite), { migrationsFolder });
+function initDb(): DrizzleDb {
+  if (cachedDb) return cachedDb;
+
+  const dbPath = resolveDbPath();
+  const sqlite = new Database(dbPath);
+
+  // WAL lets the Next server and the MCP server read/write the same file
+  // concurrently without blocking each other. Without it the MCP process
+  // would throw SQLITE_BUSY whenever the UI is saving.
+  sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("foreign_keys = ON");
+  // 5s busy timeout absorbs short overlaps between the Next server and the
+  // MCP server when they both touch the file at startup.
+  sqlite.pragma("busy_timeout = 5000");
+
+  const migrationsFolder = path.join(appResourcesRoot(), "drizzle");
+  if (fs.existsSync(migrationsFolder)) {
+    stampExistingMigrations(sqlite, migrationsFolder);
+    migrate(drizzle(sqlite), { migrationsFolder });
+  }
+
+  cachedDb = drizzle(sqlite, { schema });
+  return cachedDb;
 }
 
-export const db = drizzle(sqlite, { schema });
+// `next build` collects page data by importing every route module in
+// parallel workers and invoking each handler. If we open SQLite at module
+// load (or on the first handler call), every worker races on `new Database`
+// + WAL setup + migrate(), and one of them crashes the build with
+// "database is locked". Defer DB initialisation until an actual request
+// runs, and during the build phase throw a Next-recognised
+// DYNAMIC_SERVER_USAGE error so static analysis falls back to dynamic
+// rendering instead of failing.
+const isNextBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
+export const db = new Proxy({} as DrizzleDb, {
+  get(_target, prop, receiver) {
+    if (isNextBuildPhase) {
+      const err: Error & { digest?: string } = new Error(
+        "Dynamic server usage: route reads SQLite at request time"
+      );
+      err.digest = "DYNAMIC_SERVER_USAGE";
+      throw err;
+    }
+    const real = initDb();
+    return Reflect.get(real, prop, receiver);
+  },
+});
 
 export { schema };
