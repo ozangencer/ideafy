@@ -1,4 +1,5 @@
 import {
+  BackgroundProcess,
   ConversationActivityEntry,
   ConversationMessage,
   SectionType,
@@ -167,6 +168,20 @@ export const createConversationSlice: StoreSlice<
               switch (event.type) {
                 case "start":
                   assistantMessageId = (event.data as { messageId: string }).messageId;
+                  // Align the streaming bubble's id with the DB-assigned id so
+                  // when the message is later promoted into `messages[]` (close
+                  // handler), React's `key={message.id}` reconciles to the SAME
+                  // DOM node instead of unmount+mount — which was the residual
+                  // ms-scale flicker after the duplicate-render fix.
+                  set((state) => {
+                    if (!state.streamingMessage) return state;
+                    return {
+                      streamingMessage: {
+                        ...state.streamingMessage,
+                        id: assistantMessageId,
+                      },
+                    };
+                  });
                   // Refresh background processes list
                   get().fetchBackgroundProcesses();
                   break;
@@ -254,8 +269,37 @@ export const createConversationSlice: StoreSlice<
                   });
                   break;
                 }
-                case "close":
-                  await get().fetchConversation(cardId, sectionType as SectionType);
+                case "close": {
+                  // Atomically: refresh server-side messages, refresh
+                  // background-processes, and clear the streaming bubble in a
+                  // SINGLE set() so React never renders an interim state where
+                  // (a) the assistant message exists in both `messages` and
+                  // `streamingMessage` (duplicate bubble) or (b) streamingMessage
+                  // is null while `isBackgroundProcessing` is still stale-true
+                  // (which would surface the "Thinking…" placeholder for a
+                  // single ms-scale frame).
+                  try {
+                    const [convResp, bgResp] = await Promise.all([
+                      fetch(`/api/cards/${cardId}/conversations?section=${sectionType}`),
+                      fetch(`/api/processes`),
+                    ]);
+                    const fresh = await parseJson<ConversationMessage[]>(convResp);
+                    const bg = await parseJson<BackgroundProcess[]>(bgResp);
+                    set((state) => ({
+                      conversations: {
+                        ...state.conversations,
+                        [key]: Array.isArray(fresh)
+                          ? fresh
+                          : state.conversations[key] || [],
+                      },
+                      streamingMessage: null,
+                      backgroundProcesses: Array.isArray(bg)
+                        ? bg
+                        : state.backgroundProcesses,
+                    }));
+                  } catch {
+                    set({ streamingMessage: null });
+                  }
                   if (hadToolCalls) {
                     await get().fetchCards();
                     // Signal to open card modals that the latest selectedCard
@@ -264,9 +308,8 @@ export const createConversationSlice: StoreSlice<
                     // unsaved edits (the diff IS the MCP write).
                     set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1 }));
                   }
-                  // Refresh background processes list
-                  get().fetchBackgroundProcesses();
                   break;
+                }
               }
             } catch {
               // Invalid JSON, skip
@@ -373,6 +416,22 @@ export const createConversationSlice: StoreSlice<
           }
 
           switch (event.type) {
+            case "start": {
+              // Live-buffer replay re-emits `start` with the DB-assigned
+              // messageId. Adopt it as the streaming bubble's id for the
+              // same reason as sendMessage's start handler — keeps React
+              // key stable across the streaming → completed transition.
+              const replayedId = (event.data as { messageId?: string }).messageId;
+              if (replayedId) {
+                set((state) => {
+                  if (!state.streamingMessage) return state;
+                  return {
+                    streamingMessage: { ...state.streamingMessage, id: replayedId },
+                  };
+                });
+              }
+              break;
+            }
             case "text":
               get().appendToStreamingMessage(event.data as string);
               break;
@@ -455,14 +514,41 @@ export const createConversationSlice: StoreSlice<
               });
               break;
             }
-            case "close":
-              await get().fetchConversation(cardId, sectionType);
+            case "close": {
+              // Same atomic-clear treatment as sendMessage's close handler:
+              // bundle the fresh-messages refresh, background-processes
+              // refresh, and streamingMessage:null into one set() to prevent
+              // both the duplicate-render blink and the stale-isBackground
+              // placeholder flash during reattach.
+              const liveKey = `${cardId}-${sectionType}`;
+              try {
+                const [convResp, bgResp] = await Promise.all([
+                  fetch(`/api/cards/${cardId}/conversations?section=${sectionType}`),
+                  fetch(`/api/processes`),
+                ]);
+                const fresh = await parseJson<ConversationMessage[]>(convResp);
+                const bg = await parseJson<BackgroundProcess[]>(bgResp);
+                set((state) => ({
+                  conversations: {
+                    ...state.conversations,
+                    [liveKey]: Array.isArray(fresh)
+                      ? fresh
+                      : state.conversations[liveKey] || [],
+                  },
+                  streamingMessage: null,
+                  backgroundProcesses: Array.isArray(bg)
+                    ? bg
+                    : state.backgroundProcesses,
+                }));
+              } catch {
+                set({ streamingMessage: null });
+              }
               if (hadToolCalls) {
                 await get().fetchCards();
                 set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1 }));
               }
-              get().fetchBackgroundProcesses();
               break;
+            }
           }
         }
       }
