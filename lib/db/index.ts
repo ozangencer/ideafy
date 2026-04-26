@@ -97,9 +97,19 @@ const sqlite = new Database(dbPath);
 // would throw SQLITE_BUSY whenever the UI is saving.
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
+// Next.js production build spawns multiple workers that all import this
+// module while statically analysing API routes; without a busy timeout the
+// concurrent migrate() writes race and one of them throws "database is
+// locked", failing the whole build.
+sqlite.pragma("busy_timeout = 5000");
 
+// During `next build`, route modules get loaded for static-analysis but
+// never actually serve a request. Skip migrations there — they're write
+// operations that don't belong in the build phase, and running them in
+// parallel from many workers is what triggers the SQLite lock on CI.
+const isNextBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
 const migrationsFolder = path.join(appResourcesRoot(), "drizzle");
-if (fs.existsSync(migrationsFolder)) {
+if (!isNextBuildPhase && fs.existsSync(migrationsFolder)) {
   stampExistingMigrations(sqlite, migrationsFolder);
   migrate(drizzle(sqlite), { migrationsFolder });
 }
