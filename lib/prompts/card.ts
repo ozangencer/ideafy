@@ -1,5 +1,8 @@
+import type { Voice } from "@/lib/types";
+import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
-import { buildTestStyleContract, detectCardLanguage } from "./test-style";
+import { detectCardLanguage } from "./test-style";
+import { buildVoicePrompt } from "./voice-style";
 
 /**
  * Shared output schema for idea evaluation. Used by the one-shot evaluate
@@ -35,6 +38,7 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
 export function buildEvaluatePrompt(
   card: { title: string; description: string },
   narrativePath?: string | null,
+  voice: Voice = DEFAULT_VOICE,
 ): string {
   const title = stripHtml(card.title);
   const description = stripHtml(card.description);
@@ -42,6 +46,8 @@ export function buildEvaluatePrompt(
   const narrativeRef = narrativePath
     ? `@${narrativePath}`
     : "@docs/product-narrative.md";
+
+  const voicePrompt = buildVoicePrompt(voice, "opinion");
 
   return `You are a Product Architect. Evaluate this idea — be brutally honest, point out both good and bad.
 
@@ -58,6 +64,8 @@ ${description}
 ## Evaluation Lenses
 YAGNI · scope creep risk · scalability · technical feasibility · alignment with vision · implementation complexity.
 
+${voicePrompt}
+
 ## Output Format
 Markdown with exactly these sections:
 
@@ -68,12 +76,16 @@ ${EVALUATION_OUTPUT_SCHEMA}`;
  * Quick fix prompt for cards in the Bugs column. Asks Claude to diagnose,
  * fix, and hand back a short summary + test checklist.
  */
-export function buildQuickFixPrompt(card: { title: string; description: string }): string {
+export function buildQuickFixPrompt(
+  card: { title: string; description: string },
+  voice: Voice = DEFAULT_VOICE,
+): string {
   const title = stripHtml(card.title);
   const description = stripHtml(card.description);
-  const styleContract = buildTestStyleContract({
+  const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
   });
+  const autonomousVoice = buildVoicePrompt(voice, "autonomous");
 
   return `You are a senior developer. Fix this bug quickly and efficiently.
 
@@ -102,6 +114,8 @@ After fixing the bug, provide a brief summary in this format:
 - [ ] Related functionality still works
 - [ ] No regression in existing tests
 
+${autonomousVoice}
+
 ${styleContract}
 
 Focus on fixing the bug efficiently. Do NOT write extensive documentation or plans.`;
@@ -112,11 +126,17 @@ Focus on fixing the bug efficiently. Do NOT write extensive documentation or pla
  * `buildEvaluatePrompt`, this is conversational and expects the model to
  * call MCP tools at the end of the session.
  */
-export function buildIdeationPrompt(card: { id: string; title: string; description: string }): string {
+export function buildIdeationPrompt(
+  card: { id: string; title: string; description: string },
+  voice: Voice = DEFAULT_VOICE,
+): string {
   const title = stripHtml(card.title);
   const description = stripHtml(card.description);
+  const voicePrompt = buildVoicePrompt(voice, "chat");
 
   return `You are a Product Strategist. Brainstorm and refine this idea with the user — ask probing questions, challenge assumptions (YAGNI, scope creep), explore alternatives, weigh feasibility and complexity. Be honest but collaborative.
+
+${voicePrompt}
 
 ## Idea to Discuss
 **Title:** ${title}

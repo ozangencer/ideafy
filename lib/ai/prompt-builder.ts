@@ -3,9 +3,11 @@
  * Used by both local chat-stream and remote-job-runner.
  */
 
-import type { SectionType, ConversationMessage } from "@/lib/types";
+import type { SectionType, ConversationMessage, Voice } from "@/lib/types";
+import { DEFAULT_VOICE } from "@/lib/types";
 import { testScenariosToMarkdown } from "@/lib/markdown";
-import { buildTestStyleContract, detectCardLanguage } from "@/lib/prompts/test-style";
+import { detectCardLanguage } from "@/lib/prompts/test-style";
+import { buildVoicePrompt } from "@/lib/prompts/voice-style";
 
 // Card context info
 export interface CardContext {
@@ -19,6 +21,11 @@ export interface CardContext {
   description?: string;
   solutionSummary?: string;
   testScenarios?: string;
+  /**
+   * Project-level voice for AI tone. Defaults to 'builder' when not provided
+   * (legacy callers, missing project, etc.).
+   */
+  voice?: Voice;
   /**
    * Raw Tiptap HTML for testScenarios. When present, the builder renders
    * scenarios as markdown with [x]/[ ] preserved so the AI sees checkbox
@@ -150,13 +157,19 @@ IMPORTANT: Always APPEND new test scenarios to the existing ones. Never remove e
 
 // Section-specific system prompts
 export const SECTION_SYSTEM_PROMPTS: Record<SectionType, (ctx: CardContext) => string> = {
-  detail: (ctx) => `You are helping improve a development task description.
+  detail: (ctx) => {
+    const voice = buildVoicePrompt(ctx.voice ?? DEFAULT_VOICE, "chat");
+    return `You are helping improve a development task description.
 ${buildCardContext(ctx)}
 Current description: ${ctx.sectionContent || "(empty)"}
 
-Provide helpful suggestions, clarifications, or improvements. Be concise and practical.${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail")}`,
+Provide helpful suggestions, clarifications, or improvements. Be concise and practical.
+
+${voice}${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail")}`;
+  },
 
   opinion: (ctx) => {
+    const voice = buildVoicePrompt(ctx.voice ?? DEFAULT_VOICE, "opinion");
     let prompt = `You are a senior software architect evaluating a development task.
 ${buildCardContext(ctx)}
 Current opinion: ${ctx.sectionContent || "(none)"}`;
@@ -174,19 +187,26 @@ ${ctx.narrativeContent}
 
     prompt += `
 
-Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion")}`;
+Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.
+
+${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion")}`;
     return prompt;
   },
 
-  solution: (ctx) => `You are helping plan the implementation of a development task.
+  solution: (ctx) => {
+    const voice = buildVoicePrompt(ctx.voice ?? DEFAULT_VOICE, "plan");
+    return `You are helping plan the implementation of a development task.
 ${buildCardContext(ctx)}
 Current solution plan: ${ctx.sectionContent || "(none)"}
 
-Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution")}`,
+Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.
+
+${voice}${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution")}`;
+  },
 
   tests: (ctx) => {
     const lang = detectCardLanguage({ title: ctx.title, description: ctx.description });
-    const styleContract = buildTestStyleContract({ language: lang });
+    const voice = buildVoicePrompt(ctx.voice ?? DEFAULT_VOICE, "tests", { language: lang });
     // Prefer markdown with [x]/[ ] so the AI can see which items are already
     // checked; fall back to the stripped sectionContent for empty/legacy cases.
     const currentTests =
@@ -200,7 +220,7 @@ ${currentTests}
 
 Cover happy paths, edge cases, and error conditions. Use checkbox format: \`- [ ] Step description\`.
 
-${styleContract}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests")}`;
+${voice}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests")}`;
   },
 };
 

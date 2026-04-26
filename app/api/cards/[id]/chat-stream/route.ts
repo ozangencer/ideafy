@@ -7,7 +7,8 @@ import { v4 as uuidv4 } from "uuid";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import type { SectionType, ConversationMessage } from "@/lib/types";
+import type { SectionType, ConversationMessage, Voice } from "@/lib/types";
+import { DEFAULT_VOICE } from "@/lib/types";
 import {
   registerProcess,
   completeProcess,
@@ -108,6 +109,7 @@ export async function POST(
   let projectFolderPath = projectPath || "";
   let projectNarrativePath: string | null = null;
   let projectForSession: { idPrefix: string } | null = null;
+  let projectVoice: Voice = DEFAULT_VOICE;
 
   if (card.projectId) {
     const [project] = await db.select().from(projects).where(eq(projects.id, card.projectId));
@@ -117,6 +119,7 @@ export async function POST(
       projectFolderPath = project.folderPath;
       projectNarrativePath = project.narrativePath;
       projectForSession = project;
+      projectVoice = (project.voice as Voice) ?? DEFAULT_VOICE;
     }
   }
 
@@ -199,6 +202,7 @@ export async function POST(
     solutionSummary: stripHtml(card.solutionSummary || ""),
     testScenarios: stripHtml(card.testScenarios || ""),
     testScenariosHtml: card.testScenarios || "",
+    voice: projectVoice,
   };
   const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
   const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {
