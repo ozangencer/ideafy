@@ -52,6 +52,18 @@ data/backups/
 .claude/settings.json.backup-*
 mcp-server/mcp-config.json
 
+# AI assistant configs (developer-local, not required to run the app)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.codex/
+.cursor/
+.cursorrules
+.windsurfrules
+.aider*
+.continue/
+.github/copilot-instructions.md
+
 # Electron
 electron/node_modules/
 
@@ -64,6 +76,17 @@ sqlite.db
 
 # Build cache
 tsconfig.tsbuildinfo
+.eslintcache
+.turbo/
+.cache/
+
+# Test/coverage output
+coverage/
+.nyc_output/
+
+# Deployment platforms
+.vercel/
+.netlify/
 
 # Stray files
 nul

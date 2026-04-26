@@ -120,7 +120,7 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": ".next/standalone", "to": "app-next", "filter": ["!data/**"] },
+      { "from": ".next/standalone", "to": "app-next", "filter": ["!data/**", "!dist/**", "!.worktrees/**"] },
       { "from": ".next/static", "to": "app-next/.next/static" },
       { "from": "public", "to": "app-next/public" },
       { "from": "drizzle", "to": "app-next/drizzle" },

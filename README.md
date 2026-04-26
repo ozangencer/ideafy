@@ -55,19 +55,7 @@ The separation is what keeps each lens honest, and what makes a card legible to 
 
 ## Install
 
-Ideafy Solo ships as a macOS desktop app. Grab the latest DMG from the [releases page](https://github.com/ozangencer/ideafy/releases/latest) — pick **arm64** for Apple Silicon or **x64** for Intel — drag it into **Applications**, and launch it. No account, no signup, no cloud.
-
-### First-launch: Gatekeeper
-
-Because Ideafy currently ships without an Apple Developer ID signature, macOS will refuse to open it the first time with *"ideafy is damaged and can't be opened"* or *"cannot be opened because the developer cannot be verified"*. Clear the quarantine flag once and it runs normally every time after:
-
-```bash
-xattr -d com.apple.quarantine /Applications/ideafy.app
-```
-
-Or right-click **ideafy.app → Open** and confirm once in the dialog — the choice is remembered.
-
-A properly signed + notarized build is on the roadmap; until then, the quarantine flag is the only thing between you and a first run.
+Ideafy Solo ships as a macOS desktop app, signed and notarized with an Apple Developer ID. Grab the latest DMG from the [releases page](https://github.com/ozangencer/ideafy/releases/latest) — pick **arm64** for Apple Silicon or **x64** for Intel — drag it into **Applications**, and launch it. No account, no signup, no cloud.
 
 ### Prerequisites
 
