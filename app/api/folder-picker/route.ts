@@ -4,6 +4,12 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
+// This route opens a native macOS folder dialog via AppleScript. Pre-rendering
+// it during `next build` hangs forever on a headless CI runner — there is no
+// Aqua session to dismiss the dialog. Force dynamic so Next never executes
+// the handler at build time.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   if (process.platform !== "darwin") {
     return NextResponse.json(
