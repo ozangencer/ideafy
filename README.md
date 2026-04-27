@@ -6,7 +6,7 @@
 
 Ideafy gives them somewhere to evolve — a column for every stage of the thinking, not just the doing. It reads your project, argues with weak ideas, plans the strong ones in plain language, and keeps the receipts when an idea doesn't make it.
 
-This repository is the **Solo edition**: a local-first SQLite kanban that wires cards to Claude Code, Gemini CLI, or Codex CLI through the Model Context Protocol. One file on your disk. No accounts. Zero cloud dependencies.
+This repository is the **Solo edition**: a local-first SQLite kanban that wires cards to Claude Code, Gemini CLI, Codex CLI, or OpenCode through the Model Context Protocol. One file on your disk. No accounts. Zero cloud dependencies.
 
 **Jump to:** [Install](#install) · [First run](#first-run) · [MCP integration](#mcp-integration) · [From source](#running-from-source)
 
@@ -59,13 +59,16 @@ Ideafy Solo ships as a macOS desktop app, signed and notarized with an Apple Dev
 
 ### Prerequisites
 
-Ideafy is a front-end for your coding agent — you need at least one of the supported CLIs installed and on your `PATH` before you launch the app:
+Ideafy is a front-end for your coding agent — you need at least one of the supported CLIs installed before you launch the app:
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the reference platform. Looked up under `~/.local/bin`, `~/.claude/bin`, `/usr/local/bin`, `/usr/bin`, or `/opt/homebrew/bin`.
-- **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** — alternative provider, same PATH lookup.
-- **[Codex CLI](https://github.com/openai/codex)** — alternative provider, same PATH lookup.
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the reference platform.
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** — alternative provider.
+- **[Codex CLI](https://github.com/openai/codex)** — alternative provider.
+- **[OpenCode](https://opencode.ai)** — alternative provider.
 
 You also need **git** (worktree support is used for isolated builds) and **macOS** for the DMG build. Only one CLI is required — switching providers is a settings change, not a reinstall.
+
+When the app launches a CLI it prepends the following directories to its `PATH`, so installs from Homebrew, npm, or pipx are picked up without extra configuration: `~/.local/bin`, `~/.claude/bin`, `/usr/local/bin`, `/opt/homebrew/bin`. If your binary lives somewhere else, make sure it's reachable from your shell's `PATH` before opening Ideafy.
 
 ### First run
 
@@ -84,7 +87,7 @@ Inside the card chat panel, three mention prefixes pull context into the convers
 
 ## MCP integration
 
-Ideafy ships an MCP server that exposes the board to any MCP-compatible agent (Claude Code, Gemini CLI, Codex CLI). The agent reads and writes the same SQLite file the app is looking at.
+Ideafy ships an MCP server that exposes the board to any MCP-compatible agent (Claude Code, Gemini CLI, Codex CLI, OpenCode). The agent reads and writes the same SQLite file the app is looking at.
 
 | Tool | Purpose |
 |---|---|
@@ -102,7 +105,7 @@ The MCP server reads the same local database the UI uses, so nothing you do from
 
 ## Platform providers
 
-Ideafy abstracts the underlying coding agent behind a small provider interface in `lib/platform/`. The active platform is stored in the `ai_platform` setting and resolved at runtime, so switching from Claude Code to Gemini CLI or Codex CLI is a settings change, not a rewrite. Each provider advertises its own capabilities (plan mode, worktree support, autonomous mode) and the UI adapts accordingly.
+Ideafy abstracts the underlying coding agent behind a small provider interface in `lib/platform/`. The active platform is stored in the `ai_platform` setting and resolved at runtime, so switching between Claude Code, Gemini CLI, Codex CLI, and OpenCode is a settings change, not a rewrite. Each provider advertises its own capabilities (plan mode, worktree support, autonomous mode) and the UI adapts accordingly.
 
 ## Tech stack
 

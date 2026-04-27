@@ -1,8 +1,11 @@
 name: Release
 
 # Triggers on any `v*` tag push — e.g. `git tag v0.2.0 && git push --tags`.
-# One runner per arch so better-sqlite3 rebuilds target the runner's CPU.
-# Each runner uploads its own DMG to the GitHub Release matching the tag.
+# Both DMGs build on macos-14 (Apple Silicon) with electron-builder cross-
+# compiling the x64 target. better-sqlite3 ships prebuilt binaries for both
+# arches so no source build is needed. We avoided macos-13 because GitHub's
+# Intel runner pool became unreliable as the runner image was deprecated —
+# x64 jobs sat in queue for hours.
 on:
   push:
     tags:
@@ -15,12 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: arm64
-            runner: macos-14
-          - arch: x64
-            runner: macos-13
-    runs-on: ${{ matrix.runner }}
+        arch: [arm64, x64]
+    runs-on: macos-14
     permissions:
       contents: write
     steps:
