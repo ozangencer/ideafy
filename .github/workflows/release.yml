@@ -44,7 +44,11 @@ jobs:
       - name: Package DMG
         # --${{ arch }} filters package.json mac.target to the current runner's
         # arch so we don't double-ship an x64 DMG from the arm64 runner.
-        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+        # --config selects the variant-aware icon (Personal=blue, Team=yellow)
+        # from productName. Without it electron-builder reads the raw
+        # package.json mac.icon, which is hardcoded to the Team yellow .icns
+        # and would mis-icon the Personal DMG.
+        run: npx electron-builder --mac --${{ matrix.arch }} --config ./scripts/electron-builder-config.mjs --publish never
         env:
           # Developer ID signing + notarization. Required repo secrets:
           #   CSC_LINK                       (base64-encoded .p12)
