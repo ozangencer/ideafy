@@ -157,6 +157,7 @@ button:disabled {
     --paper-cream: 40 10% 16%;
     --paper-edge: 40 10% 18%;
     --shadow-popover: 0 20px 60px -20px rgba(0, 0, 0, 0.55), 0 8px 24px -16px rgba(0, 0, 0, 0.3);
+    --status-backlog: 220 12% 65%;
   }
   .light {
     /* Paper theme — #f7f6f3 base, warm cream */
@@ -184,6 +185,7 @@ button:disabled {
     --paper-cream: 60 14% 98%;
     --paper-edge: 0 0% 90%;
     --shadow-popover: 0 20px 50px -20px rgba(30, 20, 10, 0.22), 0 4px 14px -8px rgba(30, 20, 10, 0.1);
+    --status-backlog: 220 10% 38%;
   }
   /* Pure-white opt-in: power-user override on top of paper light */
   .light.pure-white {
