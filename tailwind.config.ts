@@ -35,7 +35,7 @@ const config: Config = {
   			},
   			status: {
   				ideation: '#8b5cf6',
-  				backlog: '#6b7280',
+  				backlog: 'hsl(var(--status-backlog))',
   				bugs: '#ef4444',
   				progress: '#facc15',
   				test: '#3b82f6',
