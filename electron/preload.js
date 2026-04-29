@@ -20,4 +20,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return "";
     }
   },
+  openPath: (filePath) => ipcRenderer.invoke("open-path", filePath),
+  revealPath: (filePath) => ipcRenderer.invoke("reveal-path", filePath),
 });

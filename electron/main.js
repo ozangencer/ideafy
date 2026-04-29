@@ -7,6 +7,7 @@ const {
   ipcMain,
   nativeImage,
   screen,
+  shell,
 } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
@@ -429,6 +430,22 @@ function hideQuickEntry() {
     quickEntryWindow.hide();
   }
 }
+
+// IPC: open a file with the OS default app via Electron's LaunchServices
+// integration. Going through shell.openPath instead of `open <path>` avoids
+// the silent failure we saw on ad-hoc-signed packaged builds where launching
+// a third-party app via /usr/bin/open returned 0 but never started the app.
+// Returns "" on success or an error string on failure.
+ipcMain.handle("open-path", async (_event, filePath) => {
+  if (typeof filePath !== "string" || !filePath) return "Invalid path";
+  return shell.openPath(filePath);
+});
+
+ipcMain.handle("reveal-path", async (_event, filePath) => {
+  if (typeof filePath !== "string" || !filePath) return "Invalid path";
+  shell.showItemInFolder(filePath);
+  return "";
+});
 
 // IPC: quick entry window requests to close
 ipcMain.on("close-quick-entry-window", () => {

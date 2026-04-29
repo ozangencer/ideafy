@@ -13,6 +13,35 @@ import {
   Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+
+type ElectronOpenAPI = {
+  openPath?: (filePath: string) => Promise<string>;
+  revealPath?: (filePath: string) => Promise<string>;
+};
+
+function getElectronOpenAPI(): ElectronOpenAPI | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as { electronAPI?: ElectronOpenAPI }).electronAPI;
+}
+
+async function openViaApi(
+  filePath: string,
+  action: "open" | "reveal"
+): Promise<string> {
+  const res = await fetch("/api/open-file", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(action === "reveal" ? { path: filePath, action } : { path: filePath }),
+  });
+  if (res.ok) return "";
+  try {
+    const data = (await res.json()) as { error?: string };
+    return data.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
 
 type MarkdownViewerPanelProps = {
   title: string;
@@ -34,6 +63,7 @@ export function MarkdownViewerPanel({
   const [isOpening, setIsOpening] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -47,14 +77,33 @@ export function MarkdownViewerPanel({
   const handleOpen = async () => {
     setIsOpening(true);
     try {
-      await fetch("/api/open-file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
+      const electron = getElectronOpenAPI();
+      let error = "";
+      if (electron?.openPath) {
+        // shell.openPath returns "" on success, error string on failure.
+        error = (await electron.openPath(path)) || "";
+      } else {
+        error = await openViaApi(path, "open");
+      }
+
+      if (error) {
+        toast({
+          title: "Couldn't open file",
+          description: `${error}. Check that a default app is set for this file type.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       onClose();
-    } catch (error) {
-      console.error("Failed to open file:", error);
+    } catch (err) {
+      console.error("Failed to open file:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast({
+        title: "Couldn't open file",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
       setIsOpening(false);
     }
@@ -63,13 +112,29 @@ export function MarkdownViewerPanel({
   const handleReveal = async () => {
     setIsRevealing(true);
     try {
-      await fetch("/api/open-file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, action: "reveal" }),
+      const electron = getElectronOpenAPI();
+      let error = "";
+      if (electron?.revealPath) {
+        error = (await electron.revealPath(path)) || "";
+      } else {
+        error = await openViaApi(path, "reveal");
+      }
+
+      if (error) {
+        toast({
+          title: "Couldn't reveal file",
+          description: error,
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to reveal file:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast({
+        title: "Couldn't reveal file",
+        description: message,
+        variant: "destructive",
       });
-    } catch (error) {
-      console.error("Failed to reveal file:", error);
     } finally {
       setIsRevealing(false);
     }

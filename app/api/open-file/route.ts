@@ -13,22 +13,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Path is required" }, { status: 400 });
     }
 
-    // Validate: must be absolute path, no null bytes
-    const resolvedPath = path.resolve(filePath);
     if (filePath.includes("\0")) {
       return NextResponse.json({ error: "Invalid path" }, { status: 400 });
     }
 
-    // Use execFile to avoid shell injection (arguments passed as array, not interpolated)
+    const resolvedPath = path.resolve(filePath);
+
     const args = action === "reveal" ? ["-R", resolvedPath] : [resolvedPath];
-    await execFileAsync("open", args);
+    const { stderr } = await execFileAsync("open", args);
+
+    if (stderr && stderr.trim()) {
+      return NextResponse.json(
+        { error: stderr.trim() },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to open file";
     console.error("Failed to open file:", error);
-    return NextResponse.json(
-      { error: "Failed to open file" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
