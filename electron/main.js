@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   Menu,
   ipcMain,
@@ -331,6 +332,9 @@ function createMainWindow() {
     mainWindow.show();
   });
 
+  // Red traffic-light closes the window but keeps the app alive in the dock.
+  // Quitting goes through before-quit (sets isQuitting), which lets the close
+  // proceed normally on the second pass.
   mainWindow.on("close", (e) => {
     if (!app.isQuitting) {
       e.preventDefault();
@@ -511,8 +515,84 @@ app.on("activate", () => {
   showAndFocusMainWindow();
 });
 
-app.on("before-quit", () => {
-  app.isQuitting = true;
+// Quit confirmation: ask the renderer to show a shadcn AlertDialog and wait
+// for the user's answer over IPC. Falls back to the native message box if
+// the renderer is missing or unresponsive.
+let quitConfirmPending = false;
+let quitConfirmTimeout = null;
+const QUIT_CONFIRM_TIMEOUT_MS = 3000;
+
+function clearQuitConfirmState() {
+  quitConfirmPending = false;
+  if (quitConfirmTimeout) {
+    clearTimeout(quitConfirmTimeout);
+    quitConfirmTimeout = null;
+  }
+}
+
+function nativeQuitConfirm() {
+  const parent =
+    mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
+      ? mainWindow
+      : null;
+  const options = {
+    type: "question",
+    buttons: ["Cancel", "Quit"],
+    defaultId: 1,
+    cancelId: 0,
+    title: "Quit Ideafy?",
+    message: "Quit Ideafy?",
+    detail: "Any in-flight Claude sessions and background tasks will stop.",
+  };
+  const choice = parent
+    ? dialog.showMessageBoxSync(parent, options)
+    : dialog.showMessageBoxSync(options);
+  if (choice === 1) {
+    app.isQuitting = true;
+    app.quit();
+  }
+}
+
+ipcMain.on("quit-confirm-response", (_event, confirm) => {
+  if (!quitConfirmPending) return;
+  clearQuitConfirmState();
+  if (confirm === true) {
+    app.isQuitting = true;
+    app.quit();
+  }
+});
+
+app.on("before-quit", (e) => {
+  if (app.isQuitting) return;
+  e.preventDefault();
+
+  // Duplicate Cmd+Q while the dialog is already open: surface the window and
+  // ignore the request. State guard prevents double IPC sends.
+  if (quitConfirmPending) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+    return;
+  }
+
+  // No renderer to ask → fall back to the native dialog so the user can still
+  // quit (boot failure, crashed window, etc.).
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.webContents) {
+    nativeQuitConfirm();
+    return;
+  }
+
+  quitConfirmPending = true;
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send("quit-confirm-request");
+
+  quitConfirmTimeout = setTimeout(() => {
+    if (!quitConfirmPending) return;
+    clearQuitConfirmState();
+    nativeQuitConfirm();
+  }, QUIT_CONFIRM_TIMEOUT_MS);
 });
 
 app.on("will-quit", () => {

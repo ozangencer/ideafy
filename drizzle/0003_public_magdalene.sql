@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `voice` text DEFAULT 'builder' NOT NULL;
