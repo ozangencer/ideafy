@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { BackupScheduler } from "@/components/backup-scheduler";
+import { QuitConfirmDialog } from "@/components/quit-confirm-dialog";
 import {
   getBrandAssetPath,
   readProductNameFromPackageJson,
@@ -59,6 +60,7 @@ export default function RootLayout({
         <ThemeProvider>
           <TooltipProvider delayDuration={100} skipDelayDuration={0}>
             <BackupScheduler />
+            <QuitConfirmDialog />
             {children}
             <Toaster />
           </TooltipProvider>

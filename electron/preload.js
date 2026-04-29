@@ -7,6 +7,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onRefreshData: (callback) => {
     ipcRenderer.on("refresh-data", () => callback());
   },
+  onQuitConfirmRequest: (callback) => {
+    ipcRenderer.on("quit-confirm-request", () => callback());
+  },
+  sendQuitConfirmResponse: (confirm) => {
+    ipcRenderer.send("quit-confirm-response", confirm === true);
+  },
   getPathForFile: (file) => {
     try {
       return webUtils.getPathForFile(file);
