@@ -1,6 +1,6 @@
 {
   "name": "ideafy",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Kanban for Claude Code — local-first, AI-native task board",
   "author": "Ozan Gencer",
   "license": "MIT",
@@ -120,20 +120,56 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": ".next/standalone", "to": "app-next", "filter": ["!data/**", "!dist/**", "!.worktrees/**"] },
-      { "from": ".next/static", "to": "app-next/.next/static" },
-      { "from": "public", "to": "app-next/public" },
-      { "from": "drizzle", "to": "app-next/drizzle" },
-      { "from": "skills", "to": "app-next/skills" },
-      { "from": "mcp-server/dist", "to": "mcp-server/dist" },
-      { "from": "mcp-server/node_modules", "to": "mcp-server/node_modules" }
+      {
+        "from": ".next/standalone",
+        "to": "app-next",
+        "filter": [
+          "!data/**",
+          "!dist/**",
+          "!.worktrees/**"
+        ]
+      },
+      {
+        "from": ".next/static",
+        "to": "app-next/.next/static"
+      },
+      {
+        "from": "public",
+        "to": "app-next/public"
+      },
+      {
+        "from": "drizzle",
+        "to": "app-next/drizzle"
+      },
+      {
+        "from": "skills",
+        "to": "app-next/skills"
+      },
+      {
+        "from": "mcp-server/dist",
+        "to": "mcp-server/dist"
+      },
+      {
+        "from": "mcp-server/node_modules",
+        "to": "mcp-server/node_modules"
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "electron/icons/app-icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["x64"] },
-        { "target": "dmg", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
