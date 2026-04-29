@@ -90,7 +90,9 @@ export const MentionPopup = forwardRef<MentionPopupRef, MentionPopupProps>(
           >
             <span
               className={`font-mono text-xs ${
-                item.prefix === "/" ? "text-ink/70" : "text-ink/60"
+                index === selectedIndex
+                  ? "text-current opacity-80"
+                  : item.prefix === "/" ? "text-ink/70" : "text-ink/60"
               }`}
             >
               {item.prefix}

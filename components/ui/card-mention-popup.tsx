@@ -108,14 +108,26 @@ export const CardMentionPopup = forwardRef<CardMentionPopupRef, CardMentionPopup
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 {item.displayId && (
-                  <span className="font-mono text-xs text-ink/70 flex-shrink-0">
+                  <span
+                    className={`font-mono text-xs flex-shrink-0 ${
+                      index === selectedIndex
+                        ? "text-current opacity-80"
+                        : "text-ink/70"
+                    }`}
+                  >
                     {item.displayId}
                   </span>
                 )}
                 <span className="truncate text-sm">{item.title}</span>
               </div>
               {item.projectName && (
-                <span className="text-xs text-gray-400 truncate block">
+                <span
+                  className={`text-xs truncate block ${
+                    index === selectedIndex
+                      ? "text-current opacity-75"
+                      : "text-gray-400"
+                  }`}
+                >
                   {item.projectName}
                 </span>
               )}
