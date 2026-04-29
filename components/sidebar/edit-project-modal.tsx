@@ -242,8 +242,25 @@ export function EditProjectModal({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()} modal={modal}>
-      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isPickingNarrativeFile) onClose();
+      }}
+      modal={modal}
+    >
+      <DialogContent
+        className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => {
+          if (isPickingNarrativeFile) e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          if (isPickingNarrativeFile) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isPickingNarrativeFile) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>

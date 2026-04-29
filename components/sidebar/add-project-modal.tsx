@@ -62,6 +62,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
 
   const handleNameChange = (value: string) => {
     setName(value);
@@ -143,8 +144,24 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isPickingNarrativeFile) onClose();
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => {
+          if (isPickingNarrativeFile) e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          if (isPickingNarrativeFile) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isPickingNarrativeFile) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {step === 1 ? "Add New Project" : "Product Narrative"}
@@ -231,8 +248,10 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8"
+                        disabled={isPickingNarrativeFile}
                         title="Browse files"
                         onClick={async () => {
+                          setIsPickingNarrativeFile(true);
                           try {
                             // Pass project folder as default location
                             const url = folderPath
@@ -249,6 +268,8 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                             }
                           } catch (error) {
                             console.error("Failed to pick file:", error);
+                          } finally {
+                            setIsPickingNarrativeFile(false);
                           }
                         }}
                       >
