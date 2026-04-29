@@ -1357,11 +1357,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const effective = cardUseWorktree ?? projectUseWorktrees ?? true;
 
         if (!effective) {
+          // Distinguish whether the disable came from the card override or
+          // the project default — the previous wording always blamed the
+          // card, which was misleading when the card was set to "follow
+          // project" and the project itself had worktrees turned off.
+          const reason =
+            cardUseWorktree === false
+              ? "Worktree enforcement is disabled for this card (card.useWorktree=false)."
+              : "Worktree enforcement is disabled at the project level (project.useWorktrees=false) and this card has no override.";
           return {
             content: [
               {
                 type: "text",
-                text: "Worktree enforcement is disabled for this card (useWorktree=false). No branch change performed.",
+                text: `${reason} No branch change performed.`,
               },
             ],
           };

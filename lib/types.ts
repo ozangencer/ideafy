@@ -186,7 +186,7 @@ export const STATUS_COLORS: Record<Status, string> = {
 };
 
 // Settings types
-export type TerminalApp = "iterm2" | "ghostty" | "terminal";
+export type TerminalApp = "iterm2" | "ghostty" | "terminal" | "warp";
 export type AiPlatform = "claude" | "gemini" | "codex" | "opencode";
 
 export interface AppSettings {
@@ -216,6 +216,7 @@ export const TERMINAL_OPTIONS: { value: TerminalApp; label: string }[] = [
   { value: "iterm2", label: "iTerm2" },
   { value: "ghostty", label: "Ghostty" },
   { value: "terminal", label: "Terminal.app" },
+  { value: "warp", label: "Warp" },
 ];
 
 // Section types for card modal tabs

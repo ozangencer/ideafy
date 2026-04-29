@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
-import { writeFileSync, unlinkSync } from "fs";
-import { tmpdir } from "os";
+import { writeFileSync, unlinkSync, mkdirSync } from "fs";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
@@ -27,6 +27,21 @@ function assertValidEnvName(name: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
     throw new Error(`Invalid env var name: ${name}`);
   }
+}
+
+function logChildExit(child: ReturnType<typeof spawn>, appName: string, tag: string): void {
+  let stderrBuf = "";
+  child.stderr?.on("data", (d) => { stderrBuf += d.toString(); });
+  child.on("error", (err) => {
+    console.error(`[${tag}] ${appName} launch failed: ${err.message}`);
+  });
+  child.on("exit", (code) => {
+    if (code !== 0) {
+      console.error(
+        `[${tag}] ${appName} launch exited with code ${code}: ${stderrBuf.trim()}`,
+      );
+    }
+  });
 }
 
 export function getTerminalPreference(): TerminalApp {
@@ -83,18 +98,59 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
       ["-na", "Ghostty.app", "--args", `--command=${scriptPath}`],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
-    let stderrBuf = "";
-    child.stderr?.on("data", (d) => { stderrBuf += d.toString(); });
-    child.on("error", (err) => {
-      console.error(`[${tag}] Ghostty launch failed: ${err.message}`);
+    logChildExit(child, "Ghostty", tag);
+    return { success: true };
+  }
+
+  if (terminal === "warp") {
+    // Warp does not expose AppleScript hooks like iTerm/Terminal, and `open
+    // -a Warp.app --args` does not surface any "run this command" CLI flag.
+    // The documented programmatic entry point is the `warp://launch/<name>`
+    // URI scheme, which loads a YAML launch configuration from
+    // ~/.warp/launch_configurations/<name>.yaml and runs its `commands` on
+    // start. This avoids the GUI-keystroke approach (which required
+    // Accessibility permission, raced with Warp's autocomplete overlay, and
+    // opened a second window from the initial `open -a` launch).
+    // See: https://docs.warp.dev/terminal/more-features/uri-scheme
+    //      https://docs.warp.dev/terminal/windows/launch-configurations
+    const configDir = join(homedir(), ".warp", "launch_configurations");
+    try {
+      mkdirSync(configDir, { recursive: true });
+    } catch (err) {
+      throw new Error(
+        `Could not prepare Warp launch_configurations dir at ${configDir}: ${(err as Error).message}`,
+      );
+    }
+
+    const configName = `ideafy-${timestamp}-${random}`;
+    const configPath = join(configDir, `${configName}.yaml`);
+
+    // Single-quoted YAML scalar: a literal quote is escaped by doubling it.
+    // We control every interpolated value, but quoting defends against paths
+    // with colons or special chars that would otherwise break YAML parsing.
+    const yamlQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
+    const yaml =
+      "---\n" +
+      `name: ${configName}\n` +
+      "windows:\n" +
+      "  - tabs:\n" +
+      "      - layout:\n" +
+      `          cwd: ${yamlQuote(opts.cwd)}\n` +
+      "          commands:\n" +
+      `            - exec: ${yamlQuote(`/bin/bash ${shellQuote(scriptPath)}`)}\n`;
+    writeFileSync(configPath, yaml, { mode: 0o600 });
+
+    const child = spawn("open", [`warp://launch/${configName}`], {
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    child.on("exit", (code) => {
-      if (code !== 0) {
-        console.error(
-          `[${tag}] Ghostty launch exited with code ${code}: ${stderrBuf.trim()}`,
-        );
-      }
-    });
+    logChildExit(child, "Warp", tag);
+
+    // Warp reads the config when handling the URI; the file can be removed
+    // shortly after. 8s is conservative even on a cold app start.
+    setTimeout(() => {
+      try { unlinkSync(configPath); } catch {}
+    }, 8000);
+
     return { success: true };
   }
 

@@ -67,6 +67,14 @@ function stampExistingMigrations(
     `SELECT name FROM sqlite_master WHERE type='table' AND name=?`
   );
 
+  const columnExists = (table: string, column: string): boolean => {
+    if (!tableExists.get(table)) return false;
+    const rows = sqlite
+      .prepare<[], { name: string }>(`PRAGMA table_info(${JSON.stringify(table)})`)
+      .all();
+    return rows.some((row) => row.name === column);
+  };
+
   const crypto = require("node:crypto") as typeof import("node:crypto");
   const insert = sqlite.prepare(
     `INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)`
@@ -79,13 +87,36 @@ function stampExistingMigrations(
     const hash = crypto.createHash("sha256").update(sql).digest("hex");
     if (applied.has(hash)) continue;
 
-    const match = sql.match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?/i);
-    if (!match) continue;
-    if (!tableExists.get(match[1])) continue;
+    let stampReason: string | null = null;
+
+    const createMatch = sql.match(
+      /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?/i
+    );
+    if (createMatch && tableExists.get(createMatch[1])) {
+      stampReason = `target table '${createMatch[1]}' already present`;
+    }
+
+    // Also handle ALTER TABLE ... ADD [COLUMN] migrations: stamp the entry
+    // if every added column already exists on the target table. Without this
+    // a DB that picked up the column via `drizzle-kit push` (or an earlier
+    // hand-edit) would replay the ALTER and crash with "duplicate column".
+    if (!stampReason) {
+      const alterMatches = Array.from(
+        sql.matchAll(
+          /ALTER TABLE\s+[`"']?([A-Za-z0-9_]+)[`"']?\s+ADD\s+(?:COLUMN\s+)?[`"']?([A-Za-z0-9_]+)[`"']?/gi
+        )
+      );
+      if (alterMatches.length > 0 && alterMatches.every(([, t, c]) => columnExists(t, c))) {
+        const cols = alterMatches.map(([, t, c]) => `${t}.${c}`).join(", ");
+        stampReason = `added column(s) ${cols} already present`;
+      }
+    }
+
+    if (!stampReason) continue;
 
     insert.run(hash, entry.when);
     applied.add(hash);
-    console.log(`[db] stamped existing migration ${entry.tag} (target table '${match[1]}' already present)`);
+    console.log(`[db] stamped existing migration ${entry.tag} (${stampReason})`);
   }
 }
 

@@ -40,6 +40,7 @@ function detectTerminal(): TerminalApp | null {
   if (termProgram === "ghostty") return "ghostty";
   if (termProgram === "iterm.app") return "iterm2";
   if (termProgram === "apple_terminal") return "terminal";
+  if (termProgram.includes("warp")) return "warp";
 
   return null;
 }

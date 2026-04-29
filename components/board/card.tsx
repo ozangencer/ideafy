@@ -154,6 +154,20 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
   }
 }
 
+function getEffectiveTerminal(
+  settings: { terminalApp?: string | null; detectedTerminal?: string | null } | null | undefined
+): string | null {
+  return settings?.terminalApp ?? settings?.detectedTerminal ?? null;
+}
+
+function getPasteTipTerminalLabel(terminal: string | null): string {
+  if (terminal === "ghostty") return "Ghostty";
+  if (terminal === "warp") return "Warp";
+  if (terminal === "iterm2") return "iTerm2";
+  if (terminal === "terminal") return "Terminal";
+  return "terminal";
+}
+
 function TaskCardImpl({
   card,
   isDragging = false,
@@ -258,6 +272,9 @@ function TaskCardImpl({
     return null;
   };
   const expectedWorktreePath = getExpectedWorktreePath();
+  const effectiveTerminal = getEffectiveTerminal(settings);
+  const needsPasteConfirm = effectiveTerminal === "ghostty";
+  const pasteTipTerminalLabel = getPasteTipTerminalLabel(effectiveTerminal);
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -312,12 +329,9 @@ function TaskCardImpl({
     e.stopPropagation();
     if (isLocked || !canStart) return;
 
-    // Check if Ghostty - show confirmation dialog
-    const isGhostty = settings?.detectedTerminal === "ghostty" || settings?.terminalApp === "ghostty";
-    if (isGhostty) {
+    if (needsPasteConfirm) {
       setShowTerminalConfirm(true);
     } else {
-      // Not Ghostty, open terminal directly
       handleOpenTerminal();
     }
   };
@@ -369,9 +383,7 @@ function TaskCardImpl({
     e.stopPropagation();
     if (isLocked || !canEvaluate) return;
 
-    // Check if Ghostty - show confirmation dialog
-    const isGhostty = settings?.detectedTerminal === "ghostty" || settings?.terminalApp === "ghostty";
-    if (isGhostty) {
+    if (needsPasteConfirm) {
       setShowIdeationConfirm(true);
     } else {
       handleOpenIdeationTerminal();
@@ -391,9 +403,7 @@ function TaskCardImpl({
     e.stopPropagation();
     if (isLocked || !canTestTogether) return;
 
-    // Check if Ghostty - show confirmation dialog
-    const isGhostty = settings?.detectedTerminal === "ghostty" || settings?.terminalApp === "ghostty";
-    if (isGhostty) {
+    if (needsPasteConfirm) {
       setShowTestTogetherConfirm(true);
     } else {
       handleOpenTestTerminal();
@@ -900,7 +910,7 @@ function TaskCardImpl({
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
-                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in Ghostty terminal.
+                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in {pasteTipTerminalLabel}.
                 </p>
                 {phase === "implementation" && (
                   !effectiveUseWorktree ? (
@@ -933,7 +943,7 @@ function TaskCardImpl({
           <AlertDialogHeader>
             <AlertDialogTitle>Interactive Ideation</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in Ghostty terminal.
+              <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in {pasteTipTerminalLabel}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -956,7 +966,7 @@ function TaskCardImpl({
               <div className="space-y-2">
                 <p>Start an interactive test session with Claude as your QA partner.</p>
                 <p>
-                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in Ghostty terminal.
+                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in {pasteTipTerminalLabel}.
                 </p>
               </div>
             </AlertDialogDescription>
