@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AiPlatform, Card, Complexity, Priority, Project, Status } from "@/lib/types";
+import type { AiPlatform, Card, Complexity, Priority, Project, SectionType, Status } from "@/lib/types";
 import type { CardUpdatePayload } from "@/lib/kanban-store/types";
 
 interface UseCardModalFormOptions {
@@ -63,7 +63,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
 
   // Close-flow UI state
   const [isVisible, setIsVisible] = useState(false);
-  const [cardHistory, setCardHistory] = useState<string[]>([]);
+  const [cardHistory, setCardHistory] = useState<Array<{ cardId: string; activeTab: SectionType }>>([]);
   const [showDiscardDraftDialog, setShowDiscardDraftDialog] = useState(false);
 
   // Derived values

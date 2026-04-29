@@ -289,28 +289,30 @@ export function CardModal({
     const card = cards.find((c) => c.id === cardId);
     if (card && card.id !== selectedCard?.id) {
       if (selectedCard) {
-        setCardHistory((prev) => [...prev, selectedCard.id]);
+        setCardHistory((prev) => [...prev, { cardId: selectedCard.id, activeTab }]);
       }
       selectCard(card);
       openModal();
     }
-  }, [cards, selectedCard, selectCard, openModal, setCardHistory]);
+  }, [cards, selectedCard, activeTab, selectCard, openModal, setCardHistory]);
 
-  // Handle back navigation
+  // Handle back navigation — restore the tab the user was on when they
+  // clicked through, not whatever tab the destination card auto-opened to.
   const handleBack = useCallback(() => {
     if (cardHistory.length > 0) {
       const newHistory = [...cardHistory];
-      const previousCardId = newHistory.pop();
+      const previousEntry = newHistory.pop();
       setCardHistory(newHistory);
 
-      if (previousCardId) {
-        const previousCard = cards.find((c) => c.id === previousCardId);
+      if (previousEntry) {
+        const previousCard = cards.find((c) => c.id === previousEntry.cardId);
         if (previousCard) {
           selectCard(previousCard);
+          setActiveTab(previousEntry.activeTab);
         }
       }
     }
-  }, [cardHistory, cards, selectCard, setCardHistory]);
+  }, [cardHistory, cards, selectCard, setActiveTab, setCardHistory]);
 
   // Handle export
   const handleExport = useCallback(() => {

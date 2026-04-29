@@ -8,6 +8,7 @@ import type {
   Complexity,
   Priority,
   Project,
+  SectionType,
   Status,
 } from "@/lib/types";
 
@@ -47,8 +48,9 @@ export interface CardModalContextValue {
   isTitleValid: boolean;
   canSave: boolean;
 
-  // Navigation history
-  cardHistory: string[];
+  // Navigation history — each entry remembers the tab the user was on when
+  // they clicked through, so Back can restore both card AND section.
+  cardHistory: Array<{ cardId: string; activeTab: SectionType }>;
 
   // Modal UI state
   isExpanded: boolean;
