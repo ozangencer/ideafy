@@ -31,6 +31,9 @@ export async function GET(request: Request) {
     const status = await getPluginStatus(scopeOpts);
     return NextResponse.json(status);
   } catch (error) {
+    // Log the full stack so testers reporting "settings randomly errors"
+    // can paste a useful diagnostic instead of a bare 500.
+    console.error("[/api/integrations/claude-code] GET failed:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to read status" },
       { status: 500 },

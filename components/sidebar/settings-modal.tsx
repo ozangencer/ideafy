@@ -98,12 +98,17 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
 
   useEffect(() => {
     if (settings) {
-      setAiPlatform(settings.aiPlatform);
-      setSkillsPath(settings.skillsPath);
-      setMcpConfigPath(settings.mcpConfigPath);
-      setTerminalApp(settings.terminalApp);
+      // Fall back to defaults for any field the server omitted (the GET
+      // route returns a partial payload from its catch path); leaving them
+      // undefined would flip the controlled Select into uncontrolled mode
+      // and crash the platform-change effect downstream.
+      const safePlatform = settings.aiPlatform ?? DEFAULT_SETTINGS.aiPlatform;
+      setAiPlatform(safePlatform);
+      setSkillsPath(settings.skillsPath ?? DEFAULT_SETTINGS.skillsPath);
+      setMcpConfigPath(settings.mcpConfigPath ?? DEFAULT_SETTINGS.mcpConfigPath);
+      setTerminalApp(settings.terminalApp ?? DEFAULT_SETTINGS.terminalApp);
       // Sync the ref so the platform-change effect doesn't fire on initial load
-      prevPlatformRef.current = settings.aiPlatform;
+      prevPlatformRef.current = safePlatform;
 
       // Get capabilities from the extended settings response
       const extSettings = settings as AppSettings & { platformCapabilities?: PlatformCapabilities };
@@ -213,7 +218,10 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
     // Skip the initial render (when prev === current)
     if (prev === aiPlatform) return;
 
-    const newDefaults = PLATFORM_DEFAULTS[aiPlatform];
+    // Defensive: an unknown platform string from a corrupt setting or a
+    // legacy DB row would otherwise crash the modal with
+    // "Cannot read properties of undefined (reading 'capabilities')".
+    const newDefaults = PLATFORM_DEFAULTS[aiPlatform] ?? PLATFORM_DEFAULTS.claude;
     setCapabilities(newDefaults.capabilities);
 
     // Update paths only if current value is a known default (not user-customized)

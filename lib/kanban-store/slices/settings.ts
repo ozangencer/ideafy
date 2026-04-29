@@ -32,11 +32,13 @@ export const createSettingsSlice: StoreSlice<
     try {
       // When platform changes, update default paths
       if (updates.aiPlatform) {
-        const newDefaults = PLATFORM_DEFAULTS[updates.aiPlatform];
+        // Fall back to claude defaults if the incoming or current platform
+        // string doesn't match a known key — guards against corrupt DB rows.
+        const newDefaults = PLATFORM_DEFAULTS[updates.aiPlatform] ?? PLATFORM_DEFAULTS.claude;
         const currentSettings = get().settings;
 
         if (currentSettings) {
-          const oldDefaults = PLATFORM_DEFAULTS[currentSettings.aiPlatform];
+          const oldDefaults = PLATFORM_DEFAULTS[currentSettings.aiPlatform] ?? PLATFORM_DEFAULTS.claude;
           // Only update paths if they were at the old platform's defaults
           if (currentSettings.skillsPath === oldDefaults.skillsPath) {
             updates.skillsPath = newDefaults.skillsPath;
