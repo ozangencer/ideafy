@@ -3,6 +3,41 @@ import * as os from "os";
 import * as path from "path";
 import { spawn } from "child_process";
 import type { Result } from "../types";
+import { findBinary, buildEnv } from "../base-provider";
+
+let cachedNpmPath: string | null = null;
+let cachedGitPath: string | null = null;
+
+function resolveNpm(): string {
+  if (cachedNpmPath) return cachedNpmPath;
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const candidates = [
+    "/opt/homebrew/bin/npm",
+    "/usr/local/bin/npm",
+    path.join(home, ".volta", "bin", "npm"),
+    path.join(home, ".nvm", "versions", "node", "current", "bin", "npm"),
+    "/usr/bin/npm",
+  ];
+  cachedNpmPath = findBinary("npm", candidates);
+  return cachedNpmPath;
+}
+
+function resolveGit(): string {
+  if (cachedGitPath) return cachedGitPath;
+  const candidates = [
+    "/usr/bin/git",
+    "/opt/homebrew/bin/git",
+    "/usr/local/bin/git",
+  ];
+  cachedGitPath = findBinary("git", candidates);
+  return cachedGitPath;
+}
+
+function resolveCmd(cmd: string): string {
+  if (cmd === "npm") return resolveNpm();
+  if (cmd === "git") return resolveGit();
+  return cmd;
+}
 
 const MARKETPLACE_NAME = "ideafy";
 const PLUGIN_NAME = "ideafy";
@@ -70,7 +105,18 @@ function writeJsonAtomic(filePath: string, data: unknown): void {
 
 function exec(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { cwd: opts.cwd, stdio: ["ignore", "pipe", "pipe"] });
+    let resolved: string;
+    try {
+      resolved = resolveCmd(cmd);
+    } catch (err) {
+      reject(new Error(`spawn ${cmd}: ${err instanceof Error ? err.message : String(err)}`));
+      return;
+    }
+    const proc = spawn(resolved, args, {
+      cwd: opts.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: buildEnv(),
+    });
     let stderr = "";
     proc.stderr?.on("data", (d) => { stderr += d.toString(); });
     proc.on("error", (err) => reject(new Error(`spawn ${cmd}: ${err.message}`)));
