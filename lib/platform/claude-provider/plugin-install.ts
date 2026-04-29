@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawn } from "child_process";
 import type { Result } from "../types";
-import { findBinary, buildEnv } from "../base-provider";
+import { findBinary, buildEnv, isMissingDependencyError } from "../base-provider";
 
 let cachedNpmPath: string | null = null;
 let cachedGitPath: string | null = null;
@@ -109,7 +109,13 @@ function exec(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: num
     try {
       resolved = resolveCmd(cmd);
     } catch (err) {
-      reject(new Error(`spawn ${cmd}: ${err instanceof Error ? err.message : String(err)}`));
+      // MissingDependencyError already has a clean, user-facing message —
+      // forward it untouched so toasts don't show "spawn npm: Node.js…"
+      if (isMissingDependencyError(err)) {
+        reject(err);
+      } else {
+        reject(new Error(`Failed to launch ${cmd}: ${err instanceof Error ? err.message : String(err)}`));
+      }
       return;
     }
     const proc = spawn(resolved, args, {
@@ -119,7 +125,7 @@ function exec(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: num
     });
     let stderr = "";
     proc.stderr?.on("data", (d) => { stderr += d.toString(); });
-    proc.on("error", (err) => reject(new Error(`spawn ${cmd}: ${err.message}`)));
+    proc.on("error", (err) => reject(new Error(`Failed to launch ${cmd}: ${err.message}`)));
     const timer = opts.timeoutMs
       ? setTimeout(() => {
           proc.kill("SIGKILL");

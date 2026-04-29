@@ -62,7 +62,16 @@ export function useSectionStream(args: UseSectionStreamArgs) {
           signal: abortControllerRef.current.signal,
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+          let serverMessage = `Request failed (HTTP ${response.status})`;
+          try {
+            const data = await response.json();
+            if (data?.error) serverMessage = data.error;
+          } catch {
+            // body wasn't JSON — fall back to the generic message
+          }
+          throw new Error(serverMessage);
+        }
         if (!response.body) throw new Error("No response body");
 
         const reader = response.body.getReader();

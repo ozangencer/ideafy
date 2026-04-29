@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cards } from "@/lib/db/schema";
 import { getProviderForCard } from "@/lib/platform/active";
+import { isMissingDependencyError } from "@/lib/platform/base-provider";
 
 // Store active processes for cleanup
 const activeProcesses = new Map<string, ChildProcess>();
@@ -47,6 +48,18 @@ export async function POST(
       }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
+  }
+
+  try {
+    provider.getCliPath();
+  } catch (err) {
+    if (isMissingDependencyError(err)) {
+      return new Response(
+        JSON.stringify({ error: err.message, dependency: err.binaryName }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    throw err;
   }
 
   const stream = new ReadableStream({

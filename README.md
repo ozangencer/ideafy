@@ -64,16 +64,34 @@ All releases live on the [releases page](https://github.com/ozangencer/ideafy/re
 
 ### Prerequisites
 
-Ideafy is a front-end for your coding agent — you need at least one of the supported CLIs installed before you launch the app:
+Ideafy is a front-end for your coding agent. Before you launch the app, make sure the following are installed and reachable from your shell's `PATH`:
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the reference platform.
-- **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** — alternative provider.
-- **[Codex CLI](https://github.com/openai/codex)** — alternative provider.
-- **[OpenCode](https://opencode.ai)** — alternative provider.
+1. **Git** — required for worktree-based isolated builds. Install from [git-scm.com](https://git-scm.com/downloads) (or `brew install git`).
+2. **Node.js (which includes `npm`)** — required to install the Ideafy plugin and its MCP server. Install from [nodejs.org](https://nodejs.org/) (LTS is fine, or `brew install node`).
+3. **At least one supported coding CLI**, installed and **logged in once from your terminal** before opening Ideafy:
+   - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the reference platform. After install, run `claude` once and complete the sign-in prompt.
+   - **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** — run `gemini` once to authenticate.
+   - **[Codex CLI](https://github.com/openai/codex)** — run `codex` once and sign in.
+   - **[OpenCode](https://opencode.ai)** — run `opencode auth login` once.
+4. **macOS** — Ideafy Solo is currently distributed as a signed/notarized macOS DMG.
 
-You also need **git** (worktree support is used for isolated builds) and **macOS** for the DMG build. Only one CLI is required — switching providers is a settings change, not a reinstall.
+Only one CLI is required; switching providers is a settings change, not a reinstall.
+
+> **Tip — Why the one-time login matters.** The first authentication writes credentials to your home directory (e.g. `~/.claude`, `~/.config/gemini`). Ideafy then spawns the CLI on your behalf as a non-interactive child process, which cannot prompt you for a password. If you skip the login step, evaluating cards or sending chat messages will fail. Doing it once in the terminal solves this for every project.
 
 When the app launches a CLI it prepends the following directories to its `PATH`, so installs from Homebrew, npm, or pipx are picked up without extra configuration: `~/.local/bin`, `~/.claude/bin`, `/usr/local/bin`, `/opt/homebrew/bin`. If your binary lives somewhere else, make sure it's reachable from your shell's `PATH` before opening Ideafy.
+
+#### Quick verification
+
+Run these in your terminal before launching Ideafy. All three should print a path or version:
+
+```bash
+git --version       # any 2.x is fine
+npm --version       # any 9.x or newer is fine
+claude --version    # or `gemini --version`, `codex --version`, `opencode --version`
+```
+
+If any command prints `command not found`, install the missing dependency above and re-open your terminal.
 
 ### First run
 

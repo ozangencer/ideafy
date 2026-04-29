@@ -15,6 +15,7 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import { isMissingDependencyError } from "@/lib/platform/base-provider";
 
 export async function POST(
   request: NextRequest,
@@ -248,6 +249,12 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
     completeProcess(processKey);
+    if (isMissingDependencyError(error)) {
+      return NextResponse.json(
+        { error: error.message, dependency: error.binaryName },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       {
         error: "Failed to evaluate idea",

@@ -16,6 +16,7 @@ import {
   killProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import { resolveSessionId } from "@/lib/platform/session-resolver";
 import {
   startLiveStream,
@@ -263,6 +264,20 @@ export async function POST(
       }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
+  }
+
+  // Resolve the CLI path once up front so missing-dependency errors return
+  // a clean 400 instead of crashing the SSE stream with a noisy stack.
+  try {
+    provider.getCliPath();
+  } catch (err) {
+    if (isMissingDependencyError(err)) {
+      return new Response(
+        JSON.stringify({ error: err.message, dependency: err.binaryName }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    throw err;
   }
 
   // Prepare session ID for the first fresh spawn (Claude uses --session-id to control it)
