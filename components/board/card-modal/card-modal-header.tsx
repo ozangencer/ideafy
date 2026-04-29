@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/tooltip";
 import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2, Settings2 } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
-import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS } from "@/lib/types";
+import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS, DEFAULT_SETTINGS } from "@/lib/types";
 import { Project } from "@/lib/types";
+import { useKanbanStore } from "@/lib/store";
 
 const SCALE_LEVEL: Record<"low" | "medium" | "high", 1 | 2 | 3> = {
   low: 1,
@@ -119,6 +120,10 @@ export function CardModalHeader({
   isReadOnly,
   assigneeSlot,
 }: CardModalHeaderProps) {
+  const globalAiPlatform = useKanbanStore((s) => s.settings?.aiPlatform ?? DEFAULT_SETTINGS.aiPlatform);
+  const globalAiPlatformLabel =
+    AI_PLATFORM_OPTIONS.find((o) => o.value === globalAiPlatform)?.label ?? globalAiPlatform;
+
   return (
     <div className="shrink-0 border-b border-border">
       {/* Title row */}
@@ -332,11 +337,13 @@ export function CardModalHeader({
                   ) : (
                     <Settings2 className="h-3.5 w-3.5 shrink-0" />
                   )}
-                  <span>
-                    {aiPlatform
-                      ? AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform)?.label || aiPlatform
-                      : "Global Default"}
-                  </span>
+                  {aiPlatform ? (
+                    <span>
+                      {AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform)?.label || aiPlatform}
+                    </span>
+                  ) : (
+                    <span className="italic">{globalAiPlatformLabel}</span>
+                  )}
                 </div>
               </SelectValue>
             </SelectTrigger>
@@ -344,7 +351,7 @@ export function CardModalHeader({
               <SelectItem value="global">
                 <div className="flex items-center gap-2 text-muted-foreground group-focus:text-current group-data-[highlighted]:text-current">
                   <Settings2 className="h-3.5 w-3.5 shrink-0" />
-                  <span>Global Default</span>
+                  <span>Global Default <span className="text-current/70">({globalAiPlatformLabel})</span></span>
                 </div>
               </SelectItem>
               {AI_PLATFORM_OPTIONS.map((opt) => (
