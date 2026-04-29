@@ -43,6 +43,10 @@ export function createTippyRenderer<I, R extends PopupRefLike>(
           trigger: "manual",
           placement: "bottom-start",
         });
+
+        if (props.items.length === 0) {
+          popup[0].hide();
+        }
       },
 
       onUpdate(props: SuggestionProps<I>) {
@@ -56,6 +60,17 @@ export function createTippyRenderer<I, R extends PopupRefLike>(
         popup[0].setProps({
           getReferenceClientRect: props.clientRect as () => DOMRect,
         });
+
+        // Hide whenever the active query has no matches. The suggestion
+        // plugin stays armed underneath; the popup re-appears as soon as
+        // the user backspaces or types something that matches again. This
+        // mirrors Notion/Linear and prevents "No cards found" from
+        // sticking under prose like "/, @, [[".
+        if (props.items.length === 0) {
+          popup[0].hide();
+        } else {
+          popup[0].show();
+        }
       },
 
       onKeyDown(props: { event: KeyboardEvent }) {

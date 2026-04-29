@@ -154,12 +154,17 @@ export function createCardSuggestion(
 
     // `[[[` triggers a completed-only filter; `[[` lists all cards. The
     // prefix is encoded into the query string and unpacked in `items()`.
+    // allowSpaces is true so multi-word card titles (e.g. `[[memory leak`)
+    // remain searchable, but a query that *starts* with whitespace means
+    // the user typed `[[` and immediately reached for prose — exit the
+    // suggestion in that case so popup doesn't follow them around.
     findSuggestionMatch: ({ $position }) => {
       const textBeforeCursor = $position.parent.textContent.slice(0, $position.parentOffset);
 
       const tripleMatch = textBeforeCursor.match(/\[\[\[([^\]]*)$/);
       if (tripleMatch) {
         const query = tripleMatch[1];
+        if (/^\s/.test(query)) return null;
         return {
           range: { from: $position.pos - query.length - 3, to: $position.pos },
           query: `${COMPLETED_PREFIX}${query}`,
@@ -170,6 +175,7 @@ export function createCardSuggestion(
       const doubleMatch = textBeforeCursor.match(/\[\[([^\]]*)$/);
       if (doubleMatch) {
         const query = doubleMatch[1];
+        if (/^\s/.test(query)) return null;
         return {
           range: { from: $position.pos - query.length - 2, to: $position.pos },
           query,
