@@ -45,9 +45,9 @@ data/backups/
 # Git worktrees
 .worktrees/
 
-# User-specific settings
-.claude/settings.json
-.claude/settings.local.json
+# Project-local Claude Code state (settings, skills, commands, hooks, schedules).
+# All of this is per-machine workflow tooling — not shared codebase.
+.claude/
 .claude/settings.json.bak-*
 .claude/settings.json.backup-*
 mcp-server/mcp-config.json
