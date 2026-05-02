@@ -8,6 +8,7 @@ import {
   mergeTestCheckState,
   testScenariosToMarkdown,
 } from "@/lib/markdown";
+import { recordApplyMessage } from "@/lib/activity-registry";
 
 type Field = "description" | "solutionSummary" | "aiOpinion" | "testScenarios";
 type Mode = "replace" | "append";
@@ -105,6 +106,8 @@ export async function POST(
   }
 
   db.update(schema.cards).set(updates).where(eq(schema.cards.id, id)).run();
+
+  recordApplyMessage(id, existing.projectId ?? null, field, mode);
 
   return NextResponse.json({
     success: true,

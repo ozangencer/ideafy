@@ -144,3 +144,33 @@ export const skillGroupItems = sqliteTable(
 
 export type SkillGroupItemRecord = typeof skillGroupItems.$inferSelect;
 export type NewSkillGroupItem = typeof skillGroupItems.$inferInsert;
+
+// Activity events: persistent feed of completed AI work (opinion/plan/
+// implementation/autonomous/sync …). Toasts are ephemeral; this table backs the
+// notification bell so events survive refresh and the user can scan history.
+//
+// Dedup: (cardId, type) is unique so re-running the same flow on the same card
+// upserts a single row instead of flooding the inbox. SQLite treats multiple
+// NULL cardIds as distinct, so app-wide events (sync) keep their own rows.
+// Previous run snapshots are pushed into payload.history (FIFO, max 10).
+export const activityEvents = sqliteTable(
+  "activity_events",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(), // 'opinion' | 'plan' | 'implementation' | 'autonomous' | 'sync' | …
+    cardId: text("card_id"),
+    projectId: text("project_id"),
+    title: text("title").notNull(),
+    summary: text("summary"),
+    payload: text("payload"),
+    isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("activity_events_card_type_idx").on(table.cardId, table.type),
+  ]
+);
+
+export type ActivityEventRecord = typeof activityEvents.$inferSelect;
+export type NewActivityEvent = typeof activityEvents.$inferInsert;

@@ -10,6 +10,7 @@ import { AgentViewer } from "@/components/editor/agent-viewer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
+import { ActivityBell } from "@/components/activity-bell";
 import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
@@ -165,6 +166,9 @@ export default function Home() {
 
               {/* Background Processes */}
               <BackgroundProcesses />
+
+              {/* Activity Bell (notification inbox) */}
+              <ActivityBell />
 
               {/* Keyboard hints */}
               <span className="text-xs text-muted-foreground hidden lg:block">

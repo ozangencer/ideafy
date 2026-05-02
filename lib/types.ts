@@ -332,6 +332,55 @@ export interface BackgroundProcess {
   endReason?: ProcessEndReason; // Present when status === "completed"
 }
 
+// Activity inbox: completed AI-work events that back the topbar bell.
+// Distinct from BackgroundProcess (running) — this is the persistent history.
+export type ActivityType =
+  | "opinion"
+  | "plan"
+  | "implementation"
+  | "autonomous"
+  | "quickfix"
+  | "chat-detail"
+  | "chat-opinion"
+  | "chat-solution"
+  | "chat-tests"
+  | "apply"
+  | "sync"
+  | "team";
+
+export interface ActivityHistoryEntry {
+  summary: string | null;
+  payload: Record<string, unknown>;
+  at: string; // ISO date
+}
+
+export interface ActivityEvent {
+  id: string;
+  type: ActivityType;
+  cardId: string | null;
+  projectId: string | null;
+  title: string;
+  summary: string | null;
+  payload: Record<string, unknown> & {
+    runCount?: number;
+    history?: ActivityHistoryEntry[];
+  };
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Cloud wrapper feeds extra sources (Supabase team notifications) via slot
+// props. Base bell merges them into a single popover without touching local
+// activity_events table.
+export interface ActivitySource {
+  key: string;
+  events: ActivityEvent[];
+  unreadCount: number;
+  onMarkRead?: (ids: string[]) => void | Promise<void>;
+  onMarkAllRead?: () => void | Promise<void>;
+}
+
 // Completed column filter - Updated in main for conflict test
 export type CompletedFilter = 'today' | 'yesterday' | 'this_week' | 'all';
 

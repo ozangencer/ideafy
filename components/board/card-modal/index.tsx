@@ -103,6 +103,9 @@ export function CardModal({
     // Background processes
     backgroundProcesses,
     fetchBackgroundProcesses,
+    // Activity bell deep-link
+    pendingCardSection,
+    setPendingCardSection,
   } = useKanbanStore();
   const { toast } = useToast();
 
@@ -149,6 +152,15 @@ export function CardModal({
   // UI state not owned by the form hook
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<SectionType>("detail");
+
+  // Honor the deep-link target set by the activity bell. Apply once per
+  // selectedCard transition and clear so subsequent opens default to "detail".
+  useEffect(() => {
+    if (selectedCard && pendingCardSection) {
+      setActiveTab(pendingCardSection);
+      setPendingCardSection(null);
+    }
+  }, [selectedCard, pendingCardSection, setPendingCardSection]);
 
   // Git state
   const [gitBranchName, setGitBranchName] = useState<string | null>(null);

@@ -237,6 +237,11 @@ export async function DELETE(
   }
 
   db.delete(schema.cards).where(eq(schema.cards.id, id)).run();
+  // Drop matching activity inbox rows so the bell doesn't keep orphan
+  // entries that 404 on click.
+  db.delete(schema.activityEvents)
+    .where(eq(schema.activityEvents.cardId, id))
+    .run();
 
   return NextResponse.json({ success: true });
 }

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { createActivitySlice } from "./slices/activity";
 import { createBackgroundProcessesSlice } from "./slices/background-processes";
 import { createCardsSlice } from "./slices/cards";
 import { createClaudeSlice } from "./slices/claude";
@@ -19,6 +20,7 @@ const VALID_COMPLETED_FILTERS: CompletedFilter[] = ['today', 'yesterday', 'this_
 export const useKanbanStore = create<KanbanStore>()(
   persist(
     (set, get) => ({
+      ...createActivitySlice(set, get),
       ...createBackgroundProcessesSlice(set, get),
       ...createCardsSlice(set, get),
       ...createProjectsSlice(set, get),

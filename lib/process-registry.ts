@@ -1,5 +1,8 @@
 import { ChildProcess } from "child_process";
+import { eq } from "drizzle-orm";
 import type { SectionType, ProcessType, BackgroundProcess } from "@/lib/types";
+import { recordProcessCompleted } from "@/lib/activity-registry";
+import { db, schema } from "@/lib/db";
 
 // Process metadata stored alongside the ChildProcess
 interface ProcessEntry {
@@ -80,6 +83,28 @@ export function completeProcess(
       endReason,
     };
     completedProcessRegistry.set(processKey, completedEntry);
+
+    // Bridge to activity bell. Looks up projectId from the card so the bell
+    // can later filter by project. Wrapped to keep registry behaviour
+    // unchanged on any failure.
+    try {
+      const card = db
+        .select({ projectId: schema.cards.projectId })
+        .from(schema.cards)
+        .where(eq(schema.cards.id, entry.metadata.cardId))
+        .get();
+      recordProcessCompleted({
+        cardId: entry.metadata.cardId,
+        projectId: card?.projectId ?? null,
+        processType: entry.metadata.processType,
+        sectionType: entry.metadata.sectionType,
+        startedAt: entry.metadata.startedAt,
+        completedAt: completedEntry.completedAt,
+        endReason,
+      });
+    } catch (err) {
+      console.error("[process-registry] failed to record activity", err);
+    }
 
     // Remove from active registry
     processRegistry.delete(processKey);

@@ -1,5 +1,6 @@
 import { StateCreator } from "zustand";
 import {
+  ActivityEvent,
   AgentListItem,
   AgentPreview,
   AppSettings,
@@ -69,6 +70,11 @@ export interface KanbanStore {
   // Quick entry state
   isQuickEntryOpen: boolean;
 
+  // Deep-link target for the next card-modal open. Activity bell sets this
+  // before calling selectCard()+openModal() so the modal lands on the right
+  // section (e.g. AI Opinion). Modal consumes & clears it on mount.
+  pendingCardSection: SectionType | null;
+
   // Skills, MCPs, Agents & Plugins state
   skills: string[];
   mcps: string[];
@@ -108,6 +114,10 @@ export interface KanbanStore {
 
   // Background processes state
   backgroundProcesses: BackgroundProcess[];
+
+  // Activity inbox state (notification bell)
+  activityEvents: ActivityEvent[];
+  activityUnreadCount: number;
 
   // Card actions
   fetchCards: () => Promise<void>;
@@ -166,6 +176,9 @@ export interface KanbanStore {
   openQuickEntry: () => void;
   closeQuickEntry: () => void;
   toggleQuickEntry: () => void;
+
+  // Deep-link section setter (activity bell → card modal)
+  setPendingCardSection: (section: SectionType | null) => void;
 
   // Skills, MCPs, Agents & Plugins actions
   fetchSkills: () => Promise<void>;
@@ -243,6 +256,12 @@ export interface KanbanStore {
   fetchBackgroundProcesses: () => Promise<void>;
   killBackgroundProcess: (processKey: string) => Promise<void>;
   clearCompletedProcesses: () => Promise<void>;
+
+  // Activity inbox actions
+  fetchActivity: () => Promise<void>;
+  fetchActivityUnreadCount: () => Promise<void>;
+  markActivityRead: (ids: string[]) => Promise<void>;
+  markAllActivityRead: () => Promise<void>;
 }
 
 // Custom slice creator type that makes the store parameter optional

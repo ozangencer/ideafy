@@ -1,4 +1,4 @@
-import { Status } from "../../types";
+import { SectionType, Status } from "../../types";
 import { KanbanStore, StoreSlice } from "../types";
 
 export const createUiSlice: StoreSlice<
@@ -11,6 +11,7 @@ export const createUiSlice: StoreSlice<
     | "collapsedColumns"
     | "completedFilter"
     | "isQuickEntryOpen"
+    | "pendingCardSection"
     | "toggleSidebar"
     | "setSidebarWidth"
     | "toggleProjectListExpanded"
@@ -20,6 +21,7 @@ export const createUiSlice: StoreSlice<
     | "openQuickEntry"
     | "closeQuickEntry"
     | "toggleQuickEntry"
+    | "setPendingCardSection"
   >
 > = (set) => ({
   isSidebarCollapsed: false,
@@ -29,6 +31,7 @@ export const createUiSlice: StoreSlice<
   collapsedColumns: ["withdrawn"] as Status[],
   completedFilter: "this_week",
   isQuickEntryOpen: false,
+  pendingCardSection: null,
 
   toggleSidebar: () =>
     set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
@@ -58,4 +61,7 @@ export const createUiSlice: StoreSlice<
   closeQuickEntry: () => set({ isQuickEntryOpen: false }),
   toggleQuickEntry: () =>
     set((state) => ({ isQuickEntryOpen: !state.isQuickEntryOpen })),
+
+  setPendingCardSection: (section: SectionType | null) =>
+    set({ pendingCardSection: section }),
 });

@@ -16,6 +16,7 @@ import {
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
+import { recordOpinionCompleted } from "@/lib/activity-registry";
 
 export async function POST(
   request: NextRequest,
@@ -230,6 +231,15 @@ export async function POST(
 
     // Mark process as completed AFTER DB updates
     completeProcess(processKey);
+
+    // Record completion in the activity inbox so the bell shows the verdict
+    // (e.g. "AI Opinion completed — Verdict: Strong Yes (8/10)") even after
+    // the user dismisses the toast or refreshes.
+    recordOpinionCompleted(id, card.projectId ?? null, {
+      verdict: aiVerdict,
+      verdictRaw: verdictText,
+      score,
+    });
 
     return NextResponse.json({
       success: true,
