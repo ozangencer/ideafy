@@ -150,7 +150,17 @@ export function CardModal({
   } = form;
 
   // UI state not owned by the form hook
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Default to expanded; remember the user's last choice so reopening matches
+  // the previous session. Reads localStorage lazily to avoid SSR mismatch.
+  const [isExpanded, setIsExpanded] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem("cardModal:isExpanded");
+    return stored === null ? true : stored === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("cardModal:isExpanded", String(isExpanded));
+  }, [isExpanded]);
   const [activeTab, setActiveTab] = useState<SectionType>("detail");
 
   // Honor the deep-link target set by the activity bell. Apply once per
@@ -829,6 +839,7 @@ export function CardModal({
                 onCardClick={handleCardClick}
                 projectId={projectId}
                 readOnly={readOnly}
+                cardId={selectedCard.id}
               />
             }
             rightPanel={
