@@ -16,8 +16,15 @@ const variant =
         ? "team"
         : "personal";
 
+// Version-free artifact names so `releases/latest/download/<name>` stays a
+// stable URL across releases (the README links rely on this). electron-builder
+// interpolates ${arch}/${ext} itself — keep them literal in this string.
+const artifactName =
+  (variant === "team" ? "Ideafy-Team-" : "Ideafy-Personal-") + "${arch}.${ext}";
+
 export default {
   ...buildConfig,
+  artifactName,
   mac: {
     ...buildConfig.mac,
     icon:

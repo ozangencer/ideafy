@@ -57,8 +57,8 @@ The separation is what keeps each lens honest, and what makes a card legible to 
 
 Ideafy Solo ships as a macOS desktop app, signed and notarized with an Apple Developer ID. Drag the DMG into **Applications**, launch it, and you're done. No account, no signup, no cloud.
 
-[**↓ Apple Silicon (M1 / M2 / M3 / M4)**](https://github.com/ozangencer/ideafy/releases/latest/download/Ideafy.Personal.-0.1.0-arm64.dmg) — `Ideafy.Personal.-0.1.0-arm64.dmg`
-[**↓ Intel**](https://github.com/ozangencer/ideafy/releases/latest/download/Ideafy.Personal.-0.1.0.dmg) — `Ideafy.Personal.-0.1.0.dmg`
+[**↓ Apple Silicon (M1 / M2 / M3 / M4)**](https://github.com/ozangencer/ideafy/releases/latest/download/Ideafy.Personal.-0.1.4-arm64.dmg) — `Ideafy.Personal.-0.1.4-arm64.dmg`
+[**↓ Intel**](https://github.com/ozangencer/ideafy/releases/latest/download/Ideafy.Personal.-0.1.4.dmg) — `Ideafy.Personal.-0.1.4.dmg`
 
 All releases live on the [releases page](https://github.com/ozangencer/ideafy/releases).
 
