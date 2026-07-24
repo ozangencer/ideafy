@@ -69,8 +69,25 @@ export interface ScopeOptions {
   projectPath?: string;
 }
 
+// A project-scope settings file is written under <projectPath>/.claude/. Only
+// accept an absolute path with no `..` traversal segments so a caller-supplied
+// projectPath cannot steer the write/read outside a real project directory.
+// (The API route additionally checks the path against the registered project
+// list; this is the by-construction fallback for any other caller.)
+function isSafeProjectPath(projectPath: string): boolean {
+  if (typeof projectPath !== "string" || projectPath.length === 0) return false;
+  if (projectPath.includes("\0")) return false;
+  if (!path.isAbsolute(projectPath)) return false;
+  return !projectPath.split(/[\\/]+/).includes("..");
+}
+
 function resolveSettingsFile(opts: ScopeOptions): string {
   if (opts.scope === "project" && opts.projectPath) {
+    if (!isSafeProjectPath(opts.projectPath)) {
+      throw new Error(
+        "Invalid projectPath: must be an absolute path with no '..' segments",
+      );
+    }
     return path.join(opts.projectPath, ".claude", "settings.json");
   }
   return SETTINGS_FILE;
@@ -160,6 +177,18 @@ async function ensureBetterSqlite3Binary(cacheDir: string): Promise<void> {
   }
 }
 
+// Accept only a plain https:// URL for `git clone`. Reject git transport
+// helpers (ext::, fd:: — the `::` form makes git run arbitrary programs),
+// alternate schemes (file:/ssh:/git:, all excluded by the https:// prefix),
+// and any leading-dash value git would parse as an option. Applied before the
+// clone so a caller-supplied gitUrl can never reach a git transport.
+function isSafeGitUrl(url: string): boolean {
+  if (typeof url !== "string" || url.length === 0) return false;
+  if (url[0] === "-") return false;
+  if (url.includes("::")) return false;
+  return /^https:\/\//.test(url);
+}
+
 async function cloneOrUpdateMarketplace(gitUrl: string): Promise<void> {
   if (fs.existsSync(path.join(MARKETPLACE_DIR, ".git"))) {
     await exec("git", ["fetch", "--depth=1", "origin", "HEAD"], {
@@ -218,6 +247,9 @@ export async function installPlugin(
     if (scope === "project" && !options.projectPath) {
       return { success: false, error: "projectPath is required when scope is 'project'" };
     }
+    if (scope === "project" && !isSafeProjectPath(options.projectPath as string)) {
+      return { success: false, error: "Invalid projectPath: must be an absolute path with no '..' segments" };
+    }
 
     if (options.localSource) {
       if (!fs.existsSync(options.localSource)) {
@@ -227,7 +259,11 @@ export async function installPlugin(
       fs.mkdirSync(path.dirname(MARKETPLACE_DIR), { recursive: true });
       copyTree(options.localSource, MARKETPLACE_DIR, new Set([".git", "node_modules"]));
     } else {
-      await cloneOrUpdateMarketplace(options.gitUrl ?? DEFAULT_GIT_URL);
+      const gitUrl = options.gitUrl ?? DEFAULT_GIT_URL;
+      if (!isSafeGitUrl(gitUrl)) {
+        return { success: false, error: `Refusing to clone from an untrusted git URL: ${gitUrl}` };
+      }
+      await cloneOrUpdateMarketplace(gitUrl);
     }
 
     const marketplaceManifest = readJsonSafe<{
@@ -250,7 +286,11 @@ export async function installPlugin(
     copyTree(pluginSrc, cacheDir, new Set([".git", "node_modules"]));
 
     if (fs.existsSync(path.join(cacheDir, "package.json"))) {
-      await exec("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund"], {
+      // --ignore-scripts: never run the cloned tree's package.json lifecycle
+      // scripts (pre/post/install). The one native dependency the MCP server
+      // needs, better-sqlite3, is (re)built below via `npm rebuild` of that
+      // single trusted package — the only script execution we allow.
+      await exec("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund", "--ignore-scripts"], {
         cwd: cacheDir,
         timeoutMs: 300_000,
       });
