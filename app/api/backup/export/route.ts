@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
+import { isSecretSettingKey } from "@/lib/db/secret-settings";
 
 export interface ExportData {
   version: string;
@@ -116,11 +117,15 @@ export async function GET() {
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
       })),
-      settings: settings.map(setting => ({
-        key: setting.key,
-        value: setting.value,
-        updatedAt: setting.updatedAt,
-      })),
+      // Credential-bearing rows are excluded by construction — the export is a
+      // shareable artifact and must not carry a live Supabase bearer token.
+      settings: settings
+        .filter(setting => !isSecretSettingKey(setting.key))
+        .map(setting => ({
+          key: setting.key,
+          value: setting.value,
+          updatedAt: setting.updatedAt,
+        })),
       skillGroups: skillGroups.map((group) => ({
         id: group.id,
         name: group.name,

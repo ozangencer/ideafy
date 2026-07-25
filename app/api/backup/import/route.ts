@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
 import { createBackup } from "@/lib/backup";
 import { ExportData } from "../export/route";
+import { SECRET_SETTING_KEYS, isSecretSettingKey } from "@/lib/db/secret-settings";
+import { notInArray } from "drizzle-orm";
 
 // POST /api/backup/import - Import data from JSON
 export async function POST(request: NextRequest) {
@@ -26,7 +28,12 @@ export async function POST(request: NextRequest) {
       tx.delete(schema.skillGroups).run();
       tx.delete(schema.cards).run();
       tx.delete(schema.projects).run();
-      tx.delete(schema.settings).run();
+      // Keep credential rows: they are excluded from the export by construction,
+      // so wiping them here would silently sign the user out of team mode on
+      // every restore.
+      tx.delete(schema.settings)
+        .where(notInArray(schema.settings.key, Array.from(SECRET_SETTING_KEYS)))
+        .run();
 
       // 2. Import projects first (cards depend on projects)
       for (const project of data.projects) {
@@ -77,6 +84,9 @@ export async function POST(request: NextRequest) {
       // 4. Import settings
       if (data.settings) {
         for (const setting of data.settings) {
+          // The backup file is untrusted input. Never let it plant a bearer
+          // token — that would be session fixation via a shared backup.
+          if (isSecretSettingKey(setting.key)) continue;
           tx.insert(schema.settings).values({
             key: setting.key,
             value: setting.value,
