@@ -11,6 +11,10 @@ interface SectionEditorProps {
   onCardClick?: (cardId: string) => void;
   projectId: string | null;
   readOnly?: boolean;
+  // Accepted so the card modal can pass the card's id through; the editor
+  // itself does not use it yet. The modal already passes it (see
+  // card-modal/index.tsx), so without this the prop is a type error.
+  cardId?: string;
 }
 
 export function SectionEditor({
