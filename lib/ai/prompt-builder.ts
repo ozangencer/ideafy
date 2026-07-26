@@ -4,6 +4,7 @@
  */
 
 import type { SectionType, ConversationMessage, Voice } from "@/lib/types";
+import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
 import { DEFAULT_VOICE } from "@/lib/types";
 import { testScenariosToMarkdown } from "@/lib/markdown";
 import { detectCardLanguage } from "@/lib/prompts/test-style";
@@ -32,6 +33,13 @@ export interface CardContext {
    * state. Falls back to `testScenarios` (stripped text) when absent.
    */
   testScenariosHtml?: string;
+  /**
+   * Set when this card's text came from another member's pool card. The
+   * tests-section path below runs with tool permissions disabled, so the
+   * card body is fenced and labelled as data before it reaches the model.
+   * Never set in the solo edition — there is no pool there.
+   */
+  externallyAuthored?: boolean;
 }
 
 // Get allowed tools for non-test sections (test section uses --dangerously-skip-permissions)
@@ -74,7 +82,7 @@ export function buildCardContext(ctx: CardContext): string {
 CURRENT CARD CONTEXT:
 - Card ID: ${ctx.displayId}
 - Card UUID: ${ctx.uuid}
-- Title: "${ctx.title}"
+- Title: "${markUntrustedInline(ctx.title, ctx.externallyAuthored === true)}"
 - Project: ${ctx.projectName || "(none)"}
 
 IMPORTANT: When updating this card, use the UUID "${ctx.uuid}" directly. Do NOT search for the card by display ID.
@@ -102,11 +110,12 @@ When you make code changes and need to update test scenarios, you MUST only APPE
 - Add new test cases at the end of the existing list
 - If you call save_tests, include ALL existing test scenarios plus your new additions`;
 
+    const external = ctx.externallyAuthored === true;
     if (ctx.description) {
-      actionContext += `\n\nCard Description: ${ctx.description}`;
+      actionContext += `\n\nCard Description: ${markUntrusted(ctx.description, external)}`;
     }
     if (ctx.solutionSummary) {
-      actionContext += `\nImplementation Plan: ${ctx.solutionSummary}`;
+      actionContext += `\nImplementation Plan: ${markUntrusted(ctx.solutionSummary, external)}`;
     }
     if (ctx.testScenarios) {
       // Feed markdown (with [x]/[ ]) instead of stripped text so the AI can

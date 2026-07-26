@@ -3,6 +3,7 @@ import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
 import { detectCardLanguage } from "./test-style";
 import { buildVoicePrompt } from "./voice-style";
+import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
 
 /**
  * Shared output schema for idea evaluation. Used by the one-shot evaluate
@@ -36,12 +37,13 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
  * Asks Claude to act as a Product Architect and return a structured verdict.
  */
 export function buildEvaluatePrompt(
-  card: { title: string; description: string },
+  card: { title: string; description: string; externallyAuthored?: boolean },
   narrativePath?: string | null,
   voice: Voice = DEFAULT_VOICE,
 ): string {
-  const title = stripHtml(card.title);
-  const description = stripHtml(card.description);
+  const external = card.externallyAuthored === true;
+  const title = markUntrustedInline(stripHtml(card.title), external);
+  const description = markUntrusted(stripHtml(card.description), external);
 
   const narrativeRef = narrativePath
     ? `@${narrativePath}`
@@ -77,11 +79,12 @@ ${EVALUATION_OUTPUT_SCHEMA}`;
  * fix, and hand back a short summary + test checklist.
  */
 export function buildQuickFixPrompt(
-  card: { title: string; description: string },
+  card: { title: string; description: string; externallyAuthored?: boolean },
   voice: Voice = DEFAULT_VOICE,
 ): string {
-  const title = stripHtml(card.title);
-  const description = stripHtml(card.description);
+  const external = card.externallyAuthored === true;
+  const title = markUntrustedInline(stripHtml(card.title), external);
+  const description = markUntrusted(stripHtml(card.description), external);
   const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
   });
@@ -127,11 +130,12 @@ Focus on fixing the bug efficiently. Do NOT write extensive documentation or pla
  * call MCP tools at the end of the session.
  */
 export function buildIdeationPrompt(
-  card: { id: string; title: string; description: string },
+  card: { id: string; title: string; description: string; externallyAuthored?: boolean },
   voice: Voice = DEFAULT_VOICE,
 ): string {
-  const title = stripHtml(card.title);
-  const description = stripHtml(card.description);
+  const external = card.externallyAuthored === true;
+  const title = markUntrustedInline(stripHtml(card.title), external);
+  const description = markUntrusted(stripHtml(card.description), external);
   const voicePrompt = buildVoicePrompt(voice, "chat");
 
   return `You are a Product Strategist. Brainstorm and refine this idea with the user — ask probing questions, challenge assumptions (YAGNI, scope creep), explore alternatives, weigh feasibility and complexity. Be honest but collaborative.
