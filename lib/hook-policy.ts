@@ -49,6 +49,35 @@ export function resolveEffectiveWorktree(
   return { enforced: true, targetBranch: null };
 }
 
+// Card titles and project names are interpolated into a <system-reminder>
+// block, which Claude Code echoes into its transcript and treats as
+// authoritative policy. Escaping double quotes — all this used to do — is not
+// enough to keep a value inside its slot:
+//
+//   * a newline lets the value start what reads as a new numbered policy line;
+//   * a literal </system-reminder> lets it close the block and open its own,
+//     so the injected text is no longer quoted content but policy.
+//
+// That matters because these values are not always authored by the person
+// running the session: a pool-synced card carries a teammate's title, and an
+// imported backup carries whatever the file said. So treat every interpolated
+// value as hostile — collapse line breaks, neutralize the angle brackets that
+// could form a tag, and cap the length so a long title cannot bury the real
+// policy lines below it.
+function sanitizeForReminder(value: string | null | undefined, maxLength = 120): string {
+  const collapsed = (value || "")
+    .replace(/[\r\n\u2028\u2029]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  const neutralized = collapsed
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, '\\"');
+  return neutralized.length > maxLength
+    ? `${neutralized.slice(0, maxLength)}…`
+    : neutralized;
+}
+
 // Phase-aware policy block used once a session is bound to a card.
 export function buildPhasePolicy(
   card: {
@@ -61,7 +90,7 @@ export function buildPhasePolicy(
   const phaseInstruction = PHASE_INSTRUCTIONS[card.status];
   if (!phaseInstruction) return null;
 
-  const title = (card.title || "").replace(/"/g, '\\"');
+  const title = sanitizeForReminder(card.title);
 
   const lines = [
     "<system-reminder>",
@@ -108,7 +137,7 @@ export function buildCreationOfferPolicy(project: {
 }): string {
   return [
     "<system-reminder>",
-    `You are in Ideafy project "${project.name}" (projectId: ${project.id}).`,
+    `You are in Ideafy project "${sanitizeForReminder(project.name)}" (projectId: ${project.id}).`,
     "No Ideafy card is bound to this session yet.",
     "",
     "Policy for this session:",
