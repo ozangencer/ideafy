@@ -15,6 +15,7 @@ import { useKanbanStore } from "@/lib/store";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { UntrustedRunDialog } from "@/components/board/untrusted-run-dialog";
 
 export default function Home() {
   const {
@@ -203,6 +204,7 @@ export default function Home() {
 
       {/* Modals */}
       {isModalOpen && <CardModal />}
+      <UntrustedRunDialog />
       {isDocumentEditorOpen && <DocumentEditor />}
       {isSkillViewerOpen && <SkillViewer />}
       {isAgentViewerOpen && <AgentViewer />}

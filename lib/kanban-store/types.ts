@@ -87,6 +87,18 @@ export interface KanbanStore {
   // Claude integration state
   startingCardIds: string[];
   quickFixingCardIds: string[];
+  /**
+   * Set when a run was refused because the card's text was written by someone
+   * else and the user has not confirmed it yet. Holds the text to review so
+   * the dialog can show what it is asking approval for. Always null in the
+   * solo edition — nothing there produces externally-authored cards.
+   */
+  pendingRunConfirmation: {
+    cardId: string;
+    action: "startTask" | "quickFixTask" | "evaluateIdea";
+    title: string;
+    description: string;
+  } | null;
   evaluatingCardIds: string[];
   lockedCardIds: string[];
 
@@ -216,15 +228,19 @@ export interface KanbanStore {
   getUnifiedItems: () => UnifiedItem[];
 
   // Claude integration actions
-  startTask: (cardId: string) => Promise<{ success: boolean; error?: string }>;
+  startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string }>;
   openTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openIdeationTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openTestTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
-  quickFixTask: (cardId: string) => Promise<{ success: boolean; error?: string }>;
-  evaluateIdea: (cardId: string) => Promise<{ success: boolean; error?: string }>;
+  quickFixTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string }>;
+  evaluateIdea: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string }>;
   lockCard: (cardId: string) => void;
   unlockCard: (cardId: string) => void;
   clearProcessing: (cardId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Re-runs the refused action, this time carrying the user's confirmation. */
+  confirmPendingRun: () => Promise<{ success: boolean; error?: string }>;
+  /** Dismisses the confirmation without running anything. */
+  cancelPendingRun: () => void;
 
   // Dev server actions
   startDevServer: (cardId: string) => Promise<{ success: boolean; port?: number; error?: string }>;

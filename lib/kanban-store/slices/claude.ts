@@ -13,6 +13,27 @@ import { KanbanStore, StoreSlice } from "../types";
 // Force React to commit the spinner-on state synchronously. Without this, a
 // busy render (heavy markdown cards) can collapse the "starting" frame into
 // later updates, leaving the spinner invisible until the user refreshes.
+// A run refused because the card was written by someone else comes back as
+// 409 with this code and the text to review. The solo edition never produces
+// such a card, so this branch is dead there — but the handling lives here
+// because this is the only place these endpoints are called from.
+const UNTRUSTED_CONFIRMATION_CODE = "untrusted_content_confirmation_required";
+
+type UntrustedRefusal = {
+  code?: string;
+  untrustedContent?: { title?: string; description?: string };
+};
+
+function runBody(acknowledged: boolean): RequestInit {
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(
+      acknowledged ? { acknowledgedUntrustedContent: true } : {}
+    ),
+  };
+}
+
 const flushSpinnerOn = (runSet: () => void) => {
   if (typeof window === "undefined") {
     runSet();
@@ -37,14 +58,18 @@ export const createClaudeSlice: StoreSlice<
     | "lockCard"
     | "unlockCard"
     | "clearProcessing"
+    | "pendingRunConfirmation"
+    | "confirmPendingRun"
+    | "cancelPendingRun"
   >
 > = (set, get) => ({
   startingCardIds: [],
   quickFixingCardIds: [],
+  pendingRunConfirmation: null,
   evaluatingCardIds: [],
   lockedCardIds: [],
 
-  startTask: async (cardId) => {
+  startTask: async (cardId, acknowledged = false) => {
     // Optimistic: write processingType locally so the spinner survives a
     // fetchCards poll landing between trigger and backend DB write.
     flushSpinnerOn(() =>
@@ -61,9 +86,7 @@ export const createClaudeSlice: StoreSlice<
 
     try {
       // Start the API call (process starts immediately on backend)
-      const fetchPromise = fetch(`/api/cards/${cardId}/start`, {
-        method: "POST",
-      });
+      const fetchPromise = fetch(`/api/cards/${cardId}/start`, runBody(acknowledged));
 
       // Refresh background processes after a short delay to show the new process
       setTimeout(() => get().fetchBackgroundProcesses(), 500);
@@ -89,6 +112,17 @@ export const createClaudeSlice: StoreSlice<
               : card
           ),
         }));
+        if (response.status === 409 && (data as UntrustedRefusal).code === UNTRUSTED_CONFIRMATION_CODE) {
+          const refusal = data as UntrustedRefusal;
+          set({
+            pendingRunConfirmation: {
+              cardId,
+              action: "startTask",
+              title: refusal.untrustedContent?.title || "",
+              description: refusal.untrustedContent?.description || "",
+            },
+          });
+        }
         return { success: false, error: data.error || "Failed to start task" };
       }
 
@@ -263,7 +297,27 @@ export const createClaudeSlice: StoreSlice<
     }
   },
 
-  quickFixTask: async (cardId) => {
+// Re-runs the action the server refused, this time asserting that the user
+  // has seen the foreign text. The acknowledgement is per-run on purpose: a
+  // pool re-sync can rewrite the card under an approval recorded earlier.
+  confirmPendingRun: async () => {
+    const pending = get().pendingRunConfirmation;
+    if (!pending) return { success: false, error: "Nothing to confirm" };
+    set({ pendingRunConfirmation: null });
+
+    switch (pending.action) {
+      case "startTask":
+        return get().startTask(pending.cardId, true);
+      case "quickFixTask":
+        return get().quickFixTask(pending.cardId, true);
+      case "evaluateIdea":
+        return get().evaluateIdea(pending.cardId, true);
+    }
+  },
+
+  cancelPendingRun: () => set({ pendingRunConfirmation: null }),
+
+  quickFixTask: async (cardId, acknowledged = false) => {
     flushSpinnerOn(() =>
       set((state) => ({
         quickFixingCardIds: addUniqueId(state.quickFixingCardIds, cardId),
@@ -284,9 +338,7 @@ export const createClaudeSlice: StoreSlice<
 
     try {
       // Start the API call (process starts immediately on backend)
-      const fetchPromise = fetch(`/api/cards/${cardId}/quick-fix`, {
-        method: "POST",
-      });
+      const fetchPromise = fetch(`/api/cards/${cardId}/quick-fix`, runBody(acknowledged));
 
       const response = await fetchPromise;
       clearInterval(pollInterval);
@@ -308,6 +360,17 @@ export const createClaudeSlice: StoreSlice<
               : card
           ),
         }));
+        if (response.status === 409 && (data as UntrustedRefusal).code === UNTRUSTED_CONFIRMATION_CODE) {
+          const refusal = data as UntrustedRefusal;
+          set({
+            pendingRunConfirmation: {
+              cardId,
+              action: "quickFixTask",
+              title: refusal.untrustedContent?.title || "",
+              description: refusal.untrustedContent?.description || "",
+            },
+          });
+        }
         return { success: false, error: data.error || "Failed to quick fix" };
       }
 
@@ -348,7 +411,7 @@ export const createClaudeSlice: StoreSlice<
     }
   },
 
-  evaluateIdea: async (cardId) => {
+  evaluateIdea: async (cardId, acknowledged = false) => {
     flushSpinnerOn(() =>
       set((state) => ({
         evaluatingCardIds: addUniqueId(state.evaluatingCardIds, cardId),
@@ -369,9 +432,7 @@ export const createClaudeSlice: StoreSlice<
 
     try {
       // Start the API call (process starts immediately on backend)
-      const fetchPromise = fetch(`/api/cards/${cardId}/evaluate`, {
-        method: "POST",
-      });
+      const fetchPromise = fetch(`/api/cards/${cardId}/evaluate`, runBody(acknowledged));
 
       const response = await fetchPromise;
       clearInterval(pollInterval);
@@ -394,6 +455,17 @@ export const createClaudeSlice: StoreSlice<
               : card
           ),
         }));
+        if (response.status === 409 && (data as UntrustedRefusal).code === UNTRUSTED_CONFIRMATION_CODE) {
+          const refusal = data as UntrustedRefusal;
+          set({
+            pendingRunConfirmation: {
+              cardId,
+              action: "evaluateIdea",
+              title: refusal.untrustedContent?.title || "",
+              description: refusal.untrustedContent?.description || "",
+            },
+          });
+        }
         return { success: false, error: data.error || "Failed to evaluate idea" };
       }
 
