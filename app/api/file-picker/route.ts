@@ -4,6 +4,10 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
+// Opens a native macOS dialog — Next must never run it at build time, and the
+// paramless call must not be answered from a prerendered "cancelled" body.
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   if (process.platform !== "darwin") {
     return NextResponse.json(

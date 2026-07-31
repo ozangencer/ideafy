@@ -11,6 +11,10 @@ import {
   listPluginMcps,
 } from "@/lib/platform/claude-provider/plugin-scanner";
 
+// Reads live on-disk state; the catch below would otherwise swallow the
+// build-phase DB bailout and freeze an empty list into the bundle.
+export const dynamic = "force-dynamic";
+
 // Expand ~ to home directory
 function expandPath(path: string): string {
   if (path.startsWith("~")) {

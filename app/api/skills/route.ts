@@ -12,6 +12,12 @@ import {
 } from "@/lib/platform/claude-provider/plugin-scanner";
 import type { SkillListItem } from "@/lib/types";
 
+// Reads live on-disk state (settings row + the user's skills dir). Without
+// this Next prerenders the handler at build time, and the catch block below
+// swallows the build-phase DB bailout — freezing an empty list into the
+// bundle for the whole life of that build.
+export const dynamic = "force-dynamic";
+
 // Expand ~ to home directory
 function expandPath(path: string): string {
   if (path.startsWith("~")) {

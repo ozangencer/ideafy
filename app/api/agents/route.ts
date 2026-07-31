@@ -12,6 +12,10 @@ import {
 } from "@/lib/platform/claude-provider/plugin-scanner";
 import type { AgentListItem } from "@/lib/types";
 
+// Reads live on-disk state; the catch below would otherwise swallow the
+// build-phase DB bailout and freeze an empty list into the bundle.
+export const dynamic = "force-dynamic";
+
 function expandPath(path: string): string {
   if (path.startsWith("~")) {
     return join(homedir(), path.slice(1));
