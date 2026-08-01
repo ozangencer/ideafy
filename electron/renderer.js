@@ -12,4 +12,10 @@ if (window.electronAPI) {
       window.dispatchEvent(new CustomEvent("refresh-data"));
     });
   }
+
+  if (window.electronAPI.updates && window.electronAPI.updates.onOpenUpdates) {
+    window.electronAPI.updates.onOpenUpdates(() => {
+      window.dispatchEvent(new CustomEvent("open-updates"));
+    });
+  }
 }

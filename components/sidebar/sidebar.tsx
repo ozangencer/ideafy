@@ -38,6 +38,15 @@ export function Sidebar() {
   const [isDragging, setIsDragging] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
+  // Clicking the "update available" OS notification lands here: main focuses
+  // the window and fires this so the user arrives at the thing they clicked
+  // for, rather than at whatever screen they left open.
+  useEffect(() => {
+    const handler = () => setIsSettingsOpen(true);
+    window.addEventListener("open-updates", handler);
+    return () => window.removeEventListener("open-updates", handler);
+  }, []);
+
   // Handle drag resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

@@ -34,5 +34,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.on("update-state", handler);
       return () => ipcRenderer.removeListener("update-state", handler);
     },
+    // Fired when the user clicks the "update available" OS notification.
+    onOpenUpdates: (callback) => {
+      ipcRenderer.on("open-updates", () => callback());
+    },
   },
 });

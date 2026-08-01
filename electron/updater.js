@@ -10,16 +10,25 @@
 // generates from the `publish` block in scripts/electron-builder-config.mjs.
 // Both release repos are public, so no token is involved.
 
-const { app, ipcMain } = require("electron");
+const { app, ipcMain, Notification } = require("electron");
 
 const FIRST_CHECK_DELAY_MS = 15_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+// Ideafy is an app you leave open and hide with Cmd+K, so a release published
+// between two heartbeats would otherwise go unseen for hours. Coming back to
+// the window is the moment you'd actually act on an update; throttled so
+// flicking between apps doesn't hammer GitHub.
+const FOCUS_CHECK_THROTTLE_MS = 30 * 60 * 1000;
 
 let autoUpdater = null;
 let resolveWindow = () => null;
 let intervalTimer = null;
 let started = false;
 let installRequested = false;
+let lastAttemptAt = 0;
+// The version we've already raised a notification for. Without this the
+// heartbeat would re-announce the same build every few hours.
+let notifiedVersion = null;
 
 // Mirrors the renderer's UpdateState shape (components/updates/types).
 let state = {
@@ -61,20 +70,67 @@ function normalizeNotes(notes) {
   return null;
 }
 
+function showWindowAndOpenUpdates() {
+  const win = resolveWindow();
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  if (win.webContents && !win.webContents.isDestroyed()) {
+    win.webContents.send("open-updates");
+  }
+}
+
+/**
+ * Raises an OS notification for a newly-found build.
+ *
+ * The in-app marker is useless on its own here: the window is routinely hidden
+ * behind Cmd+K, so a background check could find a release and nobody would
+ * learn about it until they happened to open Settings. Skipped when the window
+ * is already focused — the marker is right there and a banner would be noise.
+ */
+/** Returns whether a banner was actually raised, so callers can record it. */
+function notify(title, body) {
+  if (!Notification.isSupported()) return false;
+  const win = resolveWindow();
+  // Focused window: the in-app marker is already in view and a banner on top
+  // of it is just noise.
+  if (win && !win.isDestroyed() && win.isFocused()) return false;
+  const notification = new Notification({ title, body, silent: false });
+  notification.on("click", showWindowAndOpenUpdates);
+  notification.show();
+  return true;
+}
+
+function notifyUpdateAvailable(version) {
+  if (!version || version === notifiedVersion) return;
+  // Only remember it once a banner really went out; a version first seen while
+  // the window was focused still deserves one the next time we're in the
+  // background, which is the case where it matters.
+  if (notify(
+    `Ideafy ${version} is available`,
+    "Open Settings → Updates to download and install it.",
+  )) {
+    notifiedVersion = version;
+  }
+}
+
 function wireEvents() {
   autoUpdater.on("checking-for-update", () => {
     setState({ status: "checking", error: null });
   });
 
   autoUpdater.on("update-available", (info) => {
+    const version = info?.version ?? null;
     setState({
       status: "available",
-      latestVersion: info?.version ?? null,
+      latestVersion: version,
       releaseNotes: normalizeNotes(info?.releaseNotes),
       percent: 0,
       error: null,
       lastCheckedAt: Date.now(),
     });
+    notifyUpdateAvailable(version);
   });
 
   autoUpdater.on("update-not-available", () => {
@@ -95,12 +151,14 @@ function wireEvents() {
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    setState({
-      status: "ready",
-      latestVersion: info?.version ?? state.latestVersion,
-      percent: 100,
-      error: null,
-    });
+    const version = info?.version ?? state.latestVersion;
+    setState({ status: "ready", latestVersion: version, percent: 100, error: null });
+    // A 220 MB download takes long enough that people switch away mid-way.
+    // Say when it's done rather than making them come back to find out.
+    notify(
+      `Ideafy ${version} is ready to install`,
+      "Open Settings → Updates to install it and relaunch.",
+    );
   });
 
   autoUpdater.on("error", (err) => {
@@ -124,6 +182,7 @@ function registerIpc() {
 
   ipcMain.handle("updates:check", async () => {
     if (!autoUpdater) return state;
+    lastAttemptAt = Date.now();
     try {
       await autoUpdater.checkForUpdates();
     } catch (err) {
@@ -200,16 +259,32 @@ function initUpdater({ getWindow, enabled }) {
   registerIpc();
   setState({ supported: true, status: "idle" });
 
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {});
-  }, FIRST_CHECK_DELAY_MS);
+  setTimeout(() => backgroundCheck(), FIRST_CHECK_DELAY_MS);
+  intervalTimer = setInterval(() => backgroundCheck(), CHECK_INTERVAL_MS);
 
-  intervalTimer = setInterval(() => {
-    // Don't restart a check on top of an in-flight download or a build that is
-    // already staged and waiting for the user to hit Install.
-    if (state.status === "downloading" || state.status === "ready") return;
-    autoUpdater.checkForUpdates().catch(() => {});
-  }, CHECK_INTERVAL_MS);
+  // Returning to the app is the other moment worth checking. `activate` covers
+  // the dock icon and Cmd+K unhide; `focus` covers app switching.
+  const win = resolveWindow();
+  if (win && !win.isDestroyed()) {
+    win.on("focus", () => backgroundCheck({ throttled: true }));
+  }
+  app.on("activate", () => backgroundCheck({ throttled: true }));
+}
+
+/**
+ * A check the user did not ask for. Never runs on top of an in-flight download
+ * or a staged build waiting to install, and — when throttled — not more than
+ * once per FOCUS_CHECK_THROTTLE_MS.
+ */
+function backgroundCheck({ throttled = false } = {}) {
+  if (!autoUpdater) return;
+  if (state.status === "downloading" || state.status === "ready" || state.status === "installing") {
+    return;
+  }
+  if (state.status === "checking") return;
+  if (throttled && Date.now() - lastAttemptAt < FOCUS_CHECK_THROTTLE_MS) return;
+  lastAttemptAt = Date.now();
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 function stopUpdater() {
