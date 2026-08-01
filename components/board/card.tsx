@@ -524,13 +524,7 @@ function TaskCardImpl({
               {staleness && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span
-                      className={`text-[10px] shrink-0 tabular-nums mt-0.5 cursor-default ${
-                        staleness.severe
-                          ? "text-amber-600 dark:text-amber-500"
-                          : "text-muted-foreground"
-                      }`}
-                    >
+                    <span className="text-[10px] shrink-0 tabular-nums mt-0.5 cursor-default text-muted-foreground">
                       {staleness.label}
                     </span>
                   </TooltipTrigger>

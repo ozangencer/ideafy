@@ -16,9 +16,6 @@ const STALE_AFTER_DAYS: Partial<Record<Status, number>> = {
   test: 14,
 };
 
-/** Past this multiple of the threshold, the marker stops being a whisper. */
-const SEVERE_MULTIPLIER = 3;
-
 const DAY_MS = 86_400_000;
 
 export function daysSince(iso: string | null | undefined, now = Date.now()): number | null {
@@ -63,8 +60,6 @@ export function formatDateShort(iso: string | null | undefined): string | null {
 export interface CardStaleness {
   days: number;
   label: string;
-  /** Well past the threshold — worth more than a muted grey. */
-  severe: boolean;
 }
 
 /**
@@ -73,6 +68,11 @@ export interface CardStaleness {
  * Returning null for a fresh card is the point: an age shown on every card is
  * noise that makes the genuinely stale ones no easier to spot, which is the
  * problem it was meant to solve.
+ *
+ * The label is deliberately uniform, with no louder tier for the very oldest.
+ * On this board every card in Human Test and In Progress is past its
+ * threshold, so an emphasis colour would land on all of them at once and
+ * emphasise nothing. The number already separates six months from four.
  */
 export function getCardStaleness(
   status: Status,
@@ -85,9 +85,5 @@ export function getCardStaleness(
   const days = daysSince(createdAt, now);
   if (days === null || days < threshold) return null;
 
-  return {
-    days,
-    label: formatAgeShort(days),
-    severe: days >= threshold * SEVERE_MULTIPLIER,
-  };
+  return { days, label: formatAgeShort(days) };
 }
