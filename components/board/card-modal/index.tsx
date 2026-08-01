@@ -1159,6 +1159,9 @@ export function CardModal({
             onWithdraw={handleWithdraw}
             onCancel={handleClose}
             onSave={handleSave}
+            createdAt={selectedCard?.createdAt}
+            updatedAt={selectedCard?.updatedAt}
+            completedAt={selectedCard?.completedAt}
           />
         )}
       </div>

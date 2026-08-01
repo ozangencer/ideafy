@@ -4,6 +4,7 @@ import { memo, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/types";
+import { formatAgeLong, getCardStaleness } from "@/lib/card-age";
 import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
 import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
@@ -455,6 +456,7 @@ function TaskCardImpl({
   };
 
   const displayId = getDisplayId(card, project);
+  const staleness = getCardStaleness(card.status, card.createdAt);
   const projectName = project?.name || (card.projectFolder ? card.projectFolder.split("/").pop() : null);
 
   // Prevent context menu when locked
@@ -517,6 +519,26 @@ function TaskCardImpl({
               <h3 className={`text-sm font-medium text-card-foreground transition-colors line-clamp-2 flex-1 ${isLocked ? "" : "group-hover:text-ink"}`}>
                 {card.title}
               </h3>
+              {/* Age, but only once it is worth mentioning. Shown on every card
+                  it would be noise that hides the cards it exists to surface. */}
+              {staleness && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={`text-[10px] shrink-0 tabular-nums mt-0.5 cursor-default ${
+                        staleness.severe
+                          ? "text-amber-600 dark:text-amber-500"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {staleness.label}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    Created {formatAgeLong(staleness.days)}
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {!isLocked && <PriorityIcon priority={card.priority} />}
             </div>
 
