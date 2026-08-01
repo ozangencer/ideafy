@@ -102,13 +102,13 @@ This card is currently in "${ctx.status}" status. The user expects you to TAKE A
 - Do NOT respond with "here's a plan" — actually do the work
 - You have access to Bash, Grep, and Glob tools in addition to Read, Edit, and Write
 
-## IMPORTANT: Test Scenarios - Append Only
-When you make code changes and need to update test scenarios, you MUST only APPEND new test scenarios to the existing ones.
-- NEVER remove or overwrite existing test scenarios unless the user explicitly asks you to
-- Preserve the EXACT markdown format of existing test scenarios (headings, checkbox syntax, grouping)
-- Preserve the checked state of completed items: items marked as [x] MUST remain [x], do NOT reset them to [ ]
-- Add new test cases at the end of the existing list
-- If you call save_tests, include ALL existing test scenarios plus your new additions`;
+## Test Scenarios: append by default, delete only when asked
+Writes to the checklist are append-only unless the user asks for a removal in this turn.
+- Default: keep every existing scenario, preserve the EXACT markdown format (headings, checkbox syntax, grouping), and keep checked items checked — [x] MUST stay [x]. Add new cases at the end.
+- A save_tests call that drops an existing item is rejected by the server, so on a normal append always send ALL existing scenarios plus your additions.
+- When the user explicitly asks you to remove scenarios — "forget those", "I don't want the extra section", "drop the last three", "undo what you just added" — call save_tests with \`allowDeletion: true\` and the exact list the card should end up with. That payload is a literal replacement including checkbox state, so copy every surviving item verbatim, [x] and [ ] as they stand now.
+- Never pass allowDeletion on a turn where the user did not ask for a removal.
+- If the user wants the list emptied completely, say so plainly and let them clear it in the Tests tab — save_tests will not write an empty checklist.`;
 
     const external = ctx.externallyAuthored === true;
     if (ctx.description) {
@@ -151,17 +151,25 @@ ${section === "tests"
   : `Content writes for this section happen through the chat-UI Apply buttons (Append / Replace) — not through MCP tools. You do not have a write tool for this field; just respond with your content as markdown and let the user click Apply.`}
 
 ## CRITICAL: Persisting Content
-When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
+${section === "tests"
+  ? `Do NOT call save_tests on every turn. Most turns in this tab are conversation — answering a question, explaining why a test failed, making a code change — and they should end with a plain reply and nothing written to the card.
+
+Call save_tests only when:
+- the user explicitly asks you to add, rewrite, or save scenarios, or
+- the user asks you to remove scenarios (then pass allowDeletion: true — see the rules above).
+
+Otherwise, when you have scenarios worth proposing, just write them in your reply as markdown checkboxes and stop. The chat UI puts Append / Replace buttons under your message and the user decides whether they land on the card. Replace is also how they wipe scenarios you proposed and they didn't want — so a reply that skips save_tests keeps that escape hatch open. Calling save_tests hides those buttons.`
+  : `When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
 Do NOT just respond with text — persist it to the card so it appears in the UI.
 This includes when you agree with, refine, or expand on the user's ideas — always save the resulting content.
-Only skip saving for pure clarifying questions or very brief acknowledgments without new content.
+Only skip saving for pure clarifying questions or very brief acknowledgments without new content.`}
 ${section === "solution" ? `
 Do NOT call save_plan. The user reviews your plan and clicks Append or Replace via the Apply buttons in the chat UI; clicking Apply also moves the card to In Progress automatically when appropriate. If you call save_plan you will silently overwrite their existing solution — that is the destructive bug Apply was built to prevent. Respond with your plan as normal markdown text and let the user click Apply.
 Do NOT automatically generate test scenarios when producing a plan. Only generate tests if the user explicitly asks for it.` : ""}${section === "detail" ? `
 Do NOT call update_card to write the description. The user reviews your reply and decides whether to Append or Replace via the Apply buttons in the chat UI. If you call update_card with a description, you will silently overwrite their existing content — that is the destructive bug Apply was built to prevent. Respond with your refined content as normal markdown text and let the user click Apply.` : ""}${section === "opinion" ? `
 Do NOT call save_opinion. The user reviews your evaluation and clicks Append or Replace via the Apply buttons in the chat UI; the verdict is parsed from your "## Summary Verdict (...)" line automatically when Apply is clicked. If you call save_opinion you will silently overwrite their existing opinion — that is the destructive bug Apply was built to prevent. Respond with your evaluation as normal markdown (include the Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections) and let the user click Apply.` : ""}${section === "tests" ? `
-When you produce test scenarios, call save_tests with the test content in markdown checkbox format. NEVER use update_card for testScenarios — it bypasses checkbox state preservation.
-IMPORTANT: Always APPEND new test scenarios to the existing ones. Never remove existing test scenarios unless the user explicitly asks. Preserve the EXACT markdown format and checked state ([x]) of existing items. Include all existing scenarios plus new additions when calling save_tests. When you only need to append new items after a code change, still call save_tests with the full existing list plus the new items — save_tests will merge checkbox states automatically.` : ""}`;
+On the turns where you do call save_tests, send markdown checkbox format and NEVER use update_card for testScenarios — it bypasses checkbox state preservation. Send the full checklist the card should end up with: existing items plus your additions on an append, or the surviving items only when the user asked for a removal and you pass allowDeletion. save_tests merges checkbox states automatically on appends.
+After a code change, do not reach for save_tests reflexively. Describe what you changed, propose any new scenarios as checkboxes in your reply, and let the user apply them.` : ""}`;
 }
 
 // Section-specific system prompts
@@ -228,6 +236,8 @@ Current test scenarios:
 ${currentTests}
 
 Cover happy paths, edge cases, and error conditions. Use checkbox format: \`- [ ] Step description\`.
+
+Scope what you write to what the user actually asked about. If they asked about one flow, cover that flow — do not regenerate or expand the whole checklist. A question deserves an answer, not a fresh batch of scenarios.
 
 ${voice}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests")}`;
   },

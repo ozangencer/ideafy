@@ -706,7 +706,9 @@ VOICE ACCENT (apply on top of the style contract — read project's voice via ge
 - builder (default) — UI labels with the occasional technical hint when it helps reproduction. Still imperative manual steps.
 - engineer — after each manual scenario you may add the related code path or function name in parentheses if it speeds debugging, but the step itself stays a manual instruction.
 
-Shrink guard: if the card already has scenarios, your new list must retain ≥50% of them (fuzzy text match). Otherwise save_tests will reject your call with an error — always include existing scenarios plus your additions (append-only).`,
+Append-only guard: if the card already has scenarios, EVERY existing item must still be present in your payload (fuzzy text match). Dropping even one item rejects the call — always send the existing list plus your additions.
+
+Deleting scenarios: the guard above is absolute, so the only way to remove an item is allowDeletion: true. Pass it only on a turn where the user explicitly asked you to remove, drop, or undo scenarios. It makes your payload a literal replacement of the checklist — checkbox states included — so copy every surviving item, text and [x]/[ ], exactly as it stands today.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -717,6 +719,10 @@ Shrink guard: if the card already has scenarios, your new list must retain ≥50
             testScenarios: {
               type: "string",
               description: "Test scenarios in markdown format with checkboxes (- [ ] format). Adapt the voice accent to the project (see tool description).",
+            },
+            allowDeletion: {
+              type: "boolean",
+              description: "Opt in to removing existing scenarios. Only set true when the user explicitly asked for a removal in this turn. Turns the payload into a literal replacement: whatever you send becomes the checklist, checkbox states and all. Omit for normal appends.",
             },
             voice: {
               type: "string",
@@ -1184,7 +1190,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "save_tests": {
-        const { id: rawId, testScenarios } = args as { id: string; testScenarios: string };
+        const { id: rawId, testScenarios, allowDeletion } = args as {
+          id: string;
+          testScenarios: string;
+          allowDeletion?: boolean;
+        };
         const id = resolveCardId(rawId);
         if (!id) {
           return {
@@ -1193,22 +1203,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // Opt-in destructive write. The guards below exist because the model
+        // rewrites the whole checklist on every call and used to drop items
+        // nobody asked it to drop. But they also made "forget those scenarios,
+        // I don't want them" impossible to honour — every route back out of a
+        // bad suggestion was closed. This flag reopens exactly that one door:
+        // the payload becomes a literal replacement, merge included, so the
+        // model must send the surviving items verbatim.
+        const deletionRequested = allowDeletion === true;
+
         const existing = db.prepare(`SELECT test_scenarios FROM cards WHERE id = ?`).get(id) as { test_scenarios: string } | undefined;
         const existingItems = extractTaskItems(existing?.test_scenarios || "");
         const existingCheckedCount = existingItems.filter((item) => item.checked).length;
         const checkboxStats = markdownCheckboxStats(testScenarios);
 
+        // A payload with no checkboxes at all is a format mistake, not a
+        // deletion — refuse it even under allowDeletion rather than flattening
+        // the checklist into prose. Emptying the list entirely stays a UI job.
         if (existingItems.length > 0 && checkboxStats.total === 0) {
           return {
             content: [{
               type: "text",
-              text: "save_tests refused: payload contains no markdown checkboxes (`- [ ]` / `- [x]`). Include the full existing checklist plus your additions; plain paragraphs would wipe checkbox state.",
+              text: "save_tests refused: payload contains no markdown checkboxes (`- [ ]` / `- [x]`). Send the checklist you want the card to end up with; plain paragraphs would wipe checkbox state. To clear the list completely, tell the user to delete the items in the Tests tab.",
             }],
             isError: true,
           };
         }
 
-        if (existingCheckedCount > 0 && checkboxStats.checked === 0) {
+        if (!deletionRequested && existingCheckedCount > 0 && checkboxStats.checked === 0) {
           return {
             content: [{
               type: "text",
@@ -1224,20 +1246,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Append-only guard: save_tests is intentionally stricter than generic
         // HTML merges. Every existing checklist item must still be present
         // (fuzzy match) in the new payload; otherwise we reject the write.
-        if (existing?.test_scenarios) {
+        if (!deletionRequested && existing?.test_scenarios) {
           const assessment = assessAppendOnlyRewrite(existing.test_scenarios, htmlContent);
           if (!assessment.safe) {
             return {
               content: [{
                 type: "text",
-                text: `save_tests refused: ${assessment.reason}. Call save_tests again with the full existing list plus your new additions (append-only). Existing items: ${assessment.existing}, retained in your payload: ${assessment.retained}.`,
+                text: `save_tests refused: ${assessment.reason}. Call save_tests again with the full existing list plus your new additions (append-only). Existing items: ${assessment.existing}, retained in your payload: ${assessment.retained}. If the user explicitly asked you to remove scenarios, call save_tests again with allowDeletion: true and the exact list they want to keep.`,
               }],
               isError: true,
             };
           }
         }
 
-        const mergedHtml = existing?.test_scenarios
+        // Under allowDeletion the payload is authoritative, so the check-state
+        // merge is skipped too — otherwise an item the user asked to un-tick
+        // would come back checked.
+        const mergedHtml = !deletionRequested && existing?.test_scenarios
           ? mergeTestCheckState(existing.test_scenarios, htmlContent)
           : htmlContent;
 
@@ -1254,8 +1279,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // Report what a destructive write actually cost, so the removal shows
+        // up in chat instead of landing silently on the card.
+        let summary = `Test scenarios saved to card ${id} and moved to Human Test`;
+        if (deletionRequested && existingItems.length > 0) {
+          const kept = assessAppendOnlyRewrite(existing?.test_scenarios || "", htmlContent).retained;
+          const removed = existingItems.length - kept;
+          summary += ` — allowDeletion: ${removed} of ${existingItems.length} existing scenario(s) removed, ${kept} kept`;
+        }
+
         return {
-          content: [{ type: "text", text: `Test scenarios saved to card ${id} and moved to Human Test` }],
+          content: [{ type: "text", text: summary }],
         };
       }
 
