@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectItem } from "./project-item";
 import { AddProjectModal } from "./add-project-modal";
 import { EditProjectModal } from "./edit-project-modal";
+import { UnpushedDialog } from "./unpushed-dialog";
 import { Project } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Layers, Plus } from "lucide-react";
@@ -16,9 +17,37 @@ export function ProjectList() {
     setActiveProject,
     isProjectListExpanded,
     toggleProjectListExpanded,
+    cards,
   } = useKanbanStore();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [unpushedProject, setUnpushedProject] = useState<Project | null>(null);
+  const [unpushedCounts, setUnpushedCounts] = useState<Record<string, number>>({});
+
+  const loadUnpushedCounts = useCallback(async () => {
+    try {
+      const response = await fetch("/api/projects/unpushed");
+      if (!response.ok) return;
+      const rows: { projectId: string; count: number }[] = await response.json();
+      setUnpushedCounts(
+        Object.fromEntries(rows.map((row) => [row.projectId, row.count]))
+      );
+    } catch {
+      // A sidebar badge is not worth surfacing an error for.
+    }
+  }, []);
+
+  // Completing a card is what puts a commit on the local default branch, so the
+  // count is refreshed whenever that number moves rather than on every card
+  // edit — each refresh shells out to git once per project.
+  const completedCount = useMemo(
+    () => cards.filter((card) => card.status === "completed").length,
+    [cards]
+  );
+
+  useEffect(() => {
+    loadUnpushedCounts();
+  }, [loadUnpushedCounts, completedCount]);
 
   const pinnedProjects = projects.filter((p) => p.isPinned);
   const unpinnedProjects = projects.filter((p) => !p.isPinned);
@@ -62,6 +91,8 @@ export function ProjectList() {
                 project={project}
                 isActive={project.id === activeProjectId}
                 onEdit={setEditingProject}
+                unpushedCount={unpushedCounts[project.id] ?? 0}
+                onShowUnpushed={setUnpushedProject}
               />
             ))}
           </div>
@@ -126,6 +157,8 @@ export function ProjectList() {
                   project={project}
                   isActive={project.id === activeProjectId}
                   onEdit={setEditingProject}
+                  unpushedCount={unpushedCounts[project.id] ?? 0}
+                  onShowUnpushed={setUnpushedProject}
                 />
               ))}
             </div>
@@ -152,6 +185,14 @@ export function ProjectList() {
         <EditProjectModal
           project={editingProject}
           onClose={() => setEditingProject(null)}
+        />
+      )}
+
+      {unpushedProject && (
+        <UnpushedDialog
+          project={unpushedProject}
+          onClose={() => setUnpushedProject(null)}
+          onRefreshed={loadUnpushedCounts}
         />
       )}
     </div>

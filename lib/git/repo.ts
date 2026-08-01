@@ -171,3 +171,106 @@ export async function hasStagedChanges(projectPath: string): Promise<boolean> {
     return true;
   }
 }
+
+/**
+ * Commits sitting on the local default branch that the remote has not seen.
+ *
+ * Merging a card lands its work on the *local* default branch and stops there —
+ * nothing is pushed. A card reading "Completed" therefore says nothing about
+ * whether the work left this machine, which is exactly the gap this reports.
+ *
+ * The comparison is against the cached `origin/<branch>` ref, so it answers
+ * "not in the origin I last heard about". Callers wanting a current answer
+ * should fetch first.
+ */
+export interface UnpushedCommit {
+  hash: string;
+  subject: string;
+  /** ISO 8601 commit date. */
+  date: string;
+}
+
+export interface UnpushedStatus {
+  /** False when the project has no remote to be behind — nothing to report. */
+  supported: boolean;
+  defaultBranch: string;
+  count: number;
+  commits: UnpushedCommit[];
+}
+
+const UNSUPPORTED: UnpushedStatus = {
+  supported: false,
+  defaultBranch: "",
+  count: 0,
+  commits: [],
+};
+
+/** Refresh the cached remote refs. Best-effort: offline is not an error here. */
+export async function fetchRemote(projectPath: string): Promise<boolean> {
+  try {
+    await git(projectPath, "fetch", "--quiet", "origin");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getUnpushedStatus(
+  projectPath: string,
+  options: { withCommits?: boolean } = {}
+): Promise<UnpushedStatus> {
+  if (!existsSync(projectPath) || !(await isGitRepo(projectPath))) return UNSUPPORTED;
+
+  try {
+    const { stdout: remotes } = await git(projectPath, "remote");
+    if (!remotes.trim()) return UNSUPPORTED;
+  } catch {
+    return UNSUPPORTED;
+  }
+
+  const defaultBranch = await getDefaultBranch(projectPath);
+  const remoteRef = `refs/remotes/origin/${defaultBranch}`;
+
+  // A branch the remote has never seen has no "unpushed" answer worth giving —
+  // every commit would count, which is noise rather than a warning.
+  try {
+    await git(projectPath, "show-ref", "--verify", "--quiet", remoteRef);
+    await git(projectPath, "show-ref", "--verify", "--quiet", `refs/heads/${defaultBranch}`);
+  } catch {
+    return UNSUPPORTED;
+  }
+
+  const range = `origin/${defaultBranch}..${defaultBranch}`;
+
+  try {
+    if (!options.withCommits) {
+      const { stdout } = await git(projectPath, "rev-list", "--count", range);
+      return {
+        supported: true,
+        defaultBranch,
+        count: Number.parseInt(stdout.trim(), 10) || 0,
+        commits: [],
+      };
+    }
+
+    // Unit separator between fields: a subject may contain anything else.
+    const { stdout } = await git(
+      projectPath,
+      "log",
+      range,
+      "--pretty=format:%H%x1f%s%x1f%cI"
+    );
+
+    const commits: UnpushedCommit[] = stdout
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => {
+        const [hash, subject, date] = line.split("\x1f");
+        return { hash, subject: subject ?? "", date: date ?? "" };
+      });
+
+    return { supported: true, defaultBranch, count: commits.length, commits };
+  } catch {
+    return UNSUPPORTED;
+  }
+}

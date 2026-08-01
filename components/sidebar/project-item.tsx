@@ -8,17 +8,28 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Pencil, Star } from "lucide-react";
+import { ArrowUp, Pencil, Star } from "lucide-react";
 import { hexToRgba } from "@/lib/utils";
 
 interface ProjectItemProps {
   project: Project;
   isActive: boolean;
   onEdit: (project: Project) => void;
+  /** Commits on the local default branch that origin has not seen. */
+  unpushedCount?: number;
+  onShowUnpushed?: (project: Project) => void;
 }
 
-export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
+export function ProjectItem({
+  project,
+  isActive,
+  onEdit,
+  unpushedCount = 0,
+  onShowUnpushed,
+}: ProjectItemProps) {
   const { setActiveProject, toggleProjectPin } = useKanbanStore();
+
+  const showUnpushed = unpushedCount > 0 && Boolean(onShowUnpushed);
 
   const activeStyle = isActive
     ? {
@@ -70,17 +81,22 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
       {/* Project name */}
       <span className="truncate flex-1">{project.name}</span>
 
-      {/* Prefix badge - hide on hover/active to make room for buttons */}
+      {/* Prefix badge - hide on hover/active to make room for buttons, and
+          whenever the unpushed badge is showing: a warning outranks a
+          reminder of a prefix that every card ID already carries. */}
       <span className={`text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded shrink-0 transition-opacity ${
-        isActive ? "opacity-0" : "group-hover/project:opacity-0"
+        isActive || showUnpushed ? "opacity-0" : "group-hover/project:opacity-0"
       }`}>
         {project.idPrefix}
       </span>
 
-      {/* Action buttons - absolute positioned to avoid overflow */}
-      <div className={`absolute right-2 flex items-center gap-0.5 transition-opacity ${
-        isActive ? "opacity-100" : "opacity-0 group-hover/project:opacity-100"
-      }`}>
+      {/* Action buttons - absolute positioned to avoid overflow. The unpushed
+          badge sits last so it stays pinned to the right edge whether or not
+          the hover-only buttons are present. */}
+      <div className="absolute right-2 flex items-center gap-0.5">
+        <div className={`flex items-center gap-0.5 transition-opacity ${
+          isActive ? "opacity-100" : "opacity-0 group-hover/project:opacity-100"
+        }`}>
         {/* Edit button */}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -124,6 +140,32 @@ export function ProjectItem({ project, isActive, onEdit }: ProjectItemProps) {
             <p>{project.isPinned ? "Unpin project" : "Pin project"}</p>
           </TooltipContent>
         </Tooltip>
+        </div>
+
+        {/* Unpushed indicator — always visible, because its whole job is to be
+            noticed without being looked for. */}
+        {showUnpushed && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowUnpushed?.(project);
+                }}
+                className="flex items-center gap-0.5 h-5 pl-1 pr-1.5 rounded text-[10px] font-medium tabular-nums bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 transition-colors dark:text-amber-500"
+              >
+                <ArrowUp className="h-3 w-3" />
+                {unpushedCount}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>
+                {unpushedCount} commit{unpushedCount === 1 ? "" : "s"} not pushed yet
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

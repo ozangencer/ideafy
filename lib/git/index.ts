@@ -10,7 +10,10 @@ export {
   getBranchStatus,
   getMergeReality,
   worktreeHasUncommittedChanges,
+  getUnpushedStatus,
+  fetchRemote,
 } from "./repo";
+export type { UnpushedCommit, UnpushedStatus } from "./repo";
 export { createBranch, squashMerge, rollback, checkoutBranch } from "./branch";
 export {
   getWorktreeBaseDir,
