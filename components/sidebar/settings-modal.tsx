@@ -30,7 +30,8 @@ import {
   isPureWhiteEnabled,
   setPureWhiteEnabled,
 } from "@/components/theme-provider";
-import { PluginUpdateBadge } from "./plugin-update-badge";
+import { UpdateCenter } from "@/components/updates/update-center";
+import { useUpdates } from "@/components/updates/update-provider";
 
 export interface SettingsExtraTab {
   value: string;
@@ -78,6 +79,10 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   } | null>(null);
   const [isPluginBusy, setIsPluginBusy] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
+  // The Updates block can install a new plugin behind this modal's back; track
+  // the version it reports so the lifecycle row below refetches when it moves.
+  const updates = useUpdates();
+  const pluginVersionFromUpdates = updates?.plugin.currentVersion ?? null;
 
   // Appearance
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -133,7 +138,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
     return () => {
       cancelled = true;
     };
-  }, [aiPlatform]);
+  }, [aiPlatform, pluginVersionFromUpdates]);
 
   // Platform defaults for path and capabilities
   const PLATFORM_DEFAULTS: Record<AiPlatform, {
@@ -520,10 +525,10 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                       onClick={() => handlePluginAction("install")}
                       disabled={isPluginBusy}
                       className="gap-1.5"
-                      title="Reinstall / pull latest"
+                      title="Re-run the install to repair a broken plugin. Version upgrades live in Updates below."
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${isPluginBusy ? "animate-spin" : ""}`} />
-                      Update
+                      Reinstall
                     </Button>
                     <Button
                       type="button"
@@ -545,13 +550,6 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                     </Button>
                   </>
                 )}
-                {!isPluginBusy && (
-                  <PluginUpdateBadge
-                    installed={pluginStatus?.installed ?? false}
-                    scope="user"
-                    currentVersion={pluginStatus?.version ?? null}
-                  />
-                )}
               </div>
               {pluginError && (
                 <p className="text-xs text-destructive flex items-start gap-1">
@@ -561,6 +559,8 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
               )}
             </div>
           )}
+
+          <UpdateCenter />
 
           {generalTabExtras}
     </div>

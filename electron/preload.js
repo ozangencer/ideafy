@@ -22,4 +22,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   openPath: (filePath) => ipcRenderer.invoke("open-path", filePath),
   revealPath: (filePath) => ipcRenderer.invoke("reveal-path", filePath),
+  updates: {
+    getState: () => ipcRenderer.invoke("updates:get-state"),
+    check: () => ipcRenderer.invoke("updates:check"),
+    download: () => ipcRenderer.invoke("updates:download"),
+    install: () => ipcRenderer.invoke("updates:install"),
+    // Returns an unsubscribe so React effects can clean up; without it every
+    // remount would stack another listener on the same channel.
+    onState: (callback) => {
+      const handler = (_event, state) => callback(state);
+      ipcRenderer.on("update-state", handler);
+      return () => ipcRenderer.removeListener("update-state", handler);
+    },
+  },
 });

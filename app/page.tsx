@@ -16,8 +16,20 @@ import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { UntrustedRunDialog } from "@/components/board/untrusted-run-dialog";
+import { UpdatesProvider } from "@/components/updates/update-provider";
 
 export default function Home() {
+  // Wraps the board rather than the root layout so the quick-entry window,
+  // which renders the same bundle from a preload without the update bridge,
+  // doesn't mount an update checker it can never act on.
+  return (
+    <UpdatesProvider>
+      <Board />
+    </UpdatesProvider>
+  );
+}
+
+function Board() {
   const {
     fetchCards,
     fetchProjects,

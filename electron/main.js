@@ -15,6 +15,7 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const http = require("http");
 const net = require("net");
+const { initUpdater, stopUpdater } = require("./updater");
 
 // Paths differ between `npm run electron` in the repo and the packaged DMG.
 // In the DMG, __dirname is inside app.asar; PROJECT_ROOT makes no sense.
@@ -526,6 +527,10 @@ app.on("ready", async () => {
   createMainWindow();
   createQuickEntryWindow();
   registerGlobalShortcut();
+
+  // Squirrel.Mac needs a signed bundle and a real release feed; neither exists
+  // when running from the repo, so dev registers the IPC surface only.
+  initUpdater({ getWindow: () => mainWindow, enabled: isPackaged });
 });
 
 app.on("activate", () => {
@@ -614,6 +619,7 @@ app.on("before-quit", (e) => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  stopUpdater();
   killNextServer();
 });
 

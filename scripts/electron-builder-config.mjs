@@ -22,9 +22,21 @@ const variant =
 const artifactName =
   (variant === "team" ? "Ideafy-Team-" : "Ideafy-Personal-") + "${arch}.${ext}";
 
+// Auto-update feed. Without this electron-builder infers the repo from the git
+// remote, which is right for the public build by accident and wrong for Team:
+// the cloud checkout's remote is the private `ideafy-cloud`, where no release
+// ever lands. Team binaries live in `ideafy-team-dist`, so name it explicitly.
+// This value is baked into Resources/app-update.yml at pack time.
+const publish = {
+  provider: "github",
+  owner: "ozangencer",
+  repo: variant === "team" ? "ideafy-team-dist" : "ideafy",
+};
+
 export default {
   ...buildConfig,
   artifactName,
+  publish,
   mac: {
     ...buildConfig.mac,
     icon:

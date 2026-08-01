@@ -46,6 +46,21 @@ const DEFAULT_GITHUB_REPO = "ozangencer/ideafy-claude-plugin";
 const DEFAULT_GIT_URL = `https://github.com/${DEFAULT_GITHUB_REPO}.git`;
 const DEFAULT_PLUGIN_JSON_URL = `https://raw.githubusercontent.com/${DEFAULT_GITHUB_REPO}/main/plugins/${PLUGIN_NAME}/.claude-plugin/plugin.json`;
 
+/**
+ * Oldest plugin release this build of Ideafy can safely talk to.
+ *
+ * The plugin ships its own MCP server that opens the same SQLite file the app
+ * migrates on startup, so an app that has moved the schema forward can leave an
+ * older plugin reading columns that no longer mean what it thinks. That is the
+ * only thing this floor guards against.
+ *
+ * It is NOT a mirror of the app version: the plugin is on its own release cycle
+ * (see .claude/skills/ideafy-build/scripts/bump-all-versions.mjs) and routinely
+ * runs ahead of the app. Raise this ONLY when a schema or MCP contract change
+ * genuinely breaks older plugins — every bump nags every user.
+ */
+export const MIN_PLUGIN_VERSION = "0.1.5";
+
 const CLAUDE_DIR = path.join(os.homedir(), ".claude");
 const PLUGINS_DIR = path.join(CLAUDE_DIR, "plugins");
 const MARKETPLACES_FILE = path.join(PLUGINS_DIR, "known_marketplaces.json");
@@ -411,7 +426,40 @@ export interface UpdateCheckResult {
   currentVersion: string | null;
   latestVersion: string | null;
   hasUpdate: boolean;
+  /** Floor this app build requires; echoed so the client can name it. */
+  minimumVersion: string;
+  /** Installed version is older than the floor — a hard compatibility warning. */
+  belowMinimum: boolean;
   error?: string;
+}
+
+/**
+ * Compares two dotted version strings numerically. Any pre-release suffix
+ * ("0.2.0-beta.1") is dropped before comparing, so a pre-release counts as its
+ * release version — deliberately lenient, since the alternative is warning a
+ * tester who is deliberately ahead of the floor.
+ * Returns <0, 0 or >0 in the manner of a sort comparator.
+ */
+function compareVersions(a: string, b: string): number {
+  const parts = (v: string) =>
+    v
+      .split("-")[0]
+      .split(".")
+      .map((n) => Number.parseInt(n, 10) || 0);
+  const left = parts(a);
+  const right = parts(b);
+  const len = Math.max(left.length, right.length);
+  for (let i = 0; i < len; i++) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** True when `version` is older than MIN_PLUGIN_VERSION. Unknown → not below. */
+export function isBelowMinimum(version: string | null): boolean {
+  if (!version) return false;
+  return compareVersions(version, MIN_PLUGIN_VERSION) < 0;
 }
 
 /**
@@ -428,8 +476,11 @@ export async function checkForUpdates(opts: ScopeOptions = {}): Promise<UpdateCh
       currentVersion: null,
       latestVersion: null,
       hasUpdate: false,
+      minimumVersion: MIN_PLUGIN_VERSION,
+      belowMinimum: false,
     };
   }
+  const belowMinimum = isBelowMinimum(status.version);
   try {
     const response = await fetch(DEFAULT_PLUGIN_JSON_URL, {
       headers: { "Cache-Control": "no-cache" },
@@ -440,6 +491,8 @@ export async function checkForUpdates(opts: ScopeOptions = {}): Promise<UpdateCh
         currentVersion: status.version,
         latestVersion: null,
         hasUpdate: false,
+        minimumVersion: MIN_PLUGIN_VERSION,
+        belowMinimum,
         error: `Failed to fetch remote manifest: HTTP ${response.status}`,
       };
     }
@@ -450,13 +503,19 @@ export async function checkForUpdates(opts: ScopeOptions = {}): Promise<UpdateCh
       currentVersion: status.version,
       latestVersion,
       hasUpdate: !!latestVersion && latestVersion !== status.version,
+      minimumVersion: MIN_PLUGIN_VERSION,
+      belowMinimum,
     };
   } catch (error) {
+    // The network leg failed, but belowMinimum came from the local install
+    // record — still worth reporting, since that is the warning that matters.
     return {
       installed: true,
       currentVersion: status.version,
       latestVersion: null,
       hasUpdate: false,
+      minimumVersion: MIN_PLUGIN_VERSION,
+      belowMinimum,
       error: error instanceof Error ? error.message : String(error),
     };
   }

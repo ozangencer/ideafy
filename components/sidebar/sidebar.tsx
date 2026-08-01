@@ -9,6 +9,7 @@ import { AgentList } from "./agent-list";
 import { DocumentList } from "./document-list";
 import { MemoryList } from "./memory-list";
 import { SettingsModal } from "./settings-modal";
+import { UpdateIndicator } from "@/components/updates/update-indicator";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -141,6 +142,8 @@ export function Sidebar() {
 
           <div className="flex-1" />
 
+          <UpdateIndicator collapsed onOpenSettings={() => setIsSettingsOpen(true)} />
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -183,6 +186,7 @@ export function Sidebar() {
             <span className="text-sm font-medium text-foreground">Projects</span>
           </div>
           <div className="flex items-center gap-1">
+            <UpdateIndicator onOpenSettings={() => setIsSettingsOpen(true)} />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

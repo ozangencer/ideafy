@@ -1,11 +1,17 @@
 name: Release
 
 # Triggers on any `v*` tag push — e.g. `git tag v0.2.0 && git push --tags`.
-# Both DMGs build on macos-14 (Apple Silicon) with electron-builder cross-
-# compiling the x64 target. better-sqlite3 ships prebuilt binaries for both
-# arches so no source build is needed. We avoided macos-13 because GitHub's
-# Intel runner pool became unreliable as the runner image was deprecated —
-# x64 jobs sat in queue for hours.
+# Both architectures build in ONE job on macos-14 (Apple Silicon), with
+# electron-builder cross-compiling the x64 target. better-sqlite3 ships
+# prebuilt binaries for both arches so no source build is needed. We avoided
+# macos-13 because GitHub's Intel runner pool became unreliable as the runner
+# image was deprecated — x64 jobs sat in queue for hours.
+#
+# A per-arch matrix is NOT an option here: each electron-builder run writes its
+# own `latest-mac.yml`, and two jobs uploading to the same release means the
+# one that finishes last silently overwrites the other. Auto-update would then
+# offer the wrong architecture to half the users. One run → one manifest that
+# lists every artifact; electron-updater picks the matching arch by filename.
 on:
   push:
     tags:
@@ -14,11 +20,7 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }} DMG
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [arm64, x64]
+    name: Build macOS DMGs
     runs-on: macos-14
     permissions:
       contents: write
@@ -41,14 +43,14 @@ jobs:
       - name: Build MCP server
         run: npm run build:mcp
 
-      - name: Package DMG
-        # --${{ arch }} filters package.json mac.target to the current runner's
-        # arch so we don't double-ship an x64 DMG from the arm64 runner.
+      - name: Package DMGs + update artifacts
         # --config selects the variant-aware icon (Personal=blue, Team=yellow)
-        # from productName. Without it electron-builder reads the raw
-        # package.json mac.icon, which is hardcoded to the Team yellow .icns
-        # and would mis-icon the Personal DMG.
-        run: npx electron-builder --mac --${{ matrix.arch }} --config ./scripts/electron-builder-config.mjs --publish never
+        # from productName and pins the auto-update feed repo. Without it
+        # electron-builder reads the raw package.json mac.icon, which is
+        # hardcoded to the Team yellow .icns and would mis-icon the Personal
+        # DMG. Arch flags are omitted on purpose — package.json mac.target
+        # already lists arm64 + x64 for both the dmg and zip targets.
+        run: npx electron-builder --mac --config ./scripts/electron-builder-config.mjs --publish never
         env:
           # Developer ID signing + notarization. Required repo secrets:
           #   CSC_LINK                       (base64-encoded .p12)
@@ -64,13 +66,25 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload DMG to draft Release
+      # The .zip and latest-mac.yml are what auto-update actually consumes —
+      # Squirrel.Mac cannot install from a DMG. The DMG stays for first-time
+      # installs, the .blockmap files make follow-up updates differential.
+      - name: Verify update manifest exists
+        run: |
+          test -f dist/latest-mac.yml || { echo "::error::latest-mac.yml missing — auto-update would break"; exit 1; }
+          ls -1 dist/*.zip >/dev/null 2>&1 || { echo "::error::no zip artifact — auto-update would break"; exit 1; }
+          echo "--- latest-mac.yml ---"
+          cat dist/latest-mac.yml
+
+      - name: Upload to draft Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.dmg
-            dist/*.dmg.blockmap
+            dist/*.zip
+            dist/*.blockmap
+            dist/latest-mac.yml
           fail_on_unmatched_files: false
           draft: true
           generate_release_notes: true
@@ -81,8 +95,10 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: ideafy-${{ matrix.arch }}-dmg
+          name: ideafy-macos-dist
           path: |
             dist/*.dmg
-            dist/*.dmg.blockmap
+            dist/*.zip
+            dist/*.blockmap
+            dist/latest-mac.yml
           retention-days: 14
