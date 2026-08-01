@@ -9,6 +9,8 @@ import {
   GitWorktreeStatus,
   SectionType,
   MentionData,
+  type MergeReality,
+  RUN_MODE_LABELS,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,8 +31,10 @@ import {
   FolderGit2,
   MonitorPlay,
   MonitorStop,
+  ExternalLink,
   AlertTriangle,
   Terminal,
+  Check,
   X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -178,6 +182,12 @@ export function CardModal({
   const [gitWorktreePath, setGitWorktreePath] = useState<string | null>(null);
   const [gitWorktreeStatus, setGitWorktreeStatus] = useState<GitWorktreeStatus>(null);
   const [isMerging, setIsMerging] = useState(false);
+  // What git actually contains, as opposed to what gitBranchStatus remembers.
+  // null while unknown (not fetched yet, or the check failed) — the UI falls
+  // back to the plain merge button in that case.
+  const [mergeReality, setMergeReality] = useState<MergeReality | null>(null);
+  const [isCheckingMergeReality, setIsCheckingMergeReality] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [showCommitFirstDialog, setShowCommitFirstDialog] = useState(false);
@@ -201,6 +211,14 @@ export function CardModal({
   // Get project and displayId
   const project = projects.find((p) => p.id === projectId);
   const displayId = selectedCard ? getDisplayId(selectedCard, project) : null;
+
+  // What the run button means here. Cards without a project keep the historical
+  // dev-server shape rather than losing the button entirely.
+  const runMode = project?.resolvedRunMode ?? "server";
+  const runLabels = RUN_MODE_LABELS[runMode];
+  // Opening Xcode hands off and returns — there is no process to stop.
+  const isOneShotRun = runMode === "xcode";
+  const runIsActive = !isOneShotRun && !!devServerPid;
 
   // Auto-save. skipCondition falls back to `readOnly` when the caller didn't provide one.
   const effectiveSkipCondition = skipCondition ?? (readOnly ? () => true : undefined);
@@ -378,6 +396,86 @@ export function CardModal({
     clearConversation(selectedCard.id, activeTab);
   }, [selectedCard, isDraftMode, activeTab, clearConversation]);
 
+  // Ask git whether this branch still has anything to merge. gitBranchStatus
+  // only leaves "active" when Ideafy itself merges, so a branch merged in a
+  // terminal would otherwise keep offering "Merge & Complete" over nothing.
+  const cardId = selectedCard?.id ?? null;
+  const shouldCheckMergeReality =
+    !isDraftMode &&
+    !!cardId &&
+    status === "test" &&
+    !!gitBranchName &&
+    gitBranchStatus === "active";
+
+  useEffect(() => {
+    if (!shouldCheckMergeReality || !cardId) {
+      setMergeReality(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsCheckingMergeReality(true);
+
+    fetch(`/api/cards/${cardId}/git/status`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: MergeReality | { error: string } | null) => {
+        if (cancelled) return;
+        // Fail open: an unreadable repo leaves the plain merge button in place
+        // rather than blocking a merge that might well succeed.
+        setMergeReality(data && !("error" in data) ? data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setMergeReality(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsCheckingMergeReality(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldCheckMergeReality, cardId]);
+
+  // Nothing left to merge — close the card out without pretending a merge ran.
+  const handleCompleteWithoutMerge = async () => {
+    if (!selectedCard || isCompleting) return;
+
+    setIsCompleting(true);
+    try {
+      const response = await fetch(`/api/cards/${selectedCard.id}/git/complete`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        // The server recomputes the verdict; if it disagreed, take its answer
+        // so the button stops offering something that no longer applies.
+        if (data?.reality) setMergeReality(data.reality);
+        toast({
+          variant: "destructive",
+          title: "Complete Failed",
+          description: data?.error || "An error occurred while completing the card",
+        });
+        return;
+      }
+
+      await useKanbanStore.getState().fetchCards();
+      toast({
+        title: "Card Completed",
+        description: data?.message || "Branch was already merged, card moved to Completed",
+      });
+      handleClose();
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Complete Failed",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   // Git operations (same as before)
   const handleMerge = async (commitFirst = false) => {
     if (!selectedCard) return;
@@ -510,23 +608,33 @@ export function CardModal({
     setIsServerLoading(true);
     try {
       const result = await startDevServer(selectedCard.id);
-      if (result.success && result.port) {
-        setDevServerPort(result.port);
-        const updatedCard = useKanbanStore.getState().cards.find((c) => c.id === selectedCard.id);
-        if (updatedCard) {
-          setDevServerPid(updatedCard.devServerPid);
-        }
-        toast({
-          title: "Dev Server Started",
-          description: `Running on port ${result.port}`,
-        });
-      } else {
+      if (!result.success) {
         toast({
           variant: "destructive",
-          title: "Failed to Start Server",
+          title: `Failed to ${runLabels.start}`,
           description: result.error || "Unknown error",
         });
+        return;
       }
+
+      // Handing off to Xcode leaves no process to track — report and stop.
+      if (result.oneShot) {
+        toast({
+          title: runLabels.start,
+          description: result.message || "Done",
+        });
+        return;
+      }
+
+      setDevServerPort(result.port ?? null);
+      const updatedCard = useKanbanStore.getState().cards.find((c) => c.id === selectedCard.id);
+      if (updatedCard) {
+        setDevServerPid(updatedCard.devServerPid);
+      }
+      toast({
+        title: "Started",
+        description: result.port ? `Running on port ${result.port}` : "Running",
+      });
     } finally {
       setIsServerLoading(false);
     }
@@ -715,24 +823,41 @@ export function CardModal({
                   <span className="font-mono text-muted-foreground">{gitBranchName}</span>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    onClick={() => setShowMergeConfirmDialog(true)}
-                    disabled={isMerging}
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {isMerging ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <GitMerge className="mr-2 h-4 w-4" />
-                    )}
-                    Merge & Complete
-                  </Button>
+                  {mergeReality && mergeReality.state !== "ready" ? (
+                    <Button
+                      onClick={handleCompleteWithoutMerge}
+                      disabled={isCompleting || isRollingBack}
+                      size="sm"
+                      variant="outline"
+                      className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
+                    >
+                      {isCompleting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="mr-2 h-4 w-4" />
+                      )}
+                      Complete
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => setShowMergeConfirmDialog(true)}
+                      disabled={isMerging || isCheckingMergeReality}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {isMerging || isCheckingMergeReality ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <GitMerge className="mr-2 h-4 w-4" />
+                      )}
+                      {mergeReality?.needsCommit ? "Commit & Merge" : "Merge & Complete"}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowRollbackDialog(true)}
-                    disabled={isMerging || isRollingBack}
+                    disabled={isMerging || isRollingBack || isCompleting}
                     className="border-red-500/50 text-red-500 hover:bg-red-500/10"
                   >
                     <Undo2 className="mr-2 h-4 w-4" />
@@ -740,6 +865,18 @@ export function CardModal({
                   </Button>
                 </div>
               </div>
+
+              {/* Why the merge button is gone: git has nothing left to take. */}
+              {mergeReality && mergeReality.state !== "ready" && (
+                <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <GitMerge className="h-3.5 w-3.5 mt-0.5 shrink-0 text-ink" />
+                  <span>
+                    {mergeReality.state === "missing"
+                      ? `Branch bulunamadı — silinmiş görünüyor. Complete kartı kapatır ve worktree'yi temizler.`
+                      : `${mergeReality.defaultBranch} dalına göre merge edilecek bir değişiklik yok — branch dışarıdan merge edilmiş görünüyor. Complete kartı kapatır ve worktree'yi temizler.`}
+                  </span>
+                </div>
+              )}
               {gitWorktreeStatus === "active" && gitWorktreePath && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <FolderGit2 className="h-3.5 w-3.5 text-ink" />
@@ -748,13 +885,20 @@ export function CardModal({
                   </span>
                 </div>
               )}
-              {gitWorktreeStatus === "active" && (
+              {gitWorktreeStatus === "active" && runMode !== "none" && (
                 <div className="flex items-center gap-2 pt-2 border-t border-border/50 mt-2">
-                  {devServerPid ? (
+                  {runIsActive ? (
                     <>
                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                       <span className="text-sm text-muted-foreground">
-                        Server running on port <span className="font-mono text-foreground">{devServerPort}</span>
+                        {devServerPort ? (
+                          <>
+                            Running on port{" "}
+                            <span className="font-mono text-foreground">{devServerPort}</span>
+                          </>
+                        ) : (
+                          "Running"
+                        )}
                       </span>
                       <Button
                         size="sm"
@@ -781,10 +925,12 @@ export function CardModal({
                     >
                       {isServerLoading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : isOneShotRun ? (
+                        <ExternalLink className="mr-2 h-4 w-4" />
                       ) : (
                         <MonitorPlay className="mr-2 h-4 w-4" />
                       )}
-                      Start Dev Server
+                      {runLabels.start}
                     </Button>
                   )}
                 </div>

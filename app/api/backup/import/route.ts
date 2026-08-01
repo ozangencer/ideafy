@@ -48,6 +48,13 @@ export async function POST(request: NextRequest) {
           documentPaths: project.documentPaths,
           narrativePath: project.narrativePath ?? null,
           useWorktrees: project.useWorktrees ?? true,
+          // Backups written before these columns existed simply omit them —
+          // the defaults mean "detect", which is what an old project wants.
+          ...(project.voice ? { voice: project.voice } : {}),
+          runMode: project.runMode ?? null,
+          runCommand: project.runCommand ?? null,
+          previewUrl: project.previewUrl ?? null,
+          sharedPaths: project.sharedPaths ?? null,
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
         }).run();

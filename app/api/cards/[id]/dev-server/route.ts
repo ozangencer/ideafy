@@ -3,15 +3,18 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import {
   findAvailablePort,
-  startDevServer,
+  startRunCommand,
   stopDevServer,
   isProcessRunning,
   openInBrowser,
-  symlinkDatabase,
+  openInXcode,
+  runOneShotCommand,
+  linkSharedPaths,
   ensureWorktreeDependencies,
 } from "@/lib/dev-server";
+import { applyPort, resolveRunTarget, resolveSharedPaths } from "@/lib/run-target";
 
-// POST - Start dev server
+// POST - Run the card's worktree using the project's run target
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -37,11 +40,11 @@ export async function POST(
     );
   }
 
-  // Check if server is already running
+  // Check if something is already running for this card
   if (card.devServerPid && isProcessRunning(card.devServerPid)) {
     return NextResponse.json(
       {
-        error: "Dev server is already running",
+        error: "Already running",
         port: card.devServerPort,
         pid: card.devServerPid,
       },
@@ -66,23 +69,77 @@ export async function POST(
     );
   }
 
+  const target = resolveRunTarget({
+    projectPath: mainProjectPath,
+    runMode: project?.runMode,
+    runCommand: project?.runCommand,
+    previewUrl: project?.previewUrl,
+  });
+
+  if (target.mode === "none") {
+    return NextResponse.json(
+      {
+        error:
+          "This project has no run action. Set one under Run & Preview in project settings.",
+      },
+      { status: 400 }
+    );
+  }
+
   try {
-    // Symlink the main database to the worktree
-    symlinkDatabase(mainProjectPath, card.gitWorktreePath);
+    linkSharedPaths(
+      mainProjectPath,
+      card.gitWorktreePath,
+      resolveSharedPaths(project?.sharedPaths, mainProjectPath)
+    );
 
-    // Ensure worktree can resolve npm deps (links main's node_modules)
-    ensureWorktreeDependencies(mainProjectPath, card.gitWorktreePath);
+    // Xcode hands the worktree off to another app: nothing to supervise, so no
+    // PID or port is stored and there is no Stop counterpart.
+    if (target.oneShot) {
+      if (target.command) {
+        await runOneShotCommand(card.gitWorktreePath, target.command);
+        console.log(`[Run] Ran one-shot command: ${target.command}`);
+        return NextResponse.json({
+          success: true,
+          mode: target.mode,
+          oneShot: true,
+          message: "Ran the project's run command",
+        });
+      }
 
-    // Find available port (main app on 3030, worktrees start from 3031)
-    const port = await findAvailablePort(3031);
-    console.log(`[DevServer] Starting server on port ${port} for card ${id}`);
-    console.log(`[DevServer] Worktree path: ${card.gitWorktreePath}`);
+      const { opened, generated } = await openInXcode(card.gitWorktreePath);
+      console.log(`[Run] Opened ${opened} in Xcode (generated=${generated})`);
+      return NextResponse.json({
+        success: true,
+        mode: target.mode,
+        oneShot: true,
+        message: generated
+          ? "Generated the project file and opened it in Xcode"
+          : "Opened in Xcode",
+      });
+    }
 
-    // Start the dev server
-    const { pid } = await startDevServer(card.gitWorktreePath, port);
-    console.log(`[DevServer] Server started with PID ${pid}`);
+    // Only npm-shaped runs need the dependency link; an Xcode or shell command
+    // has no use for node_modules.
+    if (target.mode === "server" || target.mode === "app") {
+      ensureWorktreeDependencies(mainProjectPath, card.gitWorktreePath);
+    }
 
-    // Update card with server info
+    // Main kanban app owns 3030, so worktree runs start from 3031
+    const port = target.needsPort ? await findAvailablePort(3031) : null;
+    console.log(
+      `[Run] mode=${target.mode} command=${target.command} port=${port ?? "n/a"} for card ${id}`
+    );
+    console.log(`[Run] Worktree path: ${card.gitWorktreePath}`);
+
+    const { pid } = await startRunCommand(
+      card.gitWorktreePath,
+      target.command!,
+      port
+    );
+    console.log(`[Run] Started with PID ${pid}`);
+
+    // Update card with process info
     const updatedAt = new Date().toISOString();
     db.update(schema.cards)
       .set({
@@ -93,22 +150,29 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
 
-    // Open browser after a short delay to let server initialize
-    setTimeout(() => {
-      openInBrowser(`http://localhost:${port}`);
-    }, 2000);
+    // Only a server has a URL worth opening. A desktop app opens its own
+    // window — pointing a browser at localhost would just show a dead tab.
+    if (target.previewUrl && port !== null) {
+      const url = applyPort(target.previewUrl, port);
+      setTimeout(() => {
+        openInBrowser(url);
+      }, 2000);
+    }
 
     return NextResponse.json({
       success: true,
+      mode: target.mode,
+      oneShot: false,
       port,
       pid,
-      message: `Dev server started on port ${port}`,
+      message:
+        port !== null ? `Started on port ${port}` : "Started",
     });
   } catch (error) {
-    console.error("[DevServer] Failed to start:", error);
+    console.error("[Run] Failed to start:", error);
     return NextResponse.json(
       {
-        error: "Failed to start dev server",
+        error: target.mode === "xcode" ? "Failed to open in Xcode" : "Failed to start",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
@@ -134,15 +198,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
-  // Check if server is running
+  // Check if something is running
   if (!card.devServerPid) {
     return NextResponse.json(
-      { error: "No dev server is running" },
+      { error: "Nothing is running for this card" },
       { status: 400 }
     );
   }
 
-  console.log(`[DevServer] Stopping server with PID ${card.devServerPid} for card ${id}`);
+  console.log(`[Run] Stopping PID ${card.devServerPid} for card ${id}`);
 
   // Stop the server
   const stopped = stopDevServer(card.devServerPid);
@@ -161,12 +225,12 @@ export async function DELETE(
   if (stopped) {
     return NextResponse.json({
       success: true,
-      message: "Dev server stopped",
+      message: "Stopped",
     });
   } else {
     return NextResponse.json({
       success: true,
-      message: "Dev server info cleared (process may have already exited)",
+      message: "Cleared (process may have already exited)",
     });
   }
 }

@@ -12,6 +12,29 @@ export type Priority = "low" | "medium" | "high";
 export type GitBranchStatus = "active" | "merged" | "rolled_back" | null;
 export type GitWorktreeStatus = "active" | "removed" | null;
 export type ProcessingType = "autonomous" | "quick-fix" | "evaluate" | null;
+
+// What git itself says about a card's branch, as opposed to what the DB
+// remembers. `gitBranchStatus` only ever leaves "active" when the merge or
+// rollback route runs, so a branch merged by hand in a terminal leaves the
+// card claiming there is still something to merge.
+//   missing           - the branch is gone; nothing left to merge
+//   nothing-to-merge  - branch exists but carries no change the default
+//                       branch doesn't already have
+//   ready             - there is something to merge
+export type MergeRealityState = "missing" | "nothing-to-merge" | "ready";
+
+export interface MergeReality {
+  branchName: string;
+  defaultBranch: string;
+  exists: boolean;
+  ahead: number;
+  behind: number;
+  contentIdentical: boolean;
+  // Tracked, uncommitted changes in the worktree. Merge can still proceed —
+  // it commits them first — but the button should say so.
+  needsCommit: boolean;
+  state: MergeRealityState;
+}
 export type AiVerdict = "positive" | "negative" | null;
 
 export interface Card {
@@ -69,6 +92,53 @@ export const VOICE_OPTIONS: { value: Voice; label: string; description: string }
   },
 ];
 
+/**
+ * How a project answers the run button. Web apps serve a port we can preview;
+ * desktop apps just run; Xcode projects hand off to Xcode; some projects have
+ * no meaningful "run from here" at all.
+ */
+export type RunMode = "server" | "app" | "xcode" | "none";
+
+export const RUN_MODES = ["server", "app", "xcode", "none"] as const;
+
+export const RUN_MODE_OPTIONS: {
+  value: RunMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "server",
+    label: "Dev server",
+    description:
+      "Runs a dev command on its own port and opens the preview URL. Next.js, Vite, and other web apps.",
+  },
+  {
+    value: "app",
+    label: "Desktop app",
+    description:
+      "Runs a command that launches a windowed app. No port, no browser. Electron and friends.",
+  },
+  {
+    value: "xcode",
+    label: "Open in Xcode",
+    description:
+      "Generates the project file if needed and opens the worktree in Xcode. Building and running stay with ⌘R.",
+  },
+  {
+    value: "none",
+    label: "No run action",
+    description: "Hides the run button for this project.",
+  },
+];
+
+/** Button copy per mode, keyed by whether something is already running. */
+export const RUN_MODE_LABELS: Record<RunMode, { start: string; running: string }> = {
+  server: { start: "Start Dev Server", running: "Stop Server" },
+  app: { start: "Start App", running: "Stop App" },
+  xcode: { start: "Open in Xcode", running: "Open in Xcode" },
+  none: { start: "Run", running: "Run" },
+};
+
 export interface Project {
   id: string;
   name: string;
@@ -81,6 +151,12 @@ export interface Project {
   narrativePath: string | null; // Relative path to narrative file, null = docs/product-narrative.md
   useWorktrees: boolean; // Whether to use git worktrees for isolation (default: true)
   voice: Voice; // Project-level voice for AI outputs (default: 'builder')
+  runMode: RunMode | null; // Explicit override, null = detect from the project folder
+  detectedRunMode: RunMode; // Server-computed: what the project folder looks like
+  resolvedRunMode: RunMode; // Server-computed: the override, or the detected mode
+  runCommand: string | null; // Override for the run command, null = mode default
+  previewUrl: string | null; // Override for the previewed URL ({port} placeholder)
+  sharedPaths: string[] | null; // Paths symlinked from main checkout into worktrees, null = auto
   createdAt: string;
   updatedAt: string;
 }

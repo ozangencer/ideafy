@@ -8,6 +8,8 @@ export {
   branchExists,
   getDefaultBranch,
   getBranchStatus,
+  getMergeReality,
+  worktreeHasUncommittedChanges,
 } from "./repo";
 export { createBranch, squashMerge, rollback, checkoutBranch } from "./branch";
 export {
@@ -17,6 +19,7 @@ export {
   listWorktrees,
   createWorktree,
   removeWorktree,
+  isCwdInsideWorktree,
   pruneWorktrees,
   squashMergeFromWorktree,
 } from "./worktree";

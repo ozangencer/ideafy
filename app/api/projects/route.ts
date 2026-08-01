@@ -1,33 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { db, schema } from "@/lib/db";
-import { Project, DEFAULT_VOICE, type Voice } from "@/lib/types";
+import { Project } from "@/lib/types";
+import {
+  normalizeRunMode,
+  normalizeVoice,
+  serializeProject,
+} from "@/lib/project-serialize";
 import { installIdeafyHook } from "@/lib/hooks";
-
-const VALID_VOICES: Voice[] = ["entrepreneur", "builder", "engineer"];
-const normalizeVoice = (v: unknown): Voice =>
-  typeof v === "string" && (VALID_VOICES as string[]).includes(v) ? (v as Voice) : DEFAULT_VOICE;
 
 export async function GET() {
   try {
     const rows = db.select().from(schema.projects).all();
 
     const projects: Project[] = rows
-      .map((row) => ({
-        id: row.id,
-        name: row.name,
-        folderPath: row.folderPath,
-        idPrefix: row.idPrefix,
-        nextTaskNumber: row.nextTaskNumber,
-        color: row.color,
-        isPinned: row.isPinned,
-        documentPaths: row.documentPaths ? JSON.parse(row.documentPaths) : null,
-        narrativePath: row.narrativePath,
-        useWorktrees: row.useWorktrees ?? true,
-        voice: normalizeVoice(row.voice),
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      }))
+      .map(serializeProject)
       .sort((a, b) => {
         if (a.isPinned !== b.isPinned) return b.isPinned ? 1 : -1;
         return a.name.localeCompare(b.name);
@@ -68,6 +55,10 @@ export async function POST(request: NextRequest) {
       narrativePath: body.narrativePath || null,
       useWorktrees: body.useWorktrees ?? true,
       voice: normalizeVoice(body.voice),
+      runMode: normalizeRunMode(body.runMode),
+      runCommand: body.runCommand || null,
+      previewUrl: body.previewUrl || null,
+      sharedPaths: body.sharedPaths ? JSON.stringify(body.sharedPaths) : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -82,15 +73,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Return with documentPaths as array (not JSON string)
-    const responseProject = {
-      ...newProject,
-      documentPaths: body.documentPaths || null,
-      narrativePath: body.narrativePath || null,
-      useWorktrees: newProject.useWorktrees,
-      voice: newProject.voice,
-    };
-    return NextResponse.json(responseProject, { status: 201 });
+    return NextResponse.json(serializeProject(newProject), { status: 201 });
   } catch (error) {
     console.error("Failed to create project:", error);
     return NextResponse.json(

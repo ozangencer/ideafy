@@ -36,6 +36,13 @@
       "when": 1777720304905,
       "tag": "0004_cloudy_the_santerians",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785584967301,
+      "tag": "0005_curvy_magneto",
+      "breakpoints": true
     }
   ]
 }

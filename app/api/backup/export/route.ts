@@ -40,6 +40,11 @@ export interface ExportData {
     documentPaths: string | null;
     narrativePath: string | null;
     useWorktrees: boolean;
+    voice?: string;
+    runMode?: string | null;
+    runCommand?: string | null;
+    previewUrl?: string | null;
+    sharedPaths?: string | null;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -114,6 +119,11 @@ export async function GET() {
         documentPaths: project.documentPaths,
         narrativePath: project.narrativePath,
         useWorktrees: project.useWorktrees,
+        voice: project.voice,
+        runMode: project.runMode,
+        runCommand: project.runCommand,
+        previewUrl: project.previewUrl,
+        sharedPaths: project.sharedPaths,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
       })),

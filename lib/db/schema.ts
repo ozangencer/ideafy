@@ -13,6 +13,10 @@ export const projects = sqliteTable("projects", {
   narrativePath: text("narrative_path"), // Relative path to narrative file, null = use default (docs/product-narrative.md)
   useWorktrees: integer("use_worktrees", { mode: "boolean" }).notNull().default(true), // Whether to use git worktrees for isolation
   voice: text("voice").notNull().default("builder"), // "entrepreneur" | "builder" | "engineer" — project-level voice for AI outputs
+  runMode: text("run_mode"), // "server" | "app" | "xcode" | "none" — null = detect from the project folder
+  runCommand: text("run_command"), // Override for the command the run button spawns, null = mode default
+  previewUrl: text("preview_url"), // Override for the URL opened in server mode ({port} placeholder), null = http://localhost:{port}
+  sharedPaths: text("shared_paths"), // JSON array of repo-relative paths symlinked from main checkout into the worktree, null = auto
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

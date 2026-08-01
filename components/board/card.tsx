@@ -3,7 +3,7 @@
 import { memo, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, getDisplayId, COLUMNS } from "@/lib/types";
+import { Card, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/types";
 import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
 import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
@@ -424,23 +424,29 @@ function TaskCardImpl({
     downloadCardAsMarkdown(card, project);
   };
 
+  // What the run button means for this project. A card with no project can
+  // still have a worktree, so fall back to the historical dev-server shape.
+  const runMode = project?.resolvedRunMode ?? "server";
+  const runLabels = RUN_MODE_LABELS[runMode];
+  // Opening Xcode leaves no process behind — there is never a Stop state.
+  const isOneShotRun = runMode === "xcode";
+  const runIsActive = !isOneShotRun && !!card.devServerPid;
+
   const handleDevServerToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isServerLoading || isLocked) return;
 
     setIsServerLoading(true);
     try {
-      if (card.devServerPid) {
-        // Stop the server
+      if (runIsActive) {
         const result = await stopDevServer(card.id);
         if (!result.success) {
-          console.error("Failed to stop dev server:", result.error);
+          console.error("Failed to stop:", result.error);
         }
       } else {
-        // Start the server
         const result = await startDevServer(card.id);
         if (!result.success) {
-          console.error("Failed to start dev server:", result.error);
+          console.error("Failed to start:", result.error);
         }
       }
     } finally {
@@ -676,22 +682,27 @@ function TaskCardImpl({
                     <TooltipContent side="top">Test Together (Interactive)</TooltipContent>
                   </Tooltip>
                 )}
-                {card.status === "test" && card.gitWorktreeStatus === "active" && !isLocked && (
+                {card.status === "test" &&
+                  card.gitWorktreeStatus === "active" &&
+                  !isLocked &&
+                  runMode !== "none" && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         onClick={handleDevServerToggle}
                         disabled={isServerLoading}
                         className={`p-1 rounded transition-colors ${
-                          card.devServerPid
+                          runIsActive
                             ? "bg-green-500/20 text-green-500 hover:bg-red-500/20 hover:text-red-500"
                             : "bg-cyan-500/10 text-cyan-500/70 hover:bg-cyan-500/20 hover:text-cyan-500"
                         }`}
                       >
                         {isServerLoading ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : card.devServerPid ? (
+                        ) : runIsActive ? (
                           <MonitorStop className="w-3.5 h-3.5" />
+                        ) : isOneShotRun ? (
+                          <ExternalLink className="w-3.5 h-3.5" />
                         ) : (
                           <MonitorPlay className="w-3.5 h-3.5" />
                         )}
@@ -700,9 +711,11 @@ function TaskCardImpl({
                     <TooltipContent side="top">
                       {isServerLoading
                         ? "Loading..."
-                        : card.devServerPid
-                        ? `Stop Server (port ${card.devServerPort})`
-                        : "Start Dev Server"}
+                        : runIsActive
+                        ? card.devServerPort
+                          ? `${runLabels.running} (port ${card.devServerPort})`
+                          : runLabels.running
+                        : runLabels.start}
                     </TooltipContent>
                   </Tooltip>
                 )}

@@ -2,9 +2,16 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { Project, VOICE_OPTIONS, DEFAULT_VOICE, type Voice } from "@/lib/types";
+import {
+  Project,
+  VOICE_OPTIONS,
+  DEFAULT_VOICE,
+  RUN_MODE_OPTIONS,
+  type RunMode,
+  type Voice,
+} from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Play } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +78,13 @@ export function EditProjectModal({
   );
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
   const [voice, setVoice] = useState<Voice>(project.voice ?? DEFAULT_VOICE);
+  // "" means auto — fall back to whatever detection finds in the project folder.
+  const [runMode, setRunMode] = useState<RunMode | "">(project.runMode ?? "");
+  const [runCommand, setRunCommand] = useState(project.runCommand || "");
+  const [previewUrl, setPreviewUrl] = useState(project.previewUrl || "");
+  const [sharedPathsText, setSharedPathsText] = useState(
+    project.sharedPaths?.join("\n") || ""
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteWithCards, setDeleteWithCards] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
@@ -211,6 +225,11 @@ export function EditProjectModal({
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
 
+    const sharedPaths = sharedPathsText
+      .split("\n")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+
     setIsSubmitting(true);
     try {
       await updateProject(project.id, {
@@ -222,6 +241,10 @@ export function EditProjectModal({
         narrativePath: narrativePath.trim() || null,
         useWorktrees,
         voice,
+        runMode: runMode || null,
+        runCommand: runCommand.trim() || null,
+        previewUrl: previewUrl.trim() || null,
+        sharedPaths: sharedPaths.length > 0 ? sharedPaths : null,
         ...(extraSavePayload?.() ?? {}),
       });
       onClose();
@@ -536,6 +559,144 @@ export function EditProjectModal({
                 )}
                 {pluginProjectError && (
                   <p className="text-xs text-destructive pl-6">{pluginProjectError}</p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Run & Preview */}
+          {(() => {
+            const detectedLabel =
+              RUN_MODE_OPTIONS.find((o) => o.value === project.detectedRunMode)?.label ??
+              project.detectedRunMode;
+            const effectiveMode: RunMode = runMode || project.detectedRunMode;
+            const commandPlaceholder =
+              effectiveMode === "server"
+                ? "npm run dev -- -p {port}"
+                : effectiveMode === "app"
+                ? "npm run dev"
+                : "leave empty to open Xcode";
+
+            return (
+              <div className="grid gap-2">
+                <div className="flex items-center gap-2">
+                  <Play className="h-4 w-4 text-muted-foreground" />
+                  <label className="text-sm font-medium">Run &amp; Preview</label>
+                  <span className="text-xs text-muted-foreground">
+                    — what the run button does on a test card
+                  </span>
+                </div>
+
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                  role="radiogroup"
+                  aria-label="Run mode"
+                >
+                  {[
+                    {
+                      value: "" as const,
+                      label: "Auto",
+                      description: `Detect from the project folder. Right now that reads as: ${detectedLabel}.`,
+                    },
+                    ...RUN_MODE_OPTIONS,
+                  ].map((opt) => {
+                    const isSelected = runMode === opt.value;
+                    return (
+                      <button
+                        key={opt.value || "auto"}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        onClick={() => setRunMode(opt.value)}
+                        className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-muted/50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                              isSelected ? "border-primary" : "border-muted-foreground/40"
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full transition-all ${
+                                isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                              }`}
+                            />
+                          </span>
+                          <span className="font-medium text-sm text-foreground">
+                            {opt.label}
+                          </span>
+                        </span>
+                        <span className="text-xs text-muted-foreground leading-snug">
+                          {opt.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {effectiveMode !== "none" && (
+                  <>
+                    <div className="grid gap-1.5">
+                      <label htmlFor="edit-runCommand" className="text-xs font-medium">
+                        Run command{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (optional — {"{port}"} is substituted, PORT is exported)
+                        </span>
+                      </label>
+                      <Input
+                        id="edit-runCommand"
+                        value={runCommand}
+                        onChange={(e) => setRunCommand(e.target.value)}
+                        placeholder={commandPlaceholder}
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Runs without a shell, so <code>&amp;&amp;</code> and pipes are not
+                        supported — point at a script instead.
+                      </p>
+                    </div>
+
+                    {effectiveMode === "server" && (
+                      <div className="grid gap-1.5">
+                        <label htmlFor="edit-previewUrl" className="text-xs font-medium">
+                          Preview URL{" "}
+                          <span className="text-muted-foreground font-normal">(optional)</span>
+                        </label>
+                        <Input
+                          id="edit-previewUrl"
+                          value={previewUrl}
+                          onChange={(e) => setPreviewUrl(e.target.value)}
+                          placeholder="http://localhost:{port}"
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                    )}
+
+                    <div className="grid gap-1.5">
+                      <label htmlFor="edit-sharedPaths" className="text-xs font-medium">
+                        Shared paths{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (one per line, relative to the project)
+                        </span>
+                      </label>
+                      <Textarea
+                        id="edit-sharedPaths"
+                        value={sharedPathsText}
+                        onChange={(e) => setSharedPathsText(e.target.value)}
+                        placeholder="data/app.db"
+                        rows={2}
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Symlinked from the main checkout into each worktree, so a run there
+                        sees the same local data. Empty = auto.
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
             );

@@ -5,28 +5,14 @@ import {
   squashMergeFromWorktree,
   isGitRepo,
   removeWorktree,
+  isCwdInsideWorktree,
   pruneWorktrees,
   getDefaultBranch,
   git,
 } from "@/lib/git";
-import { existsSync, readFileSync, realpathSync } from "fs";
-import path from "path";
+import { existsSync, readFileSync } from "fs";
 import { stopDevServer, isProcessRunning } from "@/lib/dev-server";
 import type { Status } from "@/lib/types";
-
-function isCwdInsideWorktree(worktreePath: string): boolean {
-  const resolve = (p: string) => {
-    try {
-      return realpathSync(p);
-    } catch {
-      return path.resolve(p);
-    }
-  };
-  const cwd = resolve(process.cwd());
-  const wt = resolve(worktreePath);
-  if (cwd === wt) return true;
-  return cwd.startsWith(wt + path.sep);
-}
 
 export async function POST(
   request: NextRequest,

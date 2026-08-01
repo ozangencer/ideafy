@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { removeIdeafyHook } from "@/lib/hooks";
-import { DEFAULT_VOICE, type Voice } from "@/lib/types";
-
-const VALID_VOICES: Voice[] = ["entrepreneur", "builder", "engineer"];
-const normalizeVoice = (v: unknown, fallback: Voice = DEFAULT_VOICE): Voice =>
-  typeof v === "string" && (VALID_VOICES as string[]).includes(v) ? (v as Voice) : fallback;
+import { type Voice } from "@/lib/types";
+import {
+  normalizeRunMode,
+  normalizeVoice,
+  serializeProject,
+} from "@/lib/project-serialize";
 
 export async function PUT(
   request: NextRequest,
@@ -50,6 +51,31 @@ export async function PUT(
       voice = normalizeVoice(body.voice, voice);
     }
 
+    // Handle run target settings. Each is an explicit override where null means
+    // "fall back to detection / the mode default", so an empty string clears it.
+    let runMode = existing.runMode;
+    if (body.runMode !== undefined) {
+      runMode = normalizeRunMode(body.runMode);
+    }
+
+    let runCommand = existing.runCommand;
+    if (body.runCommand !== undefined) {
+      runCommand = body.runCommand?.trim() || null;
+    }
+
+    let previewUrl = existing.previewUrl;
+    if (body.previewUrl !== undefined) {
+      previewUrl = body.previewUrl?.trim() || null;
+    }
+
+    let sharedPaths = existing.sharedPaths;
+    if (body.sharedPaths !== undefined) {
+      sharedPaths =
+        Array.isArray(body.sharedPaths) && body.sharedPaths.length > 0
+          ? JSON.stringify(body.sharedPaths)
+          : null;
+    }
+
     const updatedProject = {
       name: body.name ?? existing.name,
       folderPath: body.folderPath ?? existing.folderPath,
@@ -60,6 +86,10 @@ export async function PUT(
       narrativePath,
       useWorktrees,
       voice,
+      runMode,
+      runCommand,
+      previewUrl,
+      sharedPaths,
       updatedAt: new Date().toISOString(),
     };
 
@@ -68,17 +98,7 @@ export async function PUT(
       .where(eq(schema.projects.id, id))
       .run();
 
-    // Return with documentPaths as array (not JSON string)
-    return NextResponse.json({
-      ...existing,
-      ...updatedProject,
-      documentPaths: updatedProject.documentPaths
-        ? JSON.parse(updatedProject.documentPaths)
-        : null,
-      narrativePath: updatedProject.narrativePath,
-      useWorktrees: updatedProject.useWorktrees,
-      voice: updatedProject.voice,
-    });
+    return NextResponse.json(serializeProject({ ...existing, ...updatedProject }));
   } catch (error) {
     console.error("Failed to update project:", error);
     return NextResponse.json(

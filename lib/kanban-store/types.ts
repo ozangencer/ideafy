@@ -11,6 +11,7 @@ import {
   DocumentFile,
   MentionData,
   Project,
+  RunMode,
   SectionType,
   SkillListItem,
   SkillPreview,
@@ -242,8 +243,16 @@ export interface KanbanStore {
   /** Dismisses the confirmation without running anything. */
   cancelPendingRun: () => void;
 
-  // Dev server actions
-  startDevServer: (cardId: string) => Promise<{ success: boolean; port?: number; error?: string }>;
+  // Run actions (dev server, desktop app, or handing the worktree to Xcode)
+  startDevServer: (cardId: string) => Promise<{
+    success: boolean;
+    port?: number | null;
+    mode?: RunMode;
+    /** True when the run handed off to another app and left nothing to stop. */
+    oneShot?: boolean;
+    message?: string;
+    error?: string;
+  }>;
   stopDevServer: (cardId: string) => Promise<{ success: boolean; error?: string }>;
 
   // Settings actions

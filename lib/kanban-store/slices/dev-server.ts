@@ -1,5 +1,6 @@
 import { nowIso, parseJson, updateCardById } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
+import { RunMode } from "@/lib/types";
 
 export const createDevServerSlice: StoreSlice<
   Pick<KanbanStore, "startDevServer" | "stopDevServer">
@@ -10,23 +11,42 @@ export const createDevServerSlice: StoreSlice<
         method: "POST",
       });
 
-      const data = await parseJson<{ port?: number; pid?: number; error?: string }>(
-        response
-      );
+      const data = await parseJson<{
+        port?: number | null;
+        pid?: number;
+        mode?: RunMode;
+        oneShot?: boolean;
+        message?: string;
+        error?: string;
+        details?: string;
+      }>(response);
 
       if (!response.ok) {
-        return { success: false, error: data.error || "Failed to start dev server" };
+        return {
+          success: false,
+          error: data.details || data.error || "Failed to start",
+        };
       }
 
-      set((state) => ({
-        cards: updateCardById(state.cards, cardId, {
-          devServerPort: data.port ?? null,
-          devServerPid: data.pid ?? null,
-          updatedAt: nowIso(),
-        }),
-      }));
+      // A one-shot run (opening Xcode) leaves no process behind, so the card
+      // must not be marked as running — there would be no way to stop it.
+      if (!data.oneShot) {
+        set((state) => ({
+          cards: updateCardById(state.cards, cardId, {
+            devServerPort: data.port ?? null,
+            devServerPid: data.pid ?? null,
+            updatedAt: nowIso(),
+          }),
+        }));
+      }
 
-      return { success: true, port: data.port };
+      return {
+        success: true,
+        port: data.port ?? null,
+        mode: data.mode,
+        oneShot: data.oneShot ?? false,
+        message: data.message,
+      };
     } catch (error) {
       console.error("Failed to start dev server:", error);
       return {

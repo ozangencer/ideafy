@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync } from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync, realpathSync } from "fs";
+import path, { join } from "path";
 import { git, buildCommitArgs } from "./core";
 import {
   branchExists,
@@ -159,6 +159,23 @@ export async function removeWorktree(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+// True when this process is being served from inside the given worktree.
+// Removing that worktree would delete the directory the server runs from and
+// kill the request mid-flight, so callers refuse instead.
+export function isCwdInsideWorktree(worktreePath: string): boolean {
+  const resolve = (p: string) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  const cwd = resolve(process.cwd());
+  const wt = resolve(worktreePath);
+  if (cwd === wt) return true;
+  return cwd.startsWith(wt + path.sep);
 }
 
 export async function pruneWorktrees(
