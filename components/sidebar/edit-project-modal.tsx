@@ -85,6 +85,10 @@ export function EditProjectModal({
   const [sharedPathsText, setSharedPathsText] = useState(
     project.sharedPaths?.join("\n") || ""
   );
+  // Almost nobody changes how a project is tested, and the knobs behind it are
+  // developer-shaped. Both stay folded away until asked for.
+  const [showRunOptions, setShowRunOptions] = useState(false);
+  const [showRunAdvanced, setShowRunAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteWithCards, setDeleteWithCards] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
@@ -564,12 +568,11 @@ export function EditProjectModal({
             );
           })()}
 
-          {/* Run & Preview */}
+          {/* Test button */}
           {(() => {
-            const detectedLabel =
-              RUN_MODE_OPTIONS.find((o) => o.value === project.detectedRunMode)?.label ??
-              project.detectedRunMode;
             const effectiveMode: RunMode = runMode || project.detectedRunMode;
+            const effectiveLabel =
+              RUN_MODE_OPTIONS.find((o) => o.value === effectiveMode)?.label ?? effectiveMode;
             const commandPlaceholder =
               effectiveMode === "server"
                 ? "npm run dev -- -p {port}"
@@ -579,123 +582,157 @@ export function EditProjectModal({
 
             return (
               <div className="grid gap-2">
-                <div className="flex items-center gap-2">
-                  <Play className="h-4 w-4 text-muted-foreground" />
-                  <label className="text-sm font-medium">Run &amp; Preview</label>
-                  <span className="text-xs text-muted-foreground">
-                    — what the run button does on a test card
-                  </span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Play className="h-4 w-4 text-muted-foreground" />
+                      <label className="text-sm font-medium">Test button</label>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {effectiveMode === "none"
+                        ? "Hidden for this project"
+                        : `${effectiveLabel} — ${
+                            runMode ? "you chose this" : "picked automatically"
+                          }`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-muted-foreground"
+                    onClick={() => setShowRunOptions((v) => !v)}
+                  >
+                    {showRunOptions ? "Done" : "Change"}
+                  </Button>
                 </div>
 
-                <div
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-2"
-                  role="radiogroup"
-                  aria-label="Run mode"
-                >
-                  {[
-                    {
-                      value: "" as const,
-                      label: "Auto",
-                      description: `Detect from the project folder. Right now that reads as: ${detectedLabel}.`,
-                    },
-                    ...RUN_MODE_OPTIONS,
-                  ].map((opt) => {
-                    const isSelected = runMode === opt.value;
-                    return (
-                      <button
-                        key={opt.value || "auto"}
-                        type="button"
-                        role="radio"
-                        aria-checked={isSelected}
-                        onClick={() => setRunMode(opt.value)}
-                        className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
-                          isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:bg-muted/50"
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                              isSelected ? "border-primary" : "border-muted-foreground/40"
+                {showRunOptions && (
+                  <>
+                    <div className="grid gap-2" role="radiogroup" aria-label="Test button">
+                      {[
+                        {
+                          value: "" as const,
+                          label: "Automatic",
+                          description:
+                            "Let Ideafy decide by looking at the project. Right now it would pick: " +
+                            (RUN_MODE_OPTIONS.find(
+                              (o) => o.value === project.detectedRunMode
+                            )?.label ?? project.detectedRunMode) +
+                            ".",
+                        },
+                        ...RUN_MODE_OPTIONS,
+                      ].map((opt) => {
+                        const isSelected = runMode === opt.value;
+                        return (
+                          <button
+                            key={opt.value || "auto"}
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            onClick={() => setRunMode(opt.value)}
+                            className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-colors ${
+                              isSelected
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:bg-muted/50"
                             }`}
                           >
                             <span
-                              className={`h-1.5 w-1.5 rounded-full transition-all ${
-                                isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                              className={`mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                                isSelected ? "border-primary" : "border-muted-foreground/40"
                               }`}
-                            />
-                          </span>
-                          <span className="font-medium text-sm text-foreground">
-                            {opt.label}
-                          </span>
-                        </span>
-                        <span className="text-xs text-muted-foreground leading-snug">
-                          {opt.description}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {effectiveMode !== "none" && (
-                  <>
-                    <div className="grid gap-1.5">
-                      <label htmlFor="edit-runCommand" className="text-xs font-medium">
-                        Run command{" "}
-                        <span className="text-muted-foreground font-normal">
-                          (optional — {"{port}"} is substituted, PORT is exported)
-                        </span>
-                      </label>
-                      <Input
-                        id="edit-runCommand"
-                        value={runCommand}
-                        onChange={(e) => setRunCommand(e.target.value)}
-                        placeholder={commandPlaceholder}
-                        className="font-mono text-sm"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Runs without a shell, so <code>&amp;&amp;</code> and pipes are not
-                        supported — point at a script instead.
-                      </p>
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full transition-all ${
+                                  isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                                }`}
+                              />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block font-medium text-sm text-foreground">
+                                {opt.label}
+                              </span>
+                              <span className="block text-xs text-muted-foreground leading-snug">
+                                {opt.description}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {effectiveMode === "server" && (
-                      <div className="grid gap-1.5">
-                        <label htmlFor="edit-previewUrl" className="text-xs font-medium">
-                          Preview URL{" "}
-                          <span className="text-muted-foreground font-normal">(optional)</span>
-                        </label>
-                        <Input
-                          id="edit-previewUrl"
-                          value={previewUrl}
-                          onChange={(e) => setPreviewUrl(e.target.value)}
-                          placeholder="http://localhost:{port}"
-                          className="font-mono text-sm"
-                        />
-                      </div>
+                    {effectiveMode !== "none" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowRunAdvanced((v) => !v)}
+                          className="self-start text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showRunAdvanced ? "Hide" : "Show"} advanced settings
+                        </button>
+
+                        {showRunAdvanced && (
+                          <div className="grid gap-3 pl-3 border-l-2 border-border">
+                            <div className="grid gap-1.5">
+                              <label htmlFor="edit-runCommand" className="text-xs font-medium">
+                                Custom command
+                              </label>
+                              <Input
+                                id="edit-runCommand"
+                                value={runCommand}
+                                onChange={(e) => setRunCommand(e.target.value)}
+                                placeholder={commandPlaceholder}
+                                className="font-mono text-sm"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Leave empty to use the default. Write{" "}
+                                <code>{"{port}"}</code> where the port number belongs. Runs
+                                directly rather than through a shell, so chain several steps
+                                in a script instead of with <code>&amp;&amp;</code>.
+                              </p>
+                            </div>
+
+                            {effectiveMode === "server" && (
+                              <div className="grid gap-1.5">
+                                <label
+                                  htmlFor="edit-previewUrl"
+                                  className="text-xs font-medium"
+                                >
+                                  Address to open
+                                </label>
+                                <Input
+                                  id="edit-previewUrl"
+                                  value={previewUrl}
+                                  onChange={(e) => setPreviewUrl(e.target.value)}
+                                  placeholder="http://localhost:{port}"
+                                  className="font-mono text-sm"
+                                />
+                              </div>
+                            )}
+
+                            <div className="grid gap-1.5">
+                              <label htmlFor="edit-sharedPaths" className="text-xs font-medium">
+                                Files shared with test copies
+                              </label>
+                              <Textarea
+                                id="edit-sharedPaths"
+                                value={sharedPathsText}
+                                onChange={(e) => setSharedPathsText(e.target.value)}
+                                placeholder="data/app.db"
+                                rows={2}
+                                className="font-mono text-sm"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Each task gets its own copy of the project. Anything listed
+                                here points back at the original instead — useful for a local
+                                database you want every copy to share. One per line, leave
+                                empty for automatic.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
-
-                    <div className="grid gap-1.5">
-                      <label htmlFor="edit-sharedPaths" className="text-xs font-medium">
-                        Shared paths{" "}
-                        <span className="text-muted-foreground font-normal">
-                          (one per line, relative to the project)
-                        </span>
-                      </label>
-                      <Textarea
-                        id="edit-sharedPaths"
-                        value={sharedPathsText}
-                        onChange={(e) => setSharedPathsText(e.target.value)}
-                        placeholder="data/app.db"
-                        rows={2}
-                        className="font-mono text-sm"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Symlinked from the main checkout into each worktree, so a run there
-                        sees the same local data. Empty = auto.
-                      </p>
-                    </div>
                   </>
                 )}
               </div>

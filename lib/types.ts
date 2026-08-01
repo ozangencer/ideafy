@@ -108,26 +108,23 @@ export const RUN_MODE_OPTIONS: {
 }[] = [
   {
     value: "server",
-    label: "Dev server",
-    description:
-      "Runs a dev command on its own port and opens the preview URL. Next.js, Vite, and other web apps.",
+    label: "Open in browser",
+    description: "Starts the app and opens it in a browser tab. For websites and web apps.",
   },
   {
     value: "app",
-    label: "Desktop app",
-    description:
-      "Runs a command that launches a windowed app. No port, no browser. Electron and friends.",
+    label: "Open the app",
+    description: "Launches the app in its own window. No browser involved.",
   },
   {
     value: "xcode",
     label: "Open in Xcode",
-    description:
-      "Generates the project file if needed and opens the worktree in Xcode. Building and running stay with ⌘R.",
+    description: "Opens the test copy in Xcode, where you press ⌘R to run it yourself.",
   },
   {
     value: "none",
-    label: "No run action",
-    description: "Hides the run button for this project.",
+    label: "Nothing",
+    description: "Hides the button for this project.",
   },
 ];
 

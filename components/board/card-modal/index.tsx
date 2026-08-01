@@ -205,6 +205,7 @@ export function CardModal({
   const [devServerPort, setDevServerPort] = useState<number | null>(null);
   const [devServerPid, setDevServerPid] = useState<number | null>(null);
   const [isServerLoading, setIsServerLoading] = useState(false);
+  const [showGitDetails, setShowGitDetails] = useState(false);
 
   const overlayMouseDownRef = useRef(false);
 
@@ -476,6 +477,41 @@ export function CardModal({
     }
   };
 
+  /**
+   * Finish a Human Test card that never got a branch of its own.
+   *
+   * Work that did not run through Ideafy leaves nothing to merge or delete, so
+   * the git panel stays hidden — but the tester still has a verdict to record,
+   * and without this the only way to act on it is the Status dropdown.
+   */
+  const handleFinishWithoutBranch = async (outcome: "completed" | "bugs") => {
+    if (!selectedCard || isCompleting) return;
+
+    setIsCompleting(true);
+    try {
+      // Keep the form in step with the write so a pending auto-save agrees
+      // with it rather than putting the card back in Human Test.
+      setStatus(outcome);
+      await updateCard(selectedCard.id, { status: outcome });
+      toast({
+        title: outcome === "completed" ? "Card Completed" : "Sent back to Bugs",
+        description:
+          outcome === "completed"
+            ? "Moved to Completed."
+            : "Moved to Bugs to be worked on again.",
+      });
+      handleClose();
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't move the card",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   // Git operations (same as before)
   const handleMerge = async (commitFirst = false) => {
     if (!selectedCard) return;
@@ -679,7 +715,7 @@ export function CardModal({
         const error = await response.json();
         toast({
           variant: "destructive",
-          title: "Rollback Failed",
+          title: "Couldn't send the card back",
           description: error.error || "An error occurred during rollback",
         });
         return;
@@ -688,14 +724,17 @@ export function CardModal({
       await useKanbanStore.getState().fetchCards();
       setShowRollbackDialog(false);
       toast({
-        title: "Rolled Back",
-        description: deleteBranch ? "Branch deleted, card moved to Bugs" : "Switched to main, branch preserved",
+        title: "Sent back to Bugs",
+        // The old copy said "Switched to main", which never happened.
+        description: deleteBranch
+          ? "The code from this attempt was deleted."
+          : "The code from this attempt was kept.",
       });
       handleClose();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Rollback Failed",
+        title: "Couldn't send the card back",
         description: error instanceof Error ? error.message : String(error),
       });
     } finally {
@@ -817,12 +856,14 @@ export function CardModal({
         {status === "test" && gitBranchName && gitBranchStatus === "active" && (
           <div className="mx-6 my-3 border border-ink rounded-lg p-4 bg-paper-cream">
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                  <GitBranch className="h-4 w-4 text-ink" />
-                  <span className="font-mono text-muted-foreground">{gitBranchName}</span>
+              <div className="flex items-start justify-between gap-3">
+                {/* The decision this panel actually asks for, in the tester's
+                    words. The branch name and worktree path underneath are the
+                    same fact in git's words — useful, but not the question. */}
+                <div className="text-sm text-ink">
+                  <span className="font-medium">Did this change work?</span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   {mergeReality && mergeReality.state !== "ready" ? (
                     <Button
                       onClick={handleCompleteWithoutMerge}
@@ -861,10 +902,31 @@ export function CardModal({
                     className="border-red-500/50 text-red-500 hover:bg-red-500/10"
                   >
                     <Undo2 className="mr-2 h-4 w-4" />
-                    Rollback
+                    Didn&apos;t work
                   </Button>
                 </div>
               </div>
+
+              {/* Say what the destructive button costs before it is pressed.
+                  The two states need genuinely different sentences: normally the
+                  work is thrown away, but once it is already on the default
+                  branch nothing can take it back out, and saying "deletes this
+                  attempt" there reads as a contradiction. */}
+              <p className="text-xs text-muted-foreground">
+                {mergeReality && mergeReality.state !== "ready" ? (
+                  <>
+                    This change is already on {mergeReality.defaultBranch}, so &ldquo;Didn&apos;t
+                    work&rdquo; cannot take it back out — it only sends the card to Bugs to be
+                    worked on again.
+                  </>
+                ) : (
+                  <>
+                    &ldquo;Didn&apos;t work&rdquo; sends the card back to Bugs and nothing from
+                    this attempt reaches {mergeReality?.defaultBranch ?? "the main branch"}.
+                    You choose whether to keep the code.
+                  </>
+                )}
+              </p>
 
               {/* Why the merge button is gone: git has nothing left to take. */}
               {mergeReality && mergeReality.state !== "ready" && (
@@ -872,19 +934,41 @@ export function CardModal({
                   <GitMerge className="h-3.5 w-3.5 mt-0.5 shrink-0 text-ink" />
                   <span>
                     {mergeReality.state === "missing"
-                      ? `Branch bulunamadı — silinmiş görünüyor. Complete kartı kapatır ve worktree'yi temizler.`
-                      : `${mergeReality.defaultBranch} dalına göre merge edilecek bir değişiklik yok — branch dışarıdan merge edilmiş görünüyor. Complete kartı kapatır ve worktree'yi temizler.`}
+                      ? "This work is no longer on its own branch — it looks like it was already merged or removed elsewhere. Complete moves the card to Completed."
+                      : `Everything here is already on ${mergeReality.defaultBranch}, so there is nothing left to merge. Complete moves the card to Completed.`}
                   </span>
                 </div>
               )}
-              {gitWorktreeStatus === "active" && gitWorktreePath && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <FolderGit2 className="h-3.5 w-3.5 text-ink" />
-                  <span className="font-mono truncate" title={gitWorktreePath}>
-                    {gitWorktreePath.split("/").slice(-3).join("/")}
-                  </span>
-                </div>
-              )}
+
+              {/* Git's own words for the same thing — real, but not the question
+                  being asked, so they stay out of the way until wanted. */}
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowGitDetails((v) => !v)}
+                  className="self-start text-xs text-muted-foreground hover:text-ink transition-colors"
+                >
+                  {showGitDetails ? "Hide details" : "Details"}
+                </button>
+                {showGitDetails && (
+                  <div className="flex flex-col gap-1 pl-3 border-l-2 border-border">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <GitBranch className="h-3.5 w-3.5 shrink-0 text-ink" />
+                      <span className="font-mono truncate" title={gitBranchName ?? undefined}>
+                        {gitBranchName}
+                      </span>
+                    </div>
+                    {gitWorktreeStatus === "active" && gitWorktreePath && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-ink" />
+                        <span className="font-mono truncate" title={gitWorktreePath}>
+                          {gitWorktreePath.split("/").slice(-3).join("/")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {gitWorktreeStatus === "active" && runMode !== "none" && (
                 <div className="flex items-center gap-2 pt-2 border-t border-border/50 mt-2">
                   {runIsActive ? (
@@ -935,6 +1019,52 @@ export function CardModal({
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* The same verdict, for cards that never got a branch. Work done
+            outside Ideafy leaves nothing to merge or roll back, but the tester
+            still has to say whether it worked — and the Status dropdown is a
+            poor place to hide that decision. */}
+        {status === "test" && !gitBranchName && (
+          <div className="mx-6 my-3 border border-ink rounded-lg p-4 bg-paper-cream">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm text-ink">
+                  <span className="font-medium">Did this change work?</span>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    onClick={() => handleFinishWithoutBranch("completed")}
+                    disabled={isCompleting}
+                    size="sm"
+                    variant="outline"
+                    className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
+                  >
+                    {isCompleting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="mr-2 h-4 w-4" />
+                    )}
+                    Complete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleFinishWithoutBranch("bugs")}
+                    disabled={isCompleting}
+                    className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+                  >
+                    <Undo2 className="mr-2 h-4 w-4" />
+                    Didn&apos;t work
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This card has no branch of its own, so nothing is merged or deleted — only the
+                card moves.
+              </p>
             </div>
           </div>
         )}
@@ -1037,9 +1167,13 @@ export function CardModal({
       <AlertDialog open={showRollbackDialog} onOpenChange={setShowRollbackDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rollback Branch</AlertDialogTitle>
+            <AlertDialogTitle>This change didn&apos;t work?</AlertDialogTitle>
+            {/* The old copy claimed this checks out main, which it never did,
+                and never mentioned where the card lands. Both matter. */}
             <AlertDialogDescription>
-              This will checkout to the main branch. What would you like to do with the feature branch?
+              The card goes back to Bugs and its test scenarios are cleared, so the work can
+              be attempted again from scratch. Should the code written for this attempt be
+              kept?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4 space-y-3">
@@ -1054,7 +1188,7 @@ export function CardModal({
               ) : (
                 <GitBranch className="mr-2 h-4 w-4" />
               )}
-              Keep branch (can retry later)
+              Keep it — I may pick it up again
             </Button>
             <Button
               variant="outline"
@@ -1067,7 +1201,7 @@ export function CardModal({
               ) : (
                 <X className="mr-2 h-4 w-4" />
               )}
-              Delete branch (start fresh)
+              Delete it — start over next time
             </Button>
           </div>
           <AlertDialogFooter>
