@@ -13,6 +13,10 @@ import {
   type Phase,
 } from "@/lib/prompts";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import {
+  RUN_OUTPUT_CONTRACTS,
+  prependWarningHtml,
+} from "@/lib/autonomous-run/select-run-output";
 import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
@@ -116,6 +120,7 @@ export async function POST(
       prompt,
       cwd: actualWorkingDir,
       aiPlatform: card.aiPlatform,
+      contract: RUN_OUTPUT_CONTRACTS[phase],
       tracking: {
         processKey,
         cardId: id,
@@ -127,7 +132,10 @@ export async function POST(
 
     // Convert markdown response to HTML for the TipTap editor.
     const markedHtml = await marked(result.response);
-    const htmlResponse = convertToTipTapTaskList(markedHtml);
+    let htmlResponse = convertToTipTapTaskList(markedHtml);
+    if (result.warning) {
+      htmlResponse = prependWarningHtml(htmlResponse, result.warning);
+    }
 
     // Planning phase can embed [COMPLEXITY:] / [PRIORITY:] — hoist them onto the card row.
     let complexity: string | null = null;
@@ -184,6 +192,7 @@ export async function POST(
       phase,
       newStatus,
       response: htmlResponse,
+      outputWarning: result.warning,
       complexity,
       priority,
       cost: result.cost,

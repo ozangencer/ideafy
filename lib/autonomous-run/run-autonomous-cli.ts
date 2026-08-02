@@ -6,6 +6,8 @@ import {
   registerProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import type { ParsedRunOutput } from "@/lib/platform/types";
+import { selectRunOutput, type RunOutputContract } from "./select-run-output";
 
 /** Process-registry label; must match the values the UI filters on. */
 export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix";
@@ -39,6 +41,19 @@ export interface RunAutonomousOptions {
    * the card-driven runs have always behaved.
    */
   requireExitZero?: boolean;
+  /**
+   * What this run's output must look like to be recognisable as its product.
+   * Without one the runner falls back to a length heuristic and flags it.
+   */
+  contract?: RunOutputContract;
+}
+
+export interface AutonomousRunResult {
+  response: string;
+  /** Non-null when the output had to be guessed at; surface it to the user. */
+  warning: string | null;
+  cost?: number;
+  duration?: number;
 }
 
 /**
@@ -55,7 +70,7 @@ export interface RunAutonomousOptions {
  */
 export async function runAutonomousCli(
   options: RunAutonomousOptions,
-): Promise<{ response: string; cost?: number; duration?: number }> {
+): Promise<AutonomousRunResult> {
   const {
     prompt,
     cwd,
@@ -63,6 +78,7 @@ export async function runAutonomousCli(
     timeoutMs = 10 * 60 * 1000,
     tracking,
     requireExitZero = false,
+    contract,
   } = options;
 
   // Kill any existing process for this card so a second click doesn't race the first.
@@ -98,11 +114,21 @@ export async function runAutonomousCli(
       });
     }
 
+    // Providers that can decompose their own output stream do so incrementally;
+    // the rest keep the old buffer-everything path.
+    const collector = provider.createRunOutputCollector?.();
     let stdout = "";
     let stderr = "";
+    let stdoutLength = 0;
 
     cliProcess.stdout?.on("data", (data: Buffer) => {
-      stdout += data.toString();
+      const text = data.toString();
+      stdoutLength += text.length;
+      if (collector) {
+        collector.push(text);
+      } else {
+        stdout += text;
+      }
     });
 
     cliProcess.stderr?.on("data", (data: Buffer) => {
@@ -120,21 +146,53 @@ export async function runAutonomousCli(
       if (stderr) {
         console.log(`[${label}] stderr: ${stderr}`);
       }
-      console.log(`[${label}] stdout length: ${stdout.length}`);
+      console.log(`[${label}] stdout length: ${stdoutLength}`);
 
-      if (code !== 0 && (requireExitZero || !stdout.trim())) {
+      let parsed: ParsedRunOutput;
+      if (collector) {
+        parsed = collector.finish();
+      } else {
+        const legacy = provider.parseJsonResponse(stdout);
+        parsed = {
+          candidates: [],
+          result: legacy.result,
+          cost: legacy.cost,
+          duration: legacy.duration,
+          isError: legacy.isError,
+          // Nothing better to go on for these providers, and treating output as
+          // proof of completion is what the old guard below did anyway.
+          sawResultEnvelope: !!stdout.trim(),
+          injectedUserMessages: 0,
+        };
+      }
+
+      // Not `!stdout.trim()`: under stream-json a `system/init` line lands
+      // within milliseconds, so stdout is never empty and that guard would
+      // never fire again. A terminating result envelope is what actually
+      // distinguishes a finished run from a crashed one.
+      if (code !== 0 && (requireExitZero || !parsed.sawResultEnvelope)) {
         reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
         return;
       }
 
-      const parsed = provider.parseJsonResponse(stdout);
       if (parsed.isError) {
+        // The error text lives in `result`; candidate selection has no business
+        // running on a failed run.
         reject(new Error(parsed.result || `${provider.displayName} returned an error`));
         return;
       }
 
+      const selected = selectRunOutput(parsed, contract);
+      if (selected.warning) {
+        console.warn(
+          `[${label}] ${selected.warning} ` +
+            `(adaylar: ${selected.candidateCount}, segment: ${selected.segmentCount})`,
+        );
+      }
+
       resolve({
-        response: parsed.result,
+        response: selected.text,
+        warning: selected.warning,
         cost: parsed.cost,
         duration: parsed.duration,
       });

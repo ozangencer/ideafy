@@ -9,6 +9,7 @@ import {
   type NarrativeData,
 } from "@/lib/prompts";
 import { runAutonomousCli } from "@/lib/autonomous-run/run-autonomous-cli";
+import { prependWarningMarkdown } from "@/lib/autonomous-run/select-run-output";
 import { safeResolvePath } from "@/lib/path-utils";
 
 /**
@@ -25,7 +26,10 @@ import { safeResolvePath } from "@/lib/path-utils";
  * `product-narrative.md`. Failing here routes it to `generateFallbackContent`.
  */
 async function generateNarrative(prompt: string, cwd: string): Promise<string> {
-  const { response } = await runAutonomousCli({
+  // No contract: a narrative is free-form markdown with no marker to key on, so
+  // the runner falls back to picking the longest text run and warns when that
+  // differs from the last thing said.
+  const { response, warning } = await runAutonomousCli({
     prompt,
     cwd,
     requireExitZero: true,
@@ -39,7 +43,7 @@ async function generateNarrative(prompt: string, cwd: string): Promise<string> {
   if (!content) {
     throw new Error("Narrative generation produced no content");
   }
-  return content;
+  return warning ? prependWarningMarkdown(content, warning) : content;
 }
 
 // GET - Read narrative from project folder

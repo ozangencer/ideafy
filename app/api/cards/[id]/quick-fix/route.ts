@@ -12,6 +12,10 @@ import {
 } from "@/lib/prompts";
 import { getProcess, killProcess } from "@/lib/process-registry";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import {
+  RUN_OUTPUT_CONTRACTS,
+  prependWarningHtml,
+} from "@/lib/autonomous-run/select-run-output";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import {
   generateBranchName,
@@ -158,12 +162,13 @@ export async function POST(
 
     console.log(`[Quick Fix] Prompt length: ${prompt.length} chars`);
 
-    const { response: responseText, cost, duration } = await runAutonomousCli({
+    const { response: responseText, warning, cost, duration } = await runAutonomousCli({
       prompt,
       cwd: actualWorkingDir,
       aiPlatform: card.aiPlatform,
       label: "Quick fix",
       timeoutMs: 10 * 60 * 1000,
+      contract: RUN_OUTPUT_CONTRACTS.quickFix,
       tracking: {
         processKey,
         cardId: id,
@@ -181,9 +186,12 @@ export async function POST(
     const summaryMatch = responseText.match(/## Quick Fix Summary[\s\S]*?(?=## Test Scenarios|$)/i);
     const testsMatch = responseText.match(/## Test Scenarios[\s\S]*/i);
 
-    const solutionSummary = summaryMatch
+    let solutionSummary = summaryMatch
       ? convertToTipTapTaskList(await marked(summaryMatch[0]))
       : htmlResponse;
+    if (warning) {
+      solutionSummary = prependWarningHtml(solutionSummary, warning);
+    }
 
     const testScenarios = testsMatch
       ? convertToTipTapTaskList(await marked(testsMatch[0]))
@@ -244,6 +252,7 @@ export async function POST(
       newStatus,
       solutionSummary,
       testScenarios,
+      outputWarning: warning,
       cost,
       duration,
       gitBranchName,

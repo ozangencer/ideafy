@@ -10,11 +10,13 @@ import type {
   StreamOptions,
   CliResponse,
   StreamEvent,
+  RunOutputCollector,
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { appResourcesRoot, resolveUserSkillsDir } from "../paths";
 import { parseClaudeStreamLine } from "./claude-provider/parse-stream-line";
+import { createClaudeRunOutputCollector } from "./claude-provider/collect-run-output";
 import {
   listProjectMcps as listProjectMcpsImpl,
   listProjectSkills as listProjectSkillsImpl,
@@ -104,7 +106,15 @@ class ClaudeProvider implements PlatformProvider {
     const args = [
       "-p", opts.prompt,
       "--dangerously-skip-permissions",
-      "--output-format", "json",
+      // stream-json rather than json: the latter collapses the whole run to its
+      // `result` field, which is only ever the *last* thing the model said. A
+      // background command finishing mid-run re-invokes the model, and the real
+      // output is lost behind the follow-up remark (IDE-280). The event stream
+      // keeps every text run so the caller can pick the right one.
+      "--output-format", "stream-json",
+      "--verbose",
+      // Deliberately no --include-partial-messages: nothing consumes deltas
+      // here, and the consolidated blocks give cleaner run boundaries.
       "--setting-sources", "user",
     ];
     return args;
@@ -163,7 +173,9 @@ class ClaudeProvider implements PlatformProvider {
       const response = JSON.parse(stdout);
       return {
         result: response.result || "",
-        cost: response.cost_usd,
+        // The CLI emits `total_cost_usd`; `cost_usd` has never existed, so this
+        // silently returned undefined until IDE-280.
+        cost: response.total_cost_usd ?? response.cost_usd,
         duration: response.duration_ms,
         isError: !!response.is_error,
       };
@@ -174,6 +186,10 @@ class ClaudeProvider implements PlatformProvider {
 
   parseStreamLine(line: string): StreamEvent[] {
     return parseClaudeStreamLine(line);
+  }
+
+  createRunOutputCollector(): RunOutputCollector {
+    return createClaudeRunOutputCollector();
   }
 
   getDefaultSkillsPath(): string {

@@ -9,6 +9,10 @@ import {
 } from "@/lib/prompts";
 import { getProcess, killProcess } from "@/lib/process-registry";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import {
+  RUN_OUTPUT_CONTRACTS,
+  prependWarningHtml,
+} from "@/lib/autonomous-run/select-run-output";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import { recordOpinionCompleted } from "@/lib/activity-registry";
 
@@ -85,12 +89,13 @@ export async function POST(
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 
-    const { response: responseText, cost, duration } = await runAutonomousCli({
+    const { response: responseText, warning, cost, duration } = await runAutonomousCli({
       prompt,
       cwd: workingDir,
       aiPlatform: card.aiPlatform,
       label: "Evaluate",
       timeoutMs: 5 * 60 * 1000,
+      contract: RUN_OUTPUT_CONTRACTS.evaluate,
       tracking: {
         processKey,
         cardId: id,
@@ -102,7 +107,10 @@ export async function POST(
 
     // Convert markdown response to HTML for TipTap editor
     const markedHtml = await marked(responseText);
-    const aiOpinion = convertToTipTapTaskList(markedHtml);
+    let aiOpinion = convertToTipTapTaskList(markedHtml);
+    if (warning) {
+      aiOpinion = prependWarningHtml(aiOpinion, warning);
+    }
 
     // Extract verdict from "## Summary Verdict" section
     const verdictMatch = responseText.match(/##\s*Summary\s*Verdict[\s\S]*?(Strong\s*Yes|Yes|Maybe|No|Strong\s*No)/i);
@@ -181,6 +189,7 @@ export async function POST(
       cardId: id,
       aiOpinion,
       aiVerdict,
+      outputWarning: warning,
       priority,
       complexity,
       cost,
