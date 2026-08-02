@@ -60,6 +60,7 @@ export function serializeProject(row: ProjectRecord): Project {
     runCommand: row.runCommand,
     previewUrl: row.previewUrl,
     sharedPaths: parseStringArray(row.sharedPaths),
+    cmuxWorkspaceId: row.cmuxWorkspaceId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

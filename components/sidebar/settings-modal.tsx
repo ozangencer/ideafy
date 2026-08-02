@@ -466,13 +466,15 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
           <div className="grid gap-1.5">
             <div className="flex items-center justify-between gap-3">
               <label htmlFor="terminalApp" className="text-sm font-medium">Terminal Application</label>
-              {(terminalApp === "ghostty" || terminalApp === "terminal" || terminalApp === "iterm2" || terminalApp === "warp") && (
+              {(terminalApp === "ghostty" || terminalApp === "terminal" || terminalApp === "iterm2" || terminalApp === "warp" || terminalApp === "cmux") && (
                 <span className="text-xs text-muted-foreground truncate">
                   {terminalApp === "ghostty"
                     ? "Opens via app launch args"
                     : terminalApp === "warp"
                       ? "Opens via Warp launch config"
-                      : "Opens via AppleScript"}
+                      : terminalApp === "cmux"
+                        ? "Opens a workspace via the cmux CLI"
+                        : "Opens via AppleScript"}
                 </span>
               )}
             </div>

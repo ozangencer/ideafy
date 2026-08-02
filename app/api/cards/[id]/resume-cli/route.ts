@@ -3,7 +3,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "@/lib/db";
 import { cards, projects, chatSessions, conversations } from "@/lib/db/schema";
-import { launchTerminal, getTerminalPreference } from "@/lib/terminal-launcher";
+import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 import { getProviderForCard } from "@/lib/platform/active";
 import { stripHtml } from "@/lib/ai/prompt-builder";
 import type { PlatformProvider } from "@/lib/platform/types";
@@ -141,6 +141,7 @@ export async function POST(
         argv: buildResumeCliArgv(provider, session.cliSessionId),
         terminal,
         tag: "Resume CLI",
+        session: buildTerminalSession(card, project),
       });
       return NextResponse.json({
         success: true,
@@ -193,6 +194,7 @@ export async function POST(
       argv: buildFreshCliArgv(provider, newSessionId, openingPrompt),
       terminal,
       tag: "Resume CLI (fresh)",
+      session: buildTerminalSession(card, project, displayId),
     });
   } catch (error) {
     return NextResponse.json(

@@ -17,6 +17,7 @@ export const projects = sqliteTable("projects", {
   runCommand: text("run_command"), // Override for the command the run button spawns, null = mode default
   previewUrl: text("preview_url"), // Override for the URL opened in server mode ({port} placeholder), null = http://localhost:{port}
   sharedPaths: text("shared_paths"), // JSON array of repo-relative paths symlinked from main checkout into the worktree, null = auto
+  cmuxWorkspaceId: text("cmux_workspace_id"), // cmux workspace UUID to open this project's tabs in, "new" for a fresh workspace per run, null = match by folder
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

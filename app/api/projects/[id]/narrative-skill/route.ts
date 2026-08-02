@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { existsSync } from "fs";
 import { getActiveProvider } from "@/lib/platform/active";
-import { launchTerminal, getTerminalPreference } from "@/lib/terminal-launcher";
+import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 
 export async function POST(
   request: NextRequest,
@@ -56,7 +56,8 @@ export async function POST(
   console.log(`[Narrative Skill] Terminal: ${terminal}`);
   console.log(`[Narrative Skill] Working dir: ${project.folderPath}`);
 
-  launchTerminal({ ...invocation, terminal, tag: "Narrative Skill" });
+  launchTerminal({ ...invocation, terminal, tag: "Narrative Skill",
+    session: buildTerminalSession(null, project) });
 
   return NextResponse.json({
     success: true,

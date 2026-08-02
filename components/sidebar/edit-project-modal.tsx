@@ -33,6 +33,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, FileText, GitBranch, Plug, Terminal } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { BasicInfoFields } from "./project-form/basic-info-fields";
 import { PluginUpdateBadge } from "./plugin-update-badge";
@@ -85,6 +92,11 @@ export function EditProjectModal({
   const [sharedPathsText, setSharedPathsText] = useState(
     project.sharedPaths?.join("\n") || ""
   );
+  // "" means match a cmux workspace by folder; "new" forces a fresh one.
+  const [cmuxWorkspaceId, setCmuxWorkspaceId] = useState(project.cmuxWorkspaceId || "");
+  const [cmuxWorkspaces, setCmuxWorkspaces] = useState<
+    { id: string; title: string | null; currentDirectory: string | null }[]
+  >([]);
   // Almost nobody changes how a project is tested, and the knobs behind it are
   // developer-shaped. Both stay folded away until asked for.
   const [showRunOptions, setShowRunOptions] = useState(false);
@@ -139,6 +151,16 @@ export function EditProjectModal({
     };
     checkStatuses();
   }, [project.id]);
+
+  // cmux's currently open workspaces, for the placement picker below. An empty
+  // list means cmux is not installed or not running — the picker then stays
+  // hidden rather than offering a choice that cannot be made.
+  useEffect(() => {
+    fetch("/api/cmux/workspaces")
+      .then((r) => r.json())
+      .then((d) => setCmuxWorkspaces(d.workspaces ?? []))
+      .catch(() => setCmuxWorkspaces([]));
+  }, []);
 
   const handleToggleIdeafy = async (enabled: boolean) => {
     setIsTogglingKanban(true);
@@ -249,6 +271,7 @@ export function EditProjectModal({
         runCommand: runCommand.trim() || null,
         previewUrl: previewUrl.trim() || null,
         sharedPaths: sharedPaths.length > 0 ? sharedPaths : null,
+        cmuxWorkspaceId: cmuxWorkspaceId || null,
         ...(extraSavePayload?.() ?? {}),
       });
       onClose();
@@ -757,6 +780,46 @@ export function EditProjectModal({
               onCheckedChange={setUseWorktrees}
             />
           </div>
+
+          {/* cmux placement — only meaningful while cmux has workspaces open */}
+          {cmuxWorkspaces.length > 0 && (
+            <div className="grid gap-1.5">
+              <div className="flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-muted-foreground" />
+                <label className="text-sm font-medium">cmux Workspace</label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Where this project&apos;s terminal tabs open in cmux.
+              </p>
+              <Select
+                value={cmuxWorkspaceId || "auto"}
+                onValueChange={(v) => setCmuxWorkspaceId(v === "auto" ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  <SelectItem value="auto">Match by folder (default)</SelectItem>
+                  <SelectItem value="new">Always a new workspace</SelectItem>
+                  {cmuxWorkspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      <span className="flex flex-col">
+                        <span>{w.title || "Untitled"}</span>
+                        {w.currentDirectory && (
+                          // text-current, not text-muted-foreground: the row
+                          // swaps to the accent foreground when highlighted and
+                          // a muted child would drop out of contrast.
+                          <span className="text-xs text-current opacity-60">
+                            {w.currentDirectory}
+                          </span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
         </div>
 

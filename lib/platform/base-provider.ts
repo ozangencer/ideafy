@@ -30,6 +30,7 @@ const FRIENDLY_DEPENDENCIES: Record<string, { name: string; url?: string }> = {
   gemini: { name: "Gemini CLI", url: "https://github.com/google-gemini/gemini-cli" },
   codex: { name: "Codex CLI", url: "https://github.com/openai/codex" },
   opencode: { name: "OpenCode CLI", url: "https://opencode.ai" },
+  cmux: { name: "cmux", url: "https://cmux.com" },
 };
 
 export function isMissingDependencyError(err: unknown): err is MissingDependencyError {

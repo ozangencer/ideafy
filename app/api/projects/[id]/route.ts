@@ -76,6 +76,12 @@ export async function PUT(
           : null;
     }
 
+    // Empty string is how the picker spells "back to matching by folder".
+    let cmuxWorkspaceId = existing.cmuxWorkspaceId;
+    if (body.cmuxWorkspaceId !== undefined) {
+      cmuxWorkspaceId = body.cmuxWorkspaceId?.trim() || null;
+    }
+
     const updatedProject = {
       name: body.name ?? existing.name,
       folderPath: body.folderPath ?? existing.folderPath,
@@ -90,6 +96,7 @@ export async function PUT(
       runCommand,
       previewUrl,
       sharedPaths,
+      cmuxWorkspaceId,
       updatedAt: new Date().toISOString(),
     };
 

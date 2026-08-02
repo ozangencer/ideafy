@@ -163,6 +163,7 @@ function getEffectiveTerminal(
 
 function getPasteTipTerminalLabel(terminal: string | null): string {
   if (terminal === "ghostty") return "Ghostty";
+  if (terminal === "cmux") return "cmux";
   if (terminal === "warp") return "Warp";
   if (terminal === "iterm2") return "iTerm2";
   if (terminal === "terminal") return "Terminal";
@@ -274,6 +275,8 @@ function TaskCardImpl({
   };
   const expectedWorktreePath = getExpectedWorktreePath();
   const effectiveTerminal = getEffectiveTerminal(settings);
+  // cmux embeds Ghostty but does not inherit its paste confirmation (verified
+  // in real use), so it stays out of this list.
   const needsPasteConfirm = effectiveTerminal === "ghostty";
   const pasteTipTerminalLabel = getPasteTipTerminalLabel(effectiveTerminal);
 

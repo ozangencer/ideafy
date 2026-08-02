@@ -9,7 +9,7 @@ import {
   worktreeExists,
   getWorktreePath,
 } from "@/lib/git";
-import { launchTerminal, getTerminalPreference } from "@/lib/terminal-launcher";
+import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 type Phase = "planning" | "implementation" | "retest";
 
 function stripHtml(html: string): string {
@@ -257,7 +257,8 @@ export async function POST(
     console.log(`[Open Terminal] Prompt length: ${prompt.length} chars`);
     console.log(`[Open Terminal] Terminal app: ${terminal}`);
 
-    launchTerminal({ ...invocation, terminal, tag: "Open Terminal" });
+    launchTerminal({ ...invocation, terminal, tag: "Open Terminal",
+      session: buildTerminalSession(card, project, displayId) });
 
     return NextResponse.json({
       success: true,

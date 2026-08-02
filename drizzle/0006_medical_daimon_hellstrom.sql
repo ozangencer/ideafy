@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `cmux_workspace_id` text;

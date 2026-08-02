@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       runCommand: body.runCommand || null,
       previewUrl: body.previewUrl || null,
       sharedPaths: body.sharedPaths ? JSON.stringify(body.sharedPaths) : null,
+      cmuxWorkspaceId: null,
       createdAt: now,
       updatedAt: now,
     };

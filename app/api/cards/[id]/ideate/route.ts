@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildIdeationPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
-import { launchTerminal } from "@/lib/terminal-launcher";
+import { launchTerminal, buildTerminalSession } from "@/lib/terminal-launcher";
 
 export async function POST(
   request: NextRequest,
@@ -83,7 +83,8 @@ export async function POST(
     console.log(`[Ideate] Terminal app: ${terminal}`);
     console.log(`[Ideate] Prompt length: ${prompt.length} chars`);
 
-    launchTerminal({ ...invocation, terminal, tag: "Ideate" });
+    launchTerminal({ ...invocation, terminal, tag: "Ideate",
+      session: buildTerminalSession(card, project) });
 
     return NextResponse.json({
       success: true,

@@ -154,6 +154,7 @@ export interface Project {
   runCommand: string | null; // Override for the run command, null = mode default
   previewUrl: string | null; // Override for the previewed URL ({port} placeholder)
   sharedPaths: string[] | null; // Paths symlinked from main checkout into worktrees, null = auto
+  cmuxWorkspaceId: string | null; // cmux workspace UUID for this project's tabs, "new" for a fresh one per run, null = match by folder
   createdAt: string;
   updatedAt: string;
 }
@@ -259,7 +260,7 @@ export const STATUS_COLORS: Record<Status, string> = {
 };
 
 // Settings types
-export type TerminalApp = "iterm2" | "ghostty" | "terminal" | "warp";
+export type TerminalApp = "iterm2" | "ghostty" | "terminal" | "warp" | "cmux";
 export type AiPlatform = "claude" | "gemini" | "codex" | "opencode";
 
 export interface AppSettings {
@@ -290,6 +291,7 @@ export const TERMINAL_OPTIONS: { value: TerminalApp; label: string }[] = [
   { value: "ghostty", label: "Ghostty" },
   { value: "terminal", label: "Terminal.app" },
   { value: "warp", label: "Warp" },
+  { value: "cmux", label: "cmux" },
 ];
 
 // Section types for card modal tabs

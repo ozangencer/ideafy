@@ -1,9 +1,10 @@
 import { spawn } from "child_process";
 import { writeFileSync, unlinkSync, mkdirSync } from "fs";
 import { homedir, tmpdir } from "os";
-import { join } from "path";
+import { basename, join } from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { openCmuxTerminal } from "@/lib/terminal/cmux";
 import type { TerminalApp } from "@/lib/types";
 
 export interface LaunchTerminalOptions {
@@ -13,6 +14,44 @@ export interface LaunchTerminalOptions {
   terminal?: TerminalApp;
   /** Optional log tag used in stderr messages. */
   tag?: string;
+  /**
+   * Extra context for terminals that can place a run rather than just spawn a
+   * window. Only cmux reads this; the others ignore it.
+   */
+  session?: {
+    /** Sidebar label for the tab. Agents overwrite it once they start. */
+    title?: string;
+    /** Project root, matched against cmux workspace directories. */
+    projectFolder?: string | null;
+    /** `projects.cmuxWorkspaceId`. */
+    workspacePreference?: string | null;
+    /** Lets a created workspace be remembered against the project. */
+    projectId?: string | null;
+  };
+}
+
+/**
+ * Assemble the placement/label context from whatever the route already has.
+ * Every field is optional: a caller with no card still gets useful placement,
+ * and terminals that cannot place a run ignore the whole thing.
+ */
+export function buildTerminalSession(
+  card: { title?: string | null } | null | undefined,
+  project:
+    | { id?: string; folderPath?: string | null; cmuxWorkspaceId?: string | null }
+    | null
+    | undefined,
+  displayId?: string | null,
+): LaunchTerminalOptions["session"] {
+  const cardTitle = card?.title || null;
+  return {
+    title: displayId && cardTitle
+      ? `${displayId} · ${cardTitle}`
+      : displayId || cardTitle || undefined,
+    projectFolder: project?.folderPath ?? null,
+    workspacePreference: project?.cmuxWorkspaceId ?? null,
+    projectId: project?.id ?? null,
+  };
 }
 
 // POSIX shell single-quote: safe for any string (no null byte). Embedded
@@ -151,6 +190,34 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
       try { unlinkSync(configPath); } catch {}
     }, 8000);
 
+    return { success: true };
+  }
+
+  if (terminal === "cmux") {
+    // A tab's title otherwise defaults to the command it runs, which would put
+    // the generated /tmp script path in the sidebar. The cwd basename is the
+    // branch name for worktree runs and the project folder otherwise — the
+    // name the user would have picked themselves.
+    const name = opts.session?.title || basename(opts.cwd) || tag;
+    const projectId = opts.session?.projectId ?? null;
+
+    void openCmuxTerminal({
+      cwd: opts.cwd,
+      scriptPath,
+      name,
+      projectFolder: opts.session?.projectFolder ?? null,
+      workspacePreference: opts.session?.workspacePreference ?? null,
+      tag,
+      onWorkspaceCreated: projectId
+        ? (workspaceId) => {
+            db.update(schema.projects)
+              .set({ cmuxWorkspaceId: workspaceId, updatedAt: new Date().toISOString() })
+              .where(eq(schema.projects.id, projectId))
+              .run();
+            console.log(`[${tag}] pinned project ${projectId} to cmux workspace ${workspaceId}`);
+          }
+        : undefined,
+    });
     return { success: true };
   }
 

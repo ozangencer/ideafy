@@ -4,7 +4,7 @@ import { db, schema } from "@/lib/db";
 import type { TerminalApp } from "@/lib/types";
 import { buildTestGenerationPrompt, stripHtml } from "@/lib/prompts";
 import { worktreeExists } from "@/lib/git";
-import { launchTerminal } from "@/lib/terminal-launcher";
+import { launchTerminal, buildTerminalSession } from "@/lib/terminal-launcher";
 
 export async function POST(
   request: NextRequest,
@@ -107,7 +107,8 @@ export async function POST(
     console.log(`[Generate Tests] Prompt length: ${prompt.length} chars`);
     console.log(`[Generate Tests] Terminal app: ${terminal}`);
 
-    launchTerminal({ ...invocation, terminal, tag: "Generate Tests" });
+    launchTerminal({ ...invocation, terminal, tag: "Generate Tests",
+      session: buildTerminalSession(card, project, displayId) });
 
     return NextResponse.json({
       success: true,

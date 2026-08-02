@@ -39,6 +39,10 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 // Detect terminal from TERM_PROGRAM env variable
 function detectTerminal(): TerminalApp | null {
+  // cmux embeds Ghostty and reports TERM_PROGRAM=ghostty, so TERM_PROGRAM alone
+  // would misdetect it. Its own markers have to be checked first.
+  if (process.env.CMUX_BUNDLE_ID || process.env.CMUX_WORKSPACE_ID) return "cmux";
+
   const termProgram = process.env.TERM_PROGRAM?.toLowerCase();
   if (!termProgram) return null;
 

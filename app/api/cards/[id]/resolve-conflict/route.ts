@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import type { TerminalApp } from "@/lib/types";
 import { buildConflictPrompt } from "@/lib/prompts";
-import { launchTerminal } from "@/lib/terminal-launcher";
+import { launchTerminal, buildTerminalSession } from "@/lib/terminal-launcher";
 import { claudeProvider } from "@/lib/platform/claude-provider";
 
 export async function POST(
@@ -74,6 +74,7 @@ export async function POST(
       env: { IDEAFY_CARD_ID: id },
       terminal,
       tag: "Resolve Conflict",
+      session: buildTerminalSession(card, project, displayId),
     });
 
     return NextResponse.json({
