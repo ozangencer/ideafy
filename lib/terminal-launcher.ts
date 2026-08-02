@@ -23,9 +23,7 @@ export interface LaunchTerminalOptions {
     title?: string;
     /** Project root, matched against cmux workspace directories. */
     projectFolder?: string | null;
-    /** `projects.cmuxWorkspaceId`. */
-    workspacePreference?: string | null;
-    /** Lets a created workspace be remembered against the project. */
+    /** Lets the run look up the project's workspace preference and pin. */
     projectId?: string | null;
   };
 }
@@ -37,10 +35,7 @@ export interface LaunchTerminalOptions {
  */
 export function buildTerminalSession(
   card: { title?: string | null } | null | undefined,
-  project:
-    | { id?: string; folderPath?: string | null; cmuxWorkspaceId?: string | null }
-    | null
-    | undefined,
+  project: { id?: string; folderPath?: string | null } | null | undefined,
   displayId?: string | null,
 ): LaunchTerminalOptions["session"] {
   const cardTitle = card?.title || null;
@@ -49,7 +44,6 @@ export function buildTerminalSession(
       ? `${displayId} · ${cardTitle}`
       : displayId || cardTitle || undefined,
     projectFolder: project?.folderPath ?? null,
-    workspacePreference: project?.cmuxWorkspaceId ?? null,
     projectId: project?.id ?? null,
   };
 }
@@ -199,24 +193,18 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
     // branch name for worktree runs and the project folder otherwise — the
     // name the user would have picked themselves.
     const name = opts.session?.title || basename(opts.cwd) || tag;
-    const projectId = opts.session?.projectId ?? null;
 
+    // Placement and the workspace pin are decided inside cmux (see
+    // lib/terminal/cmux.ts): the bootstrap asks /api/cmux/resolve and writes
+    // the pin back through the project API, because this process is not
+    // allowed to read cmux's workspace list in the first place.
     void openCmuxTerminal({
       cwd: opts.cwd,
       scriptPath,
       name,
+      projectId: opts.session?.projectId ?? null,
       projectFolder: opts.session?.projectFolder ?? null,
-      workspacePreference: opts.session?.workspacePreference ?? null,
       tag,
-      onWorkspaceCreated: projectId
-        ? (workspaceId) => {
-            db.update(schema.projects)
-              .set({ cmuxWorkspaceId: workspaceId, updatedAt: new Date().toISOString() })
-              .where(eq(schema.projects.id, projectId))
-              .run();
-            console.log(`[${tag}] pinned project ${projectId} to cmux workspace ${workspaceId}`);
-          }
-        : undefined,
     });
     return { success: true };
   }
