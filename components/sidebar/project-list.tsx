@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectItem } from "./project-item";
 import { AddProjectModal } from "./add-project-modal";
@@ -9,6 +9,10 @@ import { UnpushedDialog } from "./unpushed-dialog";
 import { Project } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Layers, Plus } from "lucide-react";
+
+// Slower than the card poll on purpose: every tick shells out to git once per
+// project, and a commit count is not worth that at the board's cadence.
+const UNPUSHED_POLL_MS = 15000;
 
 export function ProjectList() {
   const {
@@ -24,7 +28,12 @@ export function ProjectList() {
   const [unpushedProject, setUnpushedProject] = useState<Project | null>(null);
   const [unpushedCounts, setUnpushedCounts] = useState<Record<string, number>>({});
 
+  // A slow git run must not let ticks stack up on each other.
+  const isLoadingCountsRef = useRef(false);
+
   const loadUnpushedCounts = useCallback(async () => {
+    if (isLoadingCountsRef.current) return;
+    isLoadingCountsRef.current = true;
     try {
       const response = await fetch("/api/projects/unpushed");
       if (!response.ok) return;
@@ -34,12 +43,14 @@ export function ProjectList() {
       );
     } catch {
       // A sidebar badge is not worth surfacing an error for.
+    } finally {
+      isLoadingCountsRef.current = false;
     }
   }, []);
 
   // Completing a card is what puts a commit on the local default branch, so the
-  // count is refreshed whenever that number moves rather than on every card
-  // edit — each refresh shells out to git once per project.
+  // count moves the moment that number does, rather than waiting for the next
+  // poll — each refresh shells out to git once per project.
   const completedCount = useMemo(
     () => cards.filter((card) => card.status === "completed").length,
     [cards]
@@ -48,6 +59,34 @@ export function ProjectList() {
   useEffect(() => {
     loadUnpushedCounts();
   }, [loadUnpushedCounts, completedCount]);
+
+  // Commits and pushes happen in a terminal at least as often as they happen
+  // through a card, and neither one tells this window anything. Polling is what
+  // keeps the badge honest about work done outside the app. Nothing here can go
+  // stale while the window is hidden, so the ticks stand down until it is back.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      loadUnpushedCounts();
+    }, UNPUSHED_POLL_MS);
+    return () => clearInterval(interval);
+  }, [loadUnpushedCounts]);
+
+  // Coming back to the window is the moment a stale number is most likely and
+  // most visible — the user has usually just been in a terminal. Focus catches
+  // the switch back from another app, which leaves the window visible the whole
+  // time and so never fires visibilitychange.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") loadUnpushedCounts();
+    };
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    window.addEventListener("focus", refreshIfVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+      window.removeEventListener("focus", refreshIfVisible);
+    };
+  }, [loadUnpushedCounts]);
 
   const pinnedProjects = projects.filter((p) => p.isPinned);
   const unpinnedProjects = projects.filter((p) => !p.isPinned);
