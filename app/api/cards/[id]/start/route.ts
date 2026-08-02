@@ -115,11 +115,14 @@ export async function POST(
     const result = await runAutonomousCli({
       prompt,
       cwd: actualWorkingDir,
-      processKey,
-      cardId: id,
-      cardTitle: card.title,
-      displayId,
       aiPlatform: card.aiPlatform,
+      tracking: {
+        processKey,
+        cardId: id,
+        cardTitle: card.title,
+        displayId,
+        processType: "autonomous",
+      },
     });
 
     // Convert markdown response to HTML for the TipTap editor.

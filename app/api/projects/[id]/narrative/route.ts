@@ -3,72 +3,43 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import * as fs from "fs";
 import * as path from "path";
-import { spawn } from "child_process";
 import {
   buildNarrativePrompt,
   generateFallbackContent,
   type NarrativeData,
 } from "@/lib/prompts";
-import { getActiveProvider } from "@/lib/platform/active";
+import { runAutonomousCli } from "@/lib/autonomous-run/run-autonomous-cli";
 import { safeResolvePath } from "@/lib/path-utils";
 
 /**
- * Run AI CLI using spawn (shell-free) and collect output
+ * Generate narrative markdown by running the active provider's CLI.
+ *
+ * Untracked (no card behind it, so nothing to show in the process registry) and
+ * stricter about the exit code than the card-driven runs: a non-zero exit is a
+ * failure even if it produced output, because the caller's fallback writes a
+ * usable template and that beats persisting a half-finished document.
+ *
+ * Throws on empty output for the same reason — the previous behaviour wrote the
+ * CLI's raw stdout into the user's narrative file when the parsed result came
+ * back empty, which meant a run that produced nothing usable left raw JSON in
+ * `product-narrative.md`. Failing here routes it to `generateFallbackContent`.
  */
-function runAiCli(prompt: string, cwd: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const provider = getActiveProvider();
-    const cliProcess = spawn(
-      provider.getCliPath(),
-      provider.buildAutonomousArgs({ prompt }),
-      {
-        cwd,
-        env: provider.getCIEnv(),
-        stdio: ["pipe", "pipe", "pipe"],
-      }
-    );
-
-    let stdout = "";
-    let stderr = "";
-
-    cliProcess.stdout.on("data", (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    cliProcess.stderr.on("data", (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    cliProcess.stdin.end();
-
-    const timeout = setTimeout(() => {
-      cliProcess.kill("SIGTERM");
-      reject(new Error(`${provider.displayName} timed out after 10 minutes`));
-    }, 600000);
-
-    cliProcess.on("close", (code: number | null) => {
-      clearTimeout(timeout);
-      if (code === 0) {
-        resolve(stdout);
-      } else {
-        reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
-      }
-    });
-
-    cliProcess.on("error", (err: Error) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+async function generateNarrative(prompt: string, cwd: string): Promise<string> {
+  const { response } = await runAutonomousCli({
+    prompt,
+    cwd,
+    requireExitZero: true,
   });
-}
 
-/**
- * Parse AI CLI output to extract narrative content
- */
-function parseCliOutput(stdout: string): string {
-  const provider = getActiveProvider();
-  const parsed = provider.parseJsonResponse(stdout);
-  return parsed.result || stdout;
+  const content = response
+    .replace(/^```markdown\n?/g, "")
+    .replace(/\n?```$/g, "")
+    .trim();
+
+  if (!content) {
+    throw new Error("Narrative generation produced no content");
+  }
+  return content;
 }
 
 // GET - Read narrative from project folder
@@ -157,16 +128,7 @@ export async function POST(
 
     console.log("Running AI CLI for narrative generation...");
 
-    const stdout = await runAiCli(prompt, project.folderPath);
-
-    // Parse Claude's JSON response
-    let narrativeContent = parseCliOutput(stdout);
-
-    // Clean up the content (remove JSON artifacts if any)
-    narrativeContent = narrativeContent
-      .replace(/^```markdown\n?/g, "")
-      .replace(/\n?```$/g, "")
-      .trim();
+    const narrativeContent = await generateNarrative(prompt, project.folderPath);
 
     // Write narrative to file
     fs.writeFileSync(narrativePath, narrativeContent, "utf-8");
@@ -238,16 +200,7 @@ export async function PUT(
 
     console.log("Running AI CLI for narrative update...");
 
-    const stdout = await runAiCli(prompt, project.folderPath);
-
-    // Parse Claude's JSON response
-    let narrativeContent = parseCliOutput(stdout);
-
-    // Clean up the content
-    narrativeContent = narrativeContent
-      .replace(/^```markdown\n?/g, "")
-      .replace(/\n?```$/g, "")
-      .trim();
+    const narrativeContent = await generateNarrative(prompt, project.folderPath);
 
     // Write narrative to file
     fs.writeFileSync(narrativePath, narrativeContent, "utf-8");

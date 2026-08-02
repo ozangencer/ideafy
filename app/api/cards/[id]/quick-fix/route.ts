@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { spawn } from "child_process";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
 import {
@@ -11,13 +10,8 @@ import {
   saveCardImagesToTemp,
   generateImageReferences,
 } from "@/lib/prompts";
-import {
-  registerProcess,
-  completeProcess,
-  getProcess,
-  killProcess,
-} from "@/lib/process-registry";
-import { getProviderForCard } from "@/lib/platform/active";
+import { getProcess, killProcess } from "@/lib/process-registry";
+import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import {
   generateBranchName,
@@ -164,78 +158,19 @@ export async function POST(
 
     console.log(`[Quick Fix] Prompt length: ${prompt.length} chars`);
 
-    const provider = getProviderForCard(card);
-
-    // Run CLI with spawn for process tracking
-    const { responseText, cost, duration } = await new Promise<{
-      responseText: string;
-      cost?: number;
-      duration?: number;
-    }>((resolve, reject) => {
-      const cliProcess = spawn(provider.getCliPath(), provider.buildAutonomousArgs({ prompt }), {
-        cwd: actualWorkingDir,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: provider.getCIEnv(),
-      });
-
-      // Close stdin immediately
-      cliProcess.stdin?.end();
-
-      // Register process for tracking
-      registerProcess(processKey, cliProcess, {
+    const { response: responseText, cost, duration } = await runAutonomousCli({
+      prompt,
+      cwd: actualWorkingDir,
+      aiPlatform: card.aiPlatform,
+      label: "Quick fix",
+      timeoutMs: 10 * 60 * 1000,
+      tracking: {
+        processKey,
         cardId: id,
-        sectionType: null,
-        processType: "quick-fix",
         cardTitle: card.title,
         displayId,
-        startedAt: new Date().toISOString(),
-      });
-
-      let stdout = "";
-      let stderr = "";
-
-      cliProcess.stdout?.on("data", (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      cliProcess.stderr?.on("data", (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      // Set timeout
-      const timeout = setTimeout(() => {
-        cliProcess.kill();
-        reject(new Error("Quick fix timed out after 10 minutes"));
-      }, 10 * 60 * 1000);
-
-      cliProcess.on("close", (code) => {
-        clearTimeout(timeout);
-
-        if (stderr) {
-          console.log(`[Quick Fix] stderr: ${stderr}`);
-        }
-
-        if (code !== 0 && !stdout.trim()) {
-          reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
-          return;
-        }
-
-        const parsed = provider.parseJsonResponse(stdout);
-        if (parsed.isError) {
-          reject(new Error(parsed.result || `${provider.displayName} returned an error`));
-          return;
-        }
-        resolve({
-          responseText: parsed.result,
-          cost: parsed.cost,
-          duration: parsed.duration,
-        });
-      });
-
-      cliProcess.on("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
+        processType: "quick-fix",
+      },
     });
 
     // Convert markdown response to HTML for TipTap editor

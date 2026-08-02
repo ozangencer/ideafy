@@ -7,29 +7,51 @@ import {
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
 
-interface RunAutonomousOptions {
-  prompt: string;
-  cwd: string;
+/** Process-registry label; must match the values the UI filters on. */
+export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix";
+
+/**
+ * Card context needed to surface the run in the process registry. Omit it
+ * entirely for runs with no card behind them (e.g. project narrative), which
+ * then go untracked exactly as they did before.
+ */
+export interface AutonomousTracking {
   processKey: string;
   cardId: string;
   cardTitle: string;
   displayId: string | null;
+  processType: AutonomousProcessType;
+}
+
+export interface RunAutonomousOptions {
+  prompt: string;
+  cwd: string;
   aiPlatform?: string | null;
   /** Timeout in ms; defaults to 10 minutes. */
   timeoutMs?: number;
+  /** Prefix for log lines and the timeout message. Defaults to the provider name. */
+  label?: string;
+  /** Omit to skip process-registry tracking. */
+  tracking?: AutonomousTracking;
+  /**
+   * Reject on any non-zero exit, even when stdout carried content. The default
+   * (false) tolerates a non-zero exit that still produced output, which is how
+   * the card-driven runs have always behaved.
+   */
+  requireExitZero?: boolean;
 }
 
 /**
- * Spawn the active platform provider's CLI in autonomous mode, streaming
- * stdout/stderr, enforcing a timeout, and parsing the final JSON response.
+ * Spawn the active platform provider's CLI in autonomous mode, enforcing a
+ * timeout and parsing the response.
  *
- * Registers the child process via the process registry so the UI can surface
- * it and so a second request for the same card can pre-emptively kill the
- * first (`processKey` must be unique per card).
+ * When `tracking` is supplied the child is registered with the process registry
+ * so the UI can surface it and a second request for the same card pre-emptively
+ * kills the first (`processKey` must be unique per card).
  *
- * The caller is responsible for calling `completeProcess(processKey)` after
- * it has finished post-processing (e.g. DB writes) — deliberately *not* done
- * here so the UI stays "running" until the card row is actually up to date.
+ * The caller is responsible for calling `completeProcess(processKey)` after it
+ * has finished post-processing (e.g. DB writes) — deliberately *not* done here
+ * so the UI stays "running" until the card row is actually up to date.
  */
 export async function runAutonomousCli(
   options: RunAutonomousOptions,
@@ -37,24 +59,23 @@ export async function runAutonomousCli(
   const {
     prompt,
     cwd,
-    processKey,
-    cardId,
-    cardTitle,
-    displayId,
     aiPlatform,
     timeoutMs = 10 * 60 * 1000,
+    tracking,
+    requireExitZero = false,
   } = options;
 
   // Kill any existing process for this card so a second click doesn't race the first.
-  if (getProcess(processKey)) {
-    killProcess(processKey);
+  if (tracking && getProcess(tracking.processKey)) {
+    killProcess(tracking.processKey);
   }
 
   const provider = getProviderForCard({ aiPlatform });
+  const label = options.label ?? provider.displayName;
   const args = provider.buildAutonomousArgs({ prompt });
 
-  console.log(`[${provider.displayName}] Running in ${cwd}:`);
-  console.log(`[${provider.displayName}] Prompt length: ${prompt.length} chars`);
+  console.log(`[${label}] Running in ${cwd}:`);
+  console.log(`[${label}] Prompt length: ${prompt.length} chars`);
 
   return new Promise((resolve, reject) => {
     const cliProcess = spawn(provider.getCliPath(), args, {
@@ -66,14 +87,16 @@ export async function runAutonomousCli(
     // Close stdin immediately — equivalent to `< /dev/null`.
     cliProcess.stdin?.end();
 
-    registerProcess(processKey, cliProcess, {
-      cardId,
-      sectionType: null,
-      processType: "autonomous",
-      cardTitle,
-      displayId,
-      startedAt: new Date().toISOString(),
-    });
+    if (tracking) {
+      registerProcess(tracking.processKey, cliProcess, {
+        cardId: tracking.cardId,
+        sectionType: null,
+        processType: tracking.processType,
+        cardTitle: tracking.cardTitle,
+        displayId: tracking.displayId,
+        startedAt: new Date().toISOString(),
+      });
+    }
 
     let stdout = "";
     let stderr = "";
@@ -88,18 +111,18 @@ export async function runAutonomousCli(
 
     const timeout = setTimeout(() => {
       cliProcess.kill();
-      reject(new Error(`${provider.displayName} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
+      reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
     }, timeoutMs);
 
     cliProcess.on("close", (code) => {
       clearTimeout(timeout);
 
       if (stderr) {
-        console.log(`[${provider.displayName}] stderr: ${stderr}`);
+        console.log(`[${label}] stderr: ${stderr}`);
       }
-      console.log(`[${provider.displayName}] stdout length: ${stdout.length}`);
+      console.log(`[${label}] stdout length: ${stdout.length}`);
 
-      if (code !== 0 && !stdout.trim()) {
+      if (code !== 0 && (requireExitZero || !stdout.trim())) {
         reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
         return;
       }
