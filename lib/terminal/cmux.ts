@@ -1,13 +1,27 @@
 import { spawn } from "child_process";
-import { resolve as resolvePath } from "path";
+import { writeFileSync, readFileSync, existsSync } from "fs";
+import { join, resolve as resolvePath } from "path";
+import { tmpdir } from "os";
 import { findBinary } from "@/lib/platform/base-provider";
+import { resolveUserDataDir } from "@/lib/paths";
 
 /**
  * cmux is driven through its CLI, which talks to the running app over a Unix
- * socket rather than taking launch arguments like the other terminals. That
- * buys us something the others cannot do: instead of spawning a window per
- * run, Ideafy can drop a tab into the workspace the user already keeps open
- * for the project.
+ * socket. That socket only answers processes cmux itself started — a request
+ * from anywhere else is refused with "Access denied - only processes started
+ * inside cmux can connect". Ideafy launched from the Dock is exactly that
+ * "anywhere else", so it cannot drive cmux directly at all.
+ *
+ * The way in is LaunchServices: cmux registers as a handler for shell scripts,
+ * so `open -a cmux.app <script>` makes cmux run it in a fresh tab — no socket
+ * involved. cmux injects a socket capability into that tab's environment, so
+ * from inside the script the whole CLI is available. Every run is therefore two
+ * stages: Ideafy opens a bootstrap script, and the bootstrap — now speaking for
+ * a process cmux started — places itself and execs the real command.
+ *
+ * Placement decisions stay here on the server (see resolveCmuxWorkspaceId); the
+ * bootstrap posts the workspace list to /api/cmux/resolve and does what it is
+ * told, so the interesting logic remains testable TypeScript rather than shell.
  */
 
 export interface CmuxWorkspace {
@@ -20,8 +34,16 @@ export interface CmuxWorkspace {
 /** `projects.cmuxWorkspaceId` value meaning "always open a fresh workspace". */
 export const CMUX_WORKSPACE_NEW = "new";
 
-const PING_ATTEMPTS = 40;
-const PING_INTERVAL_MS = 250;
+/** What the bootstrap should do with the workspace cmux just put it in. */
+export type CmuxPlacement =
+  /** Move into this existing workspace. */
+  | { kind: "move"; workspaceId: string }
+  /** Keep this one, name it after the project, and pin it to the project. */
+  | { kind: "keep" }
+  /** Keep it as-is: the project asked for a fresh workspace every run. */
+  | { kind: "stay" };
+
+const WORKSPACE_CACHE_FILE = "cmux-workspaces.json";
 
 interface CmdResult {
   code: number;
@@ -57,46 +79,40 @@ export function findCmuxBinary(): string {
   ].filter(Boolean));
 }
 
-/**
- * Start cmux if it isn't running, and raise it above Ideafy if it is —
- * `--focus` only selects a workspace *within* cmux, so without this the new
- * terminal would open behind the app the user just clicked in. The socket
- * does not answer until the app has finished launching, hence the ping loop.
- */
-async function ensureRunning(bin: string, tag: string): Promise<boolean> {
-  await runCmd("open", ["-a", "cmux.app"]);
-
-  for (let i = 0; i < PING_ATTEMPTS; i++) {
-    if ((await runCmd(bin, ["ping"])).code === 0) return true;
-    await new Promise((r) => setTimeout(r, PING_INTERVAL_MS));
-  }
-
-  console.error(
-    `[${tag}] cmux socket did not respond within ` +
-    `${(PING_ATTEMPTS * PING_INTERVAL_MS) / 1000}s; is cmux able to start?`,
-  );
-  return false;
+function workspaceCachePath(): string {
+  return join(resolveUserDataDir(), WORKSPACE_CACHE_FILE);
 }
 
 /**
- * The workspaces of the current window. Returns [] when cmux is not running —
- * callers that merely want to show a list should not boot the app.
+ * Remember the list a bootstrap reported. Ideafy's own process is refused by
+ * the socket, so this cache is the only way the project settings picker can
+ * offer real workspaces to choose from.
  */
-export async function listCmuxWorkspaces(): Promise<CmuxWorkspace[]> {
-  let bin: string;
+export function cacheCmuxWorkspaces(workspaces: CmuxWorkspace[]): void {
   try {
-    bin = findCmuxBinary();
+    writeFileSync(workspaceCachePath(), JSON.stringify(workspaces), { mode: 0o600 });
+  } catch (err) {
+    console.error(`[cmux] could not cache workspace list: ${(err as Error).message}`);
+  }
+}
+
+function readCachedCmuxWorkspaces(): CmuxWorkspace[] {
+  try {
+    const path = workspaceCachePath();
+    if (!existsSync(path)) return [];
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((w): w is CmuxWorkspace =>
+      !!w && typeof (w as CmuxWorkspace).id === "string");
   } catch {
     return [];
   }
+}
 
-  const { code, stdout } = await runCmd(bin, [
-    "workspace", "list", "--json", "--id-format", "uuids",
-  ]);
-  if (code !== 0) return [];
-
+/** Shape of `cmux workspace list --json`. Exported so the API route can parse it. */
+export function parseCmuxWorkspaceList(json: string): CmuxWorkspace[] {
   try {
-    const parsed = JSON.parse(stdout) as {
+    const parsed = JSON.parse(json) as {
       workspaces?: Array<{ id?: string; title?: string | null; current_directory?: string | null }>;
     };
     return (parsed.workspaces ?? [])
@@ -113,9 +129,32 @@ export async function listCmuxWorkspaces(): Promise<CmuxWorkspace[]> {
 }
 
 /**
- * Which workspace this project's tabs belong in, or null to open a standalone
- * workspace. Exported separately from the launch path so the decision can be
- * reasoned about (and tested) without touching a running cmux.
+ * The workspaces cmux has open. Asks the CLI first — which only answers when
+ * Ideafy itself was started from a cmux terminal — and otherwise falls back to
+ * what the last launch reported. Returns [] when neither is available; callers
+ * that merely want to show a list should not boot the app.
+ */
+export async function listCmuxWorkspaces(): Promise<CmuxWorkspace[]> {
+  let bin: string;
+  try {
+    bin = findCmuxBinary();
+  } catch {
+    return readCachedCmuxWorkspaces();
+  }
+
+  const { code, stdout } = await runCmd(bin, [
+    "workspace", "list", "--json", "--id-format", "uuids",
+  ]);
+  if (code !== 0) return readCachedCmuxWorkspaces();
+
+  const workspaces = parseCmuxWorkspaceList(stdout);
+  return workspaces.length > 0 ? workspaces : readCachedCmuxWorkspaces();
+}
+
+/**
+ * Which workspace this project's tabs belong in. Exported separately from the
+ * launch path so the decision can be reasoned about (and tested) without
+ * touching a running cmux.
  */
 export function resolveCmuxWorkspaceId(
   workspaces: CmuxWorkspace[],
@@ -140,9 +179,30 @@ export function resolveCmuxWorkspaceId(
 
   // Two workspaces sharing a directory is a real configuration, not a bug, and
   // picking one at random would drop the terminal somewhere the user is not
-  // looking. A standalone workspace is the honest answer; the per-project
+  // looking. Keeping the fresh one is the honest answer; the per-project
   // override exists to break exactly this tie.
   return matches.length === 1 ? matches[0].id : null;
+}
+
+/**
+ * Turn a resolved workspace id into an instruction for the bootstrap. Pulled
+ * out of the route so the "no match, so adopt and remember this one" rule sits
+ * next to the matching rule it complements.
+ */
+export function decideCmuxPlacement(
+  workspaces: CmuxWorkspace[],
+  projectFolder: string | null,
+  preference: string | null,
+): CmuxPlacement {
+  if (preference === CMUX_WORKSPACE_NEW) return { kind: "stay" };
+
+  const workspaceId = resolveCmuxWorkspaceId(workspaces, projectFolder, preference);
+  if (workspaceId) return { kind: "move", workspaceId };
+
+  // Nothing to join. The workspace cmux just created for this run becomes the
+  // project's — otherwise a folder that matches nothing (or matches
+  // ambiguously) would collect another workspace on every single run.
+  return { kind: "keep" };
 }
 
 export interface OpenCmuxOptions {
@@ -152,110 +212,117 @@ export interface OpenCmuxOptions {
   scriptPath: string;
   /** Sidebar label for the tab. Agents overwrite this once they start. */
   name: string;
-  /** Project root, matched against workspace directories. */
+  /** Project the run belongs to; lets the bootstrap ask where to place itself. */
+  projectId: string | null;
+  /** Project root, used for placement when there is no project row. */
   projectFolder: string | null;
-  /** `projects.cmuxWorkspaceId`. */
-  workspacePreference: string | null;
   /** Log prefix identifying the caller. */
   tag: string;
-  /**
-   * Called with the UUID of a workspace this run had to create, so the project
-   * can remember it. Without this, a project whose folder matches nothing —
-   * or matches ambiguously — would create another workspace on every run, and
-   * each one makes the next match worse. Not called when the project asked for
-   * a fresh workspace every time; that choice is the user's to keep.
-   */
-  onWorkspaceCreated?: (workspaceId: string) => void;
+}
+
+// POSIX shell single-quote: safe for any string (no null byte).
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+function ideafyBaseUrl(): string {
+  return `http://127.0.0.1:${process.env.PORT || "3030"}`;
 }
 
 /**
- * `workspace create` reports `OK workspace:22` and ignores --id-format, but
- * refs are only stable for the current run. Trade the ref for the UUID that is
- * safe to persist.
+ * The script cmux runs on our behalf. It is deliberately dumb: ask Ideafy where
+ * this tab belongs, do that, then hand the terminal over to the real command.
+ * Every cmux call here is allowed because cmux started this process.
  */
-async function refToUuid(bin: string, ref: string): Promise<string | null> {
-  const { code, stdout } = await runCmd(bin, ["workspace", "list", "--id-format", "both"]);
-  if (code !== 0) return null;
+function buildBootstrap(opts: OpenCmuxOptions): string {
+  const resolveUrl = new URL("/api/cmux/resolve", ideafyBaseUrl());
+  if (opts.projectId) resolveUrl.searchParams.set("projectId", opts.projectId);
+  if (opts.projectFolder) resolveUrl.searchParams.set("folder", opts.projectFolder);
 
-  // "* workspace:17 C51B586B-...-83FFE0AB2D0B  aidev-Ideafy Public"
-  for (const line of stdout.split("\n")) {
-    const m = line.match(/\b(workspace:\d+)\s+([0-9A-Fa-f-]{36})\b/);
-    if (m && m[1] === ref) return m[2];
-  }
-  return null;
+  const pinUrl = opts.projectId
+    ? new URL(`/api/projects/${encodeURIComponent(opts.projectId)}`, ideafyBaseUrl()).toString()
+    : "";
+
+  return `#!/bin/bash
+# Generated by Ideafy. Opened through LaunchServices so cmux runs it, which is
+# what earns this process the socket access the CLI calls below need.
+CMUX="\${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}"
+export CMUX_QUIET=1
+NAME=${shellQuote(opts.name)}
+RUN=${shellQuote(opts.scriptPath)}
+
+place() {
+  [ -x "$CMUX" ] || return 0
+  [ -n "$CMUX_SURFACE_ID" ] || return 0
+
+  local list target workspace self_title
+  list=$("$CMUX" workspace list --json --id-format uuids 2>/dev/null) || return 0
+  # Plain-text reply: a workspace UUID, "keep", or "stay". Keeps the parsing
+  # here to a case statement instead of a JSON reader the shell may not have.
+  target=$(printf '%s' "$list" | curl -sS -m 10 -X POST ${shellQuote(resolveUrl.toString())} \\
+    -H 'content-type: application/json' --data-binary @- 2>/dev/null)
+
+  workspace="$CMUX_WORKSPACE_ID"
+  case "$target" in
+    keep)
+      "$CMUX" workspace rename "$CMUX_WORKSPACE_ID" --title "$NAME" >/dev/null 2>&1
+      ${pinUrl
+        ? `curl -sS -m 10 -X PUT ${shellQuote(pinUrl)} -H 'content-type: application/json' \\
+        -d "{\\"cmuxWorkspaceId\\":\\"$CMUX_WORKSPACE_ID\\"}" >/dev/null 2>&1`
+        : ": # no project row to pin the workspace to"}
+      ;;
+    stay|"")
+      ;;
+    *)
+      if "$CMUX" move-surface --surface "$CMUX_SURFACE_ID" --workspace "$target" \\
+          --focus true >/dev/null 2>&1; then
+        workspace="$target"
+        # Moving out does not clean up behind us, so the workspace cmux made to
+        # hold this script would linger empty after every run. Close it only
+        # when its title still carries this bootstrap's filename — proof it is
+        # ours. Anything else (a title we do not recognise, a listing we could
+        # not read) leaves an empty workspace rather than risking a workspace
+        # with the user's tabs in it.
+        self_title=$("$CMUX" workspace list --id-format uuids 2>/dev/null | grep -F "$CMUX_WORKSPACE_ID")
+        case "$self_title" in
+          *"$(basename "$0")"*)
+            "$CMUX" workspace close "$CMUX_WORKSPACE_ID" >/dev/null 2>&1
+            ;;
+        esac
+      fi
+      ;;
+  esac
+
+  # rename-tab needs BOTH --workspace and --surface, and after a move the
+  # workspace in our environment is the one we left, so pass it explicitly.
+  "$CMUX" rename-tab --workspace "$workspace" --surface "$CMUX_SURFACE_ID" "$NAME" >/dev/null 2>&1
+}
+
+place
+exec "$RUN"
+`;
 }
 
 /**
- * Add a tab to an existing workspace. Returns false only when the tab could
- * not be created at all, so the caller knows it still owes the user a
- * terminal — a later step failing leaves a usable (if empty) tab, and
- * launching a second one on top of it would be worse.
+ * Open a terminal in cmux. Fire-and-forget; failures are logged, not thrown.
+ * Resolves once the bootstrap has been handed to LaunchServices — everything
+ * after that happens inside cmux.
  */
-async function openTabIn(bin: string, workspaceId: string, opts: OpenCmuxOptions): Promise<boolean> {
-  const created = await runCmd(bin, [
-    "new-surface",
-    "--workspace", workspaceId,
-    "--working-directory", opts.cwd,
-    "--focus", "true",
-  ]);
-
-  // "OK surface:45 pane:18 workspace:18"
-  const surfaceRef = created.stdout.match(/\b(surface:\d+)\b/)?.[1];
-  if (created.code !== 0 || !surfaceRef) {
-    console.error(
-      `[${opts.tag}] cmux new-surface failed (${created.code}): ` +
-      `${created.stderr.trim() || created.stdout.trim()}`,
-    );
-    return false;
-  }
-
-  // rename-tab needs BOTH --workspace and --surface; --surface alone reports
-  // "Tab not found". Purely cosmetic, so failure here is not worth aborting.
-  await runCmd(bin, ["rename-tab", "--workspace", workspaceId, "--surface", surfaceRef, opts.name]);
-
-  // The new tab starts at an interactive shell prompt — `new-surface` does not
-  // return until the shell is ready, so the script can be typed straight in.
-  // "\n" is how the CLI spells Enter.
-  const sent = await runCmd(bin, ["send", "--surface", surfaceRef, `${opts.scriptPath}\n`]);
-  if (sent.code !== 0) {
-    console.error(`[${opts.tag}] cmux send failed (${sent.code}): ${sent.stderr.trim()}`);
-  }
-  return true;
-}
-
-/** Open a terminal in cmux. Fire-and-forget; failures are logged, not thrown. */
 export async function openCmuxTerminal(opts: OpenCmuxOptions): Promise<void> {
-  const bin = findCmuxBinary();
-  if (!(await ensureRunning(bin, opts.tag))) return;
-
-  const workspaceId = resolveCmuxWorkspaceId(
-    await listCmuxWorkspaces(),
-    opts.projectFolder,
-    opts.workspacePreference,
+  const bootstrapPath = join(
+    tmpdir(),
+    `ideafy-cmux-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sh`,
   );
+  // 0o700 — same reasoning as the script it wraps: only the current user may
+  // read or run it.
+  writeFileSync(bootstrapPath, buildBootstrap(opts), { mode: 0o700 });
 
-  if (workspaceId && (await openTabIn(bin, workspaceId, opts))) return;
-
-  // No workspace to join, or the tab could not be created — a standalone
-  // workspace still gets the user their terminal. `--command` runs the script
-  // directly, so this path needs no send.
-  const { code, stdout, stderr } = await runCmd(bin, [
-    "workspace", "create",
-    "--name", opts.name,
-    "--cwd", opts.cwd,
-    "--command", opts.scriptPath,
-    "--focus", "true",
-  ]);
+  // `open` launches cmux if it is not running and raises it if it is, then
+  // hands over the script as a document. No socket, so no permission to earn.
+  const { code, stderr } = await runCmd("open", ["-a", "cmux.app", bootstrapPath]);
   if (code !== 0) {
-    console.error(`[${opts.tag}] cmux workspace create failed (${code}): ${stderr.trim()}`);
-    return;
+    console.error(
+      `[${opts.tag}] could not open cmux (${code}): ${stderr.trim() || "no output"}`,
+    );
   }
-
-  // Pin it, so the next run joins this workspace instead of adding another one
-  // beside it. Skipped when the project asked for a fresh workspace per run.
-  if (!opts.onWorkspaceCreated || opts.workspacePreference === CMUX_WORKSPACE_NEW) return;
-
-  const ref = stdout.match(/\b(workspace:\d+)\b/)?.[1];
-  const uuid = ref ? await refToUuid(bin, ref) : null;
-  if (uuid) opts.onWorkspaceCreated(uuid);
 }
