@@ -142,6 +142,28 @@ test("falls back to a single JSON envelope from an older CLI", () => {
   assert.equal(parsed.sawResultEnvelope, true);
 });
 
+test("a run that dies mid-stream reports no result envelope", () => {
+  // This is the predicate the exit-code guard keys on. The old guard asked
+  // whether stdout was empty, which worked only because --output-format json
+  // wrote nothing until the very end. Under stream-json a system/init line
+  // lands within milliseconds, so a crashed run has plenty of stdout and would
+  // have sailed straight past it.
+  const partial =
+    JSON.stringify({ type: "system", subtype: "init", session_id: "x" }) +
+    "\n" +
+    JSON.stringify({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { id: "m1", content: [{ type: "text", text: "starting work" }] },
+    }) +
+    "\n";
+
+  const parsed = collect(partial);
+
+  assert.equal(parsed.sawResultEnvelope, false, "no result line arrived");
+  assert.ok(partial.trim().length > 0, "yet stdout is far from empty");
+});
+
 test("non-JSON output is handed back rather than swallowed", () => {
   const parsed = collect("command not found: claude\n");
   assert.equal(parsed.candidates.length, 0);
