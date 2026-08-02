@@ -12,10 +12,14 @@ const PHASE_INSTRUCTIONS: Record<string, string> = {
     "propose save_plan. This moves the card to In Progress.",
   progress:
     "propose save_tests. This moves the card to Human Test.",
+  // The test column runs on its own policy block (buildTestPhaseLines) rather
+  // than the propose-a-save_* shape the other columns share, but it still needs
+  // an entry here so buildPhasePolicy does not bail out.
+  test: "record what you verified with save_tests, then propose moving to Completed.",
 };
 
 export function isTerminalPhase(status: string | null | undefined): boolean {
-  return status === "test" || status === "completed" || status === "withdrawn";
+  return status === "completed" || status === "withdrawn";
 }
 
 // Compute the effective worktree policy for a card: card-level override wins,
@@ -78,6 +82,47 @@ function sanitizeForReminder(value: string | null | undefined, maxLength = 120):
     : neutralized;
 }
 
+// The other columns all share one shape: do the work, then ask before the one
+// save_* call that ends the phase. Testing does not fit that shape. Verifying a
+// scenario is not a phase transition — it is the work itself, and it happens
+// many times per session — so recording it must not need a confirmation round
+// trip. Only the move to Completed does.
+function buildTestPhaseLines(): string[] {
+  return [
+    "1. This card is in manual testing. Whenever you verify a scenario yourself,",
+    "   mark it [x] and call save_tests. Send the FULL checklist — every existing",
+    "   item with its current [x]/[ ] state — changing only the boxes you verified.",
+    "   Recording what you verified is the work, not a phase transition: do it",
+    "   without asking first.",
+    "2. Never check a scenario you did not actually observe. Leave it [ ] and say",
+    "   why — it needs a person, or access you do not have, or it failed. A failing",
+    "   scenario stays unchecked and gets reported, never quietly skipped.",
+    "3. When every scenario is checked, STOP and ASK in a single short sentence",
+    "   whether to move the card to Completed. On a clear yes, call move_card with",
+    "   status 'completed' in the same turn.",
+    "4. On 'no', keep working — 'no' means 'not yet'. Do not re-ask about moving",
+    "   the card on turns where nothing new was verified.",
+  ];
+}
+
+function buildStandardPhaseLines(status: string, phaseInstruction: string): string[] {
+  return [
+    "1. When you believe the current phase is complete, STOP and ASK the user for",
+    "   confirmation before calling any save_* tool. Do not call the tool yourself",
+    "   until the user agrees.",
+    `2. For this card in column "${status}", the expected action is: ${phaseInstruction}`,
+    "3. Ask in a single short sentence. Wait for a clear yes/no from the user.",
+    "4. On 'yes', call the tool immediately in the same turn. Do not ask again,",
+    "   do not announce, do not wait for further confirmation.",
+    "5. On 'no', continue the conversation without calling any tool.",
+    "6. A 'no' means 'not yet', not 'never'. Keep working on the same phase.",
+    "7. Re-ask at the next natural stopping point IF the phase has meaningfully",
+    "   progressed since the last refusal (new content added, a previously-open",
+    "   question resolved, a missing section filled in). Do not re-ask on cosmetic",
+    "   or no-op turns.",
+  ];
+}
+
 // Phase-aware policy block used once a session is bound to a card.
 export function buildPhasePolicy(
   card: {
@@ -98,19 +143,9 @@ export function buildPhasePolicy(
     `Current column: ${card.status}`,
     "",
     "Policy for this session:",
-    "1. When you believe the current phase is complete, STOP and ASK the user for",
-    "   confirmation before calling any save_* tool. Do not call the tool yourself",
-    "   until the user agrees.",
-    `2. For this card in column "${card.status}", the expected action is: ${phaseInstruction}`,
-    "3. Ask in a single short sentence. Wait for a clear yes/no from the user.",
-    "4. On 'yes', call the tool immediately in the same turn. Do not ask again,",
-    "   do not announce, do not wait for further confirmation.",
-    "5. On 'no', continue the conversation without calling any tool.",
-    "6. A 'no' means 'not yet', not 'never'. Keep working on the same phase.",
-    "7. Re-ask at the next natural stopping point IF the phase has meaningfully",
-    "   progressed since the last refusal (new content added, a previously-open",
-    "   question resolved, a missing section filled in). Do not re-ask on cosmetic",
-    "   or no-op turns.",
+    ...(card.status === "test"
+      ? buildTestPhaseLines()
+      : buildStandardPhaseLines(card.status, phaseInstruction)),
   ];
 
   if (branchPolicy?.enforced && branchPolicy.targetBranch) {

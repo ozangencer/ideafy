@@ -156,7 +156,8 @@ ${section === "tests"
 
 Call save_tests only when:
 - the user explicitly asks you to add, rewrite, or save scenarios, or
-- the user asks you to remove scenarios (then pass allowDeletion: true — see the rules above).
+- the user asks you to remove scenarios (then pass allowDeletion: true — see the rules above), or
+- a scenario's result becomes known: they report one as passing, or they ask you to run the tests and you verify one yourself. Results are the point of this checklist, so record them without waiting to be asked twice. Check only the boxes actually confirmed; leave failures and anything you could not verify unchecked, and say which is which. Send the full checklist with every existing item's state preserved.
 
 Otherwise, when you have scenarios worth proposing, just write them in your reply as markdown checkboxes and stop. The chat UI puts Append / Replace buttons under your message and the user decides whether they land on the card. Replace is also how they wipe scenarios you proposed and they didn't want — so a reply that skips save_tests keeps that escape hatch open. Calling save_tests hides those buttons.`
   : `When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
