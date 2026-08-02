@@ -5,7 +5,7 @@ import { generateBranchName } from "@/lib/git";
 
 const PHASE_INSTRUCTIONS: Record<string, string> = {
   ideation:
-    "propose save_opinion. If your verdict is positive, save_opinion moves the card to Backlog. If your verdict is negative, ALSO call move_card to put the card in 'withdrawn' after saving the opinion.",
+    "propose save_opinion. This tool does NOT move the card. Once the opinion is saved, ask separately whether to move the card — to 'backlog' if the verdict was positive, to 'withdrawn' if it was negative — and call move_card only on a clear yes. Never report the card as moved until move_card has returned.",
   backlog:
     "propose save_plan. This moves the card to In Progress.",
   bugs:
