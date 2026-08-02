@@ -487,6 +487,25 @@ interface Card {
 
 type Status = "ideation" | "backlog" | "bugs" | "progress" | "test" | "completed" | "withdrawn";
 
+const STATUSES: readonly Status[] = [
+  "ideation", "backlog", "bugs", "progress", "test", "completed", "withdrawn",
+];
+
+// Read a card's column back out of the row we just wrote.
+//
+// A tool result is the only thing the model sees, and it repeats it to the user
+// as fact. So a result that claims a side effect has to be built from the stored
+// row, never from what the SQL was meant to do. `result.changes` cannot stand in
+// for this: `updated_at` is unconditional in every SET list, so it is 1 for any
+// existing card even when nothing the caller asked for was written. That is
+// exactly how save_opinion came to report a column move it never performed.
+function readStatus(id: string): string {
+  const row = db
+    .prepare(`SELECT status FROM cards WHERE id = ?`)
+    .get(id) as { status: string } | undefined;
+  return row?.status ?? "unknown";
+}
+
 // Create MCP server
 const server = new Server(
   {
@@ -651,9 +670,7 @@ Before drafting the plan, call get_card to read the project's voice. Voice chang
 
 - entrepreneur — Plain prose. Lead with user impact and "why". Name the files/areas that change in human terms ("the login flow, the session check"), but skip line numbers and snippets. Trade-offs in one sentence each.
 - builder (default) — Plain technical paragraphs grouped by feature area. Name file paths inline. End with a short Files line. No spec bullets unless a step has 5+ sub-changes.
-- engineer — Numbered spec steps with file:line scope, function/symbol names, code snippets where they clarify, and explicit trade-offs. End with a Changed Files table (| File | Change |).
-
-Pass the voice you used as the optional voice parameter so the server can record provenance.`,
+- engineer — Numbered spec steps with file:line scope, function/symbol names, code snippets where they clarify, and explicit trade-offs. End with a Changed Files table (| File | Change |).`,
         inputSchema: {
           type: "object",
           properties: {
@@ -664,11 +681,6 @@ Pass the voice you used as the optional voice parameter so the server can record
             solutionSummary: {
               type: "string",
               description: "Detailed implementation plan in markdown. MUST include: (1) Brief summary of the approach, (2) Current architecture understanding with relevant code flow (e.g. `Settings UI → POST /api/... → provider.method()`), (3) Step-by-step implementation with specific file paths, function names, and code snippets showing the planned changes, (4) Changed files table (| File | Change |), (5) Important notes or caveats. Write prose-level detail with code examples, not just headings or bullet points. Adapt the tone to the project's voice (see tool description).",
-            },
-            voice: {
-              type: "string",
-              enum: ["entrepreneur", "builder", "engineer"],
-              description: "Optional. The voice you used when writing this plan. Should match the project's voice (read via get_card). Defaults to 'builder' if omitted.",
             },
           },
           required: ["id", "solutionSummary"],
@@ -724,11 +736,6 @@ Deleting scenarios: the guard above is absolute, so the only way to remove an it
               type: "boolean",
               description: "Opt in to removing existing scenarios. Only set true when the user explicitly asked for a removal in this turn. Turns the payload into a literal replacement: whatever you send becomes the checklist, checkbox states and all. Omit for normal appends.",
             },
-            voice: {
-              type: "string",
-              enum: ["entrepreneur", "builder", "engineer"],
-              description: "Optional. The voice you used when writing these scenarios. Should match the project's voice (read via get_card). Defaults to 'builder' if omitted.",
-            },
           },
           required: ["id", "testScenarios"],
         },
@@ -736,6 +743,8 @@ Deleting scenarios: the guard above is absolute, so the only way to remove an it
       {
         name: "save_opinion",
         description: `Save AI opinion to a card after interactive ideation session. MUST include all required sections.
+
+This tool does NOT move the card between columns — it only writes the Opinion tab. Whatever the verdict, the card stays where it is. To move it, ask the user first, then call move_card ('backlog' for a positive verdict, 'withdrawn' for a negative one). Never tell the user the card moved until move_card has returned.
 
 VOICE CONTRACT (mandatory — adapt the lens AND the prose to the project's voice):
 
@@ -745,9 +754,7 @@ Before drafting, call get_card to read the project's voice. The required section
 - builder (default) — Balance product and technical lenses. Name key risks (race conditions, schema drift) as 1-line callouts; mention rough complexity in plain words. File names appear inline only when they meaningfully shape the verdict.
 - engineer — Lead with technical risk: race conditions, n+1, schema drift, API contract breaks, perf cliffs, refactor opportunities, testability and dependency cost. File:line references welcome. Product framing is secondary.
 
-All three voices still produce the same Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections — voice changes the prose inside, not the schema.
-
-Pass the voice you used as the optional voice parameter so the server can record provenance.`,
+All three voices still produce the same Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections — voice changes the prose inside, not the schema.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -763,11 +770,6 @@ Pass the voice you used as the optional voice parameter so the server can record
               type: "string",
               enum: ["positive", "negative"],
               description: "The verdict based on Summary Verdict: positive (Strong Yes, Yes, Maybe with score >= 6) or negative (No, Strong No, Maybe with score < 6)",
-            },
-            voice: {
-              type: "string",
-              enum: ["entrepreneur", "builder", "engineer"],
-              description: "Optional. The voice you used when writing this opinion. Should match the project's voice (read via get_card). Defaults to 'builder' if omitted.",
             },
           },
           required: ["id", "aiOpinion"],
@@ -934,6 +936,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           useWorktree: "use_worktree",
         };
 
+        // Reject unknown fields instead of dropping them. The loop below only
+        // writes keys present in fieldMap, so a typo ("aiOpinion", "statuss")
+        // used to vanish without a trace — and because `updated_at` is always
+        // in the SET list, the UPDATE still touched a row and the tool still
+        // said "updated successfully". Silently doing nothing while reporting
+        // success is the failure this whole handler family is being fixed for.
+        const unknownKeys = Object.keys(updates).filter(
+          (key) =>
+            !(key in fieldMap) &&
+            (updates as Record<string, unknown>)[key] !== undefined
+        );
+        if (unknownKeys.length > 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `update_card does not accept: ${unknownKeys.join(", ")}. ` +
+                `Accepted fields: ${Object.keys(fieldMap).join(", ")}. ` +
+                `For testScenarios use save_tests; for aiOpinion use save_opinion.`,
+            }],
+            isError: true,
+          };
+        }
+
         if (updates.title !== undefined) {
           assertValidCardTitle(updates.title);
         }
@@ -957,6 +982,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         }
 
+        // Only `updated_at` in the SET list means the caller passed an id and
+        // nothing else. Bumping the timestamp and calling it an update is the
+        // same silent no-op as above, one step further along.
+        if (setClauses.length === 1) {
+          return {
+            content: [{
+              type: "text",
+              text: `update_card: nothing to update — no accepted field was provided for card ${id}.`,
+            }],
+            isError: true,
+          };
+        }
+
         values.push(id);
 
         const result = db.prepare(`
@@ -970,8 +1008,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        const written = Object.keys(updates).filter((key) => key in fieldMap);
         return {
-          content: [{ type: "text", text: `Card ${id} updated successfully` }],
+          content: [{
+            type: "text",
+            text: `Card ${id} updated (${written.join(", ")}). Card is in "${readStatus(id)}".`,
+          }],
         };
       }
 
@@ -981,6 +1023,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!id) {
           return {
             content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
+
+        // The MCP SDK's low-level Server does not validate arguments against
+        // inputSchema, so the enum in the schema is documentation, not a gate.
+        // An unlisted value ("Backlog") would be written straight through and
+        // the card would disappear from every column while the tool reported
+        // a successful move.
+        if (!STATUSES.includes(status)) {
+          return {
+            content: [{
+              type: "text",
+              text: `move_card: "${status}" is not a column. Valid columns: ${STATUSES.join(", ")}.`,
+            }],
             isError: true,
           };
         }
@@ -997,7 +1054,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         return {
-          content: [{ type: "text", text: `Card ${id} moved to ${status}` }],
+          content: [{ type: "text", text: `Card ${id} moved to ${readStatus(id)}` }],
         };
       }
 
@@ -1185,7 +1242,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         return {
-          content: [{ type: "text", text: `Plan saved to card ${id} and moved to In Progress` }],
+          content: [{ type: "text", text: `Plan saved to card ${id}. Card is in "${readStatus(id)}".` }],
         };
       }
 
@@ -1281,7 +1338,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Report what a destructive write actually cost, so the removal shows
         // up in chat instead of landing silently on the card.
-        let summary = `Test scenarios saved to card ${id} and moved to Human Test`;
+        let summary = `Test scenarios saved to card ${id}. Card is in "${readStatus(id)}"`;
         if (deletionRequested && existingItems.length > 0) {
           const kept = assessAppendOnlyRewrite(existing?.test_scenarios || "", htmlContent).retained;
           const removed = existingItems.length - kept;
@@ -1320,7 +1377,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         return {
-          content: [{ type: "text", text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}` }],
+          content: [{
+            type: "text",
+            text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}. ` +
+              `Card is still in "${readStatus(id)}" — this tool does not move cards. ` +
+              `Ask the user before calling move_card.`,
+          }],
         };
       }
 

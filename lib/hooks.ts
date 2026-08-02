@@ -9,6 +9,7 @@ import * as path from "path";
 // KANBAN_CARD_ID substrings) to identify prior Ideafy hook entries.
 const IDEAFY_HOOK_MARKER = "# ideafy-hook";
 const IDEAFY_PRE_EDIT_MARKER = "# ideafy-pre-edit-check";
+const IDEAFY_PLAN_SYNC_MARKER = "# ideafy-plan-sync-check";
 
 // When curl succeeds the hook echoes whatever /api/hook-context returned
 // (empty body = 204 = no output). When curl fails (server unreachable) the
@@ -35,6 +36,16 @@ const IDEAFY_PRE_EDIT_COMMAND =
   `curl -sf -X POST -H "Content-Type: application/json" --data-binary @- ` +
   `"http://localhost:\${IDEAFY_PORT:-3030}/api/pre-edit-check" 2>/dev/null || true`;
 
+// PostToolUse hook for ExitPlanMode. Plan mode writes the approved plan to a
+// file under ~/.claude/plans and nothing tells the card about it, so a bound
+// session can finish planning while the card's Solution tab stays empty. The
+// endpoint answers 204 unless the bound card really has no plan on it.
+// Fails open (|| true) — a down Ideafy server must never wedge plan mode.
+const IDEAFY_PLAN_SYNC_COMMAND =
+  `${IDEAFY_PLAN_SYNC_MARKER}\n` +
+  `curl -sf -X POST -H "Content-Type: application/json" --data-binary @- ` +
+  `"http://localhost:\${IDEAFY_PORT:-3030}/api/plan-sync-check" 2>/dev/null || true`;
+
 const IDEAFY_HOOK = {
   hooks: {
     UserPromptSubmit: [
@@ -58,6 +69,17 @@ const IDEAFY_HOOK = {
         ],
       },
     ],
+    PostToolUse: [
+      {
+        matcher: "ExitPlanMode",
+        hooks: [
+          {
+            type: "command",
+            command: IDEAFY_PLAN_SYNC_COMMAND,
+          },
+        ],
+      },
+    ],
   },
 };
 
@@ -71,6 +93,10 @@ function isIdeafyHookCommand(cmd: string): boolean {
 
 function isIdeafyPreEditCommand(cmd: string): boolean {
   return cmd.includes(IDEAFY_PRE_EDIT_MARKER) || cmd.includes("/api/pre-edit-check");
+}
+
+function isIdeafyPlanSyncCommand(cmd: string): boolean {
+  return cmd.includes(IDEAFY_PLAN_SYNC_MARKER) || cmd.includes("/api/plan-sync-check");
 }
 
 /**
@@ -104,6 +130,7 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
     const existingHooks = (existingSettings.hooks as Record<string, unknown[]>) || {};
     const existingUserPromptSubmit = existingHooks.UserPromptSubmit || [];
     const existingPreToolUse = existingHooks.PreToolUse || [];
+    const existingPostToolUse = existingHooks.PostToolUse || [];
 
     const filterGroups = (
       groups: unknown[],
@@ -140,6 +167,10 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
       existingPreToolUse,
       isIdeafyPreEditCommand
     );
+    const filteredPostToolUse = filterGroups(
+      existingPostToolUse,
+      isIdeafyPlanSyncCommand
+    );
 
     const mergedSettings = {
       ...existingSettings,
@@ -147,6 +178,7 @@ export function installIdeafyHook(folderPath: string): { success: boolean; error
         ...existingHooks,
         UserPromptSubmit: [...filteredUserPromptSubmit, ...IDEAFY_HOOK.hooks.UserPromptSubmit],
         PreToolUse: [...filteredPreToolUse, ...IDEAFY_HOOK.hooks.PreToolUse],
+        PostToolUse: [...filteredPostToolUse, ...IDEAFY_HOOK.hooks.PostToolUse],
       },
     };
 
@@ -221,6 +253,16 @@ export function removeIdeafyHook(folderPath: string): { success: boolean; error?
       );
       if (settings.hooks.PreToolUse.length === 0) {
         delete settings.hooks.PreToolUse;
+      }
+    }
+
+    if (settings.hooks.PostToolUse) {
+      settings.hooks.PostToolUse = filterGroups(
+        settings.hooks.PostToolUse,
+        isIdeafyPlanSyncCommand
+      );
+      if (settings.hooks.PostToolUse.length === 0) {
+        delete settings.hooks.PostToolUse;
       }
     }
 
