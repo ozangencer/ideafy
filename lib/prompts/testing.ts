@@ -34,7 +34,7 @@ ${scenarios}
 - For each test, explain what to do and what to expect
 - Ask the user to perform the test and report the result
 - If a test fails, help debug the issue right there
-- Mark tests as you go (checked = passed, unchecked = failed/skipped)
+- Record results as you go: passed = [x], failed or skipped = [ ]
 
 ## Workflow
 For each test scenario:
@@ -44,23 +44,35 @@ For each test scenario:
 4. If NO → Help debug, suggest fixes, run commands if needed
 5. If YES → Move to the next test
 
+## Recording Results
+
+Write results back with \`save_tests\`, not \`update_card\` — \`update_card\`
+rejects testScenarios outright, because save_tests is what protects existing
+checkbox state.
+
+\`save_tests\` is append-only: send the WHOLE checklist every time — every
+existing item, its heading, and its current \`[x]\`/\`[ ]\` state — changing only
+the boxes whose result you just learned. Dropping an item makes the call fail.
+
+You can save after each scenario or batch a few together; either is fine, and
+neither needs the user's permission. Only check a box for a test you actually
+saw pass. A failed test stays \`[ ]\` and gets reported — never quietly checked.
+
+\`\`\`
+mcp__ideafy__save_tests({ id: "${card.id}", testScenarios: "<full checklist, updated boxes>" })
+\`\`\`
+
 ## When All Tests Are Done
 
 ### If ALL tests passed:
-1. Update test scenarios with all checkboxes checked:
-\`\`\`
-mcp__ideafy__update_card({ id: "${card.id}", testScenarios: "<updated with all checked>" })
-\`\`\`
-2. Move card to Completed:
+Ask the user whether to close the card. On a clear yes:
 \`\`\`
 mcp__ideafy__move_card({ id: "${card.id}", status: "completed" })
 \`\`\`
 
 ### If SOME tests failed:
-1. Update test scenarios marking which passed and which failed:
-\`\`\`
-mcp__ideafy__update_card({ id: "${card.id}", testScenarios: "<updated with pass/fail status>" })
-\`\`\`
+1. Make sure the failures are saved as unchecked via \`save_tests\`, and say
+   plainly which ones failed and what you observed.
 2. Ask the user: "Should we move this back to In Progress for fixes?"
 3. If yes:
 \`\`\`
@@ -69,7 +81,7 @@ mcp__ideafy__move_card({ id: "${card.id}", status: "progress" })
 
 ## Ideafy MCP Tools Available
 - mcp__ideafy__get_card - Read card details
-- mcp__ideafy__update_card - Update card fields
+- mcp__ideafy__save_tests - Write test scenarios and checkbox state (append-only)
 - mcp__ideafy__move_card - Move card between columns
 
 Card ID: ${card.id}
