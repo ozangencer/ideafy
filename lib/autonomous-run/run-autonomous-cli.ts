@@ -6,55 +6,92 @@ import {
   registerProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import type { ParsedRunOutput } from "@/lib/platform/types";
+import { selectRunOutput, type RunOutputContract } from "./select-run-output";
 
-interface RunAutonomousOptions {
-  prompt: string;
-  cwd: string;
+/** Process-registry label; must match the values the UI filters on. */
+export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix";
+
+/**
+ * Card context needed to surface the run in the process registry. Omit it
+ * entirely for runs with no card behind them (e.g. project narrative), which
+ * then go untracked exactly as they did before.
+ */
+export interface AutonomousTracking {
   processKey: string;
   cardId: string;
   cardTitle: string;
   displayId: string | null;
+  processType: AutonomousProcessType;
+}
+
+export interface RunAutonomousOptions {
+  prompt: string;
+  cwd: string;
   aiPlatform?: string | null;
   /** Timeout in ms; defaults to 10 minutes. */
   timeoutMs?: number;
+  /** Prefix for log lines and the timeout message. Defaults to the provider name. */
+  label?: string;
+  /** Omit to skip process-registry tracking. */
+  tracking?: AutonomousTracking;
+  /**
+   * Reject on any non-zero exit, even when stdout carried content. The default
+   * (false) tolerates a non-zero exit that still produced output, which is how
+   * the card-driven runs have always behaved.
+   */
+  requireExitZero?: boolean;
+  /**
+   * What this run's output must look like to be recognisable as its product.
+   * Without one the runner falls back to a length heuristic and flags it.
+   */
+  contract?: RunOutputContract;
+}
+
+export interface AutonomousRunResult {
+  response: string;
+  /** Non-null when the output had to be guessed at; surface it to the user. */
+  warning: string | null;
+  cost?: number;
+  duration?: number;
 }
 
 /**
- * Spawn the active platform provider's CLI in autonomous mode, streaming
- * stdout/stderr, enforcing a timeout, and parsing the final JSON response.
+ * Spawn the active platform provider's CLI in autonomous mode, enforcing a
+ * timeout and parsing the response.
  *
- * Registers the child process via the process registry so the UI can surface
- * it and so a second request for the same card can pre-emptively kill the
- * first (`processKey` must be unique per card).
+ * When `tracking` is supplied the child is registered with the process registry
+ * so the UI can surface it and a second request for the same card pre-emptively
+ * kills the first (`processKey` must be unique per card).
  *
- * The caller is responsible for calling `completeProcess(processKey)` after
- * it has finished post-processing (e.g. DB writes) — deliberately *not* done
- * here so the UI stays "running" until the card row is actually up to date.
+ * The caller is responsible for calling `completeProcess(processKey)` after it
+ * has finished post-processing (e.g. DB writes) — deliberately *not* done here
+ * so the UI stays "running" until the card row is actually up to date.
  */
 export async function runAutonomousCli(
   options: RunAutonomousOptions,
-): Promise<{ response: string; cost?: number; duration?: number }> {
+): Promise<AutonomousRunResult> {
   const {
     prompt,
     cwd,
-    processKey,
-    cardId,
-    cardTitle,
-    displayId,
     aiPlatform,
     timeoutMs = 10 * 60 * 1000,
+    tracking,
+    requireExitZero = false,
+    contract,
   } = options;
 
   // Kill any existing process for this card so a second click doesn't race the first.
-  if (getProcess(processKey)) {
-    killProcess(processKey);
+  if (tracking && getProcess(tracking.processKey)) {
+    killProcess(tracking.processKey);
   }
 
   const provider = getProviderForCard({ aiPlatform });
+  const label = options.label ?? provider.displayName;
   const args = provider.buildAutonomousArgs({ prompt });
 
-  console.log(`[${provider.displayName}] Running in ${cwd}:`);
-  console.log(`[${provider.displayName}] Prompt length: ${prompt.length} chars`);
+  console.log(`[${label}] Running in ${cwd}:`);
+  console.log(`[${label}] Prompt length: ${prompt.length} chars`);
 
   return new Promise((resolve, reject) => {
     const cliProcess = spawn(provider.getCliPath(), args, {
@@ -66,20 +103,32 @@ export async function runAutonomousCli(
     // Close stdin immediately — equivalent to `< /dev/null`.
     cliProcess.stdin?.end();
 
-    registerProcess(processKey, cliProcess, {
-      cardId,
-      sectionType: null,
-      processType: "autonomous",
-      cardTitle,
-      displayId,
-      startedAt: new Date().toISOString(),
-    });
+    if (tracking) {
+      registerProcess(tracking.processKey, cliProcess, {
+        cardId: tracking.cardId,
+        sectionType: null,
+        processType: tracking.processType,
+        cardTitle: tracking.cardTitle,
+        displayId: tracking.displayId,
+        startedAt: new Date().toISOString(),
+      });
+    }
 
+    // Providers that can decompose their own output stream do so incrementally;
+    // the rest keep the old buffer-everything path.
+    const collector = provider.createRunOutputCollector?.();
     let stdout = "";
     let stderr = "";
+    let stdoutLength = 0;
 
     cliProcess.stdout?.on("data", (data: Buffer) => {
-      stdout += data.toString();
+      const text = data.toString();
+      stdoutLength += text.length;
+      if (collector) {
+        collector.push(text);
+      } else {
+        stdout += text;
+      }
     });
 
     cliProcess.stderr?.on("data", (data: Buffer) => {
@@ -88,30 +137,62 @@ export async function runAutonomousCli(
 
     const timeout = setTimeout(() => {
       cliProcess.kill();
-      reject(new Error(`${provider.displayName} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
+      reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
     }, timeoutMs);
 
     cliProcess.on("close", (code) => {
       clearTimeout(timeout);
 
       if (stderr) {
-        console.log(`[${provider.displayName}] stderr: ${stderr}`);
+        console.log(`[${label}] stderr: ${stderr}`);
       }
-      console.log(`[${provider.displayName}] stdout length: ${stdout.length}`);
+      console.log(`[${label}] stdout length: ${stdoutLength}`);
 
-      if (code !== 0 && !stdout.trim()) {
+      let parsed: ParsedRunOutput;
+      if (collector) {
+        parsed = collector.finish();
+      } else {
+        const legacy = provider.parseJsonResponse(stdout);
+        parsed = {
+          candidates: [],
+          result: legacy.result,
+          cost: legacy.cost,
+          duration: legacy.duration,
+          isError: legacy.isError,
+          // Nothing better to go on for these providers, and treating output as
+          // proof of completion is what the old guard below did anyway.
+          sawResultEnvelope: !!stdout.trim(),
+          injectedUserMessages: 0,
+        };
+      }
+
+      // Not `!stdout.trim()`: under stream-json a `system/init` line lands
+      // within milliseconds, so stdout is never empty and that guard would
+      // never fire again. A terminating result envelope is what actually
+      // distinguishes a finished run from a crashed one.
+      if (code !== 0 && (requireExitZero || !parsed.sawResultEnvelope)) {
         reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
         return;
       }
 
-      const parsed = provider.parseJsonResponse(stdout);
       if (parsed.isError) {
+        // The error text lives in `result`; candidate selection has no business
+        // running on a failed run.
         reject(new Error(parsed.result || `${provider.displayName} returned an error`));
         return;
       }
 
+      const selected = selectRunOutput(parsed, contract);
+      if (selected.warning) {
+        console.warn(
+          `[${label}] ${selected.warning} ` +
+            `(adaylar: ${selected.candidateCount}, segment: ${selected.segmentCount})`,
+        );
+      }
+
       resolve({
-        response: parsed.result,
+        response: selected.text,
+        warning: selected.warning,
         cost: parsed.cost,
         duration: parsed.duration,
       });

@@ -90,5 +90,13 @@ export function buildCIEnv(): NodeJS.ProcessEnv {
   return {
     ...buildEnv(),
     CI: "true",
+    // Headless runs routinely shell out to builds, test suites and long greps.
+    // At the 120s default those get auto-backgrounded, and when one finishes it
+    // re-invokes the model, whose follow-up remark then replaces the run's real
+    // output (IDE-280 — a 16k plan lost to a one-line footnote). Raising the
+    // ceiling below the 10 minute run timeout keeps that from firing at all.
+    // Trade-off: a genuinely hung command now blocks for longer, so an operator
+    // (or a test reproducing the original failure) can still override it.
+    BASH_DEFAULT_TIMEOUT_MS: process.env.BASH_DEFAULT_TIMEOUT_MS || "240000",
   };
 }

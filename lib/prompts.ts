@@ -144,6 +144,26 @@ User will describe the error — wait, then fix. If you change code:
 
 ${buildCommitInstructions(commitRef, "fix")}
 
+## FINAL response format
+
+Your FINAL response must be ONLY manual test scenarios in this EXACT format:
+
+## Test Scenarios
+
+### Happy Path
+- [ ] Description of what to test manually and expected result
+
+### Edge Cases
+- [ ] Edge case to verify
+
+### Regression
+- [ ] Existing feature that should still work
+
+Rules:
+- Every line must be a markdown checkbox (- [ ])
+- Write actionable manual test steps, NOT a summary of code changes
+- Do NOT include code summaries, file lists, or implementation details
+
 ${NO_SAVE_TOOLS_RULE}`;
   }
 }

@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { spawn } from "child_process";
 import { marked } from "marked";
 import {
   stripHtml,
   convertToTipTapTaskList,
   buildEvaluatePrompt,
 } from "@/lib/prompts";
+import { getProcess, killProcess } from "@/lib/process-registry";
+import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
 import {
-  registerProcess,
-  completeProcess,
-  getProcess,
-  killProcess,
-} from "@/lib/process-registry";
-import { getProviderForCard } from "@/lib/platform/active";
+  RUN_OUTPUT_CONTRACTS,
+  prependWarningHtml,
+} from "@/lib/autonomous-run/select-run-output";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import { recordOpinionCompleted } from "@/lib/activity-registry";
 
@@ -91,83 +89,28 @@ export async function POST(
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 
-    const provider = getProviderForCard(card);
-
-    // Run CLI with spawn for process tracking
-    const { responseText, cost, duration } = await new Promise<{
-      responseText: string;
-      cost?: number;
-      duration?: number;
-    }>((resolve, reject) => {
-      const cliProcess = spawn(provider.getCliPath(), provider.buildAutonomousArgs({ prompt }), {
-        cwd: workingDir,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: provider.getCIEnv(),
-      });
-
-      // Close stdin immediately
-      cliProcess.stdin?.end();
-
-      // Register process for tracking
-      registerProcess(processKey, cliProcess, {
+    const { response: responseText, warning, cost, duration } = await runAutonomousCli({
+      prompt,
+      cwd: workingDir,
+      aiPlatform: card.aiPlatform,
+      label: "Evaluate",
+      timeoutMs: 5 * 60 * 1000,
+      contract: RUN_OUTPUT_CONTRACTS.evaluate,
+      tracking: {
+        processKey,
         cardId: id,
-        sectionType: null,
-        processType: "evaluate",
         cardTitle: card.title,
         displayId,
-        startedAt: new Date().toISOString(),
-      });
-
-      let stdout = "";
-      let stderr = "";
-
-      cliProcess.stdout?.on("data", (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      cliProcess.stderr?.on("data", (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      // Set timeout (5 minutes for evaluate)
-      const timeout = setTimeout(() => {
-        cliProcess.kill();
-        reject(new Error("Evaluate timed out after 5 minutes"));
-      }, 5 * 60 * 1000);
-
-      cliProcess.on("close", (code) => {
-        clearTimeout(timeout);
-
-        if (stderr) {
-          console.log(`[Evaluate] stderr: ${stderr}`);
-        }
-
-        if (code !== 0 && !stdout.trim()) {
-          reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
-          return;
-        }
-
-        const parsed = provider.parseJsonResponse(stdout);
-        if (parsed.isError) {
-          reject(new Error(parsed.result || `${provider.displayName} returned an error`));
-          return;
-        }
-        resolve({
-          responseText: parsed.result,
-          cost: parsed.cost,
-          duration: parsed.duration,
-        });
-      });
-
-      cliProcess.on("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
+        processType: "evaluate",
+      },
     });
 
     // Convert markdown response to HTML for TipTap editor
     const markedHtml = await marked(responseText);
-    const aiOpinion = convertToTipTapTaskList(markedHtml);
+    let aiOpinion = convertToTipTapTaskList(markedHtml);
+    if (warning) {
+      aiOpinion = prependWarningHtml(aiOpinion, warning);
+    }
 
     // Extract verdict from "## Summary Verdict" section
     const verdictMatch = responseText.match(/##\s*Summary\s*Verdict[\s\S]*?(Strong\s*Yes|Yes|Maybe|No|Strong\s*No)/i);
@@ -246,6 +189,7 @@ export async function POST(
       cardId: id,
       aiOpinion,
       aiVerdict,
+      outputWarning: warning,
       priority,
       complexity,
       cost,
