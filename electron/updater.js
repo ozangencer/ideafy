@@ -166,11 +166,16 @@ function wireEvents() {
     const message = err instanceof Error ? err.message : String(err);
     if (installRequested) {
       // The install leg failed, so no quit is coming. Undo the pre-authorised
-      // quit or the user's next Cmd+Q would skip the confirmation dialog, and
-      // hand them back the still-valid Install button.
+      // quit or the user's next Cmd+Q would skip the confirmation dialog.
       installRequested = false;
       app.isQuitting = false;
-      setState({ status: "ready", error: message });
+      // Deliberately not back to "ready": the usual reason this leg fails is
+      // that the archive we told the user was ready is no longer on disk — a
+      // Caches sweep, or another Ideafy build sharing this cache directory
+      // emptied it. Handing back the Install button then loops forever on the
+      // same missing file. Dropping to "available" makes the next press
+      // re-download, which is the only thing that can actually recover.
+      setState({ status: "available", percent: 0, error: message });
       return;
     }
     setState({ status: "error", percent: 0, error: message });

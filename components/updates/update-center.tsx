@@ -148,6 +148,14 @@ export function UpdateCenter() {
     );
   }
 
+  // A failed download or install drops the row back to an actionable state and
+  // keeps the reason in `error` alone. Without surfacing it here the button
+  // reads as having done nothing at all, which is exactly how a stale "ready"
+  // state used to present itself.
+  if (app.error && app.status !== "error") {
+    appNote = <p className="text-xs text-destructive">Last attempt failed: {app.error}</p>;
+  }
+
   // ── Claude Code plugin ──────────────────────────────────────────────
   // Only the update path lives here; install / enable / uninstall stay on the
   // plugin row above so this block reads as one thing: what needs updating.
