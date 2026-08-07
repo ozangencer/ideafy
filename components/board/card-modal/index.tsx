@@ -907,7 +907,7 @@ export function CardModal({
                     size="sm"
                     onClick={() => setShowRollbackDialog(true)}
                     disabled={isMerging || isRollingBack || isCompleting}
-                    className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+                    className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
                   >
                     <Undo2 className="mr-2 h-4 w-4" />
                     Didn&apos;t work
@@ -997,7 +997,7 @@ export function CardModal({
                         variant="outline"
                         onClick={handleStopDevServer}
                         disabled={isServerLoading}
-                        className="ml-auto border-red-500/50 text-red-500 hover:bg-red-500/10"
+                        className="ml-auto border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
                       >
                         {isServerLoading ? (
                           <Loader2 className="mr-2 h-3 w-3 animate-spin" />
@@ -1062,7 +1062,7 @@ export function CardModal({
                     size="sm"
                     onClick={() => handleFinishWithoutBranch("bugs")}
                     disabled={isCompleting}
-                    className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+                    className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
                   >
                     <Undo2 className="mr-2 h-4 w-4" />
                     Didn&apos;t work

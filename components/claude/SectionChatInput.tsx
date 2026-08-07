@@ -91,7 +91,7 @@ export function SectionChatInput({
             size="sm"
             variant="outline"
             onClick={cancel}
-            className="h-9 px-3 border-red-500/50 text-red-500 hover:bg-red-500/10"
+            className="h-9 px-3 border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
           >
             <X className="h-4 w-4" />
           </Button>
