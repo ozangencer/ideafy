@@ -95,7 +95,18 @@ export const ideafySessions = sqliteTable("ideafy_sessions", {
   projectId: text("project_id"),
   state: text("state").notNull(), // "offered" | "bound"
   cardId: text("card_id"),
+  // Which CLI the session belongs to. Only Claude Code registers sessions
+  // here today (the UserPromptSubmit hook is Claude-specific), so existing
+  // rows are correct under the default.
+  provider: text("provider").notNull().default("claude"),
+  // The directory the CLI was launched from. Resume is cwd-scoped — the
+  // provider looks for the transcript in a folder derived from it — so a
+  // session started inside a worktree can only be resumed from that same
+  // path. Null on rows written before this column existed.
+  cwd: text("cwd"),
   createdAt: text("created_at").notNull(),
+  // Refreshed on every bound turn by the hook, so it doubles as "last used"
+  // and gives the session list a meaningful sort order.
   updatedAt: text("updated_at").notNull(),
 });
 

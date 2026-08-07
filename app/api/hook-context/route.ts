@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
           projectId: project.id,
           state: "bound",
           cardId: cardHint,
+          provider: "claude",
+          cwd,
           createdAt: now,
           updatedAt: now,
         })
@@ -74,16 +76,23 @@ export async function POST(request: NextRequest) {
         projectId: project.id,
         state: "bound",
         cardId: cardHint,
+        provider: "claude",
+        cwd,
         createdAt: now,
         updatedAt: now,
       };
     } else {
+      // Record cwd even in the "offered" state: the user may bind a card
+      // later via bind_session_to_card, which has no cwd of its own to
+      // supply. This row is the only place it gets captured.
       db.insert(schema.ideafySessions)
         .values({
           sessionId,
           projectId: project.id,
           state: "offered",
           cardId: null,
+          provider: "claude",
+          cwd,
           createdAt: now,
           updatedAt: now,
         })
@@ -104,6 +113,14 @@ export async function POST(request: NextRequest) {
 
   // Bound state — look up the card and return the phase policy.
   if (sessionRow.state === "bound" && sessionRow.cardId) {
+    // Touch the row on every turn so updatedAt reads as "last used" rather
+    // than "bound at" — the session list sorts on it. This also backfills
+    // cwd for sessions bound before the column existed.
+    db.update(schema.ideafySessions)
+      .set({ updatedAt: now, cwd })
+      .where(eq(schema.ideafySessions.sessionId, sessionId))
+      .run();
+
     const card = db
       .select()
       .from(schema.cards)
