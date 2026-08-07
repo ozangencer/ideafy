@@ -236,7 +236,7 @@ ${buildCardContext(ctx)}
 Current test scenarios:
 ${currentTests}
 
-Cover happy paths, edge cases, and error conditions. Use checkbox format: \`- [ ] Step description\`.
+Lead with the core flow — the handful of steps that prove the feature works at all. Add edge cases and error conditions only where they catch something the core flow cannot; a checklist nobody runs is worse than a short one. Use checkbox format: \`- [ ] Step description\`.
 
 Scope what you write to what the user actually asked about. If they asked about one flow, cover that flow — do not regenerate or expand the whole checklist. A question deserves an answer, not a fresh batch of scenarios.
 

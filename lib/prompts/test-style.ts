@@ -1,13 +1,22 @@
 /**
  * Shared style contract for test-scenario generation. Every prompt that asks
  * the AI to write `- [ ] …` scenarios (Chat UI Tests tab, terminal
- * test-together / generate-tests flows, autonomous start / quick-fix, and the
- * MCP save_tests tool description) MUST inject this contract so the output
- * voice stays consistent across entry points.
+ * test-together / generate-tests flows, autonomous start / quick-fix) MUST
+ * inject this contract so the output voice stays consistent across entry
+ * points.
+ *
+ * NOT covered yet: mcp-server/index.ts carries a hand-maintained copy of this
+ * contract inside the save_tests tool description. The two have already
+ * drifted — editing this file does not update the MCP surface.
  *
  * Default voice: a manual tester / BA walking a solo founder through each
  * step — second-person imperative, setup → action → expected. Spec-style
  * assertion bullets are explicitly called out as the anti-pattern.
+ *
+ * Structure: the checklist leads with a capped `Core flow` group written from
+ * the card's real data; later groups are optional and exist only to catch what
+ * the core flow cannot. Volume is the failure mode these rules target — a long
+ * checklist reads as work to postpone, so it never gets run.
  */
 
 export interface TestStyleOptions {
@@ -20,7 +29,34 @@ const STYLE_CONTRACT_EN = `## Test scenario style (mandatory)
 Write scenarios as a manual tester walking the user through the feature, not as
 a spec of assertions. Each scenario must read like an instruction, not a fact.
 
-Format:
+### Structure — lead with the core flow
+
+The checklist opens with a \`## Core flow\` group. That group is the deliverable;
+everything after it is optional.
+
+- \`## Core flow\` — **at most 5 items.** If these pass, the feature
+  fundamentally works. Write these first and write them well.
+- Later groups (\`## Edge cases\`, \`## Regression\`) are OPTIONAL. Add one only
+  when it catches something the core flow cannot. A group that re-tests the
+  core flow in other words is noise, and noise is why checklists go untouched.
+- A checklist past ~12 items is a signal that the card is too big — not that
+  you were thorough.
+
+### Use the card's real data, not placeholders
+
+Every step should be runnable without the reader going to look something up.
+Pull concrete values from the card and the conversation: real card IDs, file
+paths, session IDs, URLs, column names.
+
+- "Open card IDE-282" beats "open a card".
+- "Its session is \`83e1174a…\`, idle since yesterday" beats "pick a session".
+- When the order of steps matters, say why on the same line ("not IDE-283 — that
+  session is live right now and would conflict").
+- A group may close with one \`If it breaks:\` line naming the first place to
+  look. Keep it to a sentence.
+
+### Format
+
 - Group scenarios by feature area with \`## Heading\` per group.
 - Each checkbox item = one observable step. Use second-person imperative.
 - Prefer: setup → action → expected outcome, in that order.
@@ -32,18 +68,26 @@ Format:
 
 ### Good examples (follow this style)
 
-- [ ] Open a card that already has 2-3 checked scenarios. Go to the Tests tab.
-- [ ] In chat, ask the assistant to reword one of the checked items. After the
-  reply lands, reload the modal — the reworded item must still be \`[x]\`.
-- [ ] Ask the assistant to wipe the list ("delete everything, keep one"). The
-  save should fail with \`save_tests refused…\` and the list must stay intact.
+\`\`\`
+## Core flow
+- [ ] Open card IDE-282 and click the terminal icon in the header. One row
+  should appear: \`83e1174a…\`, labelled \`terminal\`.
+- [ ] Hit copy, then paste into a fresh terminal in ~/vibecode/ideafy.
+  Yesterday's conversation should resume.
+- [ ] Back in the popover, hit the terminal button instead. Your terminal app
+  opens on the same conversation and Ideafy shows "Resumed in CLI".
+
+If it breaks: a blank session almost always means cwd — check the session's
+stored \`cwd\` against where the terminal actually opened.
+\`\`\`
 
 ### Bad examples (do not produce these)
 
 - [ ] mergeTestCheckState preserves checked state on rewording.   // too abstract, no action
 - [ ] Dropdown shows None + all teams.                             // spec, not a test step
 - [ ] value === 'none' when card has no team                        // implementation assertion
-- [ ] Works correctly.                                              // unobservable`;
+- [ ] Works correctly.                                              // unobservable
+- [ ] Open a card that has a session.                               // placeholder — name the card`;
 
 const STYLE_CONTRACT_TR = `## Test senaryosu stil kuralları (zorunlu)
 
@@ -51,7 +95,35 @@ Senaryoları, kullanıcıyı feature'ı adım adım gezdiren bir manuel testçi 
 yaz — assertion listesi gibi değil. Her madde bir gözlemlenebilir adım olmalı,
 bir iddia değil.
 
-Format:
+### Yapı — önce temel akış
+
+Çeklist \`## Temel akış\` grubuyla başlar. Asıl teslim edilen şey o grup;
+sonrasındaki her şey opsiyoneldir.
+
+- \`## Temel akış\` — **en fazla 5 madde.** Bunlar geçiyorsa feature temelde
+  çalışıyordur. Önce bunları yaz, ve iyi yaz.
+- Sonraki gruplar (\`## Kenar durumlar\`, \`## Regresyon\`) OPSİYONELDİR. Sadece
+  temel akışın yakalayamayacağı bir şeyi yakalıyorsa ekle. Temel akışı başka
+  kelimelerle tekrar eden grup gürültüdür — çeklistlerin hiç ellenmeme sebebi de
+  o gürültü.
+- ~12 maddeyi aşan bir çeklist, kapsamlı davrandığının değil, kartın fazla büyük
+  olduğunun işaretidir.
+
+### Placeholder değil, kartın gerçek verisi
+
+Her adım, okuyanın gidip bir şey araması gerekmeden çalıştırılabilir olmalı.
+Somut değerleri karttan ve konuşmadan çek: gerçek kart ID'si, dosya yolu,
+session ID, URL, kolon adı.
+
+- "IDE-282'yi aç" > "bir kart aç".
+- "Session'ı \`83e1174a…\`, dünden beri boşta" > "bir session seç".
+- Adımların sırası önemliyse gerekçesini aynı satırda yaz ("IDE-283'ü kullanma —
+  o session şu an canlı, çakışır").
+- Bir grup, tek satırlık \`Patlarsa:\` notuyla kapanabilir — ilk bakılacak yer.
+  Bir cümleyi geçmesin.
+
+### Format
+
 - Senaryoları feature alanına göre \`## Başlık\` ile grupla.
 - Her checkbox maddesi = bir gözlemlenebilir adım. İkinci şahıs emir kipi kullan.
 - Sıra: setup → aksiyon → beklenen sonuç.
@@ -62,18 +134,26 @@ Format:
 
 ### İyi örnek (bu stile uy)
 
-- [ ] 2-3 maddesi işaretli bir kart aç. Tests sekmesine geç.
-- [ ] Chat'te asistana "işaretli maddelerden birini farklı kelimelerle yaz" de.
-  Cevap geldikten sonra modali tazele — yeniden yazılan madde hâlâ \`[x]\` olmalı.
-- [ ] Asistana "tüm listeyi sil, yerine 1 satır koy" de. Kayıt \`save_tests refused…\`
-  hatasıyla başarısız olmalı; liste olduğu gibi kalmalı.
+\`\`\`
+## Temel akış
+- [ ] IDE-282'yi aç, header'daki terminal ikonuna tıkla. Tek satır çıkmalı:
+  \`83e1174a…\`, \`terminal\` etiketiyle.
+- [ ] Kopyala'ya bas, ~/vibecode/ideafy içinde yeni bir terminale yapıştır.
+  Dünkü konuşma açılmalı.
+- [ ] Popover'da bu kez terminal butonuna bas. Terminal uygulaman aynı
+  konuşmayla açılmalı, Ideafy'da "Resumed in CLI" bildirimi çıkmalı.
+
+Patlarsa: boş oturum geliyorsa sebep neredeyse kesin cwd — session'ın kayıtlı
+\`cwd\`'siyle terminalin gerçekte açıldığı dizini karşılaştır.
+\`\`\`
 
 ### Kötü örnek (bu stilde yazma)
 
 - [ ] mergeTestCheckState işaretli state'i koruyor.   // soyut, aksiyon yok
 - [ ] Dropdown'da None + tüm team'ler listeleniyor.   // spec, test adımı değil
 - [ ] Kartın teamId'si yoksa value === 'none'          // implementation iddiası
-- [ ] Doğru çalışıyor.                                  // gözlemlenebilir değil`;
+- [ ] Doğru çalışıyor.                                  // gözlemlenebilir değil
+- [ ] Session'ı olan bir kart aç.                       // placeholder — kartın adını yaz`;
 
 export function buildTestStyleContract(opts: TestStyleOptions = {}): string {
   const lang = opts.language;
