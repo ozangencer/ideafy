@@ -91,6 +91,7 @@ interface CardModalHeaderProps {
   autoFocusTitle?: boolean;
   isReadOnly?: boolean;
   assigneeSlot?: ReactNode;
+  sessionsSlot?: ReactNode;
 }
 
 export function CardModalHeader({
@@ -119,6 +120,7 @@ export function CardModalHeader({
   autoFocusTitle,
   isReadOnly,
   assigneeSlot,
+  sessionsSlot,
 }: CardModalHeaderProps) {
   const globalAiPlatform = useKanbanStore((s) => s.settings?.aiPlatform ?? DEFAULT_SETTINGS.aiPlatform);
   const globalAiPlatformLabel =
@@ -184,6 +186,7 @@ export function CardModalHeader({
               <ArrowLeft className="h-5 w-5" />
             </Button>
           )}
+          {sessionsSlot}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

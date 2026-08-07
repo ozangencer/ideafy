@@ -5,26 +5,13 @@ import { db } from "@/lib/db";
 import { cards, projects, chatSessions, conversations } from "@/lib/db/schema";
 import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 import { getProviderForCard } from "@/lib/platform/active";
+import { buildResumeCliArgv, listCardSessions, resolveSessionProvider } from "@/lib/card-sessions";
 import { stripHtml } from "@/lib/ai/prompt-builder";
 import type { PlatformProvider } from "@/lib/platform/types";
 
 interface OpeningHistoryMessage {
   role: string;
   content: string;
-}
-
-function buildResumeCliArgv(provider: PlatformProvider, sessionId: string): string[] {
-  switch (provider.id) {
-    case "codex":
-      return [provider.getCliPath(), "resume", "--include-non-interactive", sessionId];
-    case "gemini":
-      return [provider.getCliPath(), "--resume", sessionId];
-    case "opencode":
-      return [provider.getCliPath(), "--session", sessionId];
-    case "claude":
-    default:
-      return [provider.getCliPath(), "--resume", sessionId];
-  }
 }
 
 // Fresh interactive launch. For Claude we can reserve a UUID upfront via
@@ -106,15 +93,64 @@ export async function POST(
 ) {
   const { id: cardId } = await params;
   const body = await request.json();
-  const { sectionType } = body;
+  const { sectionType, sessionId: explicitSessionId } = body;
 
-  if (!sectionType) {
-    return NextResponse.json({ error: "sectionType is required" }, { status: 400 });
+  if (!sectionType && !explicitSessionId) {
+    return NextResponse.json(
+      { error: "sectionType or sessionId is required" },
+      { status: 400 }
+    );
   }
 
   const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
   if (!card) {
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
+  }
+
+  const project = card.projectId
+    ? (await db.select().from(projects).where(eq(projects.id, card.projectId)))[0]
+    : null;
+
+  const workingDir = project?.folderPath || card.projectFolder || process.cwd();
+  const terminal = getTerminalPreference();
+
+  // Explicit session — the card's session list asked for this exact one.
+  // Resume it under its own provider and, crucially, in the directory it was
+  // started from: resume is cwd-scoped, so a session born inside a worktree
+  // cannot be found from the project root.
+  if (explicitSessionId) {
+    const known = listCardSessions(cardId).find(
+      (s) => s.sessionId === explicitSessionId
+    );
+    if (!known) {
+      return NextResponse.json(
+        { error: "Session not found for this card" },
+        { status: 404 }
+      );
+    }
+
+    const sessionProvider = resolveSessionProvider(known.provider) ?? getProviderForCard(card);
+    try {
+      launchTerminal({
+        cwd: known.cwd || workingDir,
+        argv: buildResumeCliArgv(sessionProvider, known.sessionId),
+        terminal,
+        tag: "Resume CLI",
+        session: buildTerminalSession(card, project),
+      });
+      return NextResponse.json({
+        success: true,
+        mode: "resume",
+        sessionId: known.sessionId,
+        provider: sessionProvider.id,
+        message: `Resuming ${sessionProvider.displayName} session in ${terminal}`,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Failed to open terminal", details: error instanceof Error ? error.message : String(error) },
+        { status: 500 }
+      );
+    }
   }
 
   const provider = getProviderForCard(card);
@@ -125,13 +161,6 @@ export async function POST(
       eq(chatSessions.sectionType, sectionType),
       eq(chatSessions.provider, provider.id)
     ));
-
-  const project = card.projectId
-    ? (await db.select().from(projects).where(eq(projects.id, card.projectId)))[0]
-    : null;
-
-  const workingDir = project?.folderPath || card.projectFolder || process.cwd();
-  const terminal = getTerminalPreference();
 
   // Resume path — existing session found for the active provider.
   if (session) {

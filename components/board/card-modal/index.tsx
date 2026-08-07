@@ -42,6 +42,7 @@ import { downloadCardAsMarkdown } from "@/lib/card-export";
 
 // New modular components
 import { CardModalHeader } from "./card-modal-header";
+import { CardSessionsPopover } from "./sections/card-sessions-popover";
 import { CardModalTabs } from "./card-modal-tabs";
 import { CardModalFooter } from "./card-modal-footer";
 import { SplitPanel } from "./split-panel";
@@ -849,6 +850,13 @@ export function CardModal({
             isTitleValid={isTitleValid}
             autoFocusTitle={isDraftMode}
             isReadOnly={readOnly}
+            sessionsSlot={
+              // Drafts have no persisted id, so nothing could be recorded
+              // against them yet.
+              !isDraftMode && selectedCard ? (
+                <CardSessionsPopover cardId={selectedCard.id} />
+              ) : null
+            }
           />
         )}
 
