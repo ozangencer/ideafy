@@ -1,3 +1,11 @@
+// ─────────────────────────────────────────────────────────────────────────
+// GENERATED FILE — DO NOT EDIT.
+//
+// Verbatim copy of lib/prompts/test-style.ts, written by
+// scripts/sync-test-style.mjs on every mcp-server build. Edit the source,
+// not this file; anything you change here is overwritten on the next build.
+// ─────────────────────────────────────────────────────────────────────────
+
 /**
  * Shared style contract for test-scenario generation. Every prompt that asks
  * the AI to write `- [ ] …` scenarios (Chat UI Tests tab, terminal

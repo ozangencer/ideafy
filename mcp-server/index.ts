@@ -13,6 +13,7 @@ import { mkdirSync } from "fs";
 import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
 import { normalizeUseWorktree, serializeUseWorktreeForDb } from "./serialize-card.js";
+import { buildTestStyleContract } from "./test-style.generated.js";
 import {
   createWorktree,
   ensureBranchInPlace,
@@ -23,6 +24,14 @@ import {
   worktreeExists,
 } from "./git-helpers.js";
 import { existsSync } from "fs";
+
+// The same style contract every other AI surface injects, pulled from
+// lib/prompts/test-style.ts via scripts/sync-test-style.mjs. Built without a
+// language so the card-language rule stays in play: a tool description is
+// static text assembled at server start, long before any card is known, so it
+// cannot pick the Turkish or English body per card the way the in-app prompts
+// do.
+const TEST_STYLE_CONTRACT = buildTestStyleContract();
 
 // Configure marked for Tiptap-compatible HTML
 marked.setOptions({
@@ -690,28 +699,7 @@ Before drafting the plan, call get_card to read the project's voice. Voice chang
         name: "save_tests",
         description: `Save test scenarios to a card and move it to Human Test. Use this when you've completed implementation.
 
-STYLE CONTRACT (mandatory — match this voice regardless of where you're called from):
-
-Write scenarios as a manual tester walking a solo founder through the feature, not as a spec of assertions. Each scenario = one observable step the user performs and verifies.
-
-Format:
-- Group by feature area with \`## Heading\` per group.
-- Each \`- [ ]\` item is one imperative step in second person.
-- Prefer setup → action → expected outcome order.
-- Name UI elements by visible labels, not CSS selectors or internal symbols.
-- Mirror the card's language: Turkish card → Turkish scenarios; English → English. Do not mix.
-
-Good example:
-\`\`\`
-## Core flow
-- [ ] Open a card that already has 2-3 checked scenarios. Go to the Tests tab.
-- [ ] Ask the assistant to reword one checked item. Reload the modal — the reworded item must still be [x].
-\`\`\`
-
-Bad examples to avoid:
-- \`- [ ] Dropdown shows None + all teams.\` (spec, not a step)
-- \`- [ ] mergeTestCheckState preserves state.\` (abstract, no action)
-- \`- [ ] Works correctly.\` (unobservable)
+${TEST_STYLE_CONTRACT}
 
 VOICE ACCENT (apply on top of the style contract — read project's voice via get_card):
 - entrepreneur — keep step descriptions in plain language, reference UI labels users see, skip implementation jargon entirely.
