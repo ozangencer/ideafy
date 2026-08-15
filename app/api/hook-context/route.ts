@@ -162,6 +162,10 @@ export async function POST(request: NextRequest) {
         id: card.id,
         title: card.title,
         status: card.status,
+        displayId:
+          cardProject && card.taskNumber
+            ? `${cardProject.idPrefix}-${card.taskNumber}`
+            : null,
       },
       branchPolicy
     );

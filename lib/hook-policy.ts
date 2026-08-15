@@ -123,12 +123,21 @@ function buildStandardPhaseLines(status: string, phaseInstruction: string): stri
   ];
 }
 
+// A display ID reaches the reminder as policy text, so it is validated by
+// shape rather than escaped: anything that is not PREFIX-123 is dropped
+// outright. Same reasoning as sanitizeForReminder, stricter because the
+// accepted shape is known exactly.
+function safeDisplayId(value: string | null | undefined): string | null {
+  return value && /^[A-Za-z0-9]{1,16}-\d{1,9}$/.test(value) ? value : null;
+}
+
 // Phase-aware policy block used once a session is bound to a card.
 export function buildPhasePolicy(
   card: {
     id: string;
     title: string;
     status: string;
+    displayId?: string | null;
   },
   branchPolicy?: { enforced: boolean; targetBranch: string | null }
 ): string | null {
@@ -136,6 +145,12 @@ export function buildPhasePolicy(
   if (!phaseInstruction) return null;
 
   const title = sanitizeForReminder(card.title);
+  const displayId = safeDisplayId(card.displayId);
+
+  const phaseLines =
+    card.status === "test"
+      ? buildTestPhaseLines()
+      : buildStandardPhaseLines(card.status, phaseInstruction);
 
   const lines = [
     "<system-reminder>",
@@ -143,18 +158,38 @@ export function buildPhasePolicy(
     `Current column: ${card.status}`,
     "",
     "Policy for this session:",
-    ...(card.status === "test"
-      ? buildTestPhaseLines()
-      : buildStandardPhaseLines(card.status, phaseInstruction)),
+    ...phaseLines,
   ];
+
+  // The phase blocks are different lengths — seven clauses for the standard
+  // columns, four for testing — so the clauses appended below have to count
+  // rather than assume. Hardcoding the next number made the test column read
+  // 1, 2, 3, 4, 8.
+  let clause = phaseLines.filter((line) => /^\d+\./.test(line)).length;
+  const next = () => ++clause;
 
   if (branchPolicy?.enforced && branchPolicy.targetBranch) {
     lines.push(
-      `8. This card must be implemented on branch "${branchPolicy.targetBranch}".`,
+      `${next()}. This card must be implemented on branch "${branchPolicy.targetBranch}".`,
       "   Before the first Edit/Write/NotebookEdit in this session, verify the",
       "   current branch. If it does not match, call mcp__ideafy__ensure_branch",
       `   with cardId "${card.id}" to create or check out the correct branch.`,
       "   The PreToolUse hook will block edits performed on the wrong branch."
+    );
+  }
+
+  if (displayId) {
+    lines.push(
+      `${next()}. When a commit advances the work this card describes, reference the`,
+      `   card with a trailer: put "Card: ${displayId}" on its own line as the last`,
+      "   line of the commit body. Write the subject exactly as you otherwise",
+      "   would — no prefix, no change in style.",
+      `${next()}. Do NOT tag a commit with this card when the work is something the`,
+      "   card does not cover. Untagged commits are legitimate and common — a",
+      "   typo fix, a lint pass, an unrelated bug you happened to notice. Leave",
+      "   those untagged, or ask in one sentence whether to open a card for the",
+      "   work and use that card's ref instead. A wrong ref is worse than none:",
+      "   it makes the board claim something that is not true."
     );
   }
 

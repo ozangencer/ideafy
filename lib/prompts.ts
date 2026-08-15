@@ -36,10 +36,18 @@ import { buildTestStyleContract, detectCardLanguage } from "./prompts/test-style
 const NO_SAVE_TOOLS_RULE =
   "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
 
-function buildCommitInstructions(commitRef: string, defaultType: "feat" | "fix"): string {
+function buildCommitInstructions(commitRef: string | null): string {
+  // The card reference is a trailer rather than a subject prefix so the subject
+  // stays the plain sentence it would have been. Without a resolvable display
+  // ID there is nothing worth referencing — a UUID fragment reads like a ref
+  // while matching no card at all — so that case just gets a normal commit.
+  const reference = commitRef
+    ? ` Reference the card with a trailer on its own line at the end of the message: \`git commit -m "<short imperative description>" -m "Card: ${commitRef}"\`. Add the trailer only when the commit advances this card's work; an unrelated fix you happened to make along the way stays untagged.`
+    : "";
+
   return `Commit your work in this feature-branch worktree before finishing (Merge & Complete will squash later):
 1. Stage only the files you touched — \`git add <file>\` or \`git add -u\`. NEVER \`git add -A\` (worktree contains a node_modules symlink that must stay untracked).
-2. Conventional commit referencing the card: \`git commit -m "${defaultType}(${commitRef}): <short imperative description>"\` (use \`feat\`/\`fix\`/\`refactor\`/\`chore\` as appropriate).
+2. Write the subject as a short imperative description — no prefix, no conventional-commit type.${reference}
 3. \`git status\` should show a clean tracked tree (untracked node_modules symlink is expected).`;
 }
 
@@ -69,7 +77,7 @@ export function buildPhasePrompt(
   displayId?: string | null
 ): string {
   const title = stripHtml(card.title);
-  const commitRef = displayId || card.id.slice(0, 8);
+  const commitRef = displayId ?? null;
 
   switch (phase) {
     case "planning":
@@ -103,7 +111,7 @@ Task: Implement "${title}".
 
 ## After implementing — commit before outputting tests
 
-${buildCommitInstructions(commitRef, "feat")}
+${buildCommitInstructions(commitRef)}
 
 Use multiple commits if changes are logically separate.
 
@@ -142,7 +150,7 @@ Task: "${title}" failed during testing.
 
 User will describe the error — wait, then fix. If you change code:
 
-${buildCommitInstructions(commitRef, "fix")}
+${buildCommitInstructions(commitRef)}
 
 ## FINAL response format
 
