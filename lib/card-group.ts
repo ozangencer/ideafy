@@ -14,6 +14,17 @@ export function groupFoldKey(groupId: string, columnId: Status): string {
 }
 
 /**
+ * The reserved id for a column's Stale row, which folds through the same
+ * `expandedGroups` set as a real chain.
+ *
+ * The (group, column) decision above applies to it unchanged, and more
+ * plainly: a Stale row is column-local by construction — each column has its
+ * own threshold, so "the stale cards" is a different set in Backlog than in
+ * In Progress. Real group ids are UUIDs, so this cannot collide with one.
+ */
+export const STALE_GROUP_ID = "stale";
+
+/**
  * Everything the board needs to know about a group, all of it derived. Nothing
  * here is stored: a rollup column would have to be kept in sync with every
  * status change, and the count is one filter away from the cards we already

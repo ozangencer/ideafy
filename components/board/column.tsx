@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Card as CardType,
   Status,
   STATUS_COLORS,
+  COLUMN_WIP_LIMITS,
   COMPLETED_FILTER_OPTIONS,
   CompletedFilter,
   getDisplayId,
 } from "@/lib/types";
-import { buildColumnRows, CardGroupSummary, ColumnRow, groupFoldKey } from "@/lib/card-group";
+import {
+  buildColumnRows,
+  CardGroupSummary,
+  ColumnRow,
+  groupFoldKey,
+  STALE_GROUP_ID,
+} from "@/lib/card-group";
+import { formatAgeShort, StaleGroup } from "@/lib/card-age";
 import { useKanbanStore } from "@/lib/store";
 import { TaskCard } from "./card";
 import { CardGroupChip } from "./card-group-chip";
@@ -20,6 +28,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -63,6 +81,90 @@ function useColumnWidth() {
 // still sit within a column's viewport alongside the row, so the footer would
 // be noise there.
 const COLLAPSE_FOOTER_MIN_MEMBERS = 5;
+
+// How many rows a column paints before the rest folds behind one button. Seven
+// is about a screen's worth: past it you are scrolling inside a column to find
+// out what a column contains, which is the density problem the whole card
+// exists to fix. Note this counts rows, not cards — a folded chain of fourteen
+// is one row, and shortening the board by hiding a group that is already one
+// line tall would buy nothing.
+const COLUMN_ROW_CAP = 7;
+
+/**
+ * The frame a folded row lives in: one dashed box, a chevron header that
+ * toggles it, an indented sub-line, and — once open and long enough — a way
+ * back to a header that has scrolled out of reach.
+ *
+ * Chains and Stale share it because they differ in what they say, not in how
+ * they behave. Two hand-rolled copies would drift the first time either one
+ * was touched, and a Stale box that folded differently from the chain three
+ * cards above it would read as two unrelated features.
+ */
+function FoldableBlock({
+  isExpanded,
+  onToggle,
+  header,
+  sub,
+  actions,
+  memberCount,
+  collapseLabel,
+  children,
+}: {
+  isExpanded: boolean;
+  onToggle: () => void;
+  /** Sits inside the toggle button, after the chevron. */
+  header: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  memberCount: number;
+  collapseLabel: string;
+  children?: ReactNode;
+}) {
+  return (
+    // One box, folded or not: opening the row grows it rather than spawning
+    // loose cards into the column's flow. Without it an expanded member and
+    // the ungrouped card beneath it are indistinguishable, and the row has no
+    // visible end.
+    <div className="rounded-md border border-dashed border-border bg-muted/50 p-1.5 space-y-1.5">
+      <div className={isExpanded ? "px-0.5 pb-1 border-b border-dashed border-border" : "px-0.5"}>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center gap-1.5 text-left"
+        >
+          <ChevronRight
+            className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform ${
+              isExpanded ? "rotate-90" : ""
+            }`}
+          />
+          {header}
+        </button>
+        {sub && (
+          <div className="pl-[18px] text-[10px] text-muted-foreground font-mono">{sub}</div>
+        )}
+        {actions && <div className="pl-[18px] mt-1 flex flex-wrap gap-1">{actions}</div>}
+      </div>
+
+      {children}
+
+      {/* Nothing sits under a folded row. A "+N more" button there was a third
+          control repeating what the chevron and the sub-line already say, and
+          it doubled the height of the very thing this feature exists to
+          shrink. Expanded is where a footer earns its place: by then the
+          header has scrolled away and there is no way back to it. */}
+      {isExpanded && memberCount >= COLLAPSE_FOOTER_MIN_MEMBERS && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center justify-center gap-1 rounded py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronUp className="w-3 h-3" />
+          {collapseLabel}
+        </button>
+      )}
+    </div>
+  );
+}
 
 /**
  * A chain folded into one slot. The row carries what the 14 cards underneath
@@ -132,21 +234,15 @@ function CardGroupBlock({
   );
 
   return (
-    // One box, folded or not: opening the group grows it rather than spawning
-    // loose cards into the column's flow. Without it an expanded member and
-    // the ungrouped card beneath it are indistinguishable, and the group has
-    // no visible end.
-    <div className="rounded-md border border-dashed border-border bg-muted/50 p-1.5 space-y-1.5">
-      <div className={isExpanded ? "px-0.5 pb-1 border-b border-dashed border-border" : "px-0.5"}>
-        <button
-          type="button"
-          onClick={() => toggleGroupCollapse(foldKey)}
-          className="flex w-full items-center gap-1.5 text-left"
-        >
-          {header}
-        </button>
-        {(nextDisplayId || hiddenCount > 0) && (
-          <div className="pl-[18px] text-[10px] text-muted-foreground font-mono">
+    <FoldableBlock
+      isExpanded={isExpanded}
+      onToggle={() => toggleGroupCollapse(foldKey)}
+      header={header}
+      memberCount={columnMembers.length}
+      collapseLabel={`collapse ${group.code}`}
+      sub={
+        (nextDisplayId || hiddenCount > 0) && (
+          <>
             {nextDisplayId && nextCard && (
               // The id is the handle, so folding costs no reach: the card the
               // chain is waiting on is still one click away without a card
@@ -167,47 +263,167 @@ function CardGroupBlock({
             )}
             {nextDisplayId && hiddenCount > 0 && " · "}
             {hiddenCount > 0 && `${hiddenCount} collapsed`}
-          </div>
-        )}
-      </div>
-
+          </>
+        )
+      }
+    >
       {visibleCards.map((card) => (
         <TaskCard
           key={card.id}
           card={card}
           group={group}
           columnWidth={columnWidth}
+          inGroupFrame
         />
       ))}
+    </FoldableBlock>
+  );
+}
 
-      {/* Nothing sits under a folded row. A "+N more" button there was a third
-          control repeating what the chevron and "N collapsed" already say, and
-          it doubled the height of the very thing this feature exists to
-          shrink. Expanded is where a footer earns its place: by then the
-          header has scrolled away and there is no way back to it. */}
-      {isExpanded && columnMembers.length >= COLLAPSE_FOOTER_MIN_MEMBERS && (
-        <button
-          type="button"
-          onClick={() => toggleGroupCollapse(foldKey)}
-          className="flex w-full items-center justify-center gap-1 rounded py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ChevronUp className="w-3 h-3" />
-          collapse {group.code}
-        </button>
-      )}
-    </div>
+/**
+ * The cards a column has stopped moving, gathered at its foot.
+ *
+ * Not a column of its own: a stale card has not changed what it is, only how
+ * long it has been ignored, and an eighth column would ask you to decide where
+ * things belong instead of what to do about them. At the foot of the column it
+ * came from, it keeps its context and stays one drag from coming back.
+ *
+ * The two actions are the only two answers that resolve it. Anything else —
+ * reprioritising, re-planning — is work, and work starts by opening the card,
+ * which expanding the row already offers.
+ */
+function StaleGroupBlock({
+  stale,
+  columnId,
+  columnWidth,
+  groupSummaries,
+}: {
+  stale: StaleGroup;
+  columnId: Status;
+  columnWidth: number;
+  groupSummaries: Map<string, CardGroupSummary>;
+}) {
+  const expandedGroups = useKanbanStore((s) => s.expandedGroups);
+  const toggleGroupCollapse = useKanbanStore((s) => s.toggleGroupCollapse);
+  const moveCard = useKanbanStore((s) => s.moveCard);
+  const [pendingMove, setPendingMove] = useState<Status | null>(null);
+
+  const foldKey = groupFoldKey(STALE_GROUP_ID, columnId);
+  const isExpanded = expandedGroups.includes(foldKey);
+  const count = stale.cards.length;
+
+  // Offering "To backlog" inside Backlog would be a button that does nothing.
+  const canSendToBacklog = columnId !== "backlog";
+
+  const applyMove = async (target: Status) => {
+    setPendingMove(null);
+    for (const card of stale.cards) {
+      await moveCard(card.id, target);
+    }
+  };
+
+  const actionButtonClass =
+    "rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground hover:border-ink/40";
+
+  return (
+    <>
+      <FoldableBlock
+        isExpanded={isExpanded}
+        onToggle={() => toggleGroupCollapse(foldKey)}
+        memberCount={count}
+        collapseLabel="collapse stale"
+        header={
+          <>
+            <span className="text-xs font-semibold text-muted-foreground">Stale</span>
+            <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+              {count}
+            </span>
+          </>
+        }
+        sub={
+          <>
+            untouched {formatAgeShort(stale.oldestDays)} · threshold {stale.thresholdDays}d
+          </>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setPendingMove("withdrawn")}
+              className={actionButtonClass}
+            >
+              Withdraw
+            </button>
+            {canSendToBacklog && (
+              <button
+                type="button"
+                onClick={() => setPendingMove("backlog")}
+                className={actionButtonClass}
+              >
+                To backlog
+              </button>
+            )}
+          </>
+        }
+      >
+        {isExpanded &&
+          stale.cards.map((card) => (
+            <TaskCard
+              key={card.id}
+              card={card}
+              group={
+                card.groupId ? groupSummaries.get(card.groupId)?.group ?? null : null
+              }
+              columnWidth={columnWidth}
+              inGroupFrame
+            />
+          ))}
+      </FoldableBlock>
+
+      {/* The buttons sit on a row that can be folded shut over the cards they
+          move, so the count has to be said out loud before anything moves. */}
+      <AlertDialog
+        open={pendingMove !== null}
+        onOpenChange={(open) => !open && setPendingMove(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingMove === "withdrawn" ? "Withdraw" : "Move to Backlog"} {count} stale{" "}
+              {count === 1 ? "card" : "cards"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {count === 1 ? "This card has" : "These cards have"} gone untouched for{" "}
+              {formatAgeShort(stale.oldestDays)} or more.{" "}
+              {pendingMove === "withdrawn"
+                ? "Withdrawn cards leave the board but are not deleted."
+                : "They rejoin Backlog at the bottom of the queue."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pendingMove && applyMove(pendingMove)}>
+              {pendingMove === "withdrawn" ? "Withdraw" : "Move"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
 interface ColumnProps {
   id: Status;
   title: string;
+  /** The cards still in play. Stale ones arrive separately, in `stale`. */
   cards: CardType[];
   groupSummaries: Map<string, CardGroupSummary>;
+  /** This column's stopped cards, or null when it has none. */
+  stale: StaleGroup | null;
 }
 
-export function Column({ id, title, cards, groupSummaries }: ColumnProps) {
-  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter } = useKanbanStore();
+export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps) {
+  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap } = useKanbanStore();
   const { setNodeRef, isOver } = useDroppable({ id });
   const { ref: widthRef, width: columnWidth } = useColumnWidth();
 
@@ -216,6 +432,18 @@ export function Column({ id, title, cards, groupSummaries }: ColumnProps) {
     () => buildColumnRows(cards, groupSummaries),
     [cards, groupSummaries]
   );
+
+  const isUncapped = uncappedColumns.includes(id);
+  const visibleRows = isUncapped ? rows : rows.slice(0, COLUMN_ROW_CAP);
+  // Cards, not rows: "+3 more" over a hidden chain of fourteen would be a
+  // number that undersells what you are not looking at.
+  const cappedAwayCards = rows
+    .slice(visibleRows.length)
+    .reduce((sum, row) => sum + (row.kind === "card" ? 1 : row.columnMembers.length), 0);
+
+  const staleCount = stale?.cards.length ?? 0;
+  const wipLimit = COLUMN_WIP_LIMITS[id];
+  const isOverWip = wipLimit !== undefined && cards.length > wipLimit;
 
   const handleAddCard = () => {
     openNewCardModal(id, activeProjectId);
@@ -245,8 +473,11 @@ export function Column({ id, title, cards, groupSummaries }: ColumnProps) {
           >
             {title}
           </span>
+          {/* The plain total, stale included. A collapsed tab is answering
+              "what is in this drawer", and 40px leaves no room to qualify a
+              number the way the open header's tooltip can. */}
           <span className="mt-3 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-            {cards.length}
+            {cards.length + staleCount}
           </span>
         </div>
       </div>
@@ -281,9 +512,31 @@ export function Column({ id, title, cards, groupSummaries }: ColumnProps) {
           </button>
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[id]}`} />
           <h2 className="text-sm font-medium text-foreground truncate">{title}</h2>
-          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
-            {cards.length}
-          </span>
+          {/* The count says load, not inventory: stale cards are not work in
+              flight, and counting them here would let two dead cards push a
+              column over its limit and keep it there. What they are is said
+              once, on their own row at the foot of the column. The limit is
+              never enforced — it is here to be heard, and a number that turns
+              red is louder than a drop the board refuses. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 font-mono tabular-nums cursor-default ${
+                  isOverWip
+                    ? "bg-red-500/15 text-red-500 font-semibold"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {wipLimit === undefined ? cards.length : `${cards.length} / ${wipLimit}`}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {cards.length} in flight
+              {staleCount > 0 && ` · ${staleCount} stale`}
+              {wipLimit !== undefined &&
+                (isOverWip ? ` · ${cards.length - wipLimit} over the limit of ${wipLimit}` : ` · limit ${wipLimit}`)}
+            </TooltipContent>
+          </Tooltip>
           {id === "completed" && (
             <Select
               value={completedFilter}
@@ -329,7 +582,7 @@ export function Column({ id, title, cards, groupSummaries }: ColumnProps) {
 
       {/* Cards Container */}
       <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-180px)]">
-        {rows.map((row) =>
+        {visibleRows.map((row) =>
           row.kind === "card" ? (
             <TaskCard
               key={row.card.id}
@@ -350,7 +603,42 @@ export function Column({ id, title, cards, groupSummaries }: ColumnProps) {
             />
           )
         )}
-        {cards.length === 0 && (
+
+        {/* Unlike the chain rows above, this one is not a disclosure control
+            with a chevron already saying the same thing — the cards below it
+            have no other handle, so the button is the only way to reach them. */}
+        {cappedAwayCards > 0 && (
+          <button
+            type="button"
+            onClick={() => toggleColumnCap(id)}
+            className="w-full rounded-md border border-dashed border-border py-1.5 text-center font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground hover:border-ink/40"
+          >
+            +{cappedAwayCards} more
+          </button>
+        )}
+        {isUncapped && rows.length > COLUMN_ROW_CAP && (
+          <button
+            type="button"
+            onClick={() => toggleColumnCap(id)}
+            className="flex w-full items-center justify-center gap-1 rounded py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ChevronUp className="w-3 h-3" />
+            show fewer
+          </button>
+        )}
+
+        {/* Always last, and outside the cap: the whole point is that these
+            cards stop taking room at the top of the column. */}
+        {stale && (
+          <StaleGroupBlock
+            stale={stale}
+            columnId={id}
+            columnWidth={columnWidth}
+            groupSummaries={groupSummaries}
+          />
+        )}
+
+        {cards.length === 0 && !stale && (
           <div
             className={`text-center py-8 text-muted-foreground text-sm transition-colors ${
               isOver ? "bg-paper-cream rounded-md text-ink" : ""

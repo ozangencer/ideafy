@@ -13,9 +13,30 @@ import { createSettingsSlice } from "./slices/settings";
 import { createSkillsSlice } from "./slices/skills";
 import { createUiSlice } from "./slices/ui";
 import { KanbanStore } from "./types";
-import { CompletedFilter } from "../types";
+import { BoardView, BoardViewPreference, CompletedFilter, StaleThresholds, Status } from "../types";
 
 const VALID_COMPLETED_FILTERS: CompletedFilter[] = ['today', 'yesterday', 'this_week', 'all'];
+const VALID_BOARD_VIEWS: BoardView[] = ['focus', 'all'];
+const VALID_BOARD_VIEW_PREFERENCES: BoardViewPreference[] = ['focus', 'all', 'last'];
+const STALE_THRESHOLD_STATUSES: Status[] = ['ideation', 'backlog', 'bugs', 'progress', 'test'];
+
+/**
+ * Keeps only whole-day counts of at least one. A stored 0 or -3 — from a
+ * hand-edited localStorage entry or an older build — would mark every card in
+ * that column stale on load, which reads as the board having eaten itself.
+ */
+function sanitizeStaleThresholds(value: unknown): StaleThresholds {
+  if (!value || typeof value !== 'object') return {};
+  const source = value as Record<string, unknown>;
+  const result: StaleThresholds = {};
+  for (const status of STALE_THRESHOLD_STATUSES) {
+    const days = source[status];
+    if (typeof days === 'number' && Number.isFinite(days) && days >= 1) {
+      result[status] = Math.floor(days);
+    }
+  }
+  return result;
+}
 
 export const useKanbanStore = create<KanbanStore>()(
   persist(
@@ -37,11 +58,15 @@ export const useKanbanStore = create<KanbanStore>()(
       partialize: (state) => ({
         collapsedColumns: state.collapsedColumns,
         expandedGroups: state.expandedGroups,
+        uncappedColumns: state.uncappedColumns,
         isSidebarCollapsed: state.isSidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
         isProjectListExpanded: state.isProjectListExpanded,
         collapsedSkillGroups: state.collapsedSkillGroups,
         completedFilter: state.completedFilter,
+        boardView: state.boardView,
+        boardViewPreference: state.boardViewPreference,
+        staleThresholds: state.staleThresholds,
         expandedDocFolders: state.expandedDocFolders,
       }),
       merge: (persistedState, currentState) => {
@@ -69,6 +94,24 @@ export const useKanbanStore = create<KanbanStore>()(
         const expandedGroups = Array.isArray(persisted.expandedGroups)
           ? persisted.expandedGroups
           : currentState.expandedGroups;
+        const uncappedColumns = Array.isArray(persisted.uncappedColumns)
+          ? persisted.uncappedColumns
+          : currentState.uncappedColumns;
+        const staleThresholds = sanitizeStaleThresholds(persisted.staleThresholds);
+        const boardViewPreference =
+          persisted.boardViewPreference &&
+          VALID_BOARD_VIEW_PREFERENCES.includes(persisted.boardViewPreference)
+            ? persisted.boardViewPreference
+            : currentState.boardViewPreference;
+        // The preference is applied here rather than on first render: a board
+        // that paints the columns and then swaps to Focus a frame later reads
+        // as a bug, and the toggle would briefly disagree with what is showing.
+        const lastBoardView =
+          persisted.boardView && VALID_BOARD_VIEWS.includes(persisted.boardView)
+            ? persisted.boardView
+            : currentState.boardView;
+        const boardView =
+          boardViewPreference === 'last' ? lastBoardView : boardViewPreference;
         // Validate expandedDocFolders - ensure it's an array
         const expandedDocFolders = Array.isArray(persisted.expandedDocFolders)
           ? persisted.expandedDocFolders
@@ -82,6 +125,10 @@ export const useKanbanStore = create<KanbanStore>()(
           isProjectListExpanded,
           collapsedSkillGroups,
           expandedGroups,
+          uncappedColumns,
+          staleThresholds,
+          boardView,
+          boardViewPreference,
           expandedDocFolders,
         };
       },

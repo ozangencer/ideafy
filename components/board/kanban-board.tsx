@@ -15,6 +15,8 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter } from "@/lib/types";
 import { summarizeCardGroups } from "@/lib/card-group";
+import { partitionStaleCards } from "@/lib/card-age";
+import { FocusView } from "./focus-view";
 
 // Priority order: high > medium > low (descending)
 const PRIORITY_ORDER: Record<Priority, number> = {
@@ -107,7 +109,7 @@ import { Column } from "./column";
 import { TaskCard } from "./card";
 
 export function KanbanBoard() {
-  const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter } = useKanbanStore();
+  const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter, boardView, staleThresholds } = useKanbanStore();
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showRightFade, setShowRightFade] = useState(false);
@@ -131,7 +133,9 @@ export function KanbanBoard() {
       el.removeEventListener('scroll', checkScroll);
       observer.disconnect();
     };
-  }, []);
+    // Focus unmounts the scroller, so the observer has to be re-attached to
+    // the new node when the columns come back.
+  }, [boardView]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -164,6 +168,10 @@ export function KanbanBoard() {
       card.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesProject && matchesSearch;
   });
+
+  if (boardView === "focus") {
+    return <FocusView cards={filteredCards} />;
+  }
 
   const handleDragStart = (event: DragStartEvent) => {
     const card = cards.find((c) => c.id === event.active.id);
@@ -216,13 +224,21 @@ export function KanbanBoard() {
               : column.id === 'test'
                 ? sortTestCards(columnCards)
                 : sortCards(columnCards);
+            // Split after sorting, so the Stale row keeps the column's own
+            // order rather than inventing a second one.
+            const { live, stale } = partitionStaleCards(
+              sortedCards,
+              column.id,
+              staleThresholds
+            );
             return (
               <Column
                 key={column.id}
                 id={column.id}
                 title={column.title}
-                cards={sortedCards}
+                cards={live}
                 groupSummaries={groupSummaries}
+                stale={stale}
               />
             );
           })}

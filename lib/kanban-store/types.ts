@@ -5,6 +5,8 @@ import {
   AgentPreview,
   AppSettings,
   BackgroundProcess,
+  BoardView,
+  BoardViewPreference,
   Card,
   CardGroup,
   CompletedFilter,
@@ -16,6 +18,7 @@ import {
   SectionType,
   SkillListItem,
   SkillPreview,
+  StaleThresholds,
   Status,
   UnifiedItem,
   UserSkillGroup,
@@ -72,8 +75,19 @@ export interface KanbanStore {
   // slices/ui.ts.
   expandedGroups: string[];
 
+  // Columns the user opened past the per-column render cap.
+  uncappedColumns: Status[];
+
   // Completed column filter
   completedFilter: CompletedFilter;
+
+  // Focus vs. the seven columns. `boardView` is what is showing;
+  // `boardViewPreference` is what the board opens with.
+  boardView: BoardView;
+  boardViewPreference: BoardViewPreference;
+
+  // Per-column staleness overrides. Columns absent here use the defaults.
+  staleThresholds: StaleThresholds;
 
   // Quick entry state
   isQuickEntryOpen: boolean;
@@ -192,8 +206,18 @@ export interface KanbanStore {
   // Card-group fold actions. Takes a groupFoldKey, not a bare group id.
   toggleGroupCollapse: (groupKey: string) => void;
 
+  // Column render-cap actions
+  toggleColumnCap: (columnId: Status) => void;
+
   // Completed filter actions
   setCompletedFilter: (filter: CompletedFilter) => void;
+
+  // Board view actions
+  setBoardView: (view: BoardView) => void;
+  setBoardViewPreference: (preference: BoardViewPreference) => void;
+
+  /** Pass null to drop the override and fall back to the column's default. */
+  setStaleThreshold: (status: Status, days: number | null) => void;
 
   // Quick entry actions
   openQuickEntry: () => void;

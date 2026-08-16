@@ -5,7 +5,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardGroup, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/types";
 import { CardGroupChip } from "./card-group-chip";
-import { formatAgeLong, getCardStaleness } from "@/lib/card-age";
+import { cardLastActivityAt, formatAgeLong, getCardStaleness } from "@/lib/card-age";
 import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
 import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
@@ -129,6 +129,13 @@ interface TaskCardProps {
    * the footer's "does the project name fit" budget cannot be a constant.
    */
   columnWidth?: number;
+  /**
+   * Set when the card sits inside a dashed block — a chain row or the Stale
+   * row — which costs it the frame's border and padding. `group` used to imply
+   * this, but a stale card need not belong to a chain and still loses the
+   * width.
+   */
+  inGroupFrame?: boolean;
   isDragging?: boolean;
   extraBadges?: React.ReactNode;
   extraContextMenuItems?: React.ReactNode;
@@ -208,6 +215,7 @@ function TaskCardImpl({
   // The drag overlay renders outside any column; it is a 272px snapshot, so
   // the default keeps the dragged card looking like the one it was lifted from.
   columnWidth = 288,
+  inGroupFrame = false,
   isDragging = false,
   extraBadges,
   extraContextMenuItems,
@@ -220,6 +228,7 @@ function TaskCardImpl({
   const selectCard = useKanbanStore((s) => s.selectCard);
   const openModal = useKanbanStore((s) => s.openModal);
   const projects = useKanbanStore((s) => s.projects);
+  const staleThresholds = useKanbanStore((s) => s.staleThresholds);
   const startTask = useKanbanStore((s) => s.startTask);
   const startingLocal = useKanbanStore((s) => s.startingCardIds.includes(card.id));
   const openTerminal = useKanbanStore((s) => s.openTerminal);
@@ -500,7 +509,14 @@ function TaskCardImpl({
   };
 
   const displayId = getDisplayId(card, project);
-  const staleness = getCardStaleness(card.status, card.createdAt);
+  // Same thresholds the column used to sort this card into the Stale row, so
+  // the marker and the row it sits in cannot disagree.
+  const staleness = getCardStaleness(
+    card.status,
+    cardLastActivityAt(card),
+    Date.now(),
+    staleThresholds
+  );
   const projectName = project?.name || (card.projectFolder ? card.projectFolder.split("/").pop() : null);
 
   // Whether the footer has room for the project name. There is no CSS query
@@ -539,7 +555,10 @@ function TaskCardImpl({
     0
   );
   const cardInnerWidth =
-    columnWidth - COLUMN_PADDING_W - CARD_PADDING_W - (group ? GROUP_FRAME_W : 0);
+    columnWidth -
+    COLUMN_PADDING_W -
+    CARD_PADDING_W -
+    (group || inGroupFrame ? GROUP_FRAME_W : 0);
   const showProjectName =
     !!project && cardInnerWidth - footerRightWidth >= FOOTER_NAME_MIN_W;
 
@@ -623,8 +642,12 @@ function TaskCardImpl({
               <h3 className={`text-[13px] leading-snug tracking-[-0.01em] font-medium text-card-foreground transition-colors line-clamp-3 flex-1 ${isLocked ? "" : "group-hover:text-ink"}`}>
                 {card.title}
               </h3>
-              {/* Age, but only once it is worth mentioning. Shown on every card
-                  it would be noise that hides the cards it exists to surface. */}
+              {/* Silence since the last activity — not age since creation. A
+                  card opened in April and worked on yesterday is not old, and
+                  saying it was would put every long-running card in the same
+                  bucket as the abandoned ones. Only shown past the column's
+                  threshold: on every card it would be noise that hides the
+                  cards it exists to surface. */}
               {staleness && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -633,7 +656,7 @@ function TaskCardImpl({
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    Created {formatAgeLong(staleness.days)}
+                    Last touched {formatAgeLong(staleness.days)}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1268,6 +1291,7 @@ export const TaskCard = memo(TaskCardImpl, (prev, next) => {
     prev.group?.name === next.group?.name &&
     prev.group?.color === next.group?.color &&
     prev.columnWidth === next.columnWidth &&
+    prev.inGroupFrame === next.inGroupFrame &&
     prev.softLock === next.softLock &&
     prev.extraWrapperClassName === next.extraWrapperClassName &&
     prev.extraBadges === next.extraBadges &&

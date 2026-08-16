@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { KanbanBoard } from "@/components/board/kanban-board";
+import { BoardViewToggle } from "@/components/board/focus-view";
 import { CardModal } from "@/components/board/card-modal";
 import { DocumentEditor } from "@/components/editor/document-editor";
 import { SkillViewer } from "@/components/editor/skill-viewer";
@@ -165,6 +166,11 @@ function Board() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              {/* Focus | All. Kept in the header, never behind a setting: a
+                  view that hides most of the board has to be one click from
+                  being checked. */}
+              <BoardViewToggle />
+
               {/* Search */}
               <div className="relative">
                 <Input
