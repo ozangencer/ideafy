@@ -36,6 +36,7 @@ export const useKanbanStore = create<KanbanStore>()(
       name: "kanban-preferences",
       partialize: (state) => ({
         collapsedColumns: state.collapsedColumns,
+        expandedGroups: state.expandedGroups,
         isSidebarCollapsed: state.isSidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
         isProjectListExpanded: state.isProjectListExpanded,
@@ -65,6 +66,9 @@ export const useKanbanStore = create<KanbanStore>()(
         const collapsedSkillGroups = Array.isArray(persisted.collapsedSkillGroups)
           ? persisted.collapsedSkillGroups
           : currentState.collapsedSkillGroups;
+        const expandedGroups = Array.isArray(persisted.expandedGroups)
+          ? persisted.expandedGroups
+          : currentState.expandedGroups;
         // Validate expandedDocFolders - ensure it's an array
         const expandedDocFolders = Array.isArray(persisted.expandedDocFolders)
           ? persisted.expandedDocFolders
@@ -77,6 +81,7 @@ export const useKanbanStore = create<KanbanStore>()(
           sidebarWidth,
           isProjectListExpanded,
           collapsedSkillGroups,
+          expandedGroups,
           expandedDocFolders,
         };
       },

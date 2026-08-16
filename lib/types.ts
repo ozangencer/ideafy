@@ -50,6 +50,7 @@ export interface Card {
   priority: Priority;
   projectFolder: string;
   projectId: string | null;
+  groupId: string | null;
   taskNumber: number | null;
   gitBranchName: string | null;
   gitBranchStatus: GitBranchStatus;
@@ -65,6 +66,21 @@ export interface Card {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+}
+
+/**
+ * A chain of cards that belong to one piece of work. `code` is the short chip
+ * shown on the card face ("LOOP"); `name` is the heading on the group row
+ * ("Loop Engineering"). Membership is the only thing a group carries — it has
+ * no status of its own, which is why it is a group and not an epic.
+ */
+export interface CardGroup {
+  id: string;
+  projectId: string | null;
+  code: string;
+  name: string;
+  color: string | null;
+  createdAt: string;
 }
 
 export type Voice = "entrepreneur" | "builder" | "engineer";

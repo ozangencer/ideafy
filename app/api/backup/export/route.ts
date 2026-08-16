@@ -18,6 +18,7 @@ export interface ExportData {
     priority: string;
     projectFolder: string;
     projectId: string | null;
+    groupId: string | null;
     taskNumber: number | null;
     gitBranchName: string | null;
     gitBranchStatus: string | null;
@@ -53,6 +54,14 @@ export interface ExportData {
     value: string;
     updatedAt: string;
   }>;
+  cardGroups?: Array<{
+    id: string;
+    projectId: string | null;
+    code: string;
+    name: string;
+    color: string | null;
+    createdAt: string;
+  }>;
   skillGroups?: Array<{
     id: string;
     name: string;
@@ -78,6 +87,7 @@ export async function GET() {
     const cards = db.select().from(schema.cards).all();
     const projects = db.select().from(schema.projects).all();
     const settings = db.select().from(schema.settings).all();
+    const cardGroups = db.select().from(schema.cardGroups).all();
     const skillGroups = db.select().from(schema.skillGroups).all();
     const skillGroupItems = db.select().from(schema.skillGroupItems).all();
 
@@ -97,6 +107,7 @@ export async function GET() {
         priority: card.priority,
         projectFolder: card.projectFolder,
         projectId: card.projectId,
+        groupId: card.groupId,
         taskNumber: card.taskNumber,
         gitBranchName: card.gitBranchName,
         gitBranchStatus: card.gitBranchStatus,
@@ -136,6 +147,14 @@ export async function GET() {
           value: setting.value,
           updatedAt: setting.updatedAt,
         })),
+      cardGroups: cardGroups.map((group) => ({
+        id: group.id,
+        projectId: group.projectId,
+        code: group.code,
+        name: group.name,
+        color: group.color,
+        createdAt: group.createdAt,
+      })),
       skillGroups: skillGroups.map((group) => ({
         id: group.id,
         name: group.name,

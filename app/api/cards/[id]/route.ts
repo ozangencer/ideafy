@@ -38,6 +38,7 @@ export async function GET(
     priority: row.priority as Card["priority"],
     projectFolder: row.projectFolder,
     projectId: row.projectId,
+    groupId: row.groupId,
     taskNumber: row.taskNumber,
     gitBranchName: row.gitBranchName,
     gitBranchStatus: row.gitBranchStatus as Card["gitBranchStatus"],
@@ -168,6 +169,9 @@ export async function PUT(
     priority: body.priority ?? existing.priority,
     projectFolder: body.projectFolder ?? existing.projectFolder,
     projectId: newProjectId,
+    // `null` is a meaningful value here (leave the group), so an explicit
+    // undefined check is the only way to tell "clear it" from "don't touch it".
+    groupId: body.groupId !== undefined ? (body.groupId || null) : existing.groupId,
     taskNumber,
     aiPlatform: body.aiPlatform !== undefined ? (body.aiPlatform || null) : existing.aiPlatform,
     useWorktree: body.useWorktree !== undefined
@@ -200,6 +204,7 @@ export async function PUT(
     priority: updatedCard.priority as Card["priority"],
     projectFolder: updatedCard.projectFolder,
     projectId: updatedCard.projectId,
+    groupId: updatedCard.groupId,
     taskNumber: updatedCard.taskNumber,
     gitBranchName: existing.gitBranchName,
     gitBranchStatus: existing.gitBranchStatus as Card["gitBranchStatus"],

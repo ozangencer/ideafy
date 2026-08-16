@@ -57,6 +57,13 @@
       "when": 1786089272395,
       "tag": "0007_fine_human_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786864347019,
+      "tag": "0008_add_card_groups",
+      "breakpoints": true
     }
   ]
 }

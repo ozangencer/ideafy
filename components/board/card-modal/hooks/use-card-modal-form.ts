@@ -157,6 +157,9 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         complexity,
         priority,
         projectId,
+        // A card drafted in the modal joins no chain — group membership is set
+        // from MCP or the backfill, never guessed here.
+        groupId: null,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || "",
         gitBranchName: null,

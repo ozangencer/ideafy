@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       tx.delete(schema.skillGroupItems).run();
       tx.delete(schema.skillGroups).run();
       tx.delete(schema.cards).run();
+      tx.delete(schema.cardGroups).run();
       tx.delete(schema.projects).run();
       // Keep credential rows: they are excluded from the export by construction,
       // so wiping them here would silently sign the user out of team mode on
@@ -60,7 +61,21 @@ export async function POST(request: NextRequest) {
         }).run();
       }
 
-      // 3. Import cards
+      // 3. Import card groups (cards reference them by group_id)
+      if (data.cardGroups) {
+        for (const group of data.cardGroups) {
+          tx.insert(schema.cardGroups).values({
+            id: group.id,
+            projectId: group.projectId ?? null,
+            code: group.code,
+            name: group.name,
+            color: group.color ?? null,
+            createdAt: group.createdAt,
+          }).run();
+        }
+      }
+
+      // 4. Import cards
       for (const card of data.cards) {
         tx.insert(schema.cards).values({
           id: card.id,
@@ -75,6 +90,8 @@ export async function POST(request: NextRequest) {
           priority: card.priority,
           projectFolder: card.projectFolder,
           projectId: card.projectId,
+          // Backups written before card groups existed simply omit it.
+          groupId: card.groupId ?? null,
           taskNumber: card.taskNumber,
           gitBranchName: card.gitBranchName ?? null,
           gitBranchStatus: card.gitBranchStatus ?? null,
@@ -88,7 +105,7 @@ export async function POST(request: NextRequest) {
         }).run();
       }
 
-      // 4. Import settings
+      // 5. Import settings
       if (data.settings) {
         for (const setting of data.settings) {
           // The backup file is untrusted input. Never let it plant a bearer
@@ -102,7 +119,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 5. Import skill groups
+      // 6. Import skill groups
       if (data.skillGroups) {
         for (const group of data.skillGroups) {
           tx.insert(schema.skillGroups).values({
@@ -117,7 +134,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 6. Import skill group items
+      // 7. Import skill group items
       if (data.skillGroupItems) {
         for (const item of data.skillGroupItems) {
           tx.insert(schema.skillGroupItems).values({
@@ -137,6 +154,7 @@ export async function POST(request: NextRequest) {
         cards: data.cards.length,
         projects: data.projects.length,
         settings: data.settings?.length || 0,
+        cardGroups: data.cardGroups?.length || 0,
         skillGroups: data.skillGroups?.length || 0,
         skillGroupItems: data.skillGroupItems?.length || 0,
       },
