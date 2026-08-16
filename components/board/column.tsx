@@ -108,6 +108,7 @@ function FoldableBlock({
   actions,
   memberCount,
   collapseLabel,
+  railColor,
   children,
 }: {
   isExpanded: boolean;
@@ -118,6 +119,12 @@ function FoldableBlock({
   actions?: ReactNode;
   memberCount: number;
   collapseLabel: string;
+  /**
+   * The rail beside the open members. A chain paints it in its own colour so
+   * the frame carries the identity the member chips used to repeat; anything
+   * without one falls back to ink.
+   */
+  railColor?: string;
   children?: ReactNode;
 }) {
   return (
@@ -125,8 +132,13 @@ function FoldableBlock({
     // loose cards into the column's flow. Without it an expanded member and
     // the ungrouped card beneath it are indistinguishable, and the row has no
     // visible end.
-    <div className="rounded-md border border-dashed border-border bg-muted/50 p-1.5 space-y-1.5">
-      <div className={isExpanded ? "px-0.5 pb-1 border-b border-dashed border-border" : "px-0.5"}>
+    //
+    // Not bg-muted: in the light theme --muted and --surface hold the same
+    // value, so a muted fill over a column painted bg-surface was a frame that
+    // rendered and could not be seen. An ink wash sits under both themes'
+    // surfaces by construction and needs no second token to stay in step.
+    <div className="rounded-md border border-dashed border-ink/15 bg-ink/[0.04] p-1.5 space-y-1.5">
+      <div className={isExpanded ? "px-0.5 pb-1 border-b border-dashed border-ink/15" : "px-0.5"}>
         <button
           type="button"
           onClick={onToggle}
@@ -145,7 +157,23 @@ function FoldableBlock({
         {actions && <div className="pl-[18px] mt-1 flex flex-wrap gap-1">{actions}</div>}
       </div>
 
-      {children}
+      {/* The members hang off a rail rather than sitting loose in the box.
+          Two things a dashed outline could not do: it puts real distance
+          between an inside card and the ungrouped one below it, and it ends
+          where the group ends — so a four-card chain, which is under the
+          footer's threshold, still shows you its last card.
+
+          Tighter spacing inside than the column's own space-y-2 is the other
+          half of the signal: members belong to each other more than to what
+          follows them, and at 6px against 8px that was not being said. */}
+      {isExpanded && (
+        <div
+          className="border-l-2 pl-2 space-y-1"
+          style={{ borderColor: railColor ?? "hsl(var(--ink) / 0.25)" }}
+        >
+          {children}
+        </div>
+      )}
 
       {/* Nothing sits under a folded row. A "+N more" button there was a third
           control repeating what the chevron and the sub-line already say, and
@@ -205,11 +233,6 @@ function CardGroupBlock({
 
   const header = (
     <>
-      <ChevronRight
-        className={`w-3 h-3 shrink-0 text-muted-foreground transition-transform ${
-          isExpanded ? "rotate-90" : ""
-        }`}
-      />
       <CardGroupChip group={group} />
       <span className="text-xs font-semibold text-foreground truncate min-w-0">
         {group.name}
@@ -240,6 +263,10 @@ function CardGroupBlock({
       header={header}
       memberCount={columnMembers.length}
       collapseLabel={`collapse ${group.code}`}
+      // Alpha, not the raw hue: a 2px line has to stay a frame rather than
+      // become the loudest thing in the column. Heavier than the chip's border
+      // for the same reason — there is far less of it to read.
+      railColor={group.color ? `${group.color}99` : undefined}
       sub={
         (nextDisplayId || hiddenCount > 0) && (
           <>
@@ -267,11 +294,16 @@ function CardGroupBlock({
         )
       }
     >
+      {/* No group chip on a member: the header names the chain once and the
+          rail carries its colour down the side, so repeating the code on every
+          card was the same word four times in one row, each copy costing a
+          clipped title the width it was printed in. Stale members keep theirs
+          — that row gathers cards from different chains, so there the chip is
+          the only thing saying which. */}
       {visibleCards.map((card) => (
         <TaskCard
           key={card.id}
           card={card}
-          group={group}
           columnWidth={columnWidth}
           inGroupFrame
         />
@@ -366,18 +398,18 @@ function StaleGroupBlock({
           </>
         }
       >
-        {isExpanded &&
-          stale.cards.map((card) => (
-            <TaskCard
-              key={card.id}
-              card={card}
-              group={
-                card.groupId ? groupSummaries.get(card.groupId)?.group ?? null : null
-              }
-              columnWidth={columnWidth}
-              inGroupFrame
-            />
-          ))}
+        {/* The block mounts these only when open, so no guard here. */}
+        {stale.cards.map((card) => (
+          <TaskCard
+            key={card.id}
+            card={card}
+            group={
+              card.groupId ? groupSummaries.get(card.groupId)?.group ?? null : null
+            }
+            columnWidth={columnWidth}
+            inGroupFrame
+          />
+        ))}
       </FoldableBlock>
 
       {/* The buttons sit on a row that can be folded shut over the cards they
