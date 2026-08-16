@@ -36,6 +36,12 @@ export const RUN_OUTPUT_CONTRACTS = {
     label: "test senaryoları",
     requires: [/^##\s*Test Scenarios/im],
   },
+  // Verify reproduces the existing checklist rather than authoring a new one,
+  // so the heading it must carry is the core group's, not "Test Scenarios".
+  verify: {
+    label: "doğrulanmış çeklist",
+    requires: [/^##\s*(Core\s*flow|Temel\s*ak[ıi][şs])/im],
+  },
   evaluate: {
     label: "değerlendirme",
     requires: [/^##\s*Summary\s*Verdict/im, /^##\s*Final\s*Score/im],

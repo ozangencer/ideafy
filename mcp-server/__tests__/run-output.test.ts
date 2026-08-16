@@ -282,6 +282,7 @@ test("every contract is still demanded by its prompt", () => {
     planning: ["[COMPLEXITY:", "[PRIORITY:"],
     implementation: ["## Test Scenarios"],
     retest: ["## Test Scenarios"],
+    verify: ["## Core flow", "## Temel akış"],
     evaluate: ["## Summary Verdict", "## Final Score"],
     quickFix: ["## Quick Fix Summary", "## Test Scenarios"],
   };

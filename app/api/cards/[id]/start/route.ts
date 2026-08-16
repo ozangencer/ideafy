@@ -18,6 +18,7 @@ import {
   prependWarningHtml,
 } from "@/lib/autonomous-run/select-run-output";
 import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
+import { assessTestRewrite } from "@/lib/markdown";
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
   switch (phase) {
@@ -27,6 +28,8 @@ function getNewStatus(phase: Phase, currentStatus: Status): Status {
       return "test";
     case "retest":
       return currentStatus; // Stay in current status.
+    case "verify":
+      return currentStatus; // Pre-verification does not move the card off Human Test.
   }
 }
 
@@ -164,6 +167,8 @@ export async function POST(
       processingType: null,
     };
 
+    let verifyWarning: string | null = null;
+
     switch (phase) {
       case "planning":
         updates.solutionSummary = htmlResponse;
@@ -176,6 +181,19 @@ export async function POST(
       case "retest":
         updates.testScenarios = htmlResponse;
         break;
+      case "verify": {
+        // A verify run is only allowed to tick boxes, so anything that comes
+        // back materially shorter than what went in is a rewrite, not a
+        // verification — and writing it would wipe the human's own ticks.
+        const assessment = assessTestRewrite(card.testScenarios ?? "", htmlResponse);
+        if (assessment.safe) {
+          updates.testScenarios = htmlResponse;
+        } else {
+          verifyWarning = `Checklist left untouched — ${assessment.reason}`;
+          console.warn(`[Claude CLI] verify rejected for ${id}: ${assessment.reason}`);
+        }
+        break;
+      }
     }
 
     db.update(schema.cards)
@@ -192,7 +210,7 @@ export async function POST(
       phase,
       newStatus,
       response: htmlResponse,
-      outputWarning: result.warning,
+      outputWarning: verifyWarning ?? result.warning,
       complexity,
       priority,
       cost: result.cost,
