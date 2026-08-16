@@ -51,7 +51,7 @@ function buildCommitInstructions(commitRef: string | null): string {
 3. \`git status\` should show a clean tracked tree (untracked node_modules symlink is expected).`;
 }
 
-export type Phase = "planning" | "implementation" | "retest";
+export type Phase = "planning" | "implementation" | "retest" | "verify";
 
 export interface CardForPrompt {
   id: string;
@@ -62,12 +62,22 @@ export interface CardForPrompt {
 }
 
 /** Detect which phase the card is in based on existing content. */
-export function detectPhase(card: { solutionSummary: string | null; testScenarios: string | null }): Phase {
+export function detectPhase(card: {
+  solutionSummary: string | null;
+  testScenarios: string | null;
+  status?: string | null;
+}): Phase {
   const hasSolution = card.solutionSummary && stripHtml(card.solutionSummary) !== "";
   const hasTests = card.testScenarios && stripHtml(card.testScenarios) !== "";
 
   if (!hasSolution) return "planning";
   if (!hasTests) return "implementation";
+  // Human Test is a queue waiting on a person, and it is the column that grows
+  // fastest because the agent finishes in minutes and verification takes days.
+  // There the autonomous run walks the core flow rather than rewriting the
+  // list, so what reaches the human is the handful of steps a machine could
+  // not settle. Elsewhere a re-run still means "it broke, fix it".
+  if (card.status === "test") return "verify";
   return "retest";
 }
 
@@ -171,6 +181,31 @@ Rules:
 - Every line must be a markdown checkbox (- [ ])
 - Write actionable manual test steps, NOT a summary of code changes
 - Do NOT include code summaries, file lists, or implementation details
+
+${NO_SAVE_TOOLS_RULE}`;
+
+    case "verify":
+      return `Ideafy: ${card.id}
+
+Read card via MCP (mcp__ideafy__get_card). The card is in Human Test: its checklist is waiting for a person to walk it.
+
+Task: pre-verify the core flow of "${title}".
+
+## What to run
+
+Run ONLY the items under the checklist's first group — \`## Core flow\` (English) or \`## Temel akış\` (Turkish). Those are the steps that decide whether the feature works at all; everything after them exists to catch what they cannot, and stays for the human.
+
+- Do NOT run, tick, or edit items in any later group (\`## Edge cases\`, \`## Regression\`, and so on).
+- If the checklist has no \`## Core flow\` / \`## Temel akış\` group, tick nothing and say so — without that heading you cannot tell which items are essential, and guessing would hand back a checklist that looks verified and is not.
+- Verify by actually exercising the code — read it, run it, run the build or the test the step names. Reasoning that a step "should" pass is not verification.
+
+## FINAL response format
+
+Reproduce the ENTIRE checklist: every group, every item, in the original order and wording. The only edit you may make is \`- [ ]\` → \`- [x]\` on core-flow items you ran and saw pass.
+
+- Do not reword, merge, split, add, or drop items. Later groups come back exactly as they were.
+- Leave a core item unticked when it failed or you could not run it.
+- After the checklist, add one short line naming what blocked any core item you left unticked. Nothing else.
 
 ${NO_SAVE_TOOLS_RULE}`;
   }

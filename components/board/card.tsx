@@ -113,7 +113,7 @@ interface TaskCardProps {
   softLock?: boolean;
 }
 
-type Phase = "planning" | "implementation" | "retest";
+type Phase = "planning" | "implementation" | "retest" | "verify";
 
 function detectPhase(
   card: Card,
@@ -125,6 +125,10 @@ function detectPhase(
     const hasTests = !!testText;
     return hasTests ? "retest" : "implementation";
   }
+
+  // Human Test'te iş sırası insanda; oradaki otonom koşu çeklisti yeniden
+  // yazmak yerine temel akışı yürüyüp geçenleri işaretler.
+  if (card.status === "test" && !!testText) return "verify";
 
   // Diğer sütunlar için mevcut mantık
   const hasSolution = !!solutionText;
@@ -151,6 +155,11 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
       return {
         play: "Re-test (Autonomous)",
         terminal: "Fix Issues (Interactive)",
+      };
+    case "verify":
+      return {
+        play: "Pre-verify core flow (Autonomous)",
+        terminal: "Test Together (Interactive)",
       };
   }
 }
@@ -237,6 +246,7 @@ function TaskCardImpl({
   const solutionSummaryText = useMemo(() => stripHtml(card.solutionSummary), [card.solutionSummary]);
   const testScenariosText = useMemo(() => stripHtml(card.testScenarios), [card.testScenarios]);
   const aiOpinionText = useMemo(() => stripHtml(card.aiOpinion), [card.aiOpinion]);
+  const testProgress = useMemo(() => parseTestProgress(card.testScenarios), [card.testScenarios]);
 
   // Three independent signals converge so the spinner is robust: local
   // trigger state (instant), persisted processingType (DB), and the
@@ -247,7 +257,11 @@ function TaskCardImpl({
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
-  const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "test" && card.status !== "ideation");
+  // Human Test'te otonom koşu yalnızca temel akışı doğrular. Bu grubu ilan
+  // etmeyen bir çeklistte agent hangi maddenin temel olduğunu bilemez, o yüzden
+  // orada buton hiç çıkmaz — çıkarsa hiçbir şey işaretlemeyen bir koşu vaat eder.
+  const canPreVerify = card.status === "test" && !!testProgress?.core;
+  const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "ideation" && (card.status !== "test" || canPreVerify));
   const canQuickFix = card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
   const canEvaluate = card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
   const canTestTogether = card.status === "test" && !!(card.testScenarios && testScenariosText !== "" && (card.projectId || card.projectFolder));
@@ -548,7 +562,10 @@ function TaskCardImpl({
             <div className="flex items-center justify-between">
               {/* Project indicator */}
               {projectName ? (
-                <div className="flex items-center gap-1.5">
+                // min-w-0 so the name is what gives way when the row is tight:
+                // the project is already legible from the dot and the sidebar,
+                // while a clipped progress badge loses the number it exists for.
+                <div className="flex items-center gap-1.5 min-w-0">
                   {project && (
                     <div
                       className="w-2 h-2 rounded-full shrink-0"
@@ -564,7 +581,7 @@ function TaskCardImpl({
               )}
 
               {/* Badges and Action Buttons */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 {/* Interactive Ideation button - hidden when locked */}
                 {canEvaluate && !isLocked && (
                   <Tooltip>
@@ -793,8 +810,16 @@ function TaskCardImpl({
                   </Tooltip>
                 )}
                 {testScenariosText && !isBackgroundProcessing && (() => {
-                  const progress = parseTestProgress(card.testScenarios);
-                  const isComplete = progress && progress.checked === progress.total;
+                  const progress = testProgress;
+                  const core = progress?.core;
+                  // Green tracks the core flow when the checklist declares one:
+                  // those items passing is what says the feature works.
+                  const isComplete = progress
+                    ? core
+                      ? core.checked === core.total
+                      : progress.checked === progress.total
+                    : false;
+                  const extra = core ? progress!.total - core.total : 0;
                   return (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -805,16 +830,28 @@ function TaskCardImpl({
                         }`}>
                           <FlaskConical className="w-3 h-3" />
                           {progress && (
-                            <span className="text-[10px] font-mono">
-                              {progress.checked}/{progress.total}
+                            <span className="text-[10px] font-mono tabular-nums flex items-center gap-0.5 whitespace-nowrap">
+                              {core ? (
+                                <>
+                                  <span className="font-semibold">
+                                    {core.checked}/{core.total}
+                                  </span>
+                                  <span>core</span>
+                                  {extra > 0 && <span className="opacity-60">+{extra}</span>}
+                                </>
+                              ) : (
+                                <span>{progress.checked}/{progress.total}</span>
+                              )}
                             </span>
                           )}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        {progress
-                          ? `Tests: ${progress.checked}/${progress.total} completed`
-                          : "Has tests"
+                        {!progress
+                          ? "Has tests"
+                          : core
+                            ? `Core flow ${core.checked}/${core.total}${extra > 0 ? ` · ${extra} more scenario${extra === 1 ? "" : "s"}` : ""}`
+                            : `Tests: ${progress.checked}/${progress.total} completed`
                         }
                       </TooltipContent>
                     </Tooltip>
@@ -1064,6 +1101,12 @@ function TaskCardImpl({
                 {phase === "retest" && (
                   <p className="text-muted-foreground">
                     Tests will be re-run and any issues will be fixed.
+                  </p>
+                )}
+                {phase === "verify" && (
+                  <p className="text-muted-foreground">
+                    The agent runs the core flow only and ticks the steps that pass.
+                    Later groups and your own ticks stay untouched.
                   </p>
                 )}
               </div>
