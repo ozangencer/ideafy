@@ -23,10 +23,22 @@ export async function GET(
     return new Response(null, { status: 204 });
   }
 
+  // Only for the display ID the commit-trailer clause needs; the branch clause
+  // this route omits is what the full hook-context endpoint adds on top.
+  const project = row.projectId
+    ? db
+        .select({ idPrefix: schema.projects.idPrefix })
+        .from(schema.projects)
+        .where(eq(schema.projects.id, row.projectId))
+        .get()
+    : null;
+
   const body = buildPhasePolicy({
     id: row.id,
     title: row.title,
     status: row.status,
+    displayId:
+      project && row.taskNumber ? `${project.idPrefix}-${row.taskNumber}` : null,
   });
 
   if (!body) {

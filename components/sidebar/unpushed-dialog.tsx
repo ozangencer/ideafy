@@ -17,7 +17,8 @@ interface UnpushedCommitView {
   hash: string;
   subject: string;
   date: string;
-  card: { id: string; displayId: string; title: string } | null;
+  /** Empty for the many commits that never named a card. */
+  cards: { id: string; displayId: string; title: string }[];
 }
 
 interface UnpushedResponse {
@@ -118,31 +119,29 @@ export function UnpushedDialog({ project, onClose, onRefreshed }: UnpushedDialog
             <ul className="divide-y divide-border">
               {data.commits.map((commit) => (
                 <li key={commit.hash} className="py-2.5 flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    {/* Cards are an enrichment: most commits never carried one,
-                        and hiding those would under-report the real backlog. */}
-                    {commit.card ? (
+                  {/* The commit message is the line, and the badges sit in
+                      front of it. Cards are an enrichment: most commits never
+                      carried one, and leading with the card title instead
+                      would print that same title once per commit on any card
+                      that took more than one. */}
+                  <p className="min-w-0 flex-1 text-sm text-foreground">
+                    {commit.cards.map((card) => (
                       <button
+                        key={card.id}
                         type="button"
-                        onClick={() => openCard(commit.card!.id)}
-                        className="text-left group/commit"
+                        onClick={() => openCard(card.id)}
+                        title={card.title}
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded mr-1.5 align-[1px] transition-opacity hover:opacity-80"
+                        style={{
+                          backgroundColor: `${project.color}20`,
+                          color: project.color,
+                        }}
                       >
-                        <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded mr-2 text-muted-foreground">
-                          {commit.card.displayId}
-                        </span>
-                        <span className="text-sm text-foreground group-hover/commit:underline">
-                          {commit.card.title}
-                        </span>
+                        {card.displayId}
                       </button>
-                    ) : (
-                      <span className="text-sm text-foreground">{commit.subject}</span>
-                    )}
-                    {commit.card && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {commit.subject}
-                      </p>
-                    )}
-                  </div>
+                    ))}
+                    {commit.subject}
+                  </p>
                   <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
                     {formatDate(commit.date)}
                   </span>

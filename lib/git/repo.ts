@@ -188,6 +188,11 @@ export interface UnpushedCommit {
   subject: string;
   /** ISO 8601 commit date. */
   date: string;
+  /**
+   * Everything below the subject line. Carried because that is where a
+   * `Card: IDE-283` trailer lives — the subject stays free-form prose.
+   */
+  body: string;
 }
 
 export interface UnpushedStatus {
@@ -253,20 +258,27 @@ export async function getUnpushedStatus(
       };
     }
 
-    // Unit separator between fields: a subject may contain anything else.
+    // Unit separator between fields, record separator between commits. The
+    // body spans newlines, so splitting commits on "\n" — which is what this
+    // did before the body was carried — would shred every multi-line message.
     const { stdout } = await git(
       projectPath,
       "log",
       range,
-      "--pretty=format:%H%x1f%s%x1f%cI"
+      "--pretty=format:%H%x1f%s%x1f%cI%x1f%b%x1e"
     );
 
     const commits: UnpushedCommit[] = stdout
-      .split("\n")
-      .filter((line) => line.trim() !== "")
-      .map((line) => {
-        const [hash, subject, date] = line.split("\x1f");
-        return { hash, subject: subject ?? "", date: date ?? "" };
+      .split("\x1e")
+      .filter((record) => record.trim() !== "")
+      .map((record) => {
+        const [hash, subject, date, body] = record.replace(/^\n/, "").split("\x1f");
+        return {
+          hash: hash ?? "",
+          subject: subject ?? "",
+          date: date ?? "",
+          body: (body ?? "").trim(),
+        };
       });
 
     return { supported: true, defaultBranch, count: commits.length, commits };
