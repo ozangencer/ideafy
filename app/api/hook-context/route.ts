@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { promptLooksLikeCardRequest } from "@/lib/card-request-detection";
 import {
   buildCreationOfferPolicy,
   buildPhasePolicy,
@@ -34,6 +35,9 @@ export async function POST(request: NextRequest) {
   const sessionId =
     typeof hookInput.session_id === "string" ? hookInput.session_id : "";
   const cwd = typeof hookInput.cwd === "string" ? hookInput.cwd : "";
+  // Claude Code sends the turn's text as `prompt`. Only the creation offer
+  // reads it — a bound session's phase policy does not depend on wording.
+  const prompt = typeof hookInput.prompt === "string" ? hookInput.prompt : "";
 
   if (!sessionId || !cwd) {
     return new Response(null, { status: 204 });
@@ -98,7 +102,10 @@ export async function POST(request: NextRequest) {
         })
         .run();
       return new Response(
-        buildCreationOfferPolicy({ id: project.id, name: project.name }),
+        buildCreationOfferPolicy(
+          { id: project.id, name: project.name },
+          { promptLooksLikeCardRequest: promptLooksLikeCardRequest(prompt) }
+        ),
         {
           status: 200,
           headers: { "Content-Type": "text/plain; charset=utf-8" },
