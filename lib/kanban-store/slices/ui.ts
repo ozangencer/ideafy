@@ -1,4 +1,4 @@
-import { SectionType, Status } from "../../types";
+import { BoardView, BoardViewPreference, SectionType, StaleThresholds, Status } from "../../types";
 import { KanbanStore, StoreSlice } from "../types";
 
 export const createUiSlice: StoreSlice<
@@ -10,7 +10,11 @@ export const createUiSlice: StoreSlice<
     | "collapsedSkillGroups"
     | "collapsedColumns"
     | "expandedGroups"
+    | "uncappedColumns"
     | "completedFilter"
+    | "boardView"
+    | "boardViewPreference"
+    | "staleThresholds"
     | "isQuickEntryOpen"
     | "pendingCardSection"
     | "toggleSidebar"
@@ -19,7 +23,11 @@ export const createUiSlice: StoreSlice<
     | "toggleSkillGroupCollapse"
     | "toggleColumnCollapse"
     | "toggleGroupCollapse"
+    | "toggleColumnCap"
     | "setCompletedFilter"
+    | "setBoardView"
+    | "setBoardViewPreference"
+    | "setStaleThreshold"
     | "openQuickEntry"
     | "closeQuickEntry"
     | "toggleQuickEntry"
@@ -38,7 +46,19 @@ export const createUiSlice: StoreSlice<
   // leave every new group unfolded — the opposite of the point, which is that
   // a 14-card chain occupies one slot until asked.
   expandedGroups: [] as string[],
+  // Columns the user opened past the render cap. Same shape and same reasoning
+  // as expandedGroups: capping is the default, so what has to survive a reload
+  // is the exception the user asked for.
+  uncappedColumns: [] as Status[],
   completedFilter: "this_week",
+  // The view showing right now. `boardViewPreference` decides what this starts
+  // as on load — see the merge step in kanban-store/index.ts.
+  boardView: "all" as BoardView,
+  boardViewPreference: "last" as BoardViewPreference,
+  // Only the columns the user actually changed. An empty map means every
+  // column uses the defaults, so the defaults stay free to move later without
+  // migrating anybody's settings.
+  staleThresholds: {} as StaleThresholds,
   isQuickEntryOpen: false,
   pendingCardSection: null,
 
@@ -71,7 +91,35 @@ export const createUiSlice: StoreSlice<
         : [...state.expandedGroups, groupKey],
     })),
 
+  toggleColumnCap: (columnId) =>
+    set((state) => ({
+      uncappedColumns: state.uncappedColumns.includes(columnId)
+        ? state.uncappedColumns.filter((id) => id !== columnId)
+        : [...state.uncappedColumns, columnId],
+    })),
+
   setCompletedFilter: (filter) => set({ completedFilter: filter }),
+
+  setBoardView: (view) => set({ boardView: view }),
+
+  setBoardViewPreference: (preference) =>
+    set((state) => ({
+      boardViewPreference: preference,
+      // Picking a fixed opening view is also a statement about now: leaving the
+      // board on the other one would make the setting look broken until the
+      // next launch.
+      boardView: preference === "last" ? state.boardView : preference,
+    })),
+
+  // A null clears the override rather than storing a zero, so "empty the field"
+  // means "use the default" instead of "everything is stale".
+  setStaleThreshold: (status, days) =>
+    set((state) => {
+      const next = { ...state.staleThresholds };
+      if (days === null) delete next[status];
+      else next[status] = days;
+      return { staleThresholds: next };
+    }),
 
   openQuickEntry: () => set({ isQuickEntryOpen: true }),
   closeQuickEntry: () => set({ isQuickEntryOpen: false }),

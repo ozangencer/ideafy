@@ -275,6 +275,50 @@ export const STATUS_COLORS: Record<Status, string> = {
   withdrawn: "bg-status-withdrawn",
 };
 
+/**
+ * Which question the board is answering. "all" is the seven columns — what is
+ * there. "focus" is the short list of cards whose next move is yours.
+ */
+export type BoardView = "focus" | "all";
+
+/**
+ * What the board opens with. "last" reopens whichever view was left open, so
+ * the setting can express a habit as well as a preference. The toggle itself
+ * is always in the header: a view this significant should not be reachable
+ * only through a settings dialog, where it would be set once and forgotten.
+ */
+export type BoardViewPreference = BoardView | "last";
+
+export const BOARD_VIEW_PREFERENCE_OPTIONS: {
+  value: BoardViewPreference;
+  label: string;
+}[] = [
+  { value: "focus", label: "Focus" },
+  { value: "all", label: "All columns" },
+  { value: "last", label: "Last used" },
+];
+
+/**
+ * Per-column day counts that replace the built-in staleness thresholds. Only
+ * the columns the user actually changed appear here; everything else falls
+ * through to the defaults in `lib/card-age.ts`.
+ */
+export type StaleThresholds = Partial<Record<Status, number>>;
+
+/**
+ * How many live cards a column holds before the count starts saying so.
+ *
+ * Not a gate. Dropping a seventh card into In Progress still works — the
+ * number just turns red, which is the whole intent: the limit exists to be
+ * heard, not to be enforced. Columns missing from this map have no meaningful
+ * ceiling; a Backlog is allowed to be long and Completed is supposed to be.
+ */
+export const COLUMN_WIP_LIMITS: Partial<Record<Status, number>> = {
+  backlog: 15,
+  progress: 5,
+  test: 8,
+};
+
 // Settings types
 export type TerminalApp = "iterm2" | "ghostty" | "terminal" | "warp" | "cmux";
 export type AiPlatform = "claude" | "gemini" | "codex" | "opencode";

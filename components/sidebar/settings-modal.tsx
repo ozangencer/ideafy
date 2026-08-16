@@ -3,8 +3,15 @@
 import type { ReactNode } from "react";
 import { useState, useEffect, useRef } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { TERMINAL_OPTIONS, DEFAULT_SETTINGS, AI_PLATFORM_OPTIONS } from "@/lib/types";
-import type { TerminalApp, AiPlatform, AppSettings } from "@/lib/types";
+import {
+  TERMINAL_OPTIONS,
+  DEFAULT_SETTINGS,
+  AI_PLATFORM_OPTIONS,
+  BOARD_VIEW_PREFERENCE_OPTIONS,
+  COLUMNS,
+} from "@/lib/types";
+import type { TerminalApp, AiPlatform, AppSettings, BoardViewPreference, Status } from "@/lib/types";
+import { DEFAULT_STALE_AFTER_DAYS } from "@/lib/card-age";
 import type { PlatformCapabilities } from "@/lib/platform/types";
 import {
   Dialog,
@@ -23,7 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Folder, RefreshCw, Check, AlertCircle, Wifi, WifiOff, ChevronRight } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
 import { useTheme } from "next-themes";
 import {
@@ -62,7 +74,12 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
     fetchAgents,
     fetchProjectExtensions,
     activeProjectId,
+    boardViewPreference,
+    setBoardViewPreference,
+    staleThresholds,
+    setStaleThreshold,
   } = useKanbanStore();
+  const [isStaleOpen, setIsStaleOpen] = useState(false);
   const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);
   const [mcpConfigPath, setMcpConfigPath] = useState(DEFAULT_SETTINGS.mcpConfigPath);
@@ -322,6 +339,23 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
 
   const platformOption = AI_PLATFORM_OPTIONS.find((o) => o.value === aiPlatform);
 
+  // Only the columns that have a staleness threshold at all — Completed and
+  // Withdrawn are done, so their age says nothing.
+  const staleColumns = COLUMNS.filter(
+    (column) => DEFAULT_STALE_AFTER_DAYS[column.id] !== undefined
+  );
+  const customisedThresholds = staleColumns.filter(
+    (column) => staleThresholds[column.id] !== undefined
+  ).length;
+
+  const handleThresholdChange = (status: Status, raw: string) => {
+    const days = Number.parseInt(raw, 10);
+    // Anything that is not a usable day count clears the override rather than
+    // being stored: an empty field should mean "use the default", and a 0
+    // would sweep the whole column into its Stale row the moment it was typed.
+    setStaleThreshold(status, Number.isFinite(days) && days >= 1 ? days : null);
+  };
+
   const generalTabBody = (
     <div className="grid gap-3 py-3 px-1">
           {/* Appearance */}
@@ -355,6 +389,80 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                 <SelectItem value="dark">Warm dark</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Board — view and staleness. These are board preferences, not
+              server settings: they take effect as they are changed and are not
+              waiting on Save Changes below. */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="boardView" className="text-sm font-medium">Board opens with</label>
+              <span className="text-xs text-muted-foreground truncate">
+                The Focus / All toggle stays in the header either way
+              </span>
+            </div>
+            <Select
+              value={boardViewPreference}
+              onValueChange={(value) => setBoardViewPreference(value as BoardViewPreference)}
+            >
+              <SelectTrigger id="boardView">
+                <SelectValue placeholder="Select a view" />
+              </SelectTrigger>
+              <SelectContent className="z-[70]">
+                {BOARD_VIEW_PREFERENCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Folded by default: five inputs laid flat would be the largest
+                block on this screen, for the setting on it that is changed
+                least often. */}
+            <Collapsible open={isStaleOpen} onOpenChange={setIsStaleOpen}>
+              <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded py-1 text-left transition-colors hover:text-foreground">
+                <ChevronRight
+                  className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${
+                    isStaleOpen ? "rotate-90" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">Stale thresholds</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {customisedThresholds === 0
+                    ? "Defaults"
+                    : `${customisedThresholds} changed`}
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <p className="pl-5 pt-1 text-xs text-muted-foreground">
+                  Days without activity before a card drops into its column&apos;s Stale row.
+                  Counted from the last change to the card, not from when it was created.
+                </p>
+                <div className="grid gap-2 pl-5 pt-2 sm:grid-cols-2">
+                  {staleColumns.map((column) => (
+                    <div key={column.id} className="flex items-center gap-2">
+                      <label
+                        htmlFor={`stale-${column.id}`}
+                        className="flex-1 truncate text-xs text-muted-foreground"
+                      >
+                        {column.title}
+                      </label>
+                      <Input
+                        id={`stale-${column.id}`}
+                        type="number"
+                        min={1}
+                        className="h-7 w-20 text-xs"
+                        placeholder={String(DEFAULT_STALE_AFTER_DAYS[column.id])}
+                        value={staleThresholds[column.id] ?? ""}
+                        onChange={(e) => handleThresholdChange(column.id, e.target.value)}
+                      />
+                      <span className="w-6 text-xs text-muted-foreground">days</span>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
 
           {/* AI Platform */}
