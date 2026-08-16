@@ -106,13 +106,14 @@ function PriorityIcon({ priority }: { priority: string }) {
 }
 
 // Footer width budget, in px. The card gives up its column's p-2 (16) and its
-// own p-3 (24); inside a group frame another 14 goes to the frame's border and
-// padding. Columns are fluid, so this is derived from the measured width the
-// column hands down rather than assumed from w-72 — otherwise a wide column
-// would keep hiding names that fit.
+// own p-3 (24); inside a group frame another 24 goes to the frame — 7 on the
+// right for its border and padding, 17 on the left, where the rail and its
+// indent do the work of showing the card is nested. Columns are fluid, so this
+// is derived from the measured width the column hands down rather than assumed
+// from w-72 — otherwise a wide column would keep hiding names that fit.
 const COLUMN_PADDING_W = 16;
 const CARD_PADDING_W = 24;
-const GROUP_FRAME_W = 14;
+const GROUP_FRAME_W = 24;
 const FOOTER_ICON_W = 26;
 const FOOTER_BADGE_W = 52;
 const FOOTER_CORE_BADGE_W = 88;
