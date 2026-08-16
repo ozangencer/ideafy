@@ -6,6 +6,7 @@ import {
   AppSettings,
   BackgroundProcess,
   Card,
+  CardGroup,
   CompletedFilter,
   ConversationMessage,
   DocumentFile,
@@ -27,6 +28,7 @@ export type CardUpdatePayload = Partial<Card> & {
 export interface KanbanStore {
   // Cards state
   cards: Card[];
+  cardGroups: CardGroup[];
   selectedCard: Card | null;
   draftCard: Card | null;
   isModalOpen: boolean;
@@ -64,6 +66,11 @@ export interface KanbanStore {
 
   // Column collapse state
   collapsedColumns: Status[];
+
+  // Card-group fold state, keyed by groupFoldKey(groupId, columnId). Groups
+  // fold by default, so this holds the rows the user opened — see the note in
+  // slices/ui.ts.
+  expandedGroups: string[];
 
   // Completed column filter
   completedFilter: CompletedFilter;
@@ -181,6 +188,9 @@ export interface KanbanStore {
 
   // Column collapse actions
   toggleColumnCollapse: (columnId: Status) => void;
+
+  // Card-group fold actions. Takes a groupFoldKey, not a bare group id.
+  toggleGroupCollapse: (groupKey: string) => void;
 
   // Completed filter actions
   setCompletedFilter: (filter: CompletedFilter) => void;

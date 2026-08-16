@@ -1,4 +1,4 @@
-import { Card, Status } from "../../types";
+import { Card, CardGroup, Status } from "../../types";
 import { nowIso, parseJson, replaceCardById, updateCardById } from "../helpers";
 import { CardUpdatePayload, KanbanStore, StoreSlice } from "../types";
 
@@ -15,6 +15,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   priority: "medium" as const,
   projectFolder,
   projectId,
+  groupId: null,
   taskNumber: null,
   gitBranchName: null,
   gitBranchStatus: null,
@@ -36,6 +37,7 @@ export const createCardsSlice: StoreSlice<
   Pick<
     KanbanStore,
     | "cards"
+    | "cardGroups"
     | "selectedCard"
     | "draftCard"
     | "isModalOpen"
@@ -58,6 +60,7 @@ export const createCardsSlice: StoreSlice<
   >
 > = (set, get) => ({
   cards: [],
+  cardGroups: [],
   selectedCard: null,
   draftCard: null,
   isModalOpen: false,
@@ -67,8 +70,18 @@ export const createCardsSlice: StoreSlice<
   fetchCards: async () => {
     set({ isLoading: true });
     try {
-      const response = await fetch("/api/cards");
+      // Groups ride along with the cards fetch rather than getting their own
+      // poll: the rollup is derived from card statuses, so a board that has
+      // fresh cards and stale groups would show counts for a chain that no
+      // longer exists.
+      const [response, groupsResponse] = await Promise.all([
+        fetch("/api/cards"),
+        fetch("/api/card-groups"),
+      ]);
       const cards = await parseJson<Card[]>(response);
+      const cardGroups = groupsResponse.ok
+        ? await parseJson<CardGroup[]>(groupsResponse)
+        : get().cardGroups;
 
       // Defend optimistic spinner state: if a run is locally in-flight
       // (id is in startingCardIds/quickFixingCardIds/evaluatingCardIds) but
@@ -98,7 +111,7 @@ export const createCardsSlice: StoreSlice<
         }
       }
 
-      set({ cards: mergedCards, selectedCard: newSelectedCard, isLoading: false });
+      set({ cards: mergedCards, cardGroups, selectedCard: newSelectedCard, isLoading: false });
     } catch (error) {
       console.error("Failed to fetch cards:", error);
       set({ isLoading: false });

@@ -25,6 +25,23 @@ export const projects = sqliteTable("projects", {
 export type ProjectRecord = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 
+// Card groups: a chain of cards that belong to one piece of work, so the board
+// can fold 14 cards into 1 slot. Deliberately NOT called "epic" — the row has
+// no status, no completion state and no target date of its own; it is a label
+// with an identity. Naming it "epic" would promise Jira semantics to the user
+// and, worse, to Claude over MCP.
+export const cardGroups = sqliteTable("card_groups", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id"),
+  code: text("code").notNull(), // short code shown on the card face: "LOOP"
+  name: text("name").notNull(), // group heading: "Loop Engineering"
+  color: text("color"),
+  createdAt: text("created_at").notNull(),
+});
+
+export type CardGroupRecord = typeof cardGroups.$inferSelect;
+export type NewCardGroup = typeof cardGroups.$inferInsert;
+
 // Cards tablosu
 export const cards = sqliteTable("cards", {
   id: text("id").primaryKey(),
@@ -39,6 +56,7 @@ export const cards = sqliteTable("cards", {
   priority: text("priority").notNull().default("medium"),
   projectFolder: text("project_folder").notNull().default(""),
   projectId: text("project_id"),
+  groupId: text("group_id"),                  // card_groups.id or null
   taskNumber: integer("task_number"),
   gitBranchName: text("git_branch_name"),     // "kanban/PRJ-1-add-auth" or null
   gitBranchStatus: text("git_branch_status"), // "active" | "merged" | "rolled_back" | null

@@ -3,7 +3,8 @@
 import { memo, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/types";
+import { Card, CardGroup, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/types";
+import { CardGroupChip } from "./card-group-chip";
 import { formatAgeLong, getCardStaleness } from "@/lib/card-age";
 import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
@@ -104,8 +105,30 @@ function PriorityIcon({ priority }: { priority: string }) {
   );
 }
 
+// Footer width budget, in px. The card gives up its column's p-2 (16) and its
+// own p-3 (24); inside a group frame another 14 goes to the frame's border and
+// padding. Columns are fluid, so this is derived from the measured width the
+// column hands down rather than assumed from w-72 — otherwise a wide column
+// would keep hiding names that fit.
+const COLUMN_PADDING_W = 16;
+const CARD_PADDING_W = 24;
+const GROUP_FRAME_W = 14;
+const FOOTER_ICON_W = 26;
+const FOOTER_BADGE_W = 52;
+const FOOTER_CORE_BADGE_W = 88;
+// Below this the name would clip to two or three letters — a label too short
+// to identify anything while still taking the space of one.
+const FOOTER_NAME_MIN_W = 72;
+
 interface TaskCardProps {
   card: Card;
+  /** The card's chain, when it belongs to one. Drives the code chip. */
+  group?: CardGroup | null;
+  /**
+   * The measured width of the column this card sits in. Columns are fluid, so
+   * the footer's "does the project name fit" budget cannot be a constant.
+   */
+  columnWidth?: number;
   isDragging?: boolean;
   extraBadges?: React.ReactNode;
   extraContextMenuItems?: React.ReactNode;
@@ -181,6 +204,10 @@ function getPasteTipTerminalLabel(terminal: string | null): string {
 
 function TaskCardImpl({
   card,
+  group = null,
+  // The drag overlay renders outside any column; it is a 272px snapshot, so
+  // the default keeps the dragged card looking like the one it was lifted from.
+  columnWidth = 288,
   isDragging = false,
   extraBadges,
   extraContextMenuItems,
@@ -476,6 +503,46 @@ function TaskCardImpl({
   const staleness = getCardStaleness(card.status, card.createdAt);
   const projectName = project?.name || (card.projectFolder ? card.projectFolder.split("/").pop() : null);
 
+  // Whether the footer has room for the project name. There is no CSS query
+  // for "does this text fit", and measuring per card would cost a
+  // ResizeObserver on every card of a 200-card board — but we do not need to
+  // measure, because what crowds the row is the icon set, and that is decided
+  // right here from the same flags that render it. Getting the estimate a
+  // little wrong only shows or hides a label; nothing breaks. Any icon added
+  // below should get a line here too, or it will be spent width the estimate
+  // does not know about.
+  const showsRunButton =
+    card.status === "test" &&
+    card.gitWorktreeStatus === "active" &&
+    !isLocked &&
+    (project?.resolvedRunMode ?? "server") !== "none";
+  const footerSlots: Array<[boolean, number]> = [
+    [canEvaluate && !isLocked, FOOTER_ICON_W],
+    [canEvaluate, FOOTER_ICON_W],
+    [canQuickFix, FOOTER_ICON_W],
+    [canStart && !isLocked, FOOTER_ICON_W],
+    [canStart && phase !== "retest", FOOTER_ICON_W],
+    [canTestTogether && !isLocked, FOOTER_ICON_W],
+    [showsRunButton, FOOTER_ICON_W],
+    [!!card.rebaseConflict, FOOTER_ICON_W],
+    [!!extraBadges, FOOTER_ICON_W],
+    [card.gitWorktreeStatus === "active" && !isBackgroundProcessing, FOOTER_ICON_W],
+    [!!project && !effectiveUseWorktree && !isBackgroundProcessing, FOOTER_ICON_W],
+    [!!solutionSummaryText && !isBackgroundProcessing, FOOTER_ICON_W],
+    [
+      !!testScenariosText && !isBackgroundProcessing,
+      testProgress?.core ? FOOTER_CORE_BADGE_W : testProgress ? FOOTER_BADGE_W : FOOTER_ICON_W,
+    ],
+  ];
+  const footerRightWidth = footerSlots.reduce(
+    (sum, [shown, width]) => (shown ? sum + width : sum),
+    0
+  );
+  const cardInnerWidth =
+    columnWidth - COLUMN_PADDING_W - CARD_PADDING_W - (group ? GROUP_FRAME_W : 0);
+  const showProjectName =
+    !!project && cardInnerWidth - footerRightWidth >= FOOTER_NAME_MIN_W;
+
   // Prevent context menu when locked
   const handleContextMenu = (e: React.MouseEvent) => {
     if (isLocked) {
@@ -533,7 +600,27 @@ function TaskCardImpl({
                   {displayId}
                 </span>
               )}
-              <h3 className={`text-sm font-medium text-card-foreground transition-colors line-clamp-2 flex-1 ${isLocked ? "" : "group-hover:text-ink"}`}>
+              {group && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="mt-px">
+                      <CardGroupChip group={group} />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{group.name}</TooltipContent>
+                </Tooltip>
+              )}
+              {/* Three lines, because the description quote below used to be
+                  where a clipped title continued. Now the title gets the room
+                  the repetition was taking.
+
+                  13px, not 14: the chips beside it are 10px and the footer meta
+                  is 10–12px, so 14 jumped two steps of the scale at once and
+                  read as shouting. With the quote gone the title has nothing
+                  left to out-shout, and the contrast it needs comes from weight
+                  and colour instead. Tighter leading buys back ~7px per card,
+                  which is three lines' worth over a full column. */}
+              <h3 className={`text-[13px] leading-snug tracking-[-0.01em] font-medium text-card-foreground transition-colors line-clamp-3 flex-1 ${isLocked ? "" : "group-hover:text-ink"}`}>
                 {card.title}
               </h3>
               {/* Age, but only once it is worth mentioning. Shown on every card
@@ -553,29 +640,69 @@ function TaskCardImpl({
               {!isLocked && <PriorityIcon priority={card.priority} />}
             </div>
 
-            {card.description && (
-              <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+            {/* Ideation only. Everywhere else `description` is a prompt, and a
+                prompt opens by restating the task — so the quote was the title
+                again, longer, competing for the row that now carries state.
+                In Ideation there is no state to derive (no plan, no tests, no
+                agent) and the idea itself lives in the body, so it stays.
+                Column-aware behaviour is already the norm here: kanban-board
+                sorts per column, card-age thresholds differ per column. */}
+            {card.status === "ideation" && card.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                 {descriptionText}
               </p>
             )}
 
-            <div className="flex items-center justify-between">
-              {/* Project indicator */}
-              {projectName ? (
-                // min-w-0 so the name is what gives way when the row is tight:
-                // the project is already legible from the dot and the sidebar,
-                // while a clipped progress badge loses the number it exists for.
-                <div className="flex items-center gap-1.5 min-w-0">
-                  {project && (
+            <div className="flex items-center justify-between mt-2">
+              {/* Project indicator. BOARD-01 balanced this row by letting the
+                  name truncate, which on an icon-heavy card left "I…" — a
+                  label too short to identify anything, still taking the space
+                  of one. The dot always shows; the name shows only where the
+                  icons leave room for it to be read. When it is dropped the
+                  identity is still there: the tooltip, and the display-id chip
+                  above, tinted with the project colour and prefixed
+                  IDE-/ICL-/DIC-. "No project" stays as text — that one is a
+                  warning, not a label, and has no chip to fall back on. */}
+              {project ? (
+                showProjectName ? (
+                  // The name is right there — a tooltip repeating it would be
+                  // a hover that costs a beat and returns nothing.
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <div
                       className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: project.color }}
                     />
-                  )}
-                  <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                    {projectName}
-                  </span>
-                </div>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {project.name}
+                    </span>
+                  </div>
+                ) : (
+                  // No delay only where the tooltip carries something the card
+                  // dropped. The 100ms default exists to keep tooltips from
+                  // firing as the pointer crosses a row of icons; here the dot
+                  // is the sole target and the name is the label that would
+                  // have been printed, so waiting for it is friction.
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      {/* The dot is 8px, too small to hover reliably. Padding
+                          plus a matching negative margin grows the hit area to
+                          ~24px without moving anything on screen. */}
+                      <div className="p-2 -m-2 shrink-0 cursor-default">
+                        <div
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: project.color }}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{project.name}</TooltipContent>
+                  </Tooltip>
+                )
+              ) : projectName ? (
+                // No project record, only a folder path — there is no chip
+                // above carrying this, so the text stays.
+                <span className="text-xs text-muted-foreground truncate min-w-0 max-w-[120px]">
+                  {projectName}
+                </span>
               ) : (
                 <span className="text-xs text-muted-foreground">No project</span>
               )}
@@ -1133,6 +1260,14 @@ export const TaskCard = memo(TaskCardImpl, (prev, next) => {
     prev.card.id === next.card.id &&
     prev.card.updatedAt === next.card.updatedAt &&
     prev.card.processingType === next.card.processingType &&
+    // Compare the group by what the chip renders, not by identity: every poll
+    // rebuilds the group objects, so a reference check would re-render every
+    // grouped card every 10 seconds.
+    prev.group?.id === next.group?.id &&
+    prev.group?.code === next.group?.code &&
+    prev.group?.name === next.group?.name &&
+    prev.group?.color === next.group?.color &&
+    prev.columnWidth === next.columnWidth &&
     prev.softLock === next.softLock &&
     prev.extraWrapperClassName === next.extraWrapperClassName &&
     prev.extraBadges === next.extraBadges &&

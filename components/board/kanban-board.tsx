@@ -11,9 +11,10 @@ import {
   useSensors,
   closestCenter,
 } from "@dnd-kit/core";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter } from "@/lib/types";
+import { summarizeCardGroups } from "@/lib/card-group";
 
 // Priority order: high > medium > low (descending)
 const PRIORITY_ORDER: Record<Priority, number> = {
@@ -106,7 +107,7 @@ import { Column } from "./column";
 import { TaskCard } from "./card";
 
 export function KanbanBoard() {
-  const { cards, activeProjectId, searchQuery, moveCard, completedFilter } = useKanbanStore();
+  const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter } = useKanbanStore();
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showRightFade, setShowRightFade] = useState(false);
@@ -144,6 +145,13 @@ export function KanbanBoard() {
         tolerance: 5,
       },
     })
+  );
+
+  // Summaries come from the unfiltered board on purpose: a search that hides
+  // half a chain must not make the rollup say the chain got shorter.
+  const groupSummaries = useMemo(
+    () => summarizeCardGroups(cards, cardGroups),
+    [cards, cardGroups]
   );
 
   const filteredCards = cards.filter((card) => {
@@ -214,6 +222,7 @@ export function KanbanBoard() {
                 id={column.id}
                 title={column.title}
                 cards={sortedCards}
+                groupSummaries={groupSummaries}
               />
             );
           })}
@@ -230,7 +239,15 @@ export function KanbanBoard() {
       >
         {activeCard && (
           <div className="w-[272px]">
-            <TaskCard card={activeCard} isDragging />
+            <TaskCard
+              card={activeCard}
+              group={
+                activeCard.groupId
+                  ? groupSummaries.get(activeCard.groupId)?.group ?? null
+                  : null
+              }
+              isDragging
+            />
           </div>
         )}
       </DragOverlay>
