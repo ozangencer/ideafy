@@ -23,6 +23,55 @@ export interface SelectedRunOutput {
   segmentCount: number;
 }
 
+/**
+ * The markdown heading that opens a checklist's core group, in both languages
+ * the style contract writes (see lib/prompts/test-style.ts).
+ *
+ * Every phase that authors or reproduces a checklist keys off this one source.
+ * It used to be spelled out per contract, and the cost showed: implementation,
+ * retest and quickFix kept demanding `## Test Scenarios` long after the style
+ * contract had made the core group the thing that matters, so those three
+ * phases were contractually satisfied by output the card could not read.
+ *
+ * `lib/test-progress.ts` owns the HTML-side twin of this pattern — it matches
+ * the rendered `<h2>` label rather than the markdown line. The two must keep
+ * accepting the same two names; run-output.test.ts asserts it.
+ */
+const CORE_FLOW_HEADING_SOURCE = String.raw`^##\s*(?:Core\s*flow|Temel\s*ak[ıi][şs])`;
+
+/** Matches the core heading line itself. Never global — see the note above. */
+export const CORE_FLOW_HEADING = new RegExp(CORE_FLOW_HEADING_SOURCE, "im");
+
+/** Matches the core heading and everything after it. */
+const CORE_FLOW_SECTION = new RegExp(`${CORE_FLOW_HEADING_SOURCE}[\\s\\S]*`, "im");
+
+/**
+ * Split a quick-fix response into its two halves. One response carries a
+ * summary and a checklist, and the core heading is where the second begins.
+ *
+ * Written as an index split rather than one lookahead regex on purpose. The
+ * obvious `## Quick Fix Summary[\s\S]*?(?=<heading>|$)` needs the `m` flag so
+ * the heading's `^` can anchor to a line — and `m` silently redefines `$` as
+ * end-of-LINE, so the lazy quantifier stops at the first newline and the
+ * summary collapses to its own heading. Splitting on the match index has no
+ * such trap.
+ */
+export function splitQuickFixResponse(responseText: string): {
+  summary: string | null;
+  checklist: string | null;
+} {
+  const checklistMatch = responseText.match(CORE_FLOW_SECTION);
+  const beforeChecklist = checklistMatch
+    ? responseText.slice(0, checklistMatch.index)
+    : responseText;
+  const summaryMatch = beforeChecklist.match(/## Quick Fix Summary[\s\S]*/i);
+
+  return {
+    summary: summaryMatch ? summaryMatch[0] : null,
+    checklist: checklistMatch ? checklistMatch[0] : null,
+  };
+}
+
 export const RUN_OUTPUT_CONTRACTS = {
   planning: {
     label: "plan",
@@ -30,17 +79,17 @@ export const RUN_OUTPUT_CONTRACTS = {
   },
   implementation: {
     label: "test senaryoları",
-    requires: [/^##\s*Test Scenarios/im],
+    requires: [CORE_FLOW_HEADING],
   },
   retest: {
     label: "test senaryoları",
-    requires: [/^##\s*Test Scenarios/im],
+    requires: [CORE_FLOW_HEADING],
   },
   // Verify reproduces the existing checklist rather than authoring a new one,
   // so the heading it must carry is the core group's, not "Test Scenarios".
   verify: {
     label: "doğrulanmış çeklist",
-    requires: [/^##\s*(Core\s*flow|Temel\s*ak[ıi][şs])/im],
+    requires: [CORE_FLOW_HEADING],
   },
   evaluate: {
     label: "değerlendirme",
@@ -52,7 +101,7 @@ export const RUN_OUTPUT_CONTRACTS = {
   // output dressed up as a clean run.
   quickFix: {
     label: "quick fix",
-    requires: [/^##\s*Quick\s*Fix\s*Summary/im, /^##\s*Test Scenarios/im],
+    requires: [/^##\s*Quick\s*Fix\s*Summary/im, CORE_FLOW_HEADING],
   },
 } as const satisfies Record<string, RunOutputContract>;
 

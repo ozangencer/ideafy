@@ -16,7 +16,8 @@ function interop<T extends object>(ns: T): T {
 }
 
 const { createClaudeRunOutputCollector } = interop(collectNs);
-const { selectRunOutput, RUN_OUTPUT_CONTRACTS } = interop(selectNs);
+const { selectRunOutput, RUN_OUTPUT_CONTRACTS, splitQuickFixResponse } =
+  interop(selectNs);
 
 // IDE-280: a headless run's output used to be whatever the CLI put in its
 // `result` field, which is only ever the LAST assistant message. A backgrounded
@@ -263,6 +264,45 @@ test("contract patterns are not global", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Quick-fix response split
+// ---------------------------------------------------------------------------
+
+test("splitQuickFixResponse keeps the whole summary, not just its heading", () => {
+  // The regression this exists for: writing the split as
+  // `## Quick Fix Summary[\s\S]*?(?=<core heading>|$)` needs the `m` flag for
+  // the heading's `^`, and `m` turns `$` into end-of-LINE. The lazy quantifier
+  // then stops at the first newline and the card's whole solution summary
+  // becomes the four words of its own heading.
+  const response = [
+    "## Quick Fix Summary",
+    "- **Root Cause:** the guard ran after the write",
+    "- **Fix Applied:** moved it above the update",
+    "- **Files Modified:** lib/x.ts",
+    "",
+    "## Temel akış",
+    "- [ ] Hatayı tekrar üretmeyi dene",
+  ].join("\n");
+
+  const { summary, checklist } = splitQuickFixResponse(response);
+
+  assert.match(summary ?? "", /Root Cause/);
+  assert.match(summary ?? "", /Files Modified/);
+  assert.ok(!/Temel akış/.test(summary ?? ""), "summary must stop at the checklist");
+  assert.match(checklist ?? "", /^## Temel akış/);
+  assert.match(checklist ?? "", /Hatayı tekrar üretmeyi dene/);
+});
+
+test("splitQuickFixResponse handles English cards and a missing checklist", () => {
+  const english = "## Quick Fix Summary\n- **Root Cause:** x\n\n## Core flow\n- [ ] Step";
+  assert.match(splitQuickFixResponse(english).checklist ?? "", /^## Core flow/);
+
+  const noChecklist = "## Quick Fix Summary\n- **Root Cause:** x\n- **Fix Applied:** y";
+  const split = splitQuickFixResponse(noChecklist);
+  assert.equal(split.checklist, null, "no core heading means no checklist half");
+  assert.match(split.summary ?? "", /Fix Applied/, "the summary must survive intact");
+});
+
+// ---------------------------------------------------------------------------
 // Drift guard: contracts vs. the prompts that are supposed to produce them
 // ---------------------------------------------------------------------------
 
@@ -280,11 +320,11 @@ test("every contract is still demanded by its prompt", () => {
   // What each contract's patterns should find verbatim in the prompt text.
   const EXPECTED: Record<keyof typeof RUN_OUTPUT_CONTRACTS, string[]> = {
     planning: ["[COMPLEXITY:", "[PRIORITY:"],
-    implementation: ["## Test Scenarios"],
-    retest: ["## Test Scenarios"],
+    implementation: ["## Core flow", "## Temel akış"],
+    retest: ["## Core flow", "## Temel akış"],
     verify: ["## Core flow", "## Temel akış"],
     evaluate: ["## Summary Verdict", "## Final Score"],
-    quickFix: ["## Quick Fix Summary", "## Test Scenarios"],
+    quickFix: ["## Quick Fix Summary", "## Core flow", "## Temel akış"],
   };
 
   for (const [name, needles] of Object.entries(EXPECTED)) {
@@ -309,8 +349,53 @@ test("the retest phase has a contract and a prompt that asks for it", () => {
   const prompts = readFileSync(new URL("../../lib/prompts.ts", import.meta.url), "utf8");
   const retestBlock = prompts.slice(prompts.indexOf('case "retest"'));
   assert.match(
-    retestBlock.slice(0, 1200),
-    /## Test Scenarios/,
+    retestBlock.slice(0, 1600),
+    /## Core flow/,
     "the retest prompt must still demand the format its contract checks for",
   );
+  // And it must reach the style contract at all. Demanding the heading while
+  // withholding the rules that shape what goes under it is how retest produced
+  // core-less checklists for as long as it existed.
+  assert.match(
+    retestBlock.slice(0, 1600),
+    /buildTestStyleContract/,
+    "the retest prompt must inject the shared test style contract",
+  );
 });
+
+test("every checklist-authoring prompt names both core headings", () => {
+  // The contracts key off one shared regex now, so the risk moved: a prompt
+  // that names only the English heading strands every Turkish card, and the
+  // per-contract needles above would not notice — they search the two prompt
+  // files as one blob, so another phase's mention would cover the gap.
+  const prompts = readFileSync(new URL("../../lib/prompts.ts", import.meta.url), "utf8");
+  const cardPrompts = readFileSync(
+    new URL("../../lib/prompts/card.ts", import.meta.url),
+    "utf8",
+  );
+
+  const blocks: [string, string][] = [
+    ["implementation", sliceCase(prompts, 'case "implementation"')],
+    ["retest", sliceCase(prompts, 'case "retest"')],
+    ["quickFix", cardPrompts.slice(cardPrompts.indexOf("export function buildQuickFixPrompt"))],
+  ];
+
+  for (const [name, block] of blocks) {
+    assert.ok(block.length > 0, `could not locate the ${name} prompt block`);
+    for (const heading of ["## Core flow", "## Temel akış"]) {
+      assert.ok(
+        block.includes(heading),
+        `the ${name} prompt must name ${JSON.stringify(heading)} so cards in that language get a core group`,
+      );
+    }
+  }
+});
+
+/** Text of one `case "x"` block, up to the next `case "` at the same level. */
+function sliceCase(src: string, marker: string): string {
+  const start = src.indexOf(marker);
+  if (start === -1) return "";
+  const rest = src.slice(start + marker.length);
+  const end = rest.indexOf('\n    case "');
+  return end === -1 ? rest : rest.slice(0, end);
+}

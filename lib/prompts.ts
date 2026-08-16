@@ -127,31 +127,22 @@ Use multiple commits if changes are logically separate.
 
 ## FINAL response format
 
-After committing, your FINAL response must be ONLY manual test scenarios in this EXACT format:
+After committing, your FINAL response must be ONLY the manual test checklist — no preamble, no code summary, no file list.
 
-## Test Scenarios
-
-### Happy Path
-- [ ] Description of what to test manually and expected result
-- [ ] Another test case
-
-### Edge Cases
-- [ ] Edge case to verify
-
-### Regression
-- [ ] Existing feature that should still work
-
-Rules:
-- Every line must be a markdown checkbox (- [ ])
-- Write actionable manual test steps, NOT a summary of code changes
-- Do NOT include code summaries, file lists, or implementation details
+The checklist opens with its core group: \`## Core flow\` on an English card, \`## Temel akış\` on a Turkish one. That heading is load-bearing, not decoration — the card reads it to know which items decide whether the feature works, so a checklist without it lands on the board unable to report its own progress. Everything below follows the style contract:
 
 ${styleContract}
 
 ${NO_SAVE_TOOLS_RULE}`;
     }
 
-    case "retest":
+    case "retest": {
+      // Retest authors a fresh checklist exactly like implementation does, so
+      // it needs the same style contract. It went without one for as long as
+      // it existed, which is why its output never carried a core group.
+      const styleContract = buildTestStyleContract({
+        language: detectCardLanguage({ title: card.title, description: card.description }),
+      });
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Review previous implementation and test scenarios.
@@ -164,25 +155,14 @@ ${buildCommitInstructions(commitRef)}
 
 ## FINAL response format
 
-Your FINAL response must be ONLY manual test scenarios in this EXACT format:
+Your FINAL response must be ONLY the manual test checklist — no preamble, no code summary, no file list.
 
-## Test Scenarios
+The checklist opens with its core group: \`## Core flow\` on an English card, \`## Temel akış\` on a Turkish one. That heading is load-bearing, not decoration — the card reads it to know which items decide whether the feature works, so a checklist without it lands on the board unable to report its own progress. Everything below follows the style contract:
 
-### Happy Path
-- [ ] Description of what to test manually and expected result
-
-### Edge Cases
-- [ ] Edge case to verify
-
-### Regression
-- [ ] Existing feature that should still work
-
-Rules:
-- Every line must be a markdown checkbox (- [ ])
-- Write actionable manual test steps, NOT a summary of code changes
-- Do NOT include code summaries, file lists, or implementation details
+${styleContract}
 
 ${NO_SAVE_TOOLS_RULE}`;
+    }
 
     case "verify":
       return `Ideafy: ${card.id}

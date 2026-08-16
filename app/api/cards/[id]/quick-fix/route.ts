@@ -14,8 +14,10 @@ import { getProcess, killProcess } from "@/lib/process-registry";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
 import {
   RUN_OUTPUT_CONTRACTS,
+  splitQuickFixResponse,
   prependWarningHtml,
 } from "@/lib/autonomous-run/select-run-output";
+import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import {
   generateBranchName,
@@ -182,20 +184,32 @@ export async function POST(
     const markedHtml = await marked(responseText);
     const htmlResponse = convertToTipTapTaskList(markedHtml);
 
-    // Parse response to extract summary and tests
-    const summaryMatch = responseText.match(/## Quick Fix Summary[\s\S]*?(?=## Test Scenarios|$)/i);
-    const testsMatch = responseText.match(/## Test Scenarios[\s\S]*/i);
+    // Parse response to extract summary and tests. The core-flow heading is
+    // the separator: one response carries both halves, and that heading is the
+    // only one the checklist is guaranteed to open with. It used to split on
+    // "## Test Scenarios", a wrapper the style contract never asked for — so
+    // the checklist arrived without the core group the card needs to read it.
+    const { summary: summaryText, checklist: checklistText } =
+      splitQuickFixResponse(responseText);
 
-    let solutionSummary = summaryMatch
-      ? convertToTipTapTaskList(await marked(summaryMatch[0]))
+    let solutionSummary = summaryText
+      ? convertToTipTapTaskList(await marked(summaryText))
       : htmlResponse;
     if (warning) {
       solutionSummary = prependWarningHtml(solutionSummary, warning);
     }
 
-    const testScenarios = testsMatch
-      ? convertToTipTapTaskList(await marked(testsMatch[0]))
-      : convertToTipTapTaskList(await marked("## Test Scenarios\n- [ ] Bug fix verified\n- [ ] No regression"));
+    // Fallback for a response that carried no checklist at all. It still has to
+    // open with a core heading, in the card's language — otherwise a parse miss
+    // quietly writes the very card this fix exists to prevent.
+    const fallbackChecklist =
+      detectCardLanguage({ title: card.title, description: card.description }) === "tr"
+        ? "## Temel akış\n- [ ] Bildirilen hatayı tekrar üretmeyi dene — artık oluşmamalı.\n- [ ] Hatanın çevresindeki akışı bir kez yürü, başka bir şeyin bozulmadığını gör."
+        : "## Core flow\n- [ ] Try to reproduce the reported bug — it must no longer happen.\n- [ ] Walk the flow around it once and confirm nothing else broke.";
+
+    const testScenarios = checklistText
+      ? convertToTipTapTaskList(await marked(checklistText))
+      : convertToTipTapTaskList(await marked(fallbackChecklist));
 
     // Auto-commit the changes
     const commitDisplayId = project
