@@ -201,30 +201,68 @@ export function buildPhasePolicy(
 // First-contact policy: shown once per fresh session that lands in a project
 // but has no card bound. Asks Claude to propose card creation when the user's
 // request looks like real work.
-export function buildCreationOfferPolicy(project: {
-  id: string;
-  name: string;
-}): string {
+//
+// Clause 1 is an escape hatch for the case the offer used to get wrong: a user
+// who already wrote "Ideafy'da bir kart aç" got asked whether to open a card
+// anyway. Nothing was broken — clause 2 said to ask, clause 3 said asking ends
+// the turn, and both were followed. The permission the user had already given
+// simply had nowhere to land, so it has to be read before the asking clauses,
+// not after them.
+//
+// `signals.promptLooksLikeCardRequest` comes from a keyword scan of this
+// turn's prompt (see lib/card-request-detection.ts). It only appends a line
+// saying the wording matched; it never sets the decision, because the same
+// keywords appear in messages that complain about card creation instead of
+// requesting it.
+export function buildCreationOfferPolicy(
+  project: {
+    id: string;
+    name: string;
+  },
+  signals?: { promptLooksLikeCardRequest?: boolean }
+): string {
+  const exceptionClause = [
+    "1. EXCEPTION — settle this BEFORE anything below. If the user's message",
+    "   already asks for a card (\"Ideafy'da bir kart aç\", \"create a card for",
+    "   this\", \"bunu backlog'a ekle\"), they have already given permission.",
+    "   Do NOT ask. Pick the column from their wording, call create_card and",
+    "   bind_session_to_card in THIS turn, then carry on with the work they",
+    "   actually asked for. Clauses 2 and 3 do not apply in that case.",
+    "   A message that merely MENTIONS cards is not such a request: a question",
+    "   about how card creation behaves, or a complaint that you asked when",
+    "   you should not have, wants an answer — not a card. When unsure, fall",
+    "   through to clause 2.",
+  ];
+
+  if (signals?.promptLooksLikeCardRequest) {
+    exceptionClause.push(
+      "   SIGNAL: this turn's wording matches a card request. Treat clause 1 as",
+      "   likely in effect, but confirm it against what the message actually",
+      "   asks for. The match is a hint, not a command."
+    );
+  }
+
   return [
     "<system-reminder>",
     `You are in Ideafy project "${sanitizeForReminder(project.name)}" (projectId: ${project.id}).`,
     "No Ideafy card is bound to this session yet.",
     "",
     "Policy for this session:",
-    "1. If the user's FIRST request looks like work they would want tracked,",
-    "   STOP before doing anything else and ask ONE short sentence proposing",
-    "   the column that fits:",
+    ...exceptionClause,
+    "2. Otherwise, if the user's FIRST request looks like work they would want",
+    "   tracked, STOP before doing anything else and ask ONE short sentence",
+    "   proposing the column that fits:",
     "     - A new idea that needs evaluation → \"Create this as an Ideation card?\"",
     "     - A known task ready to plan → \"Create this as a Backlog card?\"",
     "     - A bug report or broken behaviour → \"This looks like a bug. Create",
     "       it in the Bugs column?\"",
     "   Decide the column from the user's wording. Do not ask them to choose.",
-    "2. CRITICAL: After asking, END YOUR TURN. Do not read files, run tools,",
+    "3. CRITICAL: After asking, END YOUR TURN. Do not read files, run tools,",
     "   investigate, plan, or start implementation in the same turn as the",
     "   question. Wait for the user's next message. The only acceptable output",
     "   for this turn is the one-sentence question — nothing before it, nothing",
     "   after it.",
-    "3. On the user's 'yes' in the next turn:",
+    "4. On the user's 'yes' in the next turn:",
     "     - Call mcp__ideafy__create_card with projectId, a concise title, a",
     "       description drawn from the user's request, and status set to one",
     "       of: 'ideation' | 'backlog' | 'bugs'.",
@@ -232,12 +270,12 @@ export function buildCreationOfferPolicy(project: {
     "       card id. From the next turn onward the phase-aware policy will kick",
     "       in automatically.",
     "     - Then proceed with the actual work the user originally asked for.",
-    "4. On 'no' or if the request is a quick debug / read-only / lookup question:",
+    "5. On 'no' or if the request is a quick debug / read-only / lookup question:",
     "   do not offer again. Proceed with the user's request normally. The user",
     "   can bind a card later by naming one explicitly (e.g. \"this is for",
     "   IDE-125\") — in that case call mcp__ideafy__bind_session_to_card",
     "   directly without creating a new card.",
-    "5. This offer is shown only once per session. After this turn the hook will",
+    "6. This offer is shown only once per session. After this turn the hook will",
     "   stay silent unless a binding is created.",
     "</system-reminder>",
     "",
