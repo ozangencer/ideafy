@@ -112,10 +112,7 @@ After fixing the bug, provide a brief summary in this format:
 - **Fix Applied:** What was changed to fix it
 - **Files Modified:** List of files that were changed
 
-## Test Scenarios
-- [ ] Bug no longer reproduces
-- [ ] Related functionality still works
-- [ ] No regression in existing tests
+Then the test checklist, opening with its core group: \`## Core flow\` on an English card, \`## Temel akış\` on a Turkish one. Write the steps from what you actually changed — "Bug no longer reproduces" names nothing a person can walk, and the style contract below rejects it. That heading is also what separates the checklist from the summary above, so it must be present and at \`##\` level.
 
 ${autonomousVoice}
 
