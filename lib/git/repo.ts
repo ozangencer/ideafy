@@ -193,6 +193,12 @@ export interface UnpushedCommit {
    * `Card: IDE-283` trailer lives — the subject stays free-form prose.
    */
   body: string;
+  /**
+   * The branch this commit is attributed to. The default branch wins whenever
+   * it carries the commit, because "already on main" is the more useful of the
+   * two answers when several branches hold it.
+   */
+  branch: string;
 }
 
 export interface UnpushedStatus {
@@ -269,7 +275,10 @@ export async function getUnpushedStatus(
   // work here and nowhere else" is a true statement, not noise.
   //
   // HEAD is named alongside because a detached HEAD is on no branch at all.
-  const revArgs = ["HEAD", "--branches", "--not", "--remotes"];
+  // `--branches` precedes HEAD so that --source labels a commit with the branch
+  // that reaches it rather than the literal string "HEAD". The set is the same
+  // either way; only the label changes.
+  const revArgs = ["--branches", "HEAD", "--not", "--remotes"];
 
   try {
     if (!options.withCommits) {
@@ -282,13 +291,35 @@ export async function getUnpushedStatus(
       };
     }
 
+    // Which of these the default branch already carries. --source alone cannot
+    // answer this: when two branches reach a commit it reports whichever it
+    // walked from first, so a commit sitting on main can come back labelled
+    // with a feature branch. Measured on this repo, main held seven such
+    // commits and --source credited it with six.
+    const onDefault = new Set<string>();
+    if (await branchExists(projectPath, defaultBranch)) {
+      const { stdout } = await git(
+        projectPath,
+        "rev-list",
+        defaultBranch,
+        "--not",
+        "--remotes"
+      );
+      for (const line of stdout.split("\n")) {
+        const hash = line.trim();
+        if (hash) onDefault.add(hash);
+      }
+    }
+
     // Unit separator between fields, record separator between commits. The
     // body spans newlines, so splitting commits on "\n" — which is what this
     // did before the body was carried — would shred every multi-line message.
+    // %S is the ref --source walked from, and needs --source to be populated.
     const { stdout } = await git(
       projectPath,
       "log",
-      "--pretty=format:%H%x1f%s%x1f%cI%x1f%b%x1e",
+      "--pretty=format:%H%x1f%s%x1f%cI%x1f%S%x1f%b%x1e",
+      "--source",
       ...revArgs
     );
 
@@ -296,12 +327,16 @@ export async function getUnpushedStatus(
       .split("\x1e")
       .filter((record) => record.trim() !== "")
       .map((record) => {
-        const [hash, subject, date, body] = record.replace(/^\n/, "").split("\x1f");
+        const [hash, subject, date, source, body] = record
+          .replace(/^\n/, "")
+          .split("\x1f");
+        const reached = (source ?? "").replace(/^refs\/heads\//, "");
         return {
           hash: hash ?? "",
           subject: subject ?? "",
           date: date ?? "",
           body: (body ?? "").trim(),
+          branch: hash && onDefault.has(hash) ? defaultBranch : reached,
         };
       });
 

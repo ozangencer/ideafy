@@ -17,6 +17,8 @@ interface UnpushedCommitView {
   hash: string;
   subject: string;
   date: string;
+  /** Branch the commit is attributed to; the default branch wins ties. */
+  branch: string;
   /** Empty for the many commits that never named a card. */
   cards: { id: string; displayId: string; title: string }[];
 }
@@ -45,6 +47,34 @@ function formatDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * One section per branch, because the list stopped being single-branch when the
+ * badge started counting every local branch: sixteen commits under one flat
+ * heading say nothing about what to push. The default branch leads — work that
+ * has landed and only needs pushing is the most actionable row — and the rest
+ * follow by size, so the branch holding fifteen commits is not below the one
+ * holding one.
+ */
+function groupByBranch(
+  commits: UnpushedCommitView[],
+  defaultBranch: string
+): { branch: string; commits: UnpushedCommitView[] }[] {
+  const byBranch = new Map<string, UnpushedCommitView[]>();
+  for (const commit of commits) {
+    const key = commit.branch || "detached HEAD";
+    const bucket = byBranch.get(key);
+    if (bucket) bucket.push(commit);
+    else byBranch.set(key, [commit]);
+  }
+  return [...byBranch.entries()]
+    .map(([branch, list]) => ({ branch, commits: list }))
+    .sort((a, b) => {
+      if (a.branch === defaultBranch) return -1;
+      if (b.branch === defaultBranch) return 1;
+      return b.commits.length - a.commits.length || a.branch.localeCompare(b.branch);
+    });
 }
 
 export function UnpushedDialog({ project, onClose, onRefreshed }: UnpushedDialogProps) {
@@ -116,8 +146,18 @@ export function UnpushedDialog({ project, onClose, onRefreshed }: UnpushedDialog
           </p>
         ) : (
           <div className="max-h-[50vh] overflow-y-auto -mx-2 px-2">
+            {groupByBranch(data.commits, data.defaultBranch).map((group) => (
+            <section key={group.branch} className="mb-3 last:mb-0">
+              <div className="flex items-baseline gap-2 px-0.5 pb-1">
+                <span className="text-xs font-mono text-foreground truncate">
+                  {group.branch}
+                </span>
+                <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                  {group.commits.length} commit{group.commits.length === 1 ? "" : "s"}
+                </span>
+              </div>
             <ul className="divide-y divide-border">
-              {data.commits.map((commit) => (
+              {group.commits.map((commit) => (
                 <li key={commit.hash} className="py-2.5 flex items-start gap-3">
                   {/* The commit message is the line, and the badges sit in
                       front of it. Cards are an enrichment: most commits never
@@ -148,6 +188,8 @@ export function UnpushedDialog({ project, onClose, onRefreshed }: UnpushedDialog
                 </li>
               ))}
             </ul>
+            </section>
+            ))}
           </div>
         )}
 
