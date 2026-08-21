@@ -782,44 +782,74 @@ export function EditProjectModal({
           </div>
 
           {/* cmux placement — only meaningful while cmux has workspaces open */}
-          {cmuxWorkspaces.length > 0 && (
-            <div className="grid gap-1.5">
-              <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-muted-foreground" />
-                <label className="text-sm font-medium">cmux Workspace</label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Where this project&apos;s terminal tabs open in cmux.
-              </p>
-              <Select
-                value={cmuxWorkspaceId || "auto"}
-                onValueChange={(v) => setCmuxWorkspaceId(v === "auto" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[70]">
-                  <SelectItem value="auto">Match by folder (default)</SelectItem>
-                  <SelectItem value="new">Always a new workspace</SelectItem>
-                  {cmuxWorkspaces.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>
-                      <span className="flex flex-col">
-                        <span>{w.title || "Untitled"}</span>
-                        {w.currentDirectory && (
-                          // text-current, not text-muted-foreground: the row
-                          // swaps to the accent foreground when highlighted and
-                          // a muted child would drop out of contrast.
-                          <span className="text-xs text-current opacity-60">
-                            {w.currentDirectory}
+          {cmuxWorkspaces.length > 0 &&
+            (() => {
+              const selected = cmuxWorkspaces.find((w) => w.id === cmuxWorkspaceId);
+              // Radix mirrors the chosen item's markup into the trigger, so the
+              // two-line workspace row lands in a one-line box as a stack that
+              // sits half-indented. The trigger writes its own summary instead.
+              const triggerLabel =
+                cmuxWorkspaceId === "new"
+                  ? "Always a new workspace"
+                  : selected
+                    ? selected.title || "Untitled"
+                    : "Match by folder (default)";
+              const triggerPath = selected?.currentDirectory ?? null;
+
+              return (
+                <div className="grid gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="h-4 w-4 text-muted-foreground" />
+                    <label className="text-sm font-medium">cmux Workspace</label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Where this project&apos;s terminal tabs open in cmux.
+                  </p>
+                  <Select
+                    value={cmuxWorkspaceId || "auto"}
+                    onValueChange={(v) => setCmuxWorkspaceId(v === "auto" ? "" : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue>
+                        {/* One block child: the trigger clamps its value span to
+                            a single line, and a block inside it can truncate
+                            with a real ellipsis rather than a hard clip. */}
+                        <span className="block truncate text-left">
+                          {triggerLabel}
+                          {triggerPath && (
+                            <span
+                              className="ml-2 font-mono text-xs text-muted-foreground"
+                              title={triggerPath}
+                            >
+                              {triggerPath}
+                            </span>
+                          )}
+                        </span>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="z-[70]">
+                      <SelectItem value="auto">Match by folder (default)</SelectItem>
+                      <SelectItem value="new">Always a new workspace</SelectItem>
+                      {cmuxWorkspaces.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate">{w.title || "Untitled"}</span>
+                            {w.currentDirectory && (
+                              // text-current, not text-muted-foreground: the row
+                              // swaps to the accent foreground when highlighted and
+                              // a muted child would drop out of contrast.
+                              <span className="truncate font-mono text-xs text-current opacity-60">
+                                {w.currentDirectory}
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
 
         </div>
 
