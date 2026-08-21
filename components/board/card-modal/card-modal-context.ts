@@ -41,6 +41,9 @@ export interface CardModalContextValue {
   setPriority: Dispatch<SetStateAction<Priority>>;
   projectId: string | null;
   setProjectId: Dispatch<SetStateAction<string | null>>;
+  /** card_groups.id — the chain this card belongs to, or null. */
+  groupId: string | null;
+  setGroupId: Dispatch<SetStateAction<string | null>>;
   aiPlatform: AiPlatform | null;
   setAiPlatform: Dispatch<SetStateAction<AiPlatform | null>>;
 

@@ -175,6 +175,15 @@ export interface KanbanStore {
   closeModal: () => void;
   setSearchQuery: (query: string) => void;
 
+  // Card-group actions. Membership itself is a card field, so joining a chain
+  // goes through updateCard({ groupId }) — this only mints the chain.
+  createCardGroup: (input: {
+    code: string;
+    name: string;
+    color?: string | null;
+    projectId?: string | null;
+  }) => Promise<CardGroup | null>;
+
   // Project actions
   fetchProjects: () => Promise<void>;
   addProject: (

@@ -57,6 +57,7 @@ export const createCardsSlice: StoreSlice<
     | "openModal"
     | "closeModal"
     | "setSearchQuery"
+    | "createCardGroup"
   >
 > = (set, get) => ({
   cards: [],
@@ -244,6 +245,34 @@ export const createCardsSlice: StoreSlice<
     } catch (error) {
       console.error("Failed to move card:", error);
       set({ cards: previousCards });
+    }
+  },
+
+  // The board renders a group row only for groups it already holds, so the new
+  // group is pushed into the store here rather than waiting for the next
+  // fetchCards poll — otherwise the card would sit in a chain with no header
+  // for up to ten seconds.
+  createCardGroup: async ({ code, name, color = null, projectId = null }) => {
+    try {
+      const response = await fetch("/api/card-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name, color, projectId }),
+      });
+      if (!response.ok) {
+        const error = await parseJson<{ error?: string }>(response);
+        throw new Error(error.error || "Failed to create group");
+      }
+      const group = await parseJson<CardGroup>(response);
+      set((state) => ({
+        cardGroups: [...state.cardGroups, group].sort((a, b) =>
+          a.code.localeCompare(b.code)
+        ),
+      }));
+      return group;
+    } catch (error) {
+      console.error("Failed to create card group:", error);
+      return null;
     }
   },
 

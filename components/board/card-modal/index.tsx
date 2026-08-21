@@ -140,6 +140,7 @@ export function CardModal({
     complexity, setComplexity,
     priority, setPriority,
     projectId, setProjectId,
+    groupId, setGroupId,
     aiPlatform, setAiPlatform,
     isVisible,
     cardHistory, setCardHistory,
@@ -238,6 +239,7 @@ export function CardModal({
     complexity,
     priority,
     projectId,
+    groupId,
     aiPlatform,
     projects,
     updateCard,
@@ -782,6 +784,7 @@ export function CardModal({
     complexity, setComplexity,
     priority, setPriority,
     projectId, setProjectId,
+    groupId, setGroupId,
     aiPlatform, setAiPlatform,
     isTitleValid,
     canSave,
@@ -835,6 +838,8 @@ export function CardModal({
             projectId={projectId}
             onProjectChange={setProjectId}
             projects={projects}
+            groupId={groupId}
+            onGroupChange={setGroupId}
             complexity={complexity}
             onComplexityChange={setComplexity}
             priority={priority}
