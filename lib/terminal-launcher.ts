@@ -32,17 +32,32 @@ export interface LaunchTerminalOptions {
  * Assemble the placement/label context from whatever the route already has.
  * Every field is optional: a caller with no card still gets useful placement,
  * and terminals that cannot place a run ignore the whole thing.
+ *
+ * `displayId` is only an override. When it is omitted the code is derived from
+ * the card and project the caller already handed over — the same rule as
+ * getDisplayId in lib/types. A route that forgets the third argument would
+ * otherwise open a terminal labelled with the bare card title, which is
+ * exactly what happened to the interactive ideation launch: the tab said
+ * "OpenAI API Desteği" with nothing saying which card that was.
  */
 export function buildTerminalSession(
-  card: { title?: string | null } | null | undefined,
-  project: { id?: string; folderPath?: string | null } | null | undefined,
+  card: { title?: string | null; taskNumber?: number | null } | null | undefined,
+  project:
+    | { id?: string; folderPath?: string | null; idPrefix?: string | null }
+    | null
+    | undefined,
   displayId?: string | null,
 ): LaunchTerminalOptions["session"] {
   const cardTitle = card?.title || null;
+  const code =
+    displayId ||
+    (project?.idPrefix && card?.taskNumber
+      ? `${project.idPrefix}-${card.taskNumber}`
+      : null);
   return {
-    title: displayId && cardTitle
-      ? `${displayId} · ${cardTitle}`
-      : displayId || cardTitle || undefined,
+    title: code && cardTitle
+      ? `${code} · ${cardTitle}`
+      : code || cardTitle || undefined,
     projectFolder: project?.folderPath ?? null,
     projectId: project?.id ?? null,
   };

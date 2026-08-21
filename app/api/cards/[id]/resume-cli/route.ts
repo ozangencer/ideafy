@@ -199,7 +199,12 @@ export async function POST(
     ))
     .orderBy(asc(conversations.createdAt));
 
-  const displayId = card.taskNumber ? `IDE-${card.taskNumber}` : cardId;
+  // The card's own project prefix, not a hardcoded "IDE-": that mislabelled
+  // every card outside the Ideafy board, in the opening prompt and in the
+  // terminal tab it is handed to below.
+  const displayId = project?.idPrefix && card.taskNumber
+    ? `${project.idPrefix}-${card.taskNumber}`
+    : cardId;
   const openingPrompt = buildOpeningPrompt({
     displayId,
     title: card.title,
