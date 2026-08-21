@@ -236,20 +236,43 @@ export async function getUnpushedStatus(
   const defaultBranch = await getDefaultBranch(projectPath);
   const remoteRef = `refs/remotes/origin/${defaultBranch}`;
 
-  // A branch the remote has never seen has no "unpushed" answer worth giving —
-  // every commit would count, which is noise rather than a warning.
+  // A repo the remote has never seen has no "unpushed" answer worth giving —
+  // every commit would count, which is noise rather than a warning. One
+  // remote-tracking ref is enough to prove the remote is real; this one is
+  // the ref every clone has.
   try {
     await git(projectPath, "show-ref", "--verify", "--quiet", remoteRef);
-    await git(projectPath, "show-ref", "--verify", "--quiet", `refs/heads/${defaultBranch}`);
   } catch {
     return UNSUPPORTED;
   }
 
-  const range = `origin/${defaultBranch}..${defaultBranch}`;
+  // Everything reachable from where you are standing, or from the branch you
+  // push from, that no remote-tracking ref carries.
+  //
+  // Deliberately not `origin/<default>..<default>`: Ideafy's own workflow parks
+  // work on a kanban/IDE-xxx branch for days, and a badge watching only the
+  // default branch stays silent for exactly as long as the work exists nowhere
+  // but this machine — silent when it matters most.
+  //
+  // `--not --remotes` rather than `origin/<default>..HEAD` for the other half
+  // of the same question: a feature branch that HAS been pushed is safe, and
+  // comparing it against origin/main would count its commits anyway and cry
+  // wolf. Asking "is this on any remote" answers both cases with one range.
+  //
+  // HEAD alone would still leave a hole, because the workflow ends by merging
+  // into the default branch and starting the next card elsewhere — which moves
+  // HEAD off the one branch now holding unpushed commits. Naming both closes
+  // it. Not `--branches`: a kanban branch abandoned months ago would light the
+  // badge forever, and a warning nobody can clear is one nobody reads.
+  const revs = ["HEAD"];
+  if (await branchExists(projectPath, defaultBranch)) {
+    revs.push(`refs/heads/${defaultBranch}`);
+  }
+  const revArgs = [...revs, "--not", "--remotes"];
 
   try {
     if (!options.withCommits) {
-      const { stdout } = await git(projectPath, "rev-list", "--count", range);
+      const { stdout } = await git(projectPath, "rev-list", "--count", ...revArgs);
       return {
         supported: true,
         defaultBranch,
@@ -264,8 +287,8 @@ export async function getUnpushedStatus(
     const { stdout } = await git(
       projectPath,
       "log",
-      range,
-      "--pretty=format:%H%x1f%s%x1f%cI%x1f%b%x1e"
+      "--pretty=format:%H%x1f%s%x1f%cI%x1f%b%x1e",
+      ...revArgs
     );
 
     const commits: UnpushedCommit[] = stdout
