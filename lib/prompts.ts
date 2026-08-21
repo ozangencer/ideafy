@@ -31,7 +31,9 @@ export {
 // ------------------------------------------------------------------
 
 import { stripHtml } from "./prompts/utils";
-import { buildTestStyleContract, detectCardLanguage } from "./prompts/test-style";
+import { detectCardLanguage } from "./prompts/test-style";
+import { buildVoicePrompt } from "./prompts/voice-style";
+import { DEFAULT_VOICE, type Voice } from "./types";
 
 const NO_SAVE_TOOLS_RULE =
   "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
@@ -84,13 +86,22 @@ export function detectPhase(card: {
 export function buildPhasePrompt(
   phase: Phase,
   card: CardForPrompt,
-  displayId?: string | null
+  displayId?: string | null,
+  voice: Voice = DEFAULT_VOICE
 ): string {
   const title = stripHtml(card.title);
   const commitRef = displayId ?? null;
+  const cardLanguage = detectCardLanguage({
+    title: card.title,
+    description: card.description,
+  });
 
   switch (phase) {
-    case "planning":
+    case "planning": {
+      // The four headings and the two markers are the plan's contract with the
+      // board (see RUN_OUTPUT_CONTRACTS.planning) — voice colours the prose
+      // under them and nothing else.
+      const planVoice = buildVoicePrompt(voice, "plan");
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Review title, description, and any existing notes.
@@ -107,12 +118,18 @@ Must include at the end:
 [COMPLEXITY: trivial/low/medium/high/very_high]
 [PRIORITY: low/medium/high]
 
+The four headings above and both markers are required in every voice — the voice below decides how the prose under them reads, not which sections exist:
+
+${planVoice}
+
 Plan only — do NOT implement. ${NO_SAVE_TOOLS_RULE}`;
+    }
 
     case "implementation": {
-      const styleContract = buildTestStyleContract({
-        language: detectCardLanguage({ title: card.title, description: card.description }),
-      });
+      // buildVoicePrompt(..., "tests") returns the shared style contract with
+      // the voice persona and its tests accent appended, so the manual-tester
+      // format still wins and voice only colours the prose around each step.
+      const styleContract = buildVoicePrompt(voice, "tests", { language: cardLanguage });
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Follow the approved plan in solutionSummary.
@@ -140,9 +157,7 @@ ${NO_SAVE_TOOLS_RULE}`;
       // Retest authors a fresh checklist exactly like implementation does, so
       // it needs the same style contract. It went without one for as long as
       // it existed, which is why its output never carried a core group.
-      const styleContract = buildTestStyleContract({
-        language: detectCardLanguage({ title: card.title, description: card.description }),
-      });
+      const styleContract = buildVoicePrompt(voice, "tests", { language: cardLanguage });
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Review previous implementation and test scenarios.
@@ -164,6 +179,9 @@ ${styleContract}
 ${NO_SAVE_TOOLS_RULE}`;
     }
 
+    // Verify is the one phase that takes no voice: it reproduces an existing
+    // checklist word for word, and a persona that rewords anything would turn
+    // a verification pass into a silent rewrite.
     case "verify":
       return `Ideafy: ${card.id}
 

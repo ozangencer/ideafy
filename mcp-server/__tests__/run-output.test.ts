@@ -355,11 +355,21 @@ test("the retest phase has a contract and a prompt that asks for it", () => {
   );
   // And it must reach the style contract at all. Demanding the heading while
   // withholding the rules that shape what goes under it is how retest produced
-  // core-less checklists for as long as it existed.
+  // core-less checklists for as long as it existed. The phase prompt now gets
+  // there through the voice wrapper, so both links of that chain are checked.
   assert.match(
     retestBlock.slice(0, 1600),
-    /buildTestStyleContract/,
+    /buildVoicePrompt\(voice, "tests"/,
     "the retest prompt must inject the shared test style contract",
+  );
+  const voiceStyle = readFileSync(
+    new URL("../../lib/prompts/voice-style.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    voiceStyle,
+    /section === "tests"[\s\S]{0,200}buildTestStyleContract/,
+    'buildVoicePrompt(..., "tests") must still embed the shared style contract',
   );
 });
 
