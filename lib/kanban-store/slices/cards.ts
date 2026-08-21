@@ -58,6 +58,8 @@ export const createCardsSlice: StoreSlice<
     | "closeModal"
     | "setSearchQuery"
     | "createCardGroup"
+    | "updateCardGroup"
+    | "deleteCardGroup"
   >
 > = (set, get) => ({
   cards: [],
@@ -273,6 +275,75 @@ export const createCardsSlice: StoreSlice<
     } catch (error) {
       console.error("Failed to create card group:", error);
       return null;
+    }
+  },
+
+  updateCardGroup: async (id, updates) => {
+    const previousGroups = get().cardGroups;
+    set((state) => ({
+      cardGroups: state.cardGroups
+        .map((group) => (group.id === id ? { ...group, ...updates } : group))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    }));
+
+    try {
+      const response = await fetch(`/api/card-groups/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) {
+        const error = await parseJson<{ error?: string }>(response);
+        throw new Error(error.error || "Failed to update group");
+      }
+      const group = await parseJson<CardGroup>(response);
+      set((state) => ({
+        cardGroups: state.cardGroups
+          .map((existing) => (existing.id === id ? group : existing))
+          .sort((a, b) => a.code.localeCompare(b.code)),
+      }));
+      return true;
+    } catch (error) {
+      console.error("Failed to update card group:", error);
+      set({ cardGroups: previousGroups });
+      return false;
+    }
+  },
+
+  // The route releases the members in the same transaction that drops the
+  // group, so the local cards are cleared alongside it — otherwise a card
+  // would keep a groupId pointing at nothing until the next fetchCards, and
+  // that card silently renders outside its chain with no reason given.
+  deleteCardGroup: async (id) => {
+    const previousGroups = get().cardGroups;
+    const previousCards = get().cards;
+    const previousSelected = get().selectedCard;
+    set((state) => ({
+      cardGroups: state.cardGroups.filter((group) => group.id !== id),
+      cards: state.cards.map((card) =>
+        card.groupId === id ? { ...card, groupId: null } : card
+      ),
+      selectedCard:
+        state.selectedCard?.groupId === id
+          ? { ...state.selectedCard, groupId: null }
+          : state.selectedCard,
+    }));
+
+    try {
+      const response = await fetch(`/api/card-groups/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const error = await parseJson<{ error?: string }>(response);
+        throw new Error(error.error || "Failed to delete group");
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to delete card group:", error);
+      set({
+        cardGroups: previousGroups,
+        cards: previousCards,
+        selectedCard: previousSelected,
+      });
+      return false;
     }
   },
 

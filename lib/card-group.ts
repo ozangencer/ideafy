@@ -41,7 +41,14 @@ export interface CardGroupSummary {
    * completed nor withdrawn, in taskNumber order. Null once the chain is done.
    */
   nextCard: Card | null;
-  /** True when every member is completed — the group leaves the board. */
+  /**
+   * True when no member is still moving — every one completed or withdrawn —
+   * and the group leaves the board. Deliberately not `done === total`:
+   * withdrawing the last open card of a chain ends it just as surely as
+   * finishing it, and a chain that ends 3/4 has to be able to leave too.
+   * Otherwise its row sits in Completed forever, reading as unfinished work
+   * with no next card to point at.
+   */
   isComplete: boolean;
 }
 
@@ -88,7 +95,9 @@ export function summarizeCardGroups(
       total: members.length,
       done,
       nextCard: members.find((card) => !isFinished(card)) ?? null,
-      isComplete: done === members.length,
+      // `done` stays completed-only — it is a progress figure a human reads,
+      // and counting withdrawals as progress would flatter the chain.
+      isComplete: members.every(isFinished),
     });
   }
   return summaries;
