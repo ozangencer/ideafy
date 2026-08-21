@@ -88,7 +88,7 @@ export function buildQuickFixPrompt(
   const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
   });
-  const autonomousVoice = buildVoicePrompt(voice, "autonomous");
+  const summaryVoice = buildVoicePrompt(voice, "quick_fix");
 
   return `You are a senior developer. Fix this bug quickly and efficiently.
 
@@ -114,7 +114,7 @@ After fixing the bug, provide a brief summary in this format:
 
 Then the test checklist, opening with its core group: \`## Core flow\` on an English card, \`## Temel akış\` on a Turkish one. Write the steps from what you actually changed — "Bug no longer reproduces" names nothing a person can walk, and the style contract below rejects it. That heading is also what separates the checklist from the summary above, so it must be present and at \`##\` level.
 
-${autonomousVoice}
+${summaryVoice}
 
 ${styleContract}
 

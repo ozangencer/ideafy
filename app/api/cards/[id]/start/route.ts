@@ -12,6 +12,7 @@ import {
   generateImageReferences,
   type Phase,
 } from "@/lib/prompts";
+import { normalizeVoice } from "@/lib/project-serialize";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
 import {
   RUN_OUTPUT_CONTRACTS,
@@ -71,7 +72,7 @@ export async function POST(
   const promptDisplayId = project && card.taskNumber
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
-  let prompt = buildPhasePrompt(phase, card, promptDisplayId);
+  let prompt = buildPhasePrompt(phase, card, promptDisplayId, normalizeVoice(project?.voice));
   const newStatus = getNewStatus(phase, card.status as Status);
 
   // Extract and save images for CLI context

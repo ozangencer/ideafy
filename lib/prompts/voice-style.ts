@@ -1,6 +1,6 @@
 /**
  * Project-level voice contract. Generalizes the IDE-175 test-style pattern to
- * cover every AI surface (plan, tests, opinion, chat, autonomous flows). One
+ * cover every AI surface (plan, tests, opinion, chat, quick fix). One
  * voice setting per project drives tone across all of them so a single mental
  * model — `entrepreneur | builder | engineer` — controls how the assistant
  * sounds.
@@ -19,8 +19,7 @@ export type VoiceSection =
   | "plan"
   | "opinion"
   | "chat"
-  | "autonomous"
-  | "solution_summary";
+  | "quick_fix";
 
 const PERSONA_BASE: Record<Voice, string> = {
   entrepreneur: `## Voice: Entrepreneur
@@ -85,16 +84,14 @@ const SECTION_ACCENTS: Record<VoiceSection, Partial<Record<Voice, string>>> = {
     engineer: `\n\n### Chat accent\nDefault tone: terse and structured. Bullets, file refs, code blocks where they help. Skip pleasantries.`,
   },
 
-  autonomous: {
-    entrepreneur: `\n\n### Autonomous-flow accent\nThe summary you hand back at the end should be plain-language. List what changed in human terms; the user will read this without opening the diff.`,
-    builder: `\n\n### Autonomous-flow accent\nHand back a short prose summary plus a Files line. Each file gets one sentence on what changed.`,
-    engineer: `\n\n### Autonomous-flow accent\nHand back a Changed Files table, root-cause one-liner, and trade-off note. Skip narration.`,
-  },
-
-  solution_summary: {
-    entrepreneur: `\n\n### Solution-summary accent\nNarrate the fix as a story: what was wrong, what we did, what the user will notice. Files mentioned by name, not path.`,
-    builder: `\n\n### Solution-summary accent\nProse paragraphs grouped by feature area. Mention file paths inline. Add a Files table at the end if more than 3 files moved.`,
-    engineer: `\n\n### Solution-summary accent\nRoot cause → architecture context → step-by-step changes with snippets → Changed Files table → notes/caveats. Standard SWE write-up.`,
+  // Quick Fix is the only surface that hands back a free-form summary of its
+  // own work. The autonomous run's phases each produce something the board
+  // parses — a plan or a checklist — so they take the `plan` and `tests`
+  // accents instead of this one.
+  quick_fix: {
+    entrepreneur: `\n\n### Quick-fix accent\nThe summary you hand back should be plain-language. List what changed in human terms; the user will read this without opening the diff.`,
+    builder: `\n\n### Quick-fix accent\nHand back a short prose summary plus a Files line. Each file gets one sentence on what changed.`,
+    engineer: `\n\n### Quick-fix accent\nHand back a Changed Files table, root-cause one-liner, and trade-off note. Skip narration.`,
   },
 };
 
