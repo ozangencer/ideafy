@@ -246,8 +246,8 @@ export async function getUnpushedStatus(
     return UNSUPPORTED;
   }
 
-  // Everything reachable from where you are standing, or from the branch you
-  // push from, that no remote-tracking ref carries.
+  // Every commit on every local branch that no remote-tracking ref carries —
+  // the whole of what would be lost with the disk, and nothing else.
   //
   // Deliberately not `origin/<default>..<default>`: Ideafy's own workflow parks
   // work on a kanban/IDE-xxx branch for days, and a badge watching only the
@@ -259,16 +259,17 @@ export async function getUnpushedStatus(
   // comparing it against origin/main would count its commits anyway and cry
   // wolf. Asking "is this on any remote" answers both cases with one range.
   //
-  // HEAD alone would still leave a hole, because the workflow ends by merging
-  // into the default branch and starting the next card elsewhere — which moves
-  // HEAD off the one branch now holding unpushed commits. Naming both closes
-  // it. Not `--branches`: a kanban branch abandoned months ago would light the
-  // badge forever, and a warning nobody can clear is one nobody reads.
-  const revs = ["HEAD"];
-  if (await branchExists(projectPath, defaultBranch)) {
-    revs.push(`refs/heads/${defaultBranch}`);
-  }
-  const revArgs = [...revs, "--not", "--remotes"];
+  // `--branches` rather than HEAD plus the default branch, which was the first
+  // answer here and was too narrow: it went quiet about every branch the user
+  // was not standing on. Measured across this machine's own projects, one repo
+  // held seventeen commits that existed nowhere else and the badge reported
+  // one. The objection to counting them — that a branch abandoned months ago
+  // would light the badge forever — does not survive contact with that number:
+  // a branch you will never push is one to delete, and until you do, "there is
+  // work here and nowhere else" is a true statement, not noise.
+  //
+  // HEAD is named alongside because a detached HEAD is on no branch at all.
+  const revArgs = ["HEAD", "--branches", "--not", "--remotes"];
 
   try {
     if (!options.withCommits) {
