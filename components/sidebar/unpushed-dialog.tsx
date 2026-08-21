@@ -94,7 +94,7 @@ export function UnpushedDialog({ project, onClose, onRefreshed }: UnpushedDialog
           <DialogTitle>Not pushed yet</DialogTitle>
           <DialogDescription>
             {data?.supported
-              ? `These commits are on your ${data.defaultBranch} but not on origin/${data.defaultBranch}. They only exist on this machine until you push.`
+              ? "These commits have not reached any remote. They only exist on this machine until you push."
               : "Commits that exist only on this machine."}
           </DialogDescription>
         </DialogHeader>

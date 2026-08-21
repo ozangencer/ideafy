@@ -4,9 +4,11 @@ import { db, schema } from "@/lib/db";
 import { fetchRemote, getUnpushedStatus } from "@/lib/git";
 
 /**
- * The commits on this project's default branch that origin has not seen, each
- * carrying its own subject line, plus the cards it came from where any can be
- * identified.
+ * The commits on this project's current branch or its default branch that no
+ * remote has seen, each carrying its own subject line, plus the cards it came
+ * from where any can be identified. Not the default branch alone: work sits on
+ * a kanban/IDE-xxx branch for most of its life, and that is exactly when it
+ * exists nowhere else.
  *
  * Cards are an enrichment, never the unit. Most commits in a real repo are made
  * by hand and carry no card at all — listing only card-shaped commits would
