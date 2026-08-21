@@ -1,5 +1,12 @@
 import { spawn } from "child_process";
-import { writeFileSync, readFileSync, existsSync } from "fs";
+import {
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+} from "fs";
 import { join, resolve as resolvePath } from "path";
 import { tmpdir } from "os";
 import { findBinary } from "@/lib/platform/base-provider";
@@ -44,6 +51,23 @@ export type CmuxPlacement =
   | { kind: "stay" };
 
 const WORKSPACE_CACHE_FILE = "cmux-workspaces.json";
+
+/**
+ * How long a reported workspace list is worth showing. Ideafy cannot refresh
+ * it on its own — the socket refuses us — so without an expiry the picker
+ * would keep offering workspaces from a cmux that has since been quit, or
+ * uninstalled, with nothing able to notice.
+ */
+const WORKSPACE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Filename stem of the bootstrap scripts. Shared by the writer and the filter. */
+const BOOTSTRAP_NAME_PREFIX = "ideafy-cmux-";
+
+interface CachedWorkspaces {
+  /** Epoch ms the list was reported. Read back against WORKSPACE_CACHE_TTL_MS. */
+  savedAt: number;
+  workspaces: CmuxWorkspace[];
+}
 
 interface CmdResult {
   code: number;
@@ -90,7 +114,8 @@ function workspaceCachePath(): string {
  */
 export function cacheCmuxWorkspaces(workspaces: CmuxWorkspace[]): void {
   try {
-    writeFileSync(workspaceCachePath(), JSON.stringify(workspaces), { mode: 0o600 });
+    const snapshot: CachedWorkspaces = { savedAt: Date.now(), workspaces };
+    writeFileSync(workspaceCachePath(), JSON.stringify(snapshot), { mode: 0o600 });
   } catch (err) {
     console.error(`[cmux] could not cache workspace list: ${(err as Error).message}`);
   }
@@ -101,8 +126,13 @@ function readCachedCmuxWorkspaces(): CmuxWorkspace[] {
     const path = workspaceCachePath();
     if (!existsSync(path)) return [];
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((w): w is CmuxWorkspace =>
+    // Older builds wrote a bare array. Nothing says how stale one of those is,
+    // so treat it as expired; the next launch replaces it with a dated one.
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+    const { savedAt, workspaces } = parsed as Partial<CachedWorkspaces>;
+    if (typeof savedAt !== "number" || !Array.isArray(workspaces)) return [];
+    if (Date.now() - savedAt > WORKSPACE_CACHE_TTL_MS) return [];
+    return workspaces.filter((w): w is CmuxWorkspace =>
       !!w && typeof (w as CmuxWorkspace).id === "string");
   } catch {
     return [];
@@ -126,6 +156,25 @@ export function parseCmuxWorkspaceList(json: string): CmuxWorkspace[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * True for the workspace cmux opened only to run one of our bootstrap scripts.
+ * It lives for a moment — the bootstrap renames it or moves out and closes it —
+ * but the list is reported before either happens, so it has to be dropped here
+ * or it lands in the cache and, from there, in the settings picker as a
+ * workspace that no longer exists.
+ *
+ * `selfId` is the bootstrap naming itself and is authoritative. The title check
+ * covers the case where cmux left no workspace id in its environment: cmux
+ * titles the tab after the command it was handed, which is our script's path.
+ */
+export function isBootstrapWorkspace(
+  workspace: CmuxWorkspace,
+  selfId: string | null,
+): boolean {
+  if (selfId && workspace.id === selfId) return true;
+  return !!workspace.title && workspace.title.includes(BOOTSTRAP_NAME_PREFIX);
 }
 
 /**
@@ -259,8 +308,13 @@ place() {
   list=$("$CMUX" workspace list --json --id-format uuids 2>/dev/null) || return 0
   # Plain-text reply: a workspace UUID, "keep", or "stay". Keeps the parsing
   # here to a case statement instead of a JSON reader the shell may not have.
+  # x-cmux-self-workspace lets the server drop this throwaway workspace from
+  # the list before caching it. A header rather than a query param: the URL
+  # already carries conditional params, and computing "?" vs "&" in shell is
+  # the kind of thing that breaks quietly.
   target=$(printf '%s' "$list" | curl -sS -m 10 -X POST ${shellQuote(resolveUrl.toString())} \\
-    -H 'content-type: application/json' --data-binary @- 2>/dev/null)
+    -H 'content-type: application/json' \\
+    -H "x-cmux-self-workspace: $CMUX_WORKSPACE_ID" --data-binary @- 2>/dev/null)
 
   workspace="$CMUX_WORKSPACE_ID"
   case "$target" in
@@ -303,15 +357,44 @@ exec "$RUN"
 `;
 }
 
+/** Bootstraps older than this are from runs that are long over. */
+const BOOTSTRAP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Delete the bootstrap scripts earlier launches left in tmp — cmux runs them
+ * and nobody cleans up after. A day old is well past any live launch, which
+ * keeps the sweep away from a script bash has not finished reading. Best
+ * effort throughout: a failed sweep must never stop a terminal from opening.
+ */
+function sweepOldBootstraps(): void {
+  try {
+    const dir = tmpdir();
+    const cutoff = Date.now() - BOOTSTRAP_MAX_AGE_MS;
+    for (const name of readdirSync(dir)) {
+      if (!name.startsWith(BOOTSTRAP_NAME_PREFIX) || !name.endsWith(".sh")) continue;
+      const path = join(dir, name);
+      try {
+        if (statSync(path).mtimeMs < cutoff) unlinkSync(path);
+      } catch {
+        // Already gone, or not ours to remove. Either way there is nothing to do.
+      }
+    }
+  } catch (err) {
+    console.error(`[cmux] could not sweep old bootstraps: ${(err as Error).message}`);
+  }
+}
+
 /**
  * Open a terminal in cmux. Fire-and-forget; failures are logged, not thrown.
  * Resolves once the bootstrap has been handed to LaunchServices — everything
  * after that happens inside cmux.
  */
 export async function openCmuxTerminal(opts: OpenCmuxOptions): Promise<void> {
+  sweepOldBootstraps();
+
   const bootstrapPath = join(
     tmpdir(),
-    `ideafy-cmux-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sh`,
+    `${BOOTSTRAP_NAME_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sh`,
   );
   // 0o700 — same reasoning as the script it wraps: only the current user may
   // read or run it.

@@ -4,6 +4,7 @@ import { db, schema } from "@/lib/db";
 import {
   cacheCmuxWorkspaces,
   decideCmuxPlacement,
+  isBootstrapWorkspace,
   parseCmuxWorkspaceList,
 } from "@/lib/terminal/cmux";
 
@@ -34,11 +35,22 @@ export async function POST(request: NextRequest) {
         .get()
     : null;
 
-  const workspaces = parseCmuxWorkspaceList(await request.text());
+  // What the bootstrap reports includes the workspace cmux opened to run the
+  // bootstrap itself, which is about to be renamed or closed. It has no
+  // business in the cache the settings picker reads, and it could never win a
+  // placement decision anyway — no project can be pinned to an id created this
+  // run, and its directory is tmp — so drop it before either step sees it.
+  const reported = parseCmuxWorkspaceList(await request.text());
+  const workspaces = reported.filter(
+    (w) => !isBootstrapWorkspace(w, request.headers.get("x-cmux-self-workspace")),
+  );
 
   // Every launch refreshes this, which is what keeps the project settings
-  // picker populated for an Ideafy that cannot reach the socket itself.
-  if (workspaces.length > 0) cacheCmuxWorkspaces(workspaces);
+  // picker populated for an Ideafy that cannot reach the socket itself. The
+  // guard is on what was reported, not on what survived the filter: a bootstrap
+  // alone in cmux legitimately leaves no workspaces to offer, and that is worth
+  // recording. An unreadable list is not.
+  if (reported.length > 0) cacheCmuxWorkspaces(workspaces);
 
   const placement = decideCmuxPlacement(
     workspaces,
