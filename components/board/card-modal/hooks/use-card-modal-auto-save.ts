@@ -18,6 +18,7 @@ interface UseCardModalAutoSaveOptions {
   complexity: Complexity;
   priority: Priority;
   projectId: string | null;
+  groupId: string | null;
   aiPlatform: AiPlatform | null;
   projects: Project[];
   updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
@@ -56,6 +57,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
     complexity,
     priority,
     projectId,
+    groupId,
     aiPlatform,
     projects,
     updateCard,
@@ -116,6 +118,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
         complexity,
         priority,
         projectId,
+        groupId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
         baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
@@ -155,6 +158,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
     complexity,
     priority,
     projectId,
+    groupId,
     aiPlatform,
     projects,
     updateCard,

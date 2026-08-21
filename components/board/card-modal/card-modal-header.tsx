@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2, Settings2 } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
+import { CardGroupPicker } from "./card-group-picker";
 import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS, DEFAULT_SETTINGS } from "@/lib/types";
 import { Project } from "@/lib/types";
 import { useKanbanStore } from "@/lib/store";
@@ -75,6 +76,8 @@ interface CardModalHeaderProps {
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
   projects: Project[];
+  groupId: string | null;
+  onGroupChange: (groupId: string | null) => void;
   complexity: Complexity;
   onComplexityChange: (complexity: Complexity) => void;
   priority: Priority;
@@ -104,6 +107,8 @@ export function CardModalHeader({
   projectId,
   onProjectChange,
   projects,
+  groupId,
+  onGroupChange,
   complexity,
   onComplexityChange,
   priority,
@@ -145,10 +150,15 @@ export function CardModalHeader({
           <TooltipContent side="right">Close panel</TooltipContent>
         </Tooltip>
         <div className="flex-1 min-w-0">
-          {displayId && (
-            <div className="mb-2">
+          {/* Identity strip: the display id and the chain code, in the same
+              order the card face puts them. The group picker lives here rather
+              than in the metadata row below because membership names what the
+              card IS, not how it is configured — and a seventh select would
+              have squeezed all seven to nothing. */}
+          <div className="mb-2 flex items-center gap-2">
+            {displayId && (
               <span
-                className="text-xs font-mono px-2 py-1 rounded"
+                className="text-xs font-mono px-2 py-1 rounded shrink-0"
                 style={{
                   backgroundColor: project ? `${project.color}20` : undefined,
                   color: project?.color,
@@ -156,8 +166,14 @@ export function CardModalHeader({
               >
                 {displayId}
               </span>
-            </div>
-          )}
+            )}
+            <CardGroupPicker
+              value={groupId}
+              onChange={onGroupChange}
+              projectId={projectId}
+              disabled={isReadOnly}
+            />
+          </div>
           <input
             type="text"
             value={title}

@@ -10,10 +10,12 @@ import type {
   StreamOptions,
   CliResponse,
   StreamEvent,
+  RunOutputCollector,
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
+import { createStreamRunOutputCollector } from "./stream-run-output";
 import { appResourcesRoot } from "../paths";
 import { buildMcpInvocation } from "./mcp-invocation";
 
@@ -65,7 +67,13 @@ class GeminiProvider implements PlatformProvider {
   }
 
   buildAutonomousArgs(opts: AutonomousOptions): string[] {
-    return ["-p", opts.prompt, "--output-format", "json"];
+    // `json` collapses the run to a single `result` string — the last thing the
+    // model said, which is the wrong answer whenever it speaks again after
+    // finishing (IDE-280). `stream-json` is the same stream the chat path
+    // already parses, so the run's real product can be picked out of it.
+    // Approval flags stay deliberately untouched: only the output format is in
+    // question here.
+    return ["-p", opts.prompt, "--output-format", "stream-json"];
   }
 
   buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): InteractiveInvocation {
@@ -111,6 +119,25 @@ class GeminiProvider implements PlatformProvider {
     } catch {
       return { result: stdout.trim(), isError: false };
     }
+  }
+
+  createRunOutputCollector(): RunOutputCollector {
+    return createStreamRunOutputCollector({
+      label: this.displayName,
+      parseStreamLine: (line) => this.parseStreamLine(line),
+      parseJsonResponse: (stdout) => this.parseJsonResponse(stdout),
+      readTerminal: (json) => {
+        if (json.type !== "result") return null;
+        const stats = (json.stats ?? {}) as Record<string, unknown>;
+        const rawCost = json.cost_usd ?? stats.cost_usd;
+        const rawDuration = json.duration_ms ?? stats.duration_ms;
+        return {
+          cost: typeof rawCost === "number" ? rawCost : undefined,
+          duration: typeof rawDuration === "number" ? rawDuration : undefined,
+          isError: !!json.is_error,
+        };
+      },
+    });
   }
 
   parseStreamLine(line: string): StreamEvent[] {

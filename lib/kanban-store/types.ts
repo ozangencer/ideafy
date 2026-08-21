@@ -175,6 +175,25 @@ export interface KanbanStore {
   closeModal: () => void;
   setSearchQuery: (query: string) => void;
 
+  // Card-group actions. Membership itself is a card field, so joining a chain
+  // goes through updateCard({ groupId }) — this only mints the chain.
+  createCardGroup: (input: {
+    code: string;
+    name: string;
+    color?: string | null;
+    projectId?: string | null;
+  }) => Promise<CardGroup | null>;
+  updateCardGroup: (
+    id: string,
+    updates: { code?: string; name?: string; color?: string | null }
+  ) => Promise<boolean>;
+  // Deleting a chain releases its members rather than taking them with it, so
+  // the only safe target is one nobody is in — which is what the picker
+  // offers. The member release is mirrored locally anyway: a card left
+  // pointing at a group that is gone renders as an ordinary card with no
+  // explanation until the next poll.
+  deleteCardGroup: (id: string) => Promise<boolean>;
+
   // Project actions
   fetchProjects: () => Promise<void>;
   addProject: (

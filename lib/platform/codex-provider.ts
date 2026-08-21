@@ -10,9 +10,11 @@ import type {
   StreamOptions,
   CliResponse,
   StreamEvent,
+  RunOutputCollector,
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
+import { createStreamRunOutputCollector } from "./stream-run-output";
 import {
   convertSkillToCodexSkillMd,
   isGeneratedCodexSkill,
@@ -89,7 +91,14 @@ class CodexProvider implements PlatformProvider {
   }
 
   buildAutonomousArgs(opts: AutonomousOptions): string[] {
-    return ["-q", opts.prompt];
+    // `-q` printed the whole transcript as plain text, which `parseJsonResponse`
+    // then handed back verbatim as the run's single output — a verify run could
+    // write its entire narration into a card's checklist. The event stream is
+    // the same one the chat path already parses, so the run's actual answer can
+    // be picked out of it. Headless means nobody is there to approve, hence the
+    // full bypass: the same trade `--dangerously-skip-permissions` makes on the
+    // Claude side.
+    return this.buildStreamArgs({ prompt: opts.prompt, skipPermissions: true });
   }
 
   buildInteractiveCommand(opts: InteractiveOptions, workingDir: string): InteractiveInvocation {
@@ -125,8 +134,28 @@ class CodexProvider implements PlatformProvider {
   }
 
   parseJsonResponse(stdout: string): CliResponse {
-    // Codex quiet mode just outputs plain text
+    // Reached only when the stream turns out unreadable (an older CLI that
+    // still speaks plain text). Autonomous runs go through
+    // `createRunOutputCollector` instead.
     return { result: stdout.trim(), isError: false };
+  }
+
+  createRunOutputCollector(): RunOutputCollector {
+    return createStreamRunOutputCollector({
+      label: this.displayName,
+      parseStreamLine: (line) => this.parseStreamLine(line),
+      parseJsonResponse: (stdout) => this.parseJsonResponse(stdout),
+      // Codex emits one `text` event per *completed* agent message, so two in a
+      // row are two separate utterances rather than one being a fragment.
+      textEvents: "message",
+      readTerminal: (json) => {
+        if (json.type === "turn.failed" || json.type === "error") {
+          const error = json.error as { message?: string } | undefined;
+          return { isError: true, result: error?.message ?? "" };
+        }
+        return null;
+      },
+    });
   }
 
   parseStreamLine(line: string): StreamEvent[] {

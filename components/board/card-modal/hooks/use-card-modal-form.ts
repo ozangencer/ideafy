@@ -59,6 +59,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
   const [complexity, setComplexity] = useState<Complexity>("medium");
   const [priority, setPriority] = useState<Priority>("medium");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
   const [aiPlatform, setAiPlatform] = useState<AiPlatform | null>(null);
 
   // Close-flow UI state
@@ -77,6 +78,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     complexity !== (selectedCard.complexity || "medium") ||
     priority !== (selectedCard.priority || "medium") ||
     projectId !== selectedCard.projectId ||
+    groupId !== (selectedCard.groupId ?? null) ||
     aiPlatform !== (selectedCard.aiPlatform ?? null)
   );
 
@@ -111,6 +113,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     setComplexity(card.complexity || "medium");
     setPriority(card.priority || "medium");
     setProjectId(card.projectId);
+    setGroupId(card.groupId ?? null);
     setAiPlatform(card.aiPlatform ?? null);
     formBaseUpdatedAtRef.current = card.updatedAt;
   }, []);
@@ -157,9 +160,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         complexity,
         priority,
         projectId,
-        // A card drafted in the modal joins no chain — group membership is set
-        // from MCP or the backfill, never guessed here.
-        groupId: null,
+        groupId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || "",
         gitBranchName: null,
@@ -185,6 +186,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         complexity,
         priority,
         projectId,
+        groupId,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
         baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
@@ -206,6 +208,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     status,
     complexity,
     priority,
+    groupId,
     aiPlatform,
     saveDraftCard,
     updateCard,
@@ -232,6 +235,8 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
     setPriority,
     projectId,
     setProjectId,
+    groupId,
+    setGroupId,
     aiPlatform,
     setAiPlatform,
     // close-flow ui state
