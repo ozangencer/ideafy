@@ -6,6 +6,7 @@ import {
   registerProcess,
 } from "@/lib/process-registry";
 import { getProviderForCard } from "@/lib/platform/active";
+import { adaptMcpToolNames } from "@/lib/platform/mcp-tool-names";
 import type { ParsedRunOutput } from "@/lib/platform/types";
 import { selectRunOutput, type RunOutputContract } from "./select-run-output";
 
@@ -88,10 +89,14 @@ export async function runAutonomousCli(
 
   const provider = getProviderForCard({ aiPlatform });
   const label = options.label ?? provider.displayName;
-  const args = provider.buildAutonomousArgs({ prompt });
+  // Prompt builders spell MCP tools Claude-style; every other CLI prefixes them
+  // differently. Adapting here rather than in each builder keeps the single
+  // choke point that every autonomous phase already passes through.
+  const adaptedPrompt = adaptMcpToolNames(prompt, provider.id);
+  const args = provider.buildAutonomousArgs({ prompt: adaptedPrompt });
 
   console.log(`[${label}] Running in ${cwd}:`);
-  console.log(`[${label}] Prompt length: ${prompt.length} chars`);
+  console.log(`[${label}] Prompt length: ${adaptedPrompt.length} chars`);
 
   return new Promise((resolve, reject) => {
     const cliProcess = spawn(provider.getCliPath(), args, {

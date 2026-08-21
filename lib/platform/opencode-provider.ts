@@ -10,10 +10,12 @@ import type {
   StreamOptions,
   CliResponse,
   StreamEvent,
+  RunOutputCollector,
   Result,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { convertSkillToSkillMd, SKILL_FILES } from "./skill-converter";
+import { createStreamRunOutputCollector } from "./stream-run-output";
 import { buildMcpInvocation } from "./mcp-invocation";
 
 let cachedOpenCodePath: string | null = null;
@@ -136,6 +138,26 @@ function buildOpenCodeResultFromStream(stdout: string): CliResponse {
   return { result: result.trim(), isError };
 }
 
+/**
+ * Whether a decoded stream line reports a failure. Mirrors the error detection
+ * in `buildOpenCodeResultFromStream` so the collector path rejects exactly the
+ * runs the buffered path always rejected.
+ */
+function readOpenCodeError(raw: unknown): boolean {
+  const event = extractEvent(raw);
+  if (!event) return false;
+
+  if (event.type === "session.error") return true;
+
+  if (event.type === "message.part.updated" || event.type === "tool_use") {
+    const part = event.properties.part as Record<string, unknown> | undefined;
+    const state = part?.state as Record<string, unknown> | undefined;
+    return state?.status === "error";
+  }
+
+  return false;
+}
+
 class OpenCodeProvider implements PlatformProvider {
   id = "opencode" as const;
   displayName = "OpenCode";
@@ -217,6 +239,19 @@ class OpenCodeProvider implements PlatformProvider {
 
   parseJsonResponse(stdout: string): CliResponse {
     return buildOpenCodeResultFromStream(stdout);
+  }
+
+  createRunOutputCollector(): RunOutputCollector {
+    return createStreamRunOutputCollector({
+      label: this.displayName,
+      parseStreamLine: (line) => this.parseStreamLine(line),
+      parseJsonResponse: (stdout) => this.parseJsonResponse(stdout),
+      // `message.part.delta` streams fragments of one message, so they
+      // concatenate verbatim; the split into separate utterances comes from the
+      // tool calls between them.
+      textEvents: "delta",
+      readTerminal: (json) => (readOpenCodeError(json) ? { isError: true } : null),
+    });
   }
 
   parseStreamLine(line: string): StreamEvent[] {
