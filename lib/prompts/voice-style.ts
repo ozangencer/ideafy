@@ -19,7 +19,8 @@ export type VoiceSection =
   | "plan"
   | "opinion"
   | "chat"
-  | "quick_fix";
+  | "quick_fix"
+  | "description";
 
 const PERSONA_BASE: Record<Voice, string> = {
   entrepreneur: `## Voice: Entrepreneur
@@ -92,6 +93,18 @@ const SECTION_ACCENTS: Record<VoiceSection, Partial<Record<Voice, string>>> = {
     entrepreneur: `\n\n### Quick-fix accent\nThe summary you hand back should be plain-language. List what changed in human terms; the user will read this without opening the diff.`,
     builder: `\n\n### Quick-fix accent\nHand back a short prose summary plus a Files line. Each file gets one sentence on what changed.`,
     engineer: `\n\n### Quick-fix accent\nHand back a Changed Files table, root-cause one-liner, and trade-off note. Skip narration.`,
+  },
+
+  // Description enrichment expands the user's one-liner into a spec. Its four
+  // sections (Problem/Why, Expected Behavior, Scope Note, Open Questions) are
+  // fixed by the enrich prompt and survive every voice — same deal as the
+  // tests contract. What voice changes is the register the bullets are
+  // written in, because this text ends up on the card next to the plan and
+  // the opinion, and three tones in one modal reads as three authors.
+  description: {
+    entrepreneur: `\n\n### Description accent\nWrite Expected Behavior as what the user sees and does — screens, actions, outcomes. No component, store or file names. Problem/Why leads with who feels the pain today.`,
+    builder: `\n\n### Description accent\nWrite Expected Behavior as observable behavior, naming the affected area in human terms ("the card modal's detail tab") rather than paths. One technical hint per bullet where it makes the work plannable.`,
+    engineer: `\n\n### Description accent\nWrite Expected Behavior against the real surface: name components, state, and store slices, and give edge cases as explicit conditions. Keep Open Questions to decisions the context genuinely cannot settle.`,
   },
 };
 
