@@ -3,6 +3,7 @@
 import DOMPurify from "isomorphic-dompurify";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { SectionType, SECTION_CONFIG } from "@/lib/types";
+import { EnrichButton } from "./enrich-button";
 
 interface SectionEditorProps {
   sectionType: SectionType;
@@ -11,9 +12,6 @@ interface SectionEditorProps {
   onCardClick?: (cardId: string) => void;
   projectId: string | null;
   readOnly?: boolean;
-  // Accepted so the card modal can pass the card's id through; the editor
-  // itself does not use it yet. The modal already passes it (see
-  // card-modal/index.tsx), so without this the prop is a type error.
   cardId?: string;
 }
 
@@ -24,6 +22,7 @@ export function SectionEditor({
   onCardClick,
   projectId,
   readOnly,
+  cardId,
 }: SectionEditorProps) {
   const config = SECTION_CONFIG[sectionType];
 
@@ -47,6 +46,11 @@ export function SectionEditor({
 
   return (
     <div className="h-full flex flex-col p-4 overflow-hidden">
+      {/* Detail only, and only once the card exists: enrichment reads the card
+          by id on the server, which a draft has no row for yet. */}
+      {sectionType === "detail" && cardId && !cardId.startsWith("draft-") && (
+        <EnrichButton cardId={cardId} value={value} onChange={onChange} />
+      )}
       <div className="flex-1 min-h-0 h-full overflow-y-auto section-editor-wrapper">
         <MarkdownEditor
           value={value}
