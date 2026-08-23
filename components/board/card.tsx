@@ -7,6 +7,19 @@ import { Card, CardGroup, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/t
 import { CardGroupChip } from "./card-group-chip";
 import { cardLastActivityAt, formatAgeLong, getCardStaleness } from "@/lib/card-age";
 import { parseTestProgress } from "@/lib/test-progress";
+import {
+  canRunAutonomousFor,
+  canStartCard,
+  canTestTogetherFor,
+  detectBoardPhase,
+  getPhaseLabels,
+  VERIFY_RUN_BLURB,
+} from "@/lib/card-phase";
+import {
+  getEffectiveTerminal,
+  getPasteTipTerminalLabel,
+  PasteTipDialog,
+} from "./paste-tip-dialog";
 import { useKanbanStore } from "@/lib/store";
 import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
@@ -144,74 +157,6 @@ interface TaskCardProps {
   softLock?: boolean;
 }
 
-type Phase = "planning" | "implementation" | "retest" | "verify";
-
-function detectPhase(
-  card: Card,
-  solutionText: string,
-  testText: string
-): Phase {
-  // In Progress sütunundaki kartlar için direkt implementation
-  if (card.status === "progress") {
-    const hasTests = !!testText;
-    return hasTests ? "retest" : "implementation";
-  }
-
-  // Human Test'te iş sırası insanda; oradaki otonom koşu çeklisti yeniden
-  // yazmak yerine temel akışı yürüyüp geçenleri işaretler.
-  if (card.status === "test" && !!testText) return "verify";
-
-  // Diğer sütunlar için mevcut mantık
-  const hasSolution = !!solutionText;
-  const hasTests = !!testText;
-
-  if (!hasSolution) return "planning";
-  if (!hasTests) return "implementation";
-  return "retest";
-}
-
-function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
-  switch (phase) {
-    case "planning":
-      return {
-        play: "Plan Task (Autonomous)",
-        terminal: "Plan Task (Interactive)",
-      };
-    case "implementation":
-      return {
-        play: "Implement (Autonomous)",
-        terminal: "Implement (Interactive)",
-      };
-    case "retest":
-      return {
-        play: "Re-test (Autonomous)",
-        terminal: "Fix Issues (Interactive)",
-      };
-    case "verify":
-      return {
-        play: "Pre-verify core flow (Autonomous)",
-        // Human Test'te terminal, çeklisti yürüten değil çeklistin dışına çıkan
-        // oturumdur: gündemi kullanıcı getirir, kartta yazmayan bir şeydir.
-        terminal: "Report an Issue (Interactive)",
-      };
-  }
-}
-
-function getEffectiveTerminal(
-  settings: { terminalApp?: string | null; detectedTerminal?: string | null } | null | undefined
-): string | null {
-  return settings?.terminalApp ?? settings?.detectedTerminal ?? null;
-}
-
-function getPasteTipTerminalLabel(terminal: string | null): string {
-  if (terminal === "ghostty") return "Ghostty";
-  if (terminal === "cmux") return "cmux";
-  if (terminal === "warp") return "Warp";
-  if (terminal === "iterm2") return "iTerm2";
-  if (terminal === "terminal") return "Terminal";
-  return "terminal";
-}
-
 function TaskCardImpl({
   card,
   group = null,
@@ -296,22 +241,15 @@ function TaskCardImpl({
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
-  // Human Test'te otonom koşu yalnızca temel akışı doğrular. Bu grubu ilan
-  // etmeyen bir çeklistte agent hangi maddenin temel olduğunu bilemez, o yüzden
-  // orada buton hiç çıkmaz — çıkarsa hiçbir şey işaretlemeyen bir koşu vaat eder.
-  const canPreVerify = card.status === "test" && !!testProgress?.core;
-  const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "ideation");
-  // Otonom koşu Human Test'te yalnızca temel akışı doğrular, o yüzden core
-  // grubuna bağlı. Interaktif oturum ise çeklistten bağımsızdır: çeklisti
-  // olmayan bir kartta da kullanıcının anlatacak bir sorunu olabilir.
-  const canRunAutonomous = canStart && (card.status !== "test" || canPreVerify);
+  const canStart = canStartCard(card);
+  const canRunAutonomous = canRunAutonomousFor(card, testProgress);
   const canQuickFix = card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
   const canEvaluate = card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
-  const canTestTogether = card.status === "test" && !!(card.testScenarios && testScenariosText !== "" && (card.projectId || card.projectFolder));
+  const canTestTogether = canTestTogetherFor(card, testScenariosText);
   const hasAiOpinion = !!aiOpinionText;
 
   // Detect current phase for dynamic tooltips
-  const phase = detectPhase(card, solutionSummaryText, testScenariosText);
+  const phase = detectBoardPhase(card, solutionSummaryText, testScenariosText);
   const phaseLabels = getPhaseLabels(phase);
 
   // Get project info for worktree path calculation
@@ -1130,85 +1068,48 @@ function TaskCardImpl({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showTerminalConfirm} onOpenChange={setShowTerminalConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Open Interactive Terminal</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>
-                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in {pasteTipTerminalLabel}.
-                </p>
-                {phase === "implementation" && (
-                  !effectiveUseWorktree ? (
-                    <p className="text-gray-400 text-xs font-mono">
-                      Working directly on main (worktrees disabled)
-                    </p>
-                  ) : expectedWorktreePath && (
-                    <p className="text-cyan-500 text-xs font-mono">
-                      Worktree: {expectedWorktreePath.split('/').slice(-3).join('/')}
-                    </p>
-                  )
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleOpenTerminal}
-              className="bg-orange-500 hover:bg-orange-600"
-            >
-              Open Terminal
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PasteTipDialog
+        open={showTerminalConfirm}
+        onOpenChange={setShowTerminalConfirm}
+        title="Open Interactive Terminal"
+        terminalLabel={pasteTipTerminalLabel}
+        confirmLabel="Open Terminal"
+        confirmClassName="bg-orange-500 hover:bg-orange-600"
+        onConfirm={handleOpenTerminal}
+      >
+        {phase === "implementation" && (
+          !effectiveUseWorktree ? (
+            <p className="text-gray-400 text-xs font-mono">
+              Working directly on main (worktrees disabled)
+            </p>
+          ) : expectedWorktreePath && (
+            <p className="text-cyan-500 text-xs font-mono">
+              Worktree: {expectedWorktreePath.split('/').slice(-3).join('/')}
+            </p>
+          )
+        )}
+      </PasteTipDialog>
 
-      <AlertDialog open={showIdeationConfirm} onOpenChange={setShowIdeationConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Interactive Ideation</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in {pasteTipTerminalLabel}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleOpenIdeationTerminal}
-              className="bg-cyan-500 hover:bg-cyan-600"
-            >
-              Start Discussion
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PasteTipDialog
+        open={showIdeationConfirm}
+        onOpenChange={setShowIdeationConfirm}
+        title="Interactive Ideation"
+        terminalLabel={pasteTipTerminalLabel}
+        confirmLabel="Start Discussion"
+        confirmClassName="bg-cyan-500 hover:bg-cyan-600"
+        onConfirm={handleOpenIdeationTerminal}
+      />
 
-      <AlertDialog open={showTestTogetherConfirm} onOpenChange={setShowTestTogetherConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Test Together</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>Start an interactive test session with Claude as your QA partner.</p>
-                <p>
-                  <strong>Tip:</strong> Use <kbd className="px-1.5 py-0.5 bg-secondary border border-border rounded text-xs">⌘V</kbd> to paste in {pasteTipTerminalLabel}.
-                </p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleOpenTestTerminal}
-              className="bg-emerald-500 hover:bg-emerald-600"
-            >
-              Start Testing
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PasteTipDialog
+        open={showTestTogetherConfirm}
+        onOpenChange={setShowTestTogetherConfirm}
+        title="Test Together"
+        lead="Start an interactive test session with Claude as your QA partner."
+        terminalLabel={pasteTipTerminalLabel}
+        confirmLabel="Start Testing"
+        confirmClassName="bg-emerald-500 hover:bg-emerald-600"
+        onConfirm={handleOpenTestTerminal}
+      />
 
       <AlertDialog open={showAutonomousConfirm} onOpenChange={setShowAutonomousConfirm}>
         <AlertDialogContent>
@@ -1262,10 +1163,7 @@ function TaskCardImpl({
                   </p>
                 )}
                 {phase === "verify" && (
-                  <p className="text-muted-foreground">
-                    The agent runs the core flow only and ticks the steps that pass.
-                    Later groups and your own ticks stay untouched.
-                  </p>
+                  <p className="text-muted-foreground">{VERIFY_RUN_BLURB}</p>
                 )}
               </div>
             </AlertDialogDescription>

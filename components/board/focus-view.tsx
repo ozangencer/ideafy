@@ -1,16 +1,52 @@
 "use client";
 
-import { useMemo } from "react";
-import { AlertTriangle, Check, Columns3, Cpu, FlaskConical, Lightbulb } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Columns3,
+  Cpu,
+  FlaskConical,
+  Lightbulb,
+  Loader2,
+  Play,
+  Terminal,
+} from "lucide-react";
 import {
   buildFocusBoard,
   focusDetail,
   FOCUS_STATE_STYLES,
   FocusRow,
 } from "@/lib/board-focus";
+import {
+  canRunAutonomousFor,
+  canStartCard,
+  canTestTogetherFor,
+  detectBoardPhase,
+  getPhaseLabels,
+  VERIFY_RUN_BLURB,
+} from "@/lib/card-phase";
+import { stripHtml } from "@/lib/prompts/utils";
+import { parseTestProgress } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
 import { BoardView, Card, getDisplayId } from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  getEffectiveTerminal,
+  getPasteTipTerminalLabel,
+  needsPasteTip,
+  PasteTipDialog,
+} from "./paste-tip-dialog";
 
 const STATE_ICONS = {
   AlertTriangle,
@@ -78,6 +114,187 @@ function FocusBlockHeading({
   );
 }
 
+/**
+ * The three ways to take a Human Test turn, on the row that announces it.
+ *
+ * The row's own button says *that* it is your turn and opens the checklist. It
+ * cannot say *how*, and the how is where the work actually is: hand the core
+ * flow to the agent, walk it together, or report what broke. On the board those
+ * are one click each; without them here, Focus view can only ever hand you back
+ * to a modal, and the button whose entire point is that you do not have to do
+ * the testing yourself ends up the hardest one to reach.
+ *
+ * Deliberately not the rest of the board's footer. The badges — worktree,
+ * solution, the test counter — say what `focusDetail` already says in words,
+ * and a row that grows a second copy of its own subtitle stops being a row.
+ */
+function TestRowActions({ card }: { card: Card }) {
+  const startTask = useKanbanStore((s) => s.startTask);
+  const openTerminal = useKanbanStore((s) => s.openTerminal);
+  const openTestTerminal = useKanbanStore((s) => s.openTestTerminal);
+  const startingLocal = useKanbanStore((s) => s.startingCardIds.includes(card.id));
+  const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
+  const settings = useKanbanStore((s) => s.settings);
+
+  const [showAutonomousConfirm, setShowAutonomousConfirm] = useState(false);
+  const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
+  const [showTestTogetherConfirm, setShowTestTogetherConfirm] = useState(false);
+
+  const solutionSummaryText = useMemo(
+    () => stripHtml(card.solutionSummary),
+    [card.solutionSummary]
+  );
+  const testScenariosText = useMemo(
+    () => stripHtml(card.testScenarios),
+    [card.testScenarios]
+  );
+  const testProgress = useMemo(
+    () => parseTestProgress(card.testScenarios),
+    [card.testScenarios]
+  );
+
+  // Same phase the board would compute, rather than a hardcoded "verify": a
+  // Human Test card with no checklist is not in the verify phase, and its
+  // terminal is still the one the board labels for whatever phase it is in.
+  const phase = detectBoardPhase(card, solutionSummaryText, testScenariosText);
+  const phaseLabels = getPhaseLabels(phase);
+
+  // A card whose row is in Your turn cannot be processing — `getFocusState`
+  // would have routed it to Agent running — but the check costs nothing and
+  // closes the gap between a run starting and the next poll.
+  const isLocked = lockedLocal || !!card.processingType;
+  const isStarting = startingLocal || card.processingType === "autonomous";
+
+  const showPlay = canRunAutonomousFor(card, testProgress);
+  const showTerminal = canStartCard(card);
+  const showTestTogether = canTestTogetherFor(card, testScenariosText);
+
+  if (isLocked || (!showPlay && !showTerminal && !showTestTogether)) return null;
+
+  const pasteTipLabel = getPasteTipTerminalLabel(getEffectiveTerminal(settings));
+  const askPasteTip = needsPasteTip(settings);
+
+  const runTerminal = () => {
+    setShowTerminalConfirm(false);
+    void openTerminal(card.id);
+  };
+  const runTestTogether = () => {
+    setShowTestTogetherConfirm(false);
+    void openTestTerminal(card.id);
+  };
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {showPlay && (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setShowAutonomousConfirm(true)}
+                disabled={isStarting}
+                className={`p-1 rounded transition-colors ${
+                  isStarting
+                    ? "bg-ink/20 text-ink cursor-wait"
+                    : "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink"
+                }`}
+              >
+                {isStarting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {isStarting ? "Running..." : phaseLabels.play}
+            </TooltipContent>
+          </Tooltip>
+          <AlertDialog open={showAutonomousConfirm} onOpenChange={setShowAutonomousConfirm}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Start {phaseLabels.play}?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>This will run in autonomous mode with full file access.</p>
+                    <p className="text-muted-foreground">{VERIFY_RUN_BLURB}</p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    setShowAutonomousConfirm(false);
+                    void startTask(card.id);
+                  }}
+                >
+                  Start
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
+      )}
+
+      {showTerminal && (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => (askPasteTip ? setShowTerminalConfirm(true) : runTerminal())}
+                className="p-1 rounded transition-colors bg-orange-500/10 text-orange-500/70 hover:bg-orange-500/20 hover:text-orange-500"
+              >
+                <Terminal className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{phaseLabels.terminal}</TooltipContent>
+          </Tooltip>
+          <PasteTipDialog
+            open={showTerminalConfirm}
+            onOpenChange={setShowTerminalConfirm}
+            title="Open Interactive Terminal"
+            terminalLabel={pasteTipLabel}
+            confirmLabel="Open Terminal"
+            confirmClassName="bg-orange-500 hover:bg-orange-600"
+            onConfirm={runTerminal}
+          />
+        </>
+      )}
+
+      {showTestTogether && (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() =>
+                  askPasteTip ? setShowTestTogetherConfirm(true) : runTestTogether()
+                }
+                className="p-1 rounded transition-colors bg-emerald-500/10 text-emerald-500/70 hover:bg-emerald-500/20 hover:text-emerald-500"
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Test Together (Interactive)</TooltipContent>
+          </Tooltip>
+          <PasteTipDialog
+            open={showTestTogetherConfirm}
+            onOpenChange={setShowTestTogetherConfirm}
+            title="Test Together"
+            lead="Start an interactive test session with Claude as your QA partner."
+            terminalLabel={pasteTipLabel}
+            confirmLabel="Start Testing"
+            confirmClassName="bg-emerald-500 hover:bg-emerald-600"
+            onConfirm={runTestTogether}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function YourTurnRow({ row }: { row: FocusRow }) {
   const projects = useKanbanStore((s) => s.projects);
   const selectCard = useKanbanStore((s) => s.selectCard);
@@ -116,6 +333,7 @@ function YourTurnRow({ row }: { row: FocusRow }) {
           {detail}
         </span>
       </button>
+      {row.state === "your-test" && <TestRowActions card={row.card} />}
       <button
         type="button"
         onClick={open}
