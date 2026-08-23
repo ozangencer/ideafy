@@ -11,6 +11,7 @@ import {
   Loader2,
   Play,
   Terminal,
+  Unlock,
 } from "lucide-react";
 import {
   buildFocusBoard,
@@ -135,6 +136,7 @@ function TestRowActions({ card }: { card: Card }) {
   const startingLocal = useKanbanStore((s) => s.startingCardIds.includes(card.id));
   const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
   const settings = useKanbanStore((s) => s.settings);
+  const unlockCard = useKanbanStore((s) => s.unlockCard);
 
   const [showAutonomousConfirm, setShowAutonomousConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -169,7 +171,30 @@ function TestRowActions({ card }: { card: Card }) {
   const showTerminal = canStartCard(card);
   const showTestTogether = canTestTogetherFor(card, testScenariosText);
 
-  if (isLocked || (!showPlay && !showTerminal && !showTestTogether)) return null;
+  // A session is open on this card, so the three runs are gone — starting a
+  // second one would fight the first. The board says so twice, by dimming the
+  // card and by putting an unlock where the buttons were; a row that only
+  // loses its icons says nothing about why, or how to get them back. Only the
+  // interactive lock reaches here: a card with a running agent has already
+  // left Your turn for Agent running.
+  if (isLocked) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => unlockCard(card.id)}
+            className="shrink-0 p-1 rounded transition-colors bg-orange-500/20 text-orange-500 hover:bg-orange-500/30"
+          >
+            <Unlock className="w-3.5 h-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">Session open — unlock</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (!showPlay && !showTerminal && !showTestTogether) return null;
 
   const pasteTipLabel = getPasteTipTerminalLabel(getEffectiveTerminal(settings));
   const askPasteTip = needsPasteTip(settings);
