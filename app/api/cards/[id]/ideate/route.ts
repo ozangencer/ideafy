@@ -57,7 +57,10 @@ export async function POST(
     );
   }
 
-  let prompt = buildIdeationPrompt(card, project?.voice as never);
+  const { getProviderForCard } = await import("@/lib/platform/active");
+  const provider = getProviderForCard(card);
+
+  let prompt = buildIdeationPrompt(card, project?.voice as never, provider.id);
 
   // Extract and save images for CLI context
   const savedImages = saveCardImagesToTemp(card.id, card);
@@ -70,9 +73,6 @@ export async function POST(
   console.log(`[Ideate] Working dir: ${workingDir}`);
 
   try {
-    const { getProviderForCard } = await import("@/lib/platform/active");
-    const provider = getProviderForCard(card);
-
     // Build the terminal command using the active provider
     const permissionMode = provider.capabilities.supportsPermissionModes ? "plan" : null;
     const invocation = provider.buildInteractiveCommand(

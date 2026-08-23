@@ -14,6 +14,7 @@ import {
   prependWarningHtml,
 } from "@/lib/autonomous-run/select-run-output";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
+import { getProviderForCard } from "@/lib/platform/active";
 import { recordOpinionCompleted } from "@/lib/activity-registry";
 
 export async function POST(
@@ -85,7 +86,12 @@ export async function POST(
     .run();
 
   try {
-    const prompt = buildEvaluatePrompt(card, narrativePath, project?.voice as never);
+    const prompt = buildEvaluatePrompt(
+      card,
+      narrativePath,
+      project?.voice as never,
+      getProviderForCard(card).id,
+    );
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
 
