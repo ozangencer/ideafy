@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "prebuild": "node ../scripts/sync-test-style.mjs",
+    "prebuild": "node ../scripts/sync-mcp-shared.mjs",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx index.ts",

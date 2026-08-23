@@ -2,7 +2,7 @@
 // GENERATED FILE — DO NOT EDIT.
 //
 // Verbatim copy of lib/prompts/test-style.ts, written by
-// scripts/sync-test-style.mjs on every mcp-server build. Edit the source,
+// scripts/sync-mcp-shared.mjs on every mcp-server build. Edit the source,
 // not this file; anything you change here is overwritten on the next build.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,7 @@
  * voice stays consistent across entry points.
  *
  * mcp-server is a separate package and cannot import across the repo root
- * (its tsconfig pins `rootDir: "."`), so scripts/sync-test-style.mjs copies
+ * (its tsconfig pins `rootDir: "."`), so scripts/sync-mcp-shared.mjs copies
  * this file verbatim to mcp-server/test-style.generated.ts on every mcp-server
  * build. Keep this module import-free — the copy has to compile standalone.
  *

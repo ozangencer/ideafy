@@ -78,11 +78,13 @@ test("also flags a complaint about card creation — hence advisory only", () =>
   assert.equal(promptLooksLikeCardRequest(complaint), true);
 });
 
-// Drift guard on the policy text itself. Importing hook-policy.ts is not an
-// option — it is Next.js app code behind the `@/` alias — so read it as source,
-// the same way phase-policy.test.ts does.
+// Drift guard on the policy text itself. The text lives in an import-free
+// module so mcp-server can compile a copy of it, but this file reads it as
+// source anyway — the assertions below are about clause ORDER in the written
+// text, which a runtime import would not show. Same approach as
+// phase-policy.test.ts.
 const policySrc = readFileSync(
-  new URL("../../lib/hook-policy.ts", import.meta.url),
+  new URL("../../lib/prompts/phase-policy.ts", import.meta.url),
   "utf8"
 );
 
