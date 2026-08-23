@@ -58,7 +58,18 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider>
-          <TooltipProvider delayDuration={100} skipDelayDuration={0}>
+          {/* disableHoverableContent, because none of these tooltips have
+              anything to hover. Radix's default keeps a "grace area" alive
+              between a trigger and its tooltip so a pointer can travel into
+              the content — and while that transit is in flight no other
+              trigger may open. On a row of 26px icons the grace area covers
+              the neighbour, so moving along the strip left the first icon's
+              text stranded over the second. */}
+          <TooltipProvider
+            delayDuration={100}
+            skipDelayDuration={0}
+            disableHoverableContent
+          >
             <BackupScheduler />
             <QuitConfirmDialog />
             {children}

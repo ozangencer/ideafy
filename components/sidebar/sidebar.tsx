@@ -110,7 +110,7 @@ export function Sidebar() {
 
   if (isSidebarCollapsed) {
     return (
-      <TooltipProvider>
+      <TooltipProvider disableHoverableContent>
         <div
           className="border-r border-border bg-card flex flex-col items-center py-4 shrink-0 transition-[width] duration-200 ease-out"
           style={{ width: COLLAPSED_WIDTH }}
@@ -178,7 +178,7 @@ export function Sidebar() {
   }
 
   return (
-    <TooltipProvider delayDuration={0}>
+    <TooltipProvider delayDuration={0} disableHoverableContent>
       <div
         ref={sidebarRef}
         className="relative border-r border-border bg-card flex flex-col h-full shrink-0 transition-[width] duration-200 ease-out"
