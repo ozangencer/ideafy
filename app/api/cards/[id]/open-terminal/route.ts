@@ -17,9 +17,18 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function detectPhase(card: { solutionSummary: string | null; testScenarios: string | null }): Phase {
+function detectPhase(card: {
+  solutionSummary: string | null;
+  testScenarios: string | null;
+  status: string;
+}): Phase {
   const hasSolution = card.solutionSummary && stripHtml(card.solutionSummary) !== "";
   const hasTests = card.testScenarios && stripHtml(card.testScenarios) !== "";
+
+  // Human Test'te bu oturum kartta yazmayan bir sorunu konuşmak içindir. Plan
+  // yazmak için değil: oradaki bir karta "planning" demek, kullanıcı derdini
+  // anlatmadan kartı In Progress'e taşırdı.
+  if (card.status === "test") return "retest";
 
   if (!hasSolution) return "planning";
   if (!hasTests) return "implementation";
