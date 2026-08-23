@@ -14,6 +14,7 @@ import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
 import { normalizeUseWorktree, serializeUseWorktreeForDb } from "./serialize-card.js";
 import { buildTestStyleContract } from "./test-style.generated.js";
+import { buildPhaseHint, buildPhasePolicyBody } from "./phase-policy.generated.js";
 import {
   createWorktree,
   ensureBranchInPlace,
@@ -21,12 +22,13 @@ import {
   getCurrentBranch,
   getWorktreePath,
   isGitRepo,
+  resolveEffectiveWorktree,
   worktreeExists,
 } from "./git-helpers.js";
 import { existsSync } from "fs";
 
 // The same style contract every other AI surface injects, pulled from
-// lib/prompts/test-style.ts via scripts/sync-test-style.mjs. Built without a
+// lib/prompts/test-style.ts via scripts/sync-mcp-shared.mjs. Built without a
 // language so the card-language rule stays in play: a tool description is
 // static text assembled at server start, long before any card is known, so it
 // cannot pick the Turkish or English body per card the way the in-app prompts
@@ -682,6 +684,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "save_plan",
         description: `Save a solution plan to a card and move it to In Progress. Use this when you've completed planning a task.
 
+NOT the exit from Ideation. A card in the \`ideation\` column has not been evaluated yet: it needs save_opinion first, then the user's yes to move_card. Calling save_plan on an ideation card skips the evaluation the user asked for and jumps the card two columns at once — check the card's column before you call this.
+
 VOICE CONTRACT (mandatory — adapt your prose to match the project's voice):
 
 Before drafting the plan, call get_card to read the project's voice. Voice changes ONLY the tone, never the technical content — file paths, change lists, and trade-offs MUST appear in all three voices.
@@ -805,7 +809,7 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
       {
         name: "bind_session_to_card",
         description:
-          "Bind the current Claude Code session to an Ideafy card so the hook's phase-aware policy applies from the next user turn onward. Call this immediately after create_card when starting work from a plain terminal, or when the user names an existing card (e.g. 'this is for IDE-125'). The sessionId is provided by Claude Code in the hook input as the session_id field.",
+          "Bind the current Claude Code session to an Ideafy card. The call returns the card's phase policy, which applies from this turn onward; the hook re-injects it on every later turn. Call this immediately after create_card when starting work from a plain terminal, or when the user names an existing card (e.g. 'this is for IDE-125'). The sessionId is provided by Claude Code in the hook input as the session_id field.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1213,8 +1217,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           now
         );
 
+        // The column a card lands in already implies what happens next, but
+        // nothing in the create_card result used to say so — and the offer
+        // flow creates a card mid-turn, before any hook has spoken. One line
+        // is enough here; bind_session_to_card follows with the full block in
+        // the usual flow, and two copies of it in one turn is just noise.
+        const hint = buildPhaseHint(status);
+
         return {
-          content: [{ type: "text", text: `Card created: ${cardId} (${title})` }],
+          content: [
+            {
+              type: "text",
+              text: hint
+                ? `Card created: ${cardId} (${title}). ${hint}`
+                : `Card created: ${cardId} (${title})`,
+            },
+          ],
         };
       }
 
@@ -1654,8 +1672,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const card = db
-          .prepare(`SELECT id, project_id as projectId, title, status FROM cards WHERE id = ?`)
-          .get(cardId) as { id: string; projectId: string | null; title: string; status: string } | undefined;
+          .prepare(
+            `SELECT id, project_id as projectId, title, status, task_number as taskNumber,
+                    use_worktree as useWorktree, git_branch_name as gitBranchName
+             FROM cards WHERE id = ?`
+          )
+          .get(cardId) as
+          | {
+              id: string;
+              projectId: string | null;
+              title: string;
+              status: string;
+              taskNumber: number | null;
+              useWorktree: number | null;
+              gitBranchName: string | null;
+            }
+          | undefined;
 
         if (!card) {
           return {
@@ -1679,11 +1711,56 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ).run(sessionId, card.projectId, card.id, now, now);
         }
 
+        // The phase policy used to arrive only with the NEXT user turn's hook
+        // call, which left the turn that creates and binds a card — the offer
+        // flow's normal shape — running with no phase policy at all. That is
+        // how an ideation card got a plan written straight onto it: nothing in
+        // context said an opinion comes first. Return the same clauses the hook
+        // would inject, so they apply from this turn.
+        const project = card.projectId
+          ? (db
+              .prepare(
+                `SELECT id_prefix as idPrefix, use_worktrees as useWorktrees FROM projects WHERE id = ?`
+              )
+              .get(card.projectId) as
+              | { idPrefix: string; useWorktrees: number }
+              | undefined)
+          : undefined;
+
+        const policy = buildPhasePolicyBody(
+          {
+            id: card.id,
+            title: card.title,
+            status: card.status,
+            displayId:
+              project && card.taskNumber != null
+                ? `${project.idPrefix}-${card.taskNumber}`
+                : null,
+          },
+          card.status === "progress"
+            ? resolveEffectiveWorktree(
+                {
+                  useWorktree: normalizeUseWorktree(card.useWorktree),
+                  gitBranchName: card.gitBranchName,
+                  taskNumber: card.taskNumber,
+                  title: card.title,
+                },
+                project
+                  ? { useWorktrees: project.useWorktrees === 1, idPrefix: project.idPrefix }
+                  : null
+              )
+            : undefined
+        );
+
+        const bound = `Session ${sessionId} bound to card ${card.id} ("${card.title}", column: ${card.status}).`;
+
         return {
           content: [
             {
               type: "text",
-              text: `Session ${sessionId} bound to card ${card.id} ("${card.title}", column: ${card.status}). The phase-aware hook policy will apply from the next user turn.`,
+              text: policy
+                ? `${bound} The phase policy below applies from this turn onward — follow it now, do not wait for the next turn.\n\n${policy}`
+                : `${bound} This column has no phase policy.`,
             },
           ],
         };

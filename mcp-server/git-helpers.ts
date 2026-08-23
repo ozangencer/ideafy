@@ -191,3 +191,36 @@ export async function ensureBranchInPlace(
     };
   }
 }
+
+// Mirror of resolveEffectiveWorktree in lib/hook-policy.ts. That one stayed on
+// the app side because it imports generateBranchName from lib/git; this one
+// leans on the copy that already lives above. The phase policy the MCP server
+// hands back on bind has to carry the same branch clause the hook would inject
+// on the next turn, so both sides must answer "what branch should this card be
+// on" identically — mcp-server/__tests__/phase-policy.test.ts cross-checks the
+// two bodies.
+export function resolveEffectiveWorktree(
+  card: {
+    useWorktree: boolean | null;
+    gitBranchName: string | null;
+    taskNumber: number | null;
+    title: string;
+  },
+  project: { useWorktrees: boolean; idPrefix: string } | null
+): { enforced: boolean; targetBranch: string | null } {
+  const effective = card.useWorktree ?? project?.useWorktrees ?? true;
+  if (!effective) return { enforced: false, targetBranch: null };
+
+  if (card.gitBranchName) {
+    return { enforced: true, targetBranch: card.gitBranchName };
+  }
+
+  if (project && card.taskNumber != null) {
+    return {
+      enforced: true,
+      targetBranch: generateBranchName(project.idPrefix, card.taskNumber, card.title),
+    };
+  }
+
+  return { enforced: true, targetBranch: null };
+}

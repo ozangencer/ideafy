@@ -13,13 +13,22 @@ import { readFileSync } from "node:fs";
 // SQL, so nothing could notice.
 //
 // These tests read both sources as text and cross-check them. Importing
-// hook-policy.ts is not an option — it is Next.js app code behind the `@/`
-// alias — and importing index.ts would start a stdio server. The existing
-// suite already asserts against index.ts source for the same reason
-// (see worktree-write.test.ts).
+// index.ts is not an option — it would start a stdio server — and the policy
+// assertions are about the written text (clause order, the exact promises a
+// sentence makes), which a runtime import would not show. The existing suite
+// already asserts against index.ts source for the same reason (see
+// worktree-write.test.ts).
 
 const indexSrc = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
 const policySrc = readFileSync(
+  new URL("../../lib/prompts/phase-policy.ts", import.meta.url),
+  "utf8"
+);
+const gitHelpersSrc = readFileSync(
+  new URL("../git-helpers.ts", import.meta.url),
+  "utf8"
+);
+const hookPolicySrc = readFileSync(
   new URL("../../lib/hook-policy.ts", import.meta.url),
   "utf8"
 );
@@ -198,5 +207,140 @@ test("move_card validates the status against the column list at runtime", () => 
     handlerBody("move_card"),
     /STATUSES\.includes\(/,
     "move_card writes the caller's status without checking it is a real column."
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The generated copies must match their sources
+// ---------------------------------------------------------------------------
+// scripts/sync-mcp-shared.mjs runs from mcp-server's prebuild, so a normal
+// build can never ship a stale copy. But `npm run dev` / tsx read the
+// committed copy directly, and nothing stopped someone editing the generated
+// file instead of the source — the DO NOT EDIT header is a request, not a
+// guard. These make it a guard.
+
+const COPIES = [
+  { source: "lib/prompts/test-style.ts", target: "test-style.generated.ts" },
+  { source: "lib/prompts/phase-policy.ts", target: "phase-policy.generated.ts" },
+];
+
+for (const { source, target } of COPIES) {
+  test(`${target} is a verbatim copy of ${source}`, () => {
+    const sourceText = readFileSync(
+      new URL(`../../${source}`, import.meta.url),
+      "utf8"
+    );
+    const generated = readFileSync(new URL(`../${target}`, import.meta.url), "utf8");
+    const marker = "// ─────────────────────────────────────────────────────────────────────────\n\n";
+    const bodyAt = generated.indexOf(marker);
+
+    assert.ok(bodyAt !== -1, `${target} lost its GENERATED FILE header`);
+    assert.strictEqual(
+      generated.slice(bodyAt + marker.length),
+      sourceText,
+      `${target} has drifted from ${source}. Run scripts/sync-mcp-shared.mjs — ` +
+        `and if the difference is a deliberate change, make it in the source.`
+    );
+  });
+}
+
+test("the copied policy module has no imports", () => {
+  // mcp-server's tsconfig pins rootDir: "." and its dist/ is copied into the
+  // plugin repo without lib/. One import in the source and the generated copy
+  // stops compiling — at build time, in a different repo, long after the edit.
+  assert.doesNotMatch(
+    policySrc,
+    /^\s*import\s/m,
+    "lib/prompts/phase-policy.ts gained an import. It has to compile standalone " +
+      "inside mcp-server — move whatever needs the dependency to lib/hook-policy.ts."
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The policy has to reach the model on the turn the card is bound
+// ---------------------------------------------------------------------------
+// The bug: create_card + bind_session_to_card both run inside one turn, but the
+// hook had already spoken for that turn, so no phase policy was in context
+// while the model went on to do the work. An ideation card got a plan written
+// straight onto it because nothing said an opinion comes first.
+
+test("bind_session_to_card returns the phase policy, not a promise about next turn", () => {
+  const body = handlerBody("bind_session_to_card");
+
+  assert.match(
+    body,
+    /buildPhasePolicyBody\(/,
+    "bind_session_to_card no longer returns the phase policy. Binding is the " +
+      "only moment the model is guaranteed to be listening before it starts work."
+  );
+  assert.doesNotMatch(
+    body,
+    /from the next user turn/i,
+    "bind_session_to_card is telling the model the policy starts next turn. " +
+      "It ships the policy now — that sentence is what the bug was made of."
+  );
+});
+
+test("bind_session_to_card's tool description does not defer to the next turn", () => {
+  // bind_session_to_card is the last entry in the tools array, so the slice
+  // ends at the array's close rather than the next `name:`.
+  const start = indexSrc.indexOf('name: "bind_session_to_card"');
+  const region = indexSrc.slice(start, indexSrc.indexOf("// Handle tool calls", start));
+  assert.ok(region.length > 0, "Could not locate bind_session_to_card tool definition");
+  assert.doesNotMatch(
+    region,
+    /from the next user turn/i,
+    "The tool description still says the policy applies from the next user turn."
+  );
+});
+
+test("create_card names the expected next action for the column it lands in", () => {
+  assert.match(
+    handlerBody("create_card"),
+    /buildPhaseHint\(/,
+    "create_card returns a bare card id. The column already implies what " +
+      "happens next; saying so is the cheapest place to say it."
+  );
+});
+
+test("save_plan's description states it is not the exit from Ideation", () => {
+  const region = indexSrc.slice(
+    indexSrc.indexOf('name: "save_plan"'),
+    indexSrc.indexOf('name: "save_tests"')
+  );
+  assert.ok(region.length > 0, "Could not locate save_plan tool definition");
+  assert.match(
+    region,
+    /ideation/i,
+    "save_plan's description says nothing about ideation. The handler happily " +
+      "writes status='progress' onto an ideation card, so the description is " +
+      "the model's only warning that doing so skips the evaluation."
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The two worktree resolvers must agree
+// ---------------------------------------------------------------------------
+// lib/hook-policy.ts owns one (it can import lib/git); mcp-server/git-helpers.ts
+// mirrors it so the policy returned on bind carries the same branch clause the
+// hook would inject on the next turn. Two copies that disagree would hand the
+// model two different target branches for the same card.
+
+test("resolveEffectiveWorktree is identical on both sides", () => {
+  const bodyOf = (src: string, label: string) => {
+    const start = src.indexOf("export function resolveEffectiveWorktree(");
+    assert.ok(start !== -1, `resolveEffectiveWorktree missing from ${label}`);
+    const end = src.indexOf("\n}", start);
+    assert.ok(end !== -1, `Could not find the end of resolveEffectiveWorktree in ${label}`);
+    return src.slice(start, end).replace(/\s+/g, " ").trim();
+  };
+
+  assert.strictEqual(
+    bodyOf(gitHelpersSrc, "mcp-server/git-helpers.ts"),
+    bodyOf(hookPolicySrc, "lib/hook-policy.ts"),
+    "The two resolveEffectiveWorktree copies have drifted. They answer " +
+      "'what branch should this card be on' for the same card through " +
+      "different code paths; a difference is a bug the user sees as a " +
+      "branch that keeps changing."
   );
 });
