@@ -204,6 +204,7 @@ export async function POST(
     testScenarios: stripHtml(card.testScenarios || ""),
     testScenariosHtml: card.testScenarios || "",
     voice: projectVoice,
+    provider: provider.id,
   };
   const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
   const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {

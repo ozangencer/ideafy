@@ -19,6 +19,7 @@ import {
 } from "@/lib/autonomous-run/select-run-output";
 import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
+import { getProviderForCard } from "@/lib/platform/active";
 import {
   generateBranchName,
   isGitRepo,
@@ -153,7 +154,7 @@ export async function POST(
   }
 
   try {
-    let prompt = buildQuickFixPrompt(card, project?.voice as never);
+    let prompt = buildQuickFixPrompt(card, project?.voice as never, getProviderForCard(card).id);
 
     // Extract and save images for CLI context
     const savedImages = saveCardImagesToTemp(card.id, card);

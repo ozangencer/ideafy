@@ -3,12 +3,13 @@
  * Used by both local chat-stream and remote-job-runner.
  */
 
-import type { SectionType, ConversationMessage, Voice } from "@/lib/types";
+import type { AiPlatform, SectionType, ConversationMessage, Voice } from "@/lib/types";
 import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
 import { DEFAULT_VOICE } from "@/lib/types";
 import { testScenariosToMarkdown } from "@/lib/markdown";
 import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { buildVoicePrompt } from "@/lib/prompts/voice-style";
+import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 
 // Card context info
 export interface CardContext {
@@ -33,6 +34,12 @@ export interface CardContext {
    * state. Falls back to `testScenarios` (stripped text) when absent.
    */
   testScenariosHtml?: string;
+  /**
+   * Active AI provider for this card. Names the project's instruction file in
+   * the provider's own terms (CLAUDE.md / AGENTS.md / GEMINI.md). Optional:
+   * callers that cannot resolve a provider simply get no such line.
+   */
+  provider?: AiPlatform;
   /**
    * Set when this card's text came from another member's pool card. The
    * tests-section path below runs with tool permissions disabled, so the
@@ -78,13 +85,17 @@ export function getAllowedTools(
 
 // Build card context string
 export function buildCardContext(ctx: CardContext): string {
+  const providerContextLine = ctx.provider
+    ? `\nPROJECT CONTEXT FILES: ${getProviderContextRef(ctx.provider)}.\nGround your analysis in these files when relevant.\n`
+    : "";
+
   return `
 CURRENT CARD CONTEXT:
 - Card ID: ${ctx.displayId}
 - Card UUID: ${ctx.uuid}
 - Title: "${markUntrustedInline(ctx.title, ctx.externallyAuthored === true)}"
 - Project: ${ctx.projectName || "(none)"}
-
+${providerContextLine}
 IMPORTANT: When updating this card, use the UUID "${ctx.uuid}" directly. Do NOT search for the card by display ID.
 `;
 }

@@ -1,8 +1,9 @@
-import type { Voice } from "@/lib/types";
+import type { AiPlatform, Voice } from "@/lib/types";
 import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
 import { detectCardLanguage } from "./test-style";
 import { buildVoicePrompt } from "./voice-style";
+import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
 
 /**
@@ -38,8 +39,9 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
  */
 export function buildEvaluatePrompt(
   card: { title: string; description: string; externallyAuthored?: boolean },
-  narrativePath?: string | null,
+  narrativePath: string | null | undefined,
   voice: Voice = DEFAULT_VOICE,
+  provider: AiPlatform,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
@@ -55,7 +57,7 @@ export function buildEvaluatePrompt(
 
 ## Context Files (read if they exist)
 - ${narrativeRef} (project vision & scope)
-- @CLAUDE.md (technical guidelines)
+- ${getProviderContextRef(provider)}
 
 ## Idea to Evaluate
 **Title:** ${title}
@@ -81,6 +83,7 @@ ${EVALUATION_OUTPUT_SCHEMA}`;
 export function buildQuickFixPrompt(
   card: { title: string; description: string; externallyAuthored?: boolean },
   voice: Voice = DEFAULT_VOICE,
+  provider: AiPlatform,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
@@ -91,6 +94,9 @@ export function buildQuickFixPrompt(
   const summaryVoice = buildVoicePrompt(voice, "quick_fix");
 
   return `You are a senior developer. Fix this bug quickly and efficiently.
+
+## Project Context (read before changing code)
+- ${getProviderContextRef(provider)}
 
 ## Bug Report
 ${title}
@@ -129,6 +135,7 @@ Focus on fixing the bug efficiently. Do NOT write extensive documentation or pla
 export function buildIdeationPrompt(
   card: { id: string; title: string; description: string; externallyAuthored?: boolean },
   voice: Voice = DEFAULT_VOICE,
+  provider: AiPlatform,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
@@ -138,6 +145,9 @@ export function buildIdeationPrompt(
   return `You are a Product Strategist. Brainstorm and refine this idea with the user — ask probing questions, challenge assumptions (YAGNI, scope creep), explore alternatives, weigh feasibility and complexity. Be honest but collaborative.
 
 ${voicePrompt}
+
+## Project Context (skim before responding)
+- ${getProviderContextRef(provider)}
 
 ## Idea to Discuss
 **Title:** ${title}
