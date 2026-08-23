@@ -190,7 +190,9 @@ function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
     case "verify":
       return {
         play: "Pre-verify core flow (Autonomous)",
-        terminal: "Test Together (Interactive)",
+        // Human Test'te terminal, çeklisti yürüten değil çeklistin dışına çıkan
+        // oturumdur: gündemi kullanıcı getirir, kartta yazmayan bir şeydir.
+        terminal: "Report an Issue (Interactive)",
       };
   }
 }
@@ -298,7 +300,11 @@ function TaskCardImpl({
   // etmeyen bir çeklistte agent hangi maddenin temel olduğunu bilemez, o yüzden
   // orada buton hiç çıkmaz — çıkarsa hiçbir şey işaretlemeyen bir koşu vaat eder.
   const canPreVerify = card.status === "test" && !!testProgress?.core;
-  const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "ideation" && (card.status !== "test" || canPreVerify));
+  const canStart = !!(card.description && (card.projectId || card.projectFolder) && card.status !== "completed" && card.status !== "ideation");
+  // Otonom koşu Human Test'te yalnızca temel akışı doğrular, o yüzden core
+  // grubuna bağlı. Interaktif oturum ise çeklistten bağımsızdır: çeklisti
+  // olmayan bir kartta da kullanıcının anlatacak bir sorunu olabilir.
+  const canRunAutonomous = canStart && (card.status !== "test" || canPreVerify);
   const canQuickFix = card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
   const canEvaluate = card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
   const canTestTogether = card.status === "test" && !!(card.testScenarios && testScenariosText !== "" && (card.projectId || card.projectFolder));
@@ -355,14 +361,14 @@ function TaskCardImpl({
 
   const handleStartClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isLocked || isStarting || !canStart) return;
+    if (isLocked || isStarting || !canRunAutonomous) return;
     setDialogUseWorktree(effectiveUseWorktree);
     setShowAutonomousConfirm(true);
   };
 
   const handleStart = async () => {
     setShowAutonomousConfirm(false);
-    if (isStarting || !canStart) return;
+    if (isStarting || !canRunAutonomous) return;
 
     // Persist per-card override only when it diverges from project default.
     // Matching the project default clears the override (back to "follow project").
@@ -538,7 +544,7 @@ function TaskCardImpl({
     [canEvaluate, FOOTER_ICON_W],
     [canQuickFix, FOOTER_ICON_W],
     [canStart && !isLocked, FOOTER_ICON_W],
-    [canStart && phase !== "retest", FOOTER_ICON_W],
+    [canRunAutonomous && phase !== "retest", FOOTER_ICON_W],
     [canTestTogether && !isLocked, FOOTER_ICON_W],
     [showsRunButton, FOOTER_ICON_W],
     [!!card.rebaseConflict, FOOTER_ICON_W],
@@ -814,7 +820,8 @@ function TaskCardImpl({
                     </TooltipContent>
                   </Tooltip>
                 )}
-                {/* Terminal button - hidden when locked */}
+                {/* Terminal button - hidden when locked. In Human Test its agenda comes from
+                    the user, not from the card; elsewhere it is Play's interactive twin. */}
                 {canStart && !isLocked && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -829,7 +836,7 @@ function TaskCardImpl({
                   </Tooltip>
                 )}
                 {/* Autonomous button - shows spinner when running, hidden only for retest phase */}
-                {canStart && phase !== "retest" && (
+                {canRunAutonomous && phase !== "retest" && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
