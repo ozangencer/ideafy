@@ -9,6 +9,11 @@ import {
   type ResolvedSkillGroup,
 } from "@/lib/skills/grouping";
 import {
+  SEARCH_MIN_ITEMS,
+  filterResolvedGroups,
+  normalizeSearchQuery,
+} from "@/lib/skills/search";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -16,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SkillGroupDialog } from "./skill-group-dialog";
 import { SkillMovePopover } from "./skill-move-popover";
+import { HighlightedText, SidebarSearchInput } from "./sidebar-search-input";
 import {
   ChevronRight,
   Zap,
@@ -329,7 +335,9 @@ export function SkillList() {
   const [copiedSkill, setCopiedSkill] = useState<string | null>(null);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [dialogState, setDialogState] = useState<GroupDialogState | null>(null);
+  const [searchValue, setSearchValue] = useState("");
   const canInlineActions = sidebarWidth >= INLINE_SKILL_ACTIONS_MIN_WIDTH;
+  const query = normalizeSearchQuery(searchValue);
 
   const globalItems = useMemo(() => {
     const deduped = new Map<string, SkillListItem>();
@@ -418,11 +426,26 @@ export function SkillList() {
     return sections;
   }, [resolvedGlobalGroups, resolvedProjectGroups]);
 
-  const allSkillCount = scopeSections.reduce(
-    (total, section) =>
-      total + section.groups.reduce((groupTotal, group) => groupTotal + group.items.length, 0),
-    0
-  );
+  const filteredSections = useMemo<ScopeSection[]>(() => {
+    if (!query) return scopeSections;
+
+    return scopeSections
+      .map((section) => ({
+        ...section,
+        groups: filterResolvedGroups(section.groups, query),
+      }))
+      .filter((section) => section.groups.length > 0);
+  }, [query, scopeSections]);
+
+  const countItems = (sections: ScopeSection[]) =>
+    sections.reduce(
+      (total, section) =>
+        total + section.groups.reduce((groupTotal, group) => groupTotal + group.items.length, 0),
+      0
+    );
+
+  const allSkillCount = countItems(scopeSections);
+  const matchedSkillCount = countItems(filteredSections);
 
   const copyToClipboard = (skill: string) => {
     navigator.clipboard.writeText(`/${skill}`);
@@ -467,13 +490,23 @@ export function SkillList() {
 
   return (
     <>
-      <Collapsible defaultOpen={false} className="px-2 mt-4">
+      <Collapsible
+        defaultOpen={false}
+        onOpenChange={(open) => {
+          // A stale filter waiting behind a closed section reads as a bug when
+          // the section is reopened.
+          if (!open) setSearchValue("");
+        }}
+        className="px-2 mt-4"
+      >
         <div className="flex items-center gap-2 pr-1">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground group">
             <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
             <Zap className="h-3 w-3" />
             <span>Skills</span>
-            <span className="ml-auto text-[10px] opacity-60">{allSkillCount}</span>
+            <span className="ml-auto text-[10px] opacity-60">
+              {query ? `${matchedSkillCount} / ${allSkillCount}` : allSkillCount}
+            </span>
           </CollapsibleTrigger>
 
           <Button
@@ -487,6 +520,20 @@ export function SkillList() {
         </div>
 
         <CollapsibleContent className="mt-1 space-y-2">
+          {allSkillCount >= SEARCH_MIN_ITEMS && (
+            <SidebarSearchInput
+              value={searchValue}
+              onChange={setSearchValue}
+              placeholder="Search skills..."
+            />
+          )}
+
+          {query && matchedSkillCount === 0 && (
+            <div className="px-3 py-2 text-[12px] leading-[1.2rem] text-muted-foreground/70">
+              No skills match &ldquo;{searchValue.trim()}&rdquo;.
+            </div>
+          )}
+
           {isOrganizing && (
             <div className="space-y-2 px-3 pb-2 pt-1">
               <div className="text-[12px] leading-[1.2rem] text-muted-foreground/75">
@@ -517,26 +564,35 @@ export function SkillList() {
             </div>
           )}
 
-          {scopeSections.map((section) => {
+          {filteredSections.map((section) => {
             const scopedGroups =
               section.label === "Project" ? currentProjectGroups : globalSkillGroups;
 
             return (
               <div key={section.label}>
-                {scopeSections.length > 1 && (
+                {filteredSections.length > 1 && (
                   <div className="px-3 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/65">
                     {section.label}
                   </div>
                 )}
 
                 <div className="space-y-1">
-                  {section.groups.map((group) => (
+                  {section.groups.map((group) => {
+                    const groupKey = getSkillGroupKey(group, activeProjectId);
+                    // While filtering, every group is forced open — a match
+                    // hidden inside a collapsed group reads as a broken search.
+                    // The toggle is suppressed too, so the user's own collapse
+                    // state survives the search untouched.
+                    const isLocked = query.length > 0;
+
+                    return (
                     <Collapsible
                       key={`${section.label}-${group.name}-${group.id ?? "fallback"}`}
-                      open={!collapsedSkillGroups.includes(getSkillGroupKey(group, activeProjectId))}
-                      onOpenChange={() =>
-                        toggleSkillGroupCollapse(getSkillGroupKey(group, activeProjectId))
-                      }
+                      open={isLocked ? true : !collapsedSkillGroups.includes(groupKey)}
+                      onOpenChange={() => {
+                        if (isLocked) return;
+                        toggleSkillGroupCollapse(groupKey);
+                      }}
                     >
                       <div className="flex items-center justify-between gap-2 px-3 pb-1.5 pt-1">
                         <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-left transition-colors hover:text-foreground">
@@ -608,7 +664,7 @@ export function SkillList() {
                                 )}
                                 <div className="min-w-0 overflow-hidden pt-[1px]">
                                   <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90 group-hover:text-foreground">
-                                    {skill.name}
+                                    <HighlightedText text={skill.name} query={query} />
                                   </div>
                                   {skill.description && (
                                     <div
@@ -617,7 +673,7 @@ export function SkillList() {
                                         overflowWrap: "anywhere",
                                       }}
                                     >
-                                      {skill.description}
+                                      <HighlightedText text={skill.description} query={query} />
                                     </div>
                                   )}
                                 </div>
@@ -646,7 +702,8 @@ export function SkillList() {
                         })}
                       </CollapsibleContent>
                     </Collapsible>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
