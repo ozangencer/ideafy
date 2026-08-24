@@ -1,14 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { DocumentFile, TreeNode } from "@/lib/types";
+import {
+  CONTENT_SEARCH_MIN_QUERY,
+  collectTreeDocumentPaths,
+  countTreeFiles,
+  filterDocumentTree,
+  type ContentMatch,
+  type ContentSearchResponse,
+} from "@/lib/documents/search";
+import { SEARCH_MIN_ITEMS, normalizeSearchQuery } from "@/lib/skills/search";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { HighlightedText, SidebarSearchInput } from "./sidebar-search-input";
 import { FileText, File, ChevronRight, FolderOpen, Folder } from "lucide-react";
+
+/** How long the box waits after the last keystroke before asking the server. */
+const CONTENT_SEARCH_DEBOUNCE_MS = 250;
+
+type ContentState = {
+  status: "idle" | "loading" | "done";
+  results: ContentMatch[];
+  truncated: boolean;
+};
+
+const IDLE_CONTENT: ContentState = { status: "idle", results: [], truncated: false };
 
 type TopLevelOrder = "alphabetical" | "preserved";
 
@@ -147,11 +168,13 @@ function FileItem({
   depth,
   selectedDocument,
   openDocument,
+  query,
 }: {
   node: TreeNode;
   depth: number;
   selectedDocument: DocumentFile | null;
   openDocument: (doc: DocumentFile) => Promise<void>;
+  query: string;
 }) {
   if (!node.document) return null;
 
@@ -176,7 +199,7 @@ function FileItem({
         <File className="h-3.5 w-3.5 shrink-0" />
       )}
       <span className={`break-all ${isClaudeMd ? "font-medium" : ""}`}>
-        {node.name}
+        <HighlightedText text={node.name} query={query} />
       </span>
     </button>
   );
@@ -190,6 +213,8 @@ function FolderItem({
   toggleDocFolder,
   selectedDocument,
   openDocument,
+  query,
+  forceOpen,
 }: {
   node: TreeNode;
   depth: number;
@@ -197,11 +222,23 @@ function FolderItem({
   toggleDocFolder: (path: string) => void;
   selectedDocument: DocumentFile | null;
   openDocument: (doc: DocumentFile) => Promise<void>;
+  query: string;
+  forceOpen: boolean;
 }) {
-  const isExpanded = expandedDocFolders.includes(node.path);
+  // While filtering, a match hidden inside a collapsed folder reads as a broken
+  // search — so every folder opens. The toggle is suppressed for the same
+  // reason in reverse: a click during the search must not rewrite the collapse
+  // state the user gets back when the box is cleared.
+  const isExpanded = forceOpen || expandedDocFolders.includes(node.path);
 
   return (
-    <Collapsible open={isExpanded} onOpenChange={() => toggleDocFolder(node.path)}>
+    <Collapsible
+      open={isExpanded}
+      onOpenChange={() => {
+        if (forceOpen) return;
+        toggleDocFolder(node.path);
+      }}
+    >
       <CollapsibleTrigger
         className="flex items-center gap-2 w-full py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         style={{ paddingLeft: `${depth * 16 + 12}px`, paddingRight: "12px" }}
@@ -212,7 +249,9 @@ function FolderItem({
           }`}
         />
         <Folder className="h-3.5 w-3.5 shrink-0" />
-        <span>{node.name}</span>
+        <span>
+          <HighlightedText text={node.name} query={query} />
+        </span>
         <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded ml-auto">
           {node.fileCount}
         </span>
@@ -228,6 +267,8 @@ function FolderItem({
             toggleDocFolder={toggleDocFolder}
             selectedDocument={selectedDocument}
             openDocument={openDocument}
+            query={query}
+            forceOpen={forceOpen}
           />
         ))}
       </CollapsibleContent>
@@ -243,6 +284,8 @@ function TreeNodeComponent({
   toggleDocFolder,
   selectedDocument,
   openDocument,
+  query,
+  forceOpen,
 }: {
   node: TreeNode;
   depth: number;
@@ -250,6 +293,8 @@ function TreeNodeComponent({
   toggleDocFolder: (path: string) => void;
   selectedDocument: DocumentFile | null;
   openDocument: (doc: DocumentFile) => Promise<void>;
+  query: string;
+  forceOpen: boolean;
 }) {
   if (node.type === "folder") {
     return (
@@ -260,6 +305,8 @@ function TreeNodeComponent({
         toggleDocFolder={toggleDocFolder}
         selectedDocument={selectedDocument}
         openDocument={openDocument}
+        query={query}
+        forceOpen={forceOpen}
       />
     );
   }
@@ -270,7 +317,62 @@ function TreeNodeComponent({
       depth={depth}
       selectedDocument={selectedDocument}
       openDocument={openDocument}
+      query={query}
     />
+  );
+}
+
+/**
+ * A file whose text matched but whose name did not. Files already standing in
+ * the tree above are filtered out before this renders, so a hit never appears
+ * twice.
+ */
+function ContentHit({
+  match,
+  query,
+  selectedDocument,
+  openDocument,
+}: {
+  match: ContentMatch;
+  query: string;
+  selectedDocument: DocumentFile | null;
+  openDocument: (doc: DocumentFile) => Promise<void>;
+}) {
+  const isSelected = selectedDocument?.path === match.path;
+
+  return (
+    <button
+      onClick={() =>
+        openDocument({
+          name: match.name,
+          path: match.path,
+          relativePath: match.relativePath,
+          isClaudeMd: match.isClaudeMd,
+          source: match.source,
+        })
+      }
+      className={`w-full rounded-md px-3 py-1.5 text-left transition-colors ${
+        isSelected ? "bg-paper-cream" : "hover:bg-muted"
+      }`}
+    >
+      <span className="flex items-baseline gap-1.5">
+        <span className="min-w-0 break-all text-[13px] font-medium leading-[1.15rem] text-foreground/90">
+          <HighlightedText text={match.name} query={query} />
+        </span>
+        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          ×{match.matchCount}
+        </span>
+      </span>
+      <span className="mt-[1px] block break-all text-[10px] text-muted-foreground/70">
+        {match.relativePath}
+      </span>
+      <span
+        className="mt-1 block text-[11px] leading-[0.95rem] text-muted-foreground/85"
+        style={{ overflowWrap: "anywhere" }}
+      >
+        <HighlightedText text={match.snippet} query={query} />
+      </span>
+    </button>
   );
 }
 
@@ -281,8 +383,12 @@ export function DocumentList() {
     selectedDocument,
     expandedDocFolders,
     toggleDocFolder,
+    activeProjectId,
   } = useKanbanStore();
   const [isOpen, setIsOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [content, setContent] = useState<ContentState>(IDLE_CONTENT);
+  const query = normalizeSearchQuery(searchValue);
 
   // Split by source: custom (user-specified) comes first, discovered fills gaps
   const { customTree, discoveredTree } = useMemo(() => {
@@ -294,11 +400,87 @@ export function DocumentList() {
     };
   }, [documents]);
 
-  const hasCustom = customTree.length > 0;
-  const hasDiscovered = discoveredTree.length > 0;
+  const filteredCustomTree = useMemo(
+    () => filterDocumentTree(customTree, query),
+    [customTree, query]
+  );
+  const filteredDiscoveredTree = useMemo(
+    () => filterDocumentTree(discoveredTree, query),
+    [discoveredTree, query]
+  );
+
+  const nameMatchCount =
+    countTreeFiles(filteredCustomTree) + countTreeFiles(filteredDiscoveredTree);
+
+  // The content layer only reports what the tree is not already showing.
+  const visiblePaths = useMemo(() => {
+    const paths = collectTreeDocumentPaths(filteredCustomTree);
+    collectTreeDocumentPaths(filteredDiscoveredTree).forEach((p) => paths.add(p));
+    return paths;
+  }, [filteredCustomTree, filteredDiscoveredTree]);
+
+  const contentOnly = useMemo(
+    () => content.results.filter((match) => !visiblePaths.has(match.path)),
+    [content.results, visiblePaths]
+  );
+
+  // The name filter is free and runs on every keystroke; the content search is
+  // a request, so it waits out the typing. Aborting on cleanup keeps a slow
+  // earlier response from landing on top of a newer query.
+  useEffect(() => {
+    if (!isOpen || !activeProjectId || query.length < CONTENT_SEARCH_MIN_QUERY) {
+      setContent(IDLE_CONTENT);
+      return;
+    }
+
+    // Dropping the old hits rather than keeping them under a new query: a
+    // snippet cut around "work" has nothing to highlight once you have typed
+    // "workt", and a pasted query would leave results from a different search.
+    setContent({ status: "loading", results: [], truncated: false });
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/projects/${activeProjectId}/documents/search?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal }
+        );
+        const data: ContentSearchResponse = await response.json();
+        setContent({
+          status: "done",
+          results: Array.isArray(data.results) ? data.results : [],
+          truncated: Boolean(data.truncated),
+        });
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        console.error("Failed to search document contents:", error);
+        setContent({ status: "done", results: [], truncated: false });
+      }
+    }, CONTENT_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [activeProjectId, isOpen, query]);
+
+  const hasCustom = filteredCustomTree.length > 0;
+  const hasDiscovered = filteredDiscoveredTree.length > 0;
+  const belowContentThreshold =
+    query.length > 0 && query.length < CONTENT_SEARCH_MIN_QUERY;
+  const matchCount = nameMatchCount + contentOnly.length;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="px-2 relative z-0">
+    <Collapsible
+      open={isOpen}
+      onOpenChange={(open) => {
+        setIsOpen(open);
+        // A stale filter waiting behind a closed section reads as a bug when
+        // the section is reopened.
+        if (!open) setSearchValue("");
+      }}
+      className="px-2 relative z-0"
+    >
       <CollapsibleTrigger className="flex items-center gap-2 w-full px-2 py-2 text-xs text-muted-foreground uppercase tracking-wider font-medium hover:text-foreground transition-colors">
         <ChevronRight
           className={`h-3 w-3 transition-transform duration-200 ${
@@ -309,7 +491,7 @@ export function DocumentList() {
         <span>Documents</span>
         {documents.length > 0 && (
           <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded normal-case">
-            {documents.length}
+            {query ? `${matchCount} / ${documents.length}` : documents.length}
           </span>
         )}
       </CollapsibleTrigger>
@@ -321,7 +503,15 @@ export function DocumentList() {
           </p>
         ) : (
           <>
-            {customTree.map((node) => (
+            {documents.length >= SEARCH_MIN_ITEMS && (
+              <SidebarSearchInput
+                value={searchValue}
+                onChange={setSearchValue}
+                placeholder="Search documents..."
+              />
+            )}
+
+            {filteredCustomTree.map((node) => (
               <TreeNodeComponent
                 key={`custom:${node.path}`}
                 node={node}
@@ -330,12 +520,14 @@ export function DocumentList() {
                 toggleDocFolder={toggleDocFolder}
                 selectedDocument={selectedDocument}
                 openDocument={openDocument}
+                query={query}
+                forceOpen={query.length > 0}
               />
             ))}
             {hasCustom && hasDiscovered && (
               <div className="my-1 border-t border-border/50" />
             )}
-            {discoveredTree.map((node) => (
+            {filteredDiscoveredTree.map((node) => (
               <TreeNodeComponent
                 key={`discovered:${node.path}`}
                 node={node}
@@ -344,8 +536,57 @@ export function DocumentList() {
                 toggleDocFolder={toggleDocFolder}
                 selectedDocument={selectedDocument}
                 openDocument={openDocument}
+                query={query}
+                forceOpen={query.length > 0}
               />
             ))}
+
+            {contentOnly.length > 0 && (
+              <>
+                {nameMatchCount > 0 && (
+                  <div className="my-1 border-t border-border/50" />
+                )}
+                <div className="flex items-center gap-2 px-3 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/65">
+                  <span>In content</span>
+                  <span className="ml-auto tracking-normal">{contentOnly.length}</span>
+                </div>
+                {contentOnly.map((match) => (
+                  <ContentHit
+                    key={match.path}
+                    match={match}
+                    query={query}
+                    selectedDocument={selectedDocument}
+                    openDocument={openDocument}
+                  />
+                ))}
+                {content.truncated && (
+                  <div className="px-3 py-1 text-[11px] text-muted-foreground/70">
+                    Showing the first matches only.
+                  </div>
+                )}
+              </>
+            )}
+
+            {content.status === "loading" && (
+              <div className="px-3 py-2 text-[12px] leading-[1.2rem] text-muted-foreground/70">
+                Searching contents…
+              </div>
+            )}
+
+            {belowContentThreshold && nameMatchCount === 0 && (
+              <div className="px-3 py-2 text-[12px] leading-[1.2rem] text-muted-foreground/70">
+                Type {CONTENT_SEARCH_MIN_QUERY} characters to search inside
+                documents.
+              </div>
+            )}
+
+            {query.length > 0 &&
+              matchCount === 0 &&
+              content.status === "done" && (
+                <div className="px-3 py-2 text-[12px] leading-[1.2rem] text-muted-foreground/70">
+                  No documents match &ldquo;{searchValue.trim()}&rdquo;.
+                </div>
+              )}
           </>
         )}
       </CollapsibleContent>
