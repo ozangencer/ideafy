@@ -249,7 +249,9 @@ export function Sidebar() {
             {/* Documents Section - only show when project selected */}
             {activeProjectId && (
               <>
-                <Separator className="my-3 mx-4" />
+                {/* w-auto because Separator ships w-full, and full width plus
+                    a 16px margin on each side is 32px more than there is. */}
+                <Separator className="my-3 mx-4 w-auto" />
                 <DocumentList />
                 <MemoryList />
               </>
