@@ -4,10 +4,16 @@ import { useMemo, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import type { AgentListItem } from "@/lib/types";
 import {
+  SEARCH_MIN_ITEMS,
+  matchesSearchQuery,
+  normalizeSearchQuery,
+} from "@/lib/skills/search";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { HighlightedText, SidebarSearchInput } from "./sidebar-search-input";
 import { ChevronRight, Bot, Check, Copy, FileText, Puzzle } from "lucide-react";
 
 type AgentSection = {
@@ -35,6 +41,8 @@ export function AgentList() {
     openAgentPreview,
   } = useKanbanStore();
   const [copiedAgent, setCopiedAgent] = useState<string | null>(null);
+  const [searchValue, setSearchValue] = useState("");
+  const query = normalizeSearchQuery(searchValue);
 
   const globalItems = useMemo(() => {
     const items = dedupeAgentItems(agentItems);
@@ -90,7 +98,22 @@ export function AgentList() {
     return nextSections;
   }, [globalItems, scopedProjectItems]);
 
+  const filteredSections = useMemo<AgentSection[]>(() => {
+    if (!query) return sections;
+
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => matchesSearchQuery(item, query)),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [query, sections]);
+
   const allAgentCount = sections.reduce((total, section) => total + section.items.length, 0);
+  const matchedAgentCount = filteredSections.reduce(
+    (total, section) => total + section.items.length,
+    0
+  );
 
   const copyToClipboard = (agent: string) => {
     navigator.clipboard.writeText(`/${agent}`);
@@ -101,18 +124,40 @@ export function AgentList() {
   if (allAgentCount === 0) return null;
 
   return (
-    <Collapsible defaultOpen={false} className="px-2 mt-2">
+    <Collapsible
+      defaultOpen={false}
+      onOpenChange={(open) => {
+        if (!open) setSearchValue("");
+      }}
+      className="px-2 mt-2"
+    >
       <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground group">
         <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
         <Bot className="h-3 w-3" />
         <span>Agents</span>
-        <span className="ml-auto text-[10px] opacity-60">{allAgentCount}</span>
+        <span className="ml-auto text-[10px] opacity-60">
+          {query ? `${matchedAgentCount} / ${allAgentCount}` : allAgentCount}
+        </span>
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-1 space-y-2">
-        {sections.map((section) => (
+        {allAgentCount >= SEARCH_MIN_ITEMS && (
+          <SidebarSearchInput
+            value={searchValue}
+            onChange={setSearchValue}
+            placeholder="Search agents..."
+          />
+        )}
+
+        {query && matchedAgentCount === 0 && (
+          <div className="px-3 py-2 text-[12px] leading-[1.2rem] text-muted-foreground/70">
+            No agents match &ldquo;{searchValue.trim()}&rdquo;.
+          </div>
+        )}
+
+        {filteredSections.map((section) => (
           <div key={section.label}>
-            {sections.length > 1 && (
+            {filteredSections.length > 1 && (
               <div className="px-3 pb-1.5 pt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/65">
                 {section.label}
               </div>
@@ -149,7 +194,7 @@ export function AgentList() {
                       )}
                       <div className="min-w-0 overflow-hidden pt-[1px]">
                         <div className="truncate text-[13px] font-medium leading-[1.15rem] text-foreground/90 group-hover:text-foreground">
-                          {agent.name}
+                          <HighlightedText text={agent.name} query={query} />
                         </div>
                         {agent.description && (
                           <div
@@ -158,7 +203,7 @@ export function AgentList() {
                               overflowWrap: "anywhere",
                             }}
                           >
-                            {agent.description}
+                            <HighlightedText text={agent.description} query={query} />
                           </div>
                         )}
                       </div>
