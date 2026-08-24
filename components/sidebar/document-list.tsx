@@ -11,7 +11,7 @@ import {
   type ContentMatch,
   type ContentSearchResponse,
 } from "@/lib/documents/search";
-import { SEARCH_MIN_ITEMS, normalizeSearchQuery } from "@/lib/skills/search";
+import { normalizeSearchQuery } from "@/lib/skills/search";
 import {
   Collapsible,
   CollapsibleContent,
@@ -503,13 +503,17 @@ export function DocumentList() {
           </p>
         ) : (
           <>
-            {documents.length >= SEARCH_MIN_ITEMS && (
-              <SidebarSearchInput
-                value={searchValue}
-                onChange={setSearchValue}
-                placeholder="Search documents..."
-              />
-            )}
+            {/* No SEARCH_MIN_ITEMS threshold here, unlike the other sidebar
+                sections. Theirs answers "is this list too long to scan", and
+                for a name filter that is the whole question. Most of the value
+                here is reading inside the files, which does not scale with how
+                many there are: six documents can hold a hundred kilobytes of
+                text worth searching. */}
+            <SidebarSearchInput
+              value={searchValue}
+              onChange={setSearchValue}
+              placeholder="Search documents..."
+            />
 
             {filteredCustomTree.map((node) => (
               <TreeNodeComponent
