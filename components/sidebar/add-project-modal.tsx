@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useKanbanStore } from "@/lib/store";
 import {
   Dialog,
@@ -12,13 +12,34 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, ArrowRight, AlertTriangle, Info, FileText, Terminal } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert";
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field";
+import { Item, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupText,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
+import {
+  ArrowLeft,
+  ArrowRight,
+  AlertTriangle,
+  Check,
+  FileText,
+  Info,
+  Terminal,
+} from "lucide-react";
 import { BasicInfoFields } from "./project-form/basic-info-fields";
+import { cn } from "@/lib/utils";
 
 interface AddProjectModalProps {
   onClose: () => void;
@@ -36,11 +57,103 @@ interface NarrativeData {
 
 type NarrativeMode = "create" | "existing" | "skip" | "skill";
 
+// Step 1: basics, step 2: how to describe the project, step 3: the interview
+// (only reached when the user chose to write the narrative with AI).
+type Step = 1 | 2 | 3;
+
+interface Question {
+  key: keyof NarrativeData;
+  title: string;
+  /** Shorter label for the question list on the left. */
+  short?: string;
+  placeholder: string;
+  help: string;
+}
+
+const QUESTIONS: Question[] = [
+  {
+    key: "storyBehindThis",
+    title: "Story Behind This",
+    placeholder: "Why are you building this? What's your motivation?",
+    help: "What happened that made you start? A sentence or two is plenty.",
+  },
+  {
+    key: "problem",
+    title: "Problem",
+    placeholder: "What problem does this solve?",
+    help: "Who feels it, and how do they cope with it today?",
+  },
+  {
+    key: "targetUsers",
+    title: "Target Users",
+    placeholder: "Who will use this?",
+    help: "Name a person, not a market: “a consultant who records client calls”.",
+  },
+  {
+    key: "coreFeatures",
+    title: "Core Features",
+    placeholder: "3–5 main features",
+    help: "One line each. Verbs help: transcribes, summarises, exports.",
+  },
+  {
+    key: "nonGoals",
+    title: "Non-Goals (Out of Scope)",
+    short: "Non-Goals",
+    placeholder: "What will this NOT do?",
+    help: "The things you'll be tempted to add. Saying no here saves a sprint later.",
+  },
+  {
+    key: "techStack",
+    title: "Tech Stack",
+    placeholder: "Technologies being used",
+    help: "Languages, frameworks, services — including the ones you're unsure about.",
+  },
+  {
+    key: "successMetrics",
+    title: "Success Metrics",
+    placeholder: "How will you measure success?",
+    help: "One number you'd check in three months.",
+  },
+];
+
+const MODE_OPTIONS: {
+  value: NarrativeMode;
+  title: string;
+  description: string;
+  icon?: ReactNode;
+}[] = [
+  {
+    value: "create",
+    title: "Write it with AI",
+    description: "Answer seven short questions; AI drafts docs/product-narrative.md",
+  },
+  {
+    value: "existing",
+    title: "Use an existing file",
+    description: "Point at a README or spec you already have",
+  },
+  {
+    value: "skill",
+    title: "Interview in the terminal",
+    description: "Opens /product-narrative for a guided conversation",
+    icon: <Terminal className="h-3.5 w-3.5 text-muted-foreground" />,
+  },
+  {
+    value: "skip",
+    title: "Skip for now",
+    description: "Evaluations will be thinner until a narrative exists",
+  },
+];
+
+function countWords(text: string): number {
+  const matches = text.trim().match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
 export function AddProjectModal({ onClose }: AddProjectModalProps) {
   const { addProject } = useKanbanStore();
 
-  // Step state (1 = Basic Info, 2 = Narrative)
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<Step>(1);
 
   // Step 1 fields
   const [name, setName] = useState("");
@@ -48,7 +161,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
   const [idPrefix, setIdPrefix] = useState("");
   const [color, setColor] = useState("#5e6ad2");
 
-  // Step 2 fields (narrative)
+  // Step 2 / 3 fields (narrative)
   const [narrativeMode, setNarrativeMode] = useState<NarrativeMode>("create");
   const [existingNarrativePath, setExistingNarrativePath] = useState("");
   const [narrative, setNarrative] = useState<NarrativeData>({
@@ -60,9 +173,14 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     techStack: "",
     successMetrics: "",
   });
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const answerRef = useRef<HTMLTextAreaElement>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingNarrativeFile, setIsPickingNarrativeFile] = useState(false);
+
+  // The interview step only exists when the narrative is written with AI.
+  const totalSteps = narrativeMode === "create" ? 3 : 2;
 
   const handleNameChange = (value: string) => {
     setName(value);
@@ -72,12 +190,25 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     }
   };
 
-  const handleNext = () => {
-    setStep(2);
+  const hasNarrativeContent = () => {
+    return Object.values(narrative).some((v) => v.trim() !== "");
   };
 
-  const handleBack = () => {
-    setStep(1);
+  const answeredCount = QUESTIONS.filter((q) => narrative[q.key].trim() !== "").length;
+
+  const updateNarrative = (field: keyof NarrativeData, value: string) => {
+    setNarrative((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Put the cursor in the answer box whenever the interview shows a question.
+  useEffect(() => {
+    if (step === 3) {
+      answerRef.current?.focus({ preventScroll: true });
+    }
+  }, [step, currentQuestion]);
+
+  const goToQuestion = (index: number) => {
+    setCurrentQuestion(Math.max(0, Math.min(QUESTIONS.length - 1, index)));
   };
 
   const handleCreateProject = async () => {
@@ -135,13 +266,27 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     }
   };
 
-  const hasNarrativeContent = () => {
-    return Object.values(narrative).some((v) => v.trim() !== "");
-  };
+  // What the primary button on step 2 does depends on the chosen mode.
+  const stepTwoPrimary = (() => {
+    switch (narrativeMode) {
+      case "create":
+        return { label: "Next: write it", onClick: () => setStep(3), disabled: false, next: true };
+      case "existing":
+        return {
+          label: "Create Project",
+          onClick: handleCreateProject,
+          disabled: isSubmitting || !existingNarrativePath.trim(),
+          next: false,
+        };
+      case "skill":
+        return { label: "Create & Open Terminal", onClick: handleCreateProject, disabled: isSubmitting, next: false };
+      default:
+        return { label: "Create Project", onClick: handleCreateProject, disabled: isSubmitting, next: false };
+    }
+  })();
 
-  const updateNarrative = (field: keyof NarrativeData, value: string) => {
-    setNarrative((prev) => ({ ...prev, [field]: value }));
-  };
+  const question = QUESTIONS[currentQuestion];
+  const isLastQuestion = currentQuestion === QUESTIONS.length - 1;
 
   return (
     <Dialog
@@ -151,7 +296,12 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
       }}
     >
       <DialogContent
-        className="sm:max-w-[720px] max-h-[90vh] flex flex-col"
+        className={cn(
+          "flex flex-col",
+          step === 3
+            ? "sm:max-w-[780px] h-[min(640px,90vh)]"
+            : "sm:max-w-[640px] max-h-[90vh]"
+        )}
         onPointerDownOutside={(e) => {
           if (isPickingNarrativeFile) e.preventDefault();
         }}
@@ -163,19 +313,34 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
         }}
       >
         <DialogHeader className="shrink-0">
+          {step > 1 && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3 pr-6">
+              <span className="shrink-0 tabular-nums">Step {step} of {totalSteps}</span>
+              <Progress value={(step / totalSteps) * 100} className="h-1" />
+              <span className="shrink-0 tabular-nums">
+                {step === 2 ? "How to describe it" : `${answeredCount} of ${QUESTIONS.length} answered`}
+              </span>
+            </div>
+          )}
           <DialogTitle>
-            {step === 1 ? "Add New Project" : "Product Narrative"}
+            {step === 1 && "Add New Project"}
+            {step === 2 && "How should AI learn about this project?"}
+            {step === 3 && `Tell AI about ${name.trim() || "this project"}`}
           </DialogTitle>
           {step === 2 && (
             <DialogDescription>
-              Help AI understand your project better (optional)
+              Pick one. You can point at a different narrative file later from project settings.
+            </DialogDescription>
+          )}
+          {step === 3 && (
+            <DialogDescription>
+              Answer what you can. Empty questions are simply left out of the draft.
             </DialogDescription>
           )}
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {step === 1 ? (
-            // Step 1: Basic Info
+        {step === 1 && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="grid gap-4 py-4">
               <BasicInfoFields
                 name={name}
@@ -193,267 +358,243 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                 Task IDs: {idPrefix || "PRJ"}-1, {idPrefix || "PRJ"}-2...
               </p>
             </div>
-          ) : (
-            // Step 2: Narrative
-            <div className="grid gap-3">
-              {/* CLAUDE.md Warning */}
-              <Alert className="bg-paper-cream border-paper-edge">
-                <Info className="h-4 w-4 text-ink" />
-                <AlertDescription className="text-sm">
-                  For better AI evaluations, your project should have a CLAUDE.md file.
-                  You can create one with <code className="px-1 py-0.5 bg-muted rounded text-xs">claude /init</code>
-                </AlertDescription>
-              </Alert>
+          </div>
+        )}
 
-              {/* Narrative Mode Selection */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                {/* Option 1: Create with AI */}
-                <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="radio"
-                    name="narrativeMode"
-                    value="create"
-                    checked={narrativeMode === "create"}
-                    onChange={() => setNarrativeMode("create")}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">Create with AI</div>
-                    <div className="text-xs text-muted-foreground">Fill form below, AI generates narrative file</div>
-                  </div>
-                </label>
+        {step === 2 && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="grid gap-4 py-2">
+              <RadioGroup
+                value={narrativeMode}
+                onValueChange={(value) => setNarrativeMode(value as NarrativeMode)}
+                className="grid gap-3 sm:grid-cols-2"
+              >
+                {MODE_OPTIONS.map((option) => (
+                  <FieldLabel
+                    key={option.value}
+                    htmlFor={`narrative-mode-${option.value}`}
+                    className="cursor-pointer transition-colors hover:bg-muted/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                  >
+                    <Field orientation="horizontal" className="!p-3">
+                      <RadioGroupItem
+                        value={option.value}
+                        id={`narrative-mode-${option.value}`}
+                        className="mt-0.5"
+                      />
+                      <FieldContent className="gap-0.5">
+                        <FieldTitle>
+                          {option.title}
+                          {option.icon}
+                        </FieldTitle>
+                        <FieldDescription className="text-xs">{option.description}</FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  </FieldLabel>
+                ))}
+              </RadioGroup>
 
-                {/* Option 2: Use existing file */}
-                <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="radio"
-                    name="narrativeMode"
-                    value="existing"
-                    checked={narrativeMode === "existing"}
-                    onChange={() => setNarrativeMode("existing")}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">Use existing file</div>
-                    <div className="text-xs text-muted-foreground">Reference an existing doc (README, spec, etc.)</div>
-                    {narrativeMode === "existing" && (
-                      <div className="flex gap-2 mt-2">
-                        <Input
-                          value={existingNarrativePath}
-                          onChange={(e) => setExistingNarrativePath(e.target.value)}
-                          placeholder="README.md"
-                          className="flex-1 h-8 text-sm"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={isPickingNarrativeFile}
-                          title="Browse files"
-                          onClick={async () => {
-                            setIsPickingNarrativeFile(true);
-                            try {
-                              // Pass project folder as default location
-                              const url = folderPath
-                                ? `/api/file-picker?path=${encodeURIComponent(folderPath)}`
-                                : "/api/file-picker";
-                              const response = await fetch(url);
-                              const data = await response.json();
-                              if (data.path && folderPath) {
-                                // Make path relative to project folder
-                                const relativePath = data.path.startsWith(folderPath)
-                                  ? data.path.slice(folderPath.length + 1)
-                                  : data.path;
-                                setExistingNarrativePath(relativePath);
-                              }
-                            } catch (error) {
-                              console.error("Failed to pick file:", error);
-                            } finally {
-                              setIsPickingNarrativeFile(false);
-                            }
-                          }}
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                    {narrativeMode === "existing" && (
-                      <div className="text-xs text-muted-foreground mt-1">Relative to project folder</div>
-                    )}
-                  </div>
-                </label>
-
-                {/* Option 3: Create with Skill (Interactive) */}
-                <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="radio"
-                    name="narrativeMode"
-                    value="skill"
-                    checked={narrativeMode === "skill"}
-                    onChange={() => setNarrativeMode("skill")}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">Create with Skill (Interactive)</span>
-                      <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    <div className="text-xs text-muted-foreground">Opens terminal with /product-narrative skill for guided interview</div>
-                  </div>
-                </label>
-
-                {/* Option 4: Skip */}
-                <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="radio"
-                    name="narrativeMode"
-                    value="skip"
-                    checked={narrativeMode === "skip"}
-                    onChange={() => setNarrativeMode("skip")}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">Skip</div>
-                    <div className="text-xs text-muted-foreground">Use default path (docs/product-narrative.md)</div>
-                  </div>
-                </label>
-              </div>
-
-              {/* Create with AI form fields - only show when "create" is selected */}
-              {narrativeMode === "create" && (
-                <div className="grid gap-x-4 gap-y-3 pt-3 border-t sm:grid-cols-2">
-                  {/* Story Behind This */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">
-                      Story Behind This
-                    </label>
-                    <Textarea
-                      value={narrative.storyBehindThis}
-                      onChange={(e) => updateNarrative("storyBehindThis", e.target.value)}
-                      placeholder="Why are you building this? What's your motivation?"
-                      rows={2}
+              {narrativeMode === "existing" && (
+                <Field>
+                  <FieldLabel htmlFor="existing-narrative-path">Path to the file</FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="existing-narrative-path"
+                      value={existingNarrativePath}
+                      onChange={(e) => setExistingNarrativePath(e.target.value)}
+                      placeholder="README.md"
+                      className="flex-1 h-8 text-sm"
+                      autoFocus
                     />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={isPickingNarrativeFile}
+                      title="Browse files"
+                      onClick={async () => {
+                        setIsPickingNarrativeFile(true);
+                        try {
+                          // Pass project folder as default location
+                          const url = folderPath
+                            ? `/api/file-picker?path=${encodeURIComponent(folderPath)}`
+                            : "/api/file-picker";
+                          const response = await fetch(url);
+                          const data = await response.json();
+                          if (data.path && folderPath) {
+                            // Make path relative to project folder
+                            const relativePath = data.path.startsWith(folderPath)
+                              ? data.path.slice(folderPath.length + 1)
+                              : data.path;
+                            setExistingNarrativePath(relativePath);
+                          }
+                        } catch (error) {
+                          console.error("Failed to pick file:", error);
+                        } finally {
+                          setIsPickingNarrativeFile(false);
+                        }
+                      }}
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
                   </div>
-
-                  {/* Problem */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">
-                      Problem
-                    </label>
-                    <Textarea
-                      value={narrative.problem}
-                      onChange={(e) => updateNarrative("problem", e.target.value)}
-                      placeholder="What problem does this solve?"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Target Users */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">
-                      Target Users
-                    </label>
-                    <Textarea
-                      value={narrative.targetUsers}
-                      onChange={(e) => updateNarrative("targetUsers", e.target.value)}
-                      placeholder="Who will use this?"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Core Features */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">
-                      Core Features
-                    </label>
-                    <Textarea
-                      value={narrative.coreFeatures}
-                      onChange={(e) => updateNarrative("coreFeatures", e.target.value)}
-                      placeholder="3-5 main features"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Non-Goals */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">
-                      Non-Goals (Out of Scope)
-                    </label>
-                    <Textarea
-                      value={narrative.nonGoals}
-                      onChange={(e) => updateNarrative("nonGoals", e.target.value)}
-                      placeholder="What will this NOT do?"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Tech Stack */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">
-                      Tech Stack
-                    </label>
-                    <Textarea
-                      value={narrative.techStack}
-                      onChange={(e) => updateNarrative("techStack", e.target.value)}
-                      placeholder="Technologies being used"
-                      rows={2}
-                    />
-                  </div>
-
-                  {/* Success Metrics */}
-                  <div className="grid gap-2 sm:col-span-2">
-                    <label className="text-sm font-medium">
-                      Success Metrics
-                    </label>
-                    <Textarea
-                      value={narrative.successMetrics}
-                      onChange={(e) => updateNarrative("successMetrics", e.target.value)}
-                      placeholder="How will you measure success?"
-                      rows={2}
-                    />
-                  </div>
-                </div>
+                  <FieldDescription className="text-xs">Relative to the project folder</FieldDescription>
+                </Field>
               )}
-            </div>
-          )}
-        </div>
 
-        {/* Skip warning */}
-        {step === 2 && narrativeMode === "skip" && (
-          <p className="shrink-0 text-xs text-muted-foreground text-center">
-            <AlertTriangle className="inline h-3 w-3 mr-1" />
-            Without a narrative file, AI evaluations may be limited
-          </p>
+              <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+                {narrativeMode === "skip" ? (
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                ) : (
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                )}
+                <span>
+                  {narrativeMode === "skip"
+                    ? "Without a narrative file, AI evaluations may be limited. "
+                    : ""}
+                  A CLAUDE.md file in the project folder improves evaluations too &mdash;{" "}
+                  <code className="px-1 py-0.5 bg-muted rounded text-[11px]">claude /init</code> creates one.
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="flex-1 min-h-0 grid grid-cols-[200px_1fr] gap-5">
+            <nav
+              className="flex flex-col gap-0.5 border-r pr-4 overflow-y-auto"
+              aria-label="Questions"
+            >
+              {QUESTIONS.map((q, index) => {
+                const answered = narrative[q.key].trim() !== "";
+                const active = index === currentQuestion;
+                return (
+                  <Item
+                    key={q.key}
+                    asChild
+                    size="sm"
+                    className={cn(
+                      "!px-2.5 !py-2 cursor-pointer text-left",
+                      active ? "bg-primary/10 text-primary" : "hover:bg-muted/60"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-current={active ? "step" : undefined}
+                      onClick={() => goToQuestion(index)}
+                    >
+                      <ItemMedia>
+                        <span
+                          className={cn(
+                            "flex h-4 w-4 items-center justify-center rounded-full border",
+                            answered
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-muted-foreground/40"
+                          )}
+                        >
+                          {answered && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                        </span>
+                      </ItemMedia>
+                      <ItemContent>
+                        <ItemTitle className={cn("font-normal", active && "font-medium")}>
+                          {q.short ?? q.title}
+                        </ItemTitle>
+                      </ItemContent>
+                    </button>
+                  </Item>
+                );
+              })}
+            </nav>
+
+            <div className="flex flex-col gap-2 min-h-0">
+              <div>
+                <label htmlFor={`narrative-${question.key}`} className="text-base font-semibold">
+                  {question.title}
+                </label>
+                <p className="text-xs text-muted-foreground mt-1">{question.help}</p>
+              </div>
+              <InputGroup className="flex-1 min-h-0 flex-col items-stretch">
+                <InputGroupTextarea
+                  ref={answerRef}
+                  id={`narrative-${question.key}`}
+                  value={narrative[question.key]}
+                  onChange={(e) => updateNarrative(question.key, e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      if (!isLastQuestion) goToQuestion(currentQuestion + 1);
+                    }
+                  }}
+                  placeholder={question.placeholder}
+                  className="flex-1 min-h-0 px-3.5 text-[15px] leading-relaxed"
+                />
+                <InputGroupAddon align="block-end" className="border-t">
+                  <InputGroupText className="tabular-nums">
+                    {countWords(narrative[question.key])}{" "}
+                    {countWords(narrative[question.key]) === 1 ? "word" : "words"}
+                  </InputGroupText>
+                  {!isLastQuestion && (
+                    <InputGroupText className="ml-auto text-xs">
+                      <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">&#8984;&#8629;</kbd>
+                      next
+                    </InputGroupText>
+                  )}
+                  {!isLastQuestion && (
+                    <InputGroupButton
+                      size="sm"
+                      variant="default"
+                      onClick={() => goToQuestion(currentQuestion + 1)}
+                    >
+                      Next question
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </InputGroupButton>
+                  )}
+                </InputGroupAddon>
+              </InputGroup>
+            </div>
+          </div>
         )}
 
         <DialogFooter className="shrink-0 flex-col sm:flex-row gap-2">
-          {step === 1 ? (
+          {step === 1 && (
             <>
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
               <Button
-                onClick={handleNext}
+                onClick={() => setStep(2)}
                 disabled={!name.trim() || !folderPath.trim()}
               >
                 Next
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </>
-          ) : (
+          )}
+          {step === 2 && (
             <>
-              <Button variant="ghost" onClick={handleBack} className="mr-auto">
+              <Button variant="ghost" onClick={() => setStep(1)} className="mr-auto">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
-              <Button
-                onClick={handleCreateProject}
-                disabled={isSubmitting || (narrativeMode === "existing" && !existingNarrativePath.trim())}
-              >
+              <Button onClick={stepTwoPrimary.onClick} disabled={stepTwoPrimary.disabled}>
+                {isSubmitting ? "Creating..." : stepTwoPrimary.label}
+                {stepTwoPrimary.next && <ArrowRight className="ml-2 h-4 w-4" />}
+              </Button>
+            </>
+          )}
+          {step === 3 && (
+            <>
+              <Button variant="ghost" onClick={() => setStep(2)} className="mr-auto">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+              <Button onClick={handleCreateProject} disabled={isSubmitting}>
                 {isSubmitting
-                  ? (narrativeMode === "create" && hasNarrativeContent() ? "AI generating narrative..." : "Creating...")
-                  : (narrativeMode === "skill" ? "Create & Open Terminal" : "Create Project")}
+                  ? hasNarrativeContent()
+                    ? "AI generating narrative..."
+                    : "Creating..."
+                  : "Create Project"}
               </Button>
             </>
           )}
