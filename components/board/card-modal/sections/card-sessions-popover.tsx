@@ -167,7 +167,7 @@ export function CardSessionsPopover({ cardId }: { cardId: string }) {
             {sessions.map((session) => (
               <li
                 key={session.sessionId}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-accent group"
+                className="flex items-center gap-2 px-3 py-2 hover:bg-accent hover:text-accent-foreground group"
               >
                 {isKnownPlatform(session.provider) ? (
                   <PlatformIcon
