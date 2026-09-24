@@ -12,7 +12,12 @@ import { homedir } from "os";
 import { mkdirSync } from "fs";
 import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
-import { normalizeUseWorktree, serializeUseWorktreeForDb } from "./serialize-card.js";
+import {
+  normalizeUseWorktree,
+  serializeUseWorktreeForDb,
+  extractCardImages,
+  type ExtractedImage,
+} from "./serialize-card.js";
 import { buildTestStyleContract } from "./test-style.generated.js";
 import { buildPhaseHint, buildPhasePolicyBody } from "./phase-policy.generated.js";
 import {
@@ -343,68 +348,6 @@ function resolveDbPath(): string {
 
 const DB_PATH = resolveDbPath();
 
-// ============================================================================
-// Image Extraction Helpers
-// ============================================================================
-
-interface ExtractedImage {
-  id: string;
-  data: string;
-  mimeType: string;
-  fieldName: string;
-  index: number;
-}
-
-function extractImagesFromHtml(html: string, fieldName: string): {
-  cleanedHtml: string;
-  images: ExtractedImage[];
-} {
-  const images: ExtractedImage[] = [];
-  let index = 0;
-
-  const imgRegex = /<img[^>]*src=["']data:(image\/[^;]+);base64,([^"']+)["'][^>]*>/gi;
-
-  const cleanedHtml = html.replace(imgRegex, (match, mimeType, data) => {
-    const id = `${fieldName}_image_${index}`;
-    images.push({ id, data, mimeType, fieldName, index });
-    index++;
-    return `[IMAGE: ${id}]`;
-  });
-
-  return { cleanedHtml, images };
-}
-
-function extractCardImages(card: Card): {
-  cleanedCard: Card;
-  images: ExtractedImage[];
-} {
-  const allImages: ExtractedImage[] = [];
-  const cleanedCard = { ...card };
-
-  // Process description
-  if (card.description) {
-    const { cleanedHtml, images } = extractImagesFromHtml(card.description, 'description');
-    cleanedCard.description = cleanedHtml;
-    allImages.push(...images);
-  }
-
-  // Process solutionSummary
-  if (card.solutionSummary) {
-    const { cleanedHtml, images } = extractImagesFromHtml(card.solutionSummary, 'solutionSummary');
-    cleanedCard.solutionSummary = cleanedHtml;
-    allImages.push(...images);
-  }
-
-  // Process testScenarios
-  if (card.testScenarios) {
-    const { cleanedHtml, images } = extractImagesFromHtml(card.testScenarios, 'testScenarios');
-    cleanedCard.testScenarios = cleanedHtml;
-    allImages.push(...images);
-  }
-
-  return { cleanedCard, images: allImages };
-}
-
 // Initialize database connection. WAL journal mode so this process and
 // the Next server can read/write the same DB concurrently without
 // SQLITE_BUSY errors.
@@ -486,6 +429,10 @@ interface Card {
   description: string;
   solutionSummary: string;
   testScenarios: string;
+  // Only get_card selects these. The accepted evaluation is what a plan has
+  // to build on, so every phase reads it alongside the description.
+  aiOpinion?: string;
+  aiVerdict?: string | null;
   status: string;
   complexity: string;
   priority: string;
@@ -849,6 +796,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             id, title, description,
             solution_summary as solutionSummary,
             test_scenarios as testScenarios,
+            ai_opinion as aiOpinion,
+            ai_verdict as aiVerdict,
             status, complexity, priority,
             project_folder as projectFolder,
             project_id as projectId,

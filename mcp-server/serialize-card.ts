@@ -16,3 +16,59 @@ export function serializeUseWorktreeForDb(
   if (value === null) return null;
   return value ? 1 : 0;
 }
+
+// ============================================================================
+// Image extraction
+// ============================================================================
+
+export interface ExtractedImage {
+  id: string;
+  data: string;
+  mimeType: string;
+  fieldName: string;
+  index: number;
+}
+
+export function extractImagesFromHtml(html: string, fieldName: string): {
+  cleanedHtml: string;
+  images: ExtractedImage[];
+} {
+  const images: ExtractedImage[] = [];
+  let index = 0;
+
+  const imgRegex = /<img[^>]*src=["']data:(image\/[^;]+);base64,([^"']+)["'][^>]*>/gi;
+
+  const cleanedHtml = html.replace(imgRegex, (match, mimeType, data) => {
+    const id = `${fieldName}_image_${index}`;
+    images.push({ id, data, mimeType, fieldName, index });
+    index++;
+    return `[IMAGE: ${id}]`;
+  });
+
+  return { cleanedHtml, images };
+}
+
+// The Tiptap HTML fields that can carry pasted base64 images. Each is swapped
+// for an [IMAGE: <field>_image_<n>] marker so the JSON stays small and the
+// image travels as its own content block.
+const IMAGE_FIELDS = ["description", "solutionSummary", "testScenarios", "aiOpinion"] as const;
+
+type ImageField = (typeof IMAGE_FIELDS)[number];
+
+export function extractCardImages<T extends Partial<Record<ImageField, string | null>>>(card: T): {
+  cleanedCard: T;
+  images: ExtractedImage[];
+} {
+  const allImages: ExtractedImage[] = [];
+  const cleanedCard = { ...card };
+
+  for (const field of IMAGE_FIELDS) {
+    const html = card[field];
+    if (!html) continue;
+    const { cleanedHtml, images } = extractImagesFromHtml(html, field);
+    (cleanedCard as Record<ImageField, string>)[field] = cleanedHtml;
+    allImages.push(...images);
+  }
+
+  return { cleanedCard, images: allImages };
+}
