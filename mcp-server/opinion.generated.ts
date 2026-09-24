@@ -1,3 +1,11 @@
+// ─────────────────────────────────────────────────────────────────────────
+// GENERATED FILE — DO NOT EDIT.
+//
+// Verbatim copy of lib/prompts/opinion.ts, written by
+// scripts/sync-mcp-shared.mjs on every mcp-server build. Edit the source,
+// not this file; anything you change here is overwritten on the next build.
+// ─────────────────────────────────────────────────────────────────────────
+
 /**
  * How a plan treats the card's AI Opinion.
  *

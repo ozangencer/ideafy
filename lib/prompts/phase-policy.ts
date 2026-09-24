@@ -19,9 +19,9 @@ const PHASE_INSTRUCTIONS: Record<string, string> = {
   ideation:
     "propose save_opinion. This tool does NOT move the card. Once the opinion is saved, ask separately whether to move the card — to 'backlog' if the verdict was positive, to 'withdrawn' if it was negative — and call move_card only on a clear yes. Never report the card as moved until move_card has returned.",
   backlog:
-    "propose save_plan. This moves the card to In Progress.",
+    "propose save_plan. This moves the card to In Progress. Build the plan on the card's AI Opinion when it has one — get_card returns it with the rule.",
   bugs:
-    "propose save_plan. This moves the card to In Progress.",
+    "propose save_plan. This moves the card to In Progress. Build the plan on the card's AI Opinion when it has one — get_card returns it with the rule.",
   progress:
     "propose save_tests. This moves the card to Human Test.",
   // The test column runs on its own policy block (buildTestPhaseLines) rather

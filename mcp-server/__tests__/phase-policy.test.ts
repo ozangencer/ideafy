@@ -222,6 +222,7 @@ test("move_card validates the status against the column list at runtime", () => 
 const COPIES = [
   { source: "lib/prompts/test-style.ts", target: "test-style.generated.ts" },
   { source: "lib/prompts/phase-policy.ts", target: "phase-policy.generated.ts" },
+  { source: "lib/prompts/opinion.ts", target: "opinion.generated.ts" },
 ];
 
 for (const { source, target } of COPIES) {

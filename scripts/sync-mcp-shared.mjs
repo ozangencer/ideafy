@@ -26,6 +26,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const COPIES = [
   { source: "lib/prompts/test-style.ts", target: "mcp-server/test-style.generated.ts" },
   { source: "lib/prompts/phase-policy.ts", target: "mcp-server/phase-policy.generated.ts" },
+  { source: "lib/prompts/opinion.ts", target: "mcp-server/opinion.generated.ts" },
 ];
 
 export function generatedHeader(sourceRelPath) {

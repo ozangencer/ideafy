@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { extractCardImages } from "../serialize-card.js";
+import { extractCardImages, buildOpinionPlanningNote } from "../serialize-card.js";
 import * as opinionNs from "../../lib/prompts/opinion";
 
 /** See run-output.test.ts — `lib/` comes back through the CJS interop. */
@@ -47,4 +47,46 @@ test("the planning rule names the field and covers deviations", () => {
   assert.match(AI_OPINION_PLANNING_RULE, /aiOpinion/);
   assert.match(AI_OPINION_PLANNING_RULE, /why you deviated/);
   assert.match(AI_OPINION_PLANNING_RULE, /empty/);
+});
+
+// A session the user opens by hand never passes through Ideafy's planning
+// prompts, so get_card has to carry the rule itself — but only when there is
+// an opinion to build on and the card is somewhere a plan gets written.
+
+test("get_card adds the planning rule when the card has an opinion to build on", () => {
+  for (const status of ["backlog", "bugs", "progress"]) {
+    const note = buildOpinionPlanningNote({ status, aiOpinion: "<p>Use the existing hook.</p>" });
+    assert.ok(note, `no note for a ${status} card with an opinion`);
+    assert.ok(note.includes(AI_OPINION_PLANNING_RULE));
+  }
+});
+
+test("an empty opinion leaves get_card unchanged", () => {
+  for (const aiOpinion of ["", "<p></p>", "<p> &nbsp; </p>", null, undefined]) {
+    assert.equal(buildOpinionPlanningNote({ status: "backlog", aiOpinion }), null);
+  }
+});
+
+test("columns where no plan is written get no note", () => {
+  for (const status of ["ideation", "test", "completed", "withdrawn"]) {
+    assert.equal(buildOpinionPlanningNote({ status, aiOpinion: "<p>Looks good.</p>" }), null);
+  }
+});
+
+test("the get_card handler sends the note as its own block after the JSON", () => {
+  const noteAt = getCardHandler.indexOf("buildOpinionPlanningNote(card)");
+  assert.ok(noteAt !== -1, "get_card no longer builds the planning note");
+  assert.ok(
+    getCardHandler.indexOf("JSON.stringify(cleanedCard") < noteAt &&
+      noteAt < getCardHandler.indexOf('type: "image"'),
+    "The note has to follow the JSON block and precede the images, so content[0] stays plain JSON."
+  );
+});
+
+test("save_plan's description carries the planning rule", () => {
+  const region = indexSource.slice(
+    indexSource.indexOf('name: "save_plan"'),
+    indexSource.indexOf('name: "save_tests"')
+  );
+  assert.match(region, /\$\{AI_OPINION_PLANNING_RULE\}/);
 });
