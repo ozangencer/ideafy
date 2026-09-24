@@ -57,6 +57,24 @@ export function markdownToTiptapHtml(markdown: string): string {
 }
 
 /**
+ * Wrap the text of taskItems that carry no `<p>` in one. convertToTipTapTaskList
+ * (the autonomous-run path) writes `<li data-type="taskItem" …>text</li>`, while
+ * the editor writes `…<div><p>text</p></div></li>` — and extractTaskItems /
+ * mergeTestCheckState only read the latter. Without this every verify run's
+ * checklist read as empty and was refused (IDE-324).
+ */
+function wrapBareTaskItems(html: string): string {
+  return html.replace(
+    /(<li\b[^>]*data-type="taskItem"[^>]*>)([\s\S]*?)(<\/li>)/gi,
+    (match, open: string, body: string, close: string) => {
+      if (/<(p|ul|ol)\b/i.test(body)) return match;
+      const trimmed = body.trim();
+      return trimmed ? `${open}<p>${trimmed}</p>${close}` : match;
+    }
+  );
+}
+
+/**
  * Promote plain `<ul><li>…</li></ul>` content to Tiptap taskList (all items
  * unchecked). Apply before reading/merging test-scenario HTML so callers that
  * only know the taskItem schema (extractTaskItems, mergeTestCheckState) can
@@ -66,7 +84,7 @@ export function markdownToTiptapHtml(markdown: string): string {
  */
 export function normalizeTestsHtml(html: string): string {
   if (!html) return html;
-  return convertCheckboxListHtmlToTaskList(html).replace(
+  return wrapBareTaskItems(convertCheckboxListHtmlToTaskList(html)).replace(
     /<ul\b([^>]*)>([\s\S]*?)<\/ul>/gi,
     (match, attrs: string, inner: string) => {
       if (/data-type\s*=\s*"taskList"/i.test(attrs)) return match;
