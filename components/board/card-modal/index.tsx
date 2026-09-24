@@ -112,6 +112,7 @@ export function CardModal({
     // Activity bell deep-link
     pendingCardSection,
     setPendingCardSection,
+    markActivityReadForCard,
   } = useKanbanStore();
   const { toast } = useToast();
 
@@ -178,6 +179,14 @@ export function CardModal({
       setPendingCardSection(null);
     }
   }, [selectedCard, pendingCardSection, setPendingCardSection]);
+
+  // Opening a card — from the board, search, the bell or a shortcut — counts
+  // as reading its activity, so the bell's row dots don't outlive the result.
+  const selectedCardId = selectedCard?.id;
+  useEffect(() => {
+    if (!selectedCardId || isDraftMode) return;
+    markActivityReadForCard(selectedCardId);
+  }, [selectedCardId, isDraftMode, markActivityReadForCard]);
 
   // Git state
   const [gitBranchName, setGitBranchName] = useState<string | null>(null);

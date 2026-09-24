@@ -181,6 +181,9 @@ export interface KanbanStore {
   // Activity inbox state (notification bell)
   activityEvents: ActivityEvent[];
   activityUnreadCount: number;
+  // Badge count: unread events newer than the last time the bell was opened
+  activityUnseenCount: number;
+  activityLastSeenAt: string | null;
 
   // Card actions
   fetchCards: () => Promise<void>;
@@ -378,6 +381,8 @@ export interface KanbanStore {
   fetchActivity: () => Promise<void>;
   fetchActivityUnreadCount: () => Promise<void>;
   markActivityRead: (ids: string[]) => Promise<void>;
+  markActivityReadForCard: (cardId: string) => Promise<void>;
+  markActivitySeen: () => Promise<void>;
   markAllActivityRead: () => Promise<void>;
 }
 

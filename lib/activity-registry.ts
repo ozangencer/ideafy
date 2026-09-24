@@ -341,6 +341,61 @@ export function markAllActivityRead(): void {
   void isNull;
 }
 
+export function markActivityReadForCard(cardId: string): void {
+  db.update(schema.activityEvents)
+    .set({ isRead: true })
+    .where(
+      and(
+        eq(schema.activityEvents.cardId, cardId),
+        eq(schema.activityEvents.isRead, false)
+      )
+    )
+    .run();
+}
+
+// "Seen" is separate from "read": opening the bell clears the badge (seen)
+// while the per-row dot stays until the user opens the result (read). The
+// watermark lives in the settings key/value table, so no migration.
+const LAST_SEEN_KEY = "activity_last_seen_at";
+
+export function getActivityLastSeenAt(): string | null {
+  const row = db
+    .select()
+    .from(schema.settings)
+    .where(eq(schema.settings.key, LAST_SEEN_KEY))
+    .get();
+  return row?.value ?? null;
+}
+
+/**
+ * Advance the "last seen" watermark. Only moves forward, so a late or
+ * reordered request can never resurface events the user already saw.
+ */
+export function markActivitySeen(upTo: string): string | null {
+  const current = getActivityLastSeenAt();
+  if (current && current >= upTo) return current;
+  const now = new Date().toISOString();
+  db.insert(schema.settings)
+    .values({ key: LAST_SEEN_KEY, value: upTo, updatedAt: now })
+    .onConflictDoUpdate({
+      target: schema.settings.key,
+      set: { value: upTo, updatedAt: now },
+    })
+    .run();
+  return upTo;
+}
+
+export function unseenActivityCount(projectId?: string | null): number {
+  const lastSeenAt = getActivityLastSeenAt() ?? "";
+  const rows = db.select().from(schema.activityEvents).all();
+  return rows.filter((row) => {
+    if (row.isRead || row.updatedAt <= lastSeenAt) return false;
+    if (projectId === undefined) return true;
+    if (projectId === null) return row.projectId === null;
+    return row.projectId === projectId;
+  }).length;
+}
+
 const RETENTION_DAYS = 30;
 
 /**

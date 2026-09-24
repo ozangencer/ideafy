@@ -61,10 +61,10 @@ interface ActivityBellProps {
 export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
   const {
     activityEvents,
-    activityUnreadCount,
+    activityUnseenCount,
     fetchActivity,
-    fetchActivityUnreadCount,
     markActivityRead,
+    markActivitySeen,
     markAllActivityRead,
     cards,
     projects,
@@ -98,10 +98,24 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [fetchActivity]);
 
-  const totalUnread = useMemo(() => {
-    const extra = extraSources.reduce((sum, s) => sum + s.unreadCount, 0);
-    return activityUnreadCount + extra;
-  }, [activityUnreadCount, extraSources]);
+  const extraUnseen = useMemo(
+    () => extraSources.reduce((sum, s) => sum + (s.unseenCount ?? s.unreadCount), 0),
+    [extraSources]
+  );
+  const totalUnseen = activityUnseenCount + extraUnseen;
+
+  // The badge clears on open, so "Mark all read" follows the row dots instead
+  // — otherwise it would vanish the moment the popover opens.
+  const hasUnreadRows =
+    activityEvents.some((e) => !e.isRead) ||
+    extraSources.some((s) => s.unreadCount > 0 || s.events.some((e) => !e.isRead));
+
+  // While the popover is open, anything a poll brings in is seen right away so
+  // the badge never climbs in front of the user.
+  useEffect(() => {
+    if (!isOpen || activityUnseenCount === 0) return;
+    markActivitySeen();
+  }, [isOpen, activityUnseenCount, markActivitySeen]);
 
   const handleRowClick = (event: ActivityEvent) => {
     if (!event.isRead) {
@@ -142,12 +156,15 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
   };
 
   // Refresh local feed whenever the popover opens so the user sees the
-  // current state, not a 30s-stale snapshot.
+  // current state, not a 30s-stale snapshot. Opening marks everything as seen
+  // (badge → 0); rows keep their unread dot until opened.
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (open) {
       fetchActivity();
-      fetchActivityUnreadCount();
+      for (const source of extraSources) {
+        if (source.onSeen) source.onSeen();
+      }
     }
   };
 
@@ -163,11 +180,11 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
           aria-label="Notifications"
         >
           <Bell
-            className={`w-5 h-5 ${totalUnread > 0 ? "text-foreground" : "text-muted-foreground"}`}
+            className={`w-5 h-5 ${totalUnseen > 0 ? "text-foreground" : "text-muted-foreground"}`}
           />
-          {totalUnread > 0 && (
+          {totalUnseen > 0 && (
             <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 rounded-full bg-ink text-[10px] font-medium text-background flex items-center justify-center">
-              {totalUnread > 99 ? "99+" : totalUnread}
+              {totalUnseen > 99 ? "99+" : totalUnseen}
             </span>
           )}
         </Button>
@@ -175,7 +192,7 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
       <PopoverContent align="end" className="w-96 p-0">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <span className="text-sm font-medium">Activity</span>
-          {totalUnread > 0 && (
+          {hasUnreadRows && (
             <Button
               variant="ghost"
               size="sm"

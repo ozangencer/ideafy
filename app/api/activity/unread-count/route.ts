@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { unreadActivityCount } from "@/lib/activity-registry";
+import {
+  getActivityLastSeenAt,
+  unreadActivityCount,
+  unseenActivityCount,
+} from "@/lib/activity-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -14,5 +18,6 @@ export async function GET(request: NextRequest) {
       ? null
       : projectIdParam;
   const count = unreadActivityCount(projectId);
-  return NextResponse.json({ count });
+  const unseenCount = unseenActivityCount(projectId);
+  return NextResponse.json({ count, unseenCount, lastSeenAt: getActivityLastSeenAt() });
 }

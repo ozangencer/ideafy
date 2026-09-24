@@ -512,6 +512,12 @@ export interface ActivitySource {
   key: string;
   events: ActivityEvent[];
   unreadCount: number;
+  // Badge contribution. Sources without a "seen" notion leave this unset and
+  // fall back to unreadCount.
+  unseenCount?: number;
+  // Called when the bell opens so the source can clear its badge count
+  // without touching per-row read state.
+  onSeen?: () => void | Promise<void>;
   onMarkRead?: (ids: string[]) => void | Promise<void>;
   onMarkAllRead?: () => void | Promise<void>;
 }
