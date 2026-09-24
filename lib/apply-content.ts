@@ -8,7 +8,9 @@
  *   1. An explicit `<!-- ideafy:apply -->` … `<!-- /ideafy:apply -->` block
  *      (the last one wins; a missing close tag runs to the end).
  *   2. Otherwise everything from the first markdown heading on — or, in the
- *      Tests section, from the first heading or checkbox line.
+ *      Tests section, from the first heading or checkbox line. A short plain
+ *      closing remark after a final `---` ("want me to open the Phase 2
+ *      card?") is dropped too: it is the same narration, just at the end.
  *   3. Otherwise the whole reply, unchanged. A short "reword that paragraph"
  *      answer has no heading, and trimming it would lose content.
  * The trailing "click Append or Replace" sign-off is stripped in every case.
@@ -27,6 +29,8 @@ export interface ApplicableContent {
   content: string;
   /** True when narration before the content was dropped. */
   trimmedIntro: boolean;
+  /** True when a closing remark after the last `---` was dropped. */
+  trimmedOutro: boolean;
   /** First heading of the extracted content, for the confirm dialog. */
   firstHeading: string | null;
 }
@@ -80,6 +84,40 @@ function findContentStart(content: string, sectionType: SectionType): number {
   return -1;
 }
 
+const THEMATIC_BREAK_RE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
+// Anything structured means the tail is content, not a remark: headings,
+// list items, fences, tables, and the [COMPLEXITY:] / [PRIORITY:] markers a
+// plan may park below a divider.
+const STRUCTURED_LINE_RE = /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|```|~~~|\||\[[A-Z_]+:)/;
+const OUTRO_MAX_CHARS = 400;
+const OUTRO_MAX_PARAGRAPHS = 2;
+
+// Drop a closing remark that sits after the content's last `---`. Only short,
+// unstructured prose qualifies: a divider followed by another section, a list
+// or the plan markers stays, and so does a divider inside a code fence.
+function stripTrailingOutro(content: string): { text: string; trimmed: boolean } {
+  const lines = content.split("\n");
+  let breakLine = -1;
+  let inFence = false;
+  lines.forEach((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    // A `---` right under a text line is a setext heading underline, not a divider.
+    else if (!inFence && THEMATIC_BREAK_RE.test(line) && (i === 0 || !lines[i - 1].trim())) {
+      breakLine = i;
+    }
+  });
+  if (breakLine === -1) return { text: content, trimmed: false };
+
+  const tail = lines.slice(breakLine + 1).join("\n").trim();
+  const isRemark =
+    tail.length <= OUTRO_MAX_CHARS &&
+    tail.split(/\n\s*\n/).length <= OUTRO_MAX_PARAGRAPHS &&
+    !tail.split("\n").some((line) => STRUCTURED_LINE_RE.test(line));
+  if (tail && !isRemark) return { text: content, trimmed: false };
+
+  return { text: lines.slice(0, breakLine).join("\n").trimEnd(), trimmed: Boolean(tail) };
+}
+
 function firstHeadingOf(content: string): string | null {
   const match = content.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m);
   return match ? match[1].replace(/[*_`]/g, "").trim() : null;
@@ -94,18 +132,26 @@ export function extractApplicableContent(
     const body = stripApplySignoff(marked.trim());
     // A block that opens at the reply's first line hid no narration.
     const trimmedIntro = content.slice(0, content.search(OPEN_RE)).trim().length > 0;
-    return { content: body, trimmedIntro, firstHeading: firstHeadingOf(body) };
+    return { content: body, trimmedIntro, trimmedOutro: false, firstHeading: firstHeadingOf(body) };
   }
 
   // An empty block is no signal; drop its stray markers and fall through.
   if (marked !== null) content = content.replace(ANY_MARKER_RE, "");
 
+  // A reply that opens with its heading has no intro to drop, but can still
+  // close with a remark, so the outro pass runs whenever there is a heading.
   const start = findContentStart(content, sectionType);
-  if (start > 0 && content.slice(0, start).trim()) {
-    const body = stripApplySignoff(content.slice(start).trim());
-    return { content: body, trimmedIntro: true, firstHeading: firstHeadingOf(body) };
+  if (start >= 0) {
+    const outro = stripTrailingOutro(content.slice(start).trim());
+    const body = stripApplySignoff(outro.text);
+    return {
+      content: body,
+      trimmedIntro: content.slice(0, start).trim().length > 0,
+      trimmedOutro: outro.trimmed,
+      firstHeading: firstHeadingOf(body),
+    };
   }
 
   const body = stripApplySignoff(content);
-  return { content: body, trimmedIntro: false, firstHeading: firstHeadingOf(body) };
+  return { content: body, trimmedIntro: false, trimmedOutro: false, firstHeading: firstHeadingOf(body) };
 }

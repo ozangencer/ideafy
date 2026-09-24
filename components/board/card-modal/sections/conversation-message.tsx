@@ -462,6 +462,11 @@ export function ConversationMessage({
                       : <>; only the content below it is applied.</>}
                   </span>
                 )}
+                {applicable?.trimmedOutro && (
+                  <span className="block mt-2">
+                    The closing remark after the last divider stays in the chat.
+                  </span>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
