@@ -72,15 +72,7 @@ export async function POST(
   const promptDisplayId = project && card.taskNumber
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
-  let prompt = buildPhasePrompt(phase, card, promptDisplayId, normalizeVoice(project?.voice));
   const newStatus = getNewStatus(phase, card.status as Status);
-
-  // Extract and save images for CLI context
-  const savedImages = saveCardImagesToTemp(card.id, card);
-  const imageReferences = generateImageReferences(savedImages);
-  if (imageReferences) {
-    prompt = `${prompt}\n\n${imageReferences}`;
-  }
 
   console.log(`[Claude CLI] Phase: ${phase}`);
   console.log(`[Claude CLI] Current status: ${card.status} → New status: ${newStatus}`);
@@ -118,6 +110,24 @@ export async function POST(
     gitWorktreePath,
     gitWorktreeStatus,
   } = worktreeResult;
+
+  // Built after setupWorktree so the commit instructions describe where the
+  // run actually lands: a worktree only when setupWorktree moved the cwd into
+  // one, otherwise the project folder on its current branch.
+  let prompt = buildPhasePrompt(
+    phase,
+    card,
+    promptDisplayId,
+    normalizeVoice(project?.voice),
+    actualWorkingDir !== workingDir,
+  );
+
+  // Extract and save images for CLI context
+  const savedImages = saveCardImagesToTemp(card.id, card);
+  const imageReferences = generateImageReferences(savedImages);
+  if (imageReferences) {
+    prompt = `${prompt}\n\n${imageReferences}`;
+  }
 
   try {
     const result = await runAutonomousCli({

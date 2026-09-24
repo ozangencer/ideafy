@@ -38,7 +38,7 @@ import { DEFAULT_VOICE, type Voice } from "./types";
 const NO_SAVE_TOOLS_RULE =
   "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
 
-function buildCommitInstructions(commitRef: string | null): string {
+function buildCommitInstructions(commitRef: string | null, inWorktree: boolean): string {
   // The card reference is a trailer rather than a subject prefix so the subject
   // stays the plain sentence it would have been. Without a resolvable display
   // ID there is nothing worth referencing — a UUID fragment reads like a ref
@@ -46,11 +46,24 @@ function buildCommitInstructions(commitRef: string | null): string {
   const reference = commitRef
     ? ` Reference the card with a trailer on its own line at the end of the message: \`git commit -m "<short imperative description>" -m "Card: ${commitRef}"\`. Add the trailer only when the commit advances this card's work; an unrelated fix you happened to make along the way stays untagged.`
     : "";
+  const subject = `Write the subject as a short imperative description — no prefix, no conventional-commit type.${reference}`;
 
-  return `Commit your work in this feature-branch worktree before finishing (Merge & Complete will squash later):
+  if (inWorktree) {
+    return `Commit your work in this feature-branch worktree before finishing (Merge & Complete will squash later):
 1. Stage only the files you touched — \`git add <file>\` or \`git add -u\`. NEVER \`git add -A\` (worktree contains a node_modules symlink that must stay untracked).
-2. Write the subject as a short imperative description — no prefix, no conventional-commit type.${reference}
+2. ${subject}
 3. \`git status\` should show a clean tracked tree (untracked node_modules symlink is expected).`;
+  }
+
+  // Flow mode: the project has worktrees switched off and the run starts in
+  // the project folder on whatever branch it is on — usually main. Telling the
+  // agent it is in a feature-branch worktree made it "fix" the mismatch with
+  // its own `git checkout -b`, so this variant says outright not to.
+  return `Commit your work on the branch this session started on before finishing. Worktrees are off for this project (flow mode), so there is no feature branch:
+1. Do NOT create, switch, or check out a branch — commit on the current branch, even when it is main.
+2. Stage only the files you touched — \`git add <file>\` or \`git add -u\`. NEVER \`git add -A\`.
+3. ${subject}
+4. \`git status\` should show a clean tracked tree.`;
 }
 
 export type Phase = "planning" | "implementation" | "retest" | "verify";
@@ -92,7 +105,11 @@ export function buildPhasePrompt(
   phase: Phase,
   card: CardForPrompt,
   displayId?: string | null,
-  voice: Voice = DEFAULT_VOICE
+  voice: Voice = DEFAULT_VOICE,
+  // Whether the run's cwd is a feature-branch worktree. Defaults to false:
+  // flow-mode wording ("commit where you are") is harmless inside a worktree,
+  // while worktree wording on main is what sent an agent off to branch itself.
+  inWorktree = false
 ): string {
   const title = stripHtml(card.title);
   const commitRef = displayId ?? null;
@@ -143,7 +160,7 @@ Task: Implement "${title}".
 
 ## After implementing — commit before outputting tests
 
-${buildCommitInstructions(commitRef)}
+${buildCommitInstructions(commitRef, inWorktree)}
 
 Use multiple commits if changes are logically separate.
 
@@ -171,7 +188,7 @@ Task: "${title}" failed during testing.
 
 User will describe the error — wait, then fix. If you change code:
 
-${buildCommitInstructions(commitRef)}
+${buildCommitInstructions(commitRef, inWorktree)}
 
 ## FINAL response format
 
