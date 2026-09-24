@@ -1000,7 +1000,7 @@ function TaskCardImpl({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Card</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{card.title}&quot;? This action cannot be undone.
+              Are you sure you want to delete &quot;{card.title}&quot;? You can undo with ⌘Z.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

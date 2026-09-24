@@ -64,6 +64,13 @@
       "when": 1786864347019,
       "tag": "0008_add_card_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790231869028,
+      "tag": "0009_card_trash",
+      "breakpoints": true
     }
   ]
 }

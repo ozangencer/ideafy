@@ -28,6 +28,35 @@ export type CardUpdatePayload = Partial<Card> & {
   baseUpdatedAt?: string;
 };
 
+// One reversible board action. Only what the user does on the board lands
+// here — moves made by Claude or over MCP are left alone, since silently
+// undoing the AI's work would be more confusing than helpful.
+export type UndoStep =
+  | { kind: "delete"; cardId: string }
+  | { kind: "move"; cardId: string; prevStatus: Status; prevCompletedAt: string | null };
+
+// What one Cmd+Z reverses: usually a single step, or a whole batch (moving a
+// stale group) so the user doesn't have to press it once per card.
+export interface UndoEntry {
+  id: string;
+  label: string;
+  steps: UndoStep[];
+  at: number;
+}
+
+export interface UndoResult {
+  entry: UndoEntry;
+  undone: number;
+  error: string | null;
+}
+
+// Card actions whose effect should not be written to the undo stack pass
+// recordHistory: false — undo's own moves use it so undoing doesn't create
+// something new to undo.
+export interface HistoryOptions {
+  recordHistory?: boolean;
+}
+
 export interface KanbanStore {
   // Cards state
   cards: Card[];
@@ -168,8 +197,8 @@ export interface KanbanStore {
   ) => Promise<void>;
   discardDraft: () => void;
   updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
-  deleteCard: (id: string) => Promise<void>;
-  moveCard: (id: string, newStatus: Status) => Promise<void>;
+  deleteCard: (id: string, options?: HistoryOptions) => Promise<void>;
+  moveCard: (id: string, newStatus: Status, options?: HistoryOptions) => Promise<void>;
   selectCard: (card: Card | null) => void;
   openModal: () => void;
   closeModal: () => void;
@@ -193,6 +222,16 @@ export interface KanbanStore {
   // pointing at a group that is gone renders as an ordinary card with no
   // explanation until the next poll.
   deleteCardGroup: (id: string) => Promise<boolean>;
+
+  // Undo history (Cmd+Z). Session-only: a reload starts with an empty stack,
+  // though deleted cards stay restorable server-side for a week.
+  undoStack: UndoEntry[];
+  undoBatch: { label: string; steps: UndoStep[] } | null;
+  isUndoing: boolean;
+  pushUndoStep: (step: UndoStep, label: string) => void;
+  beginUndoBatch: (label: string) => void;
+  endUndoBatch: () => void;
+  undo: () => Promise<UndoResult | null>;
 
   // Project actions
   fetchProjects: () => Promise<void>;

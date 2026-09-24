@@ -74,8 +74,8 @@ export function CardModalFooter({
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete task?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete the
-                  task &quot;{title}&quot;.
+                  This will delete the task &quot;{title}&quot;. You can undo
+                  with ⌘Z.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

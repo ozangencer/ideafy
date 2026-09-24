@@ -86,6 +86,7 @@ export function CardModal({
     closeModal,
     updateCard,
     deleteCard,
+    moveCard,
     projects,
     cards,
     selectCard,
@@ -373,12 +374,14 @@ export function CardModal({
   }, [selectedCard, deleteCard]);
 
   // Handle withdraw
+  // Goes through moveCard rather than updateCard so the withdraw lands on the
+  // undo stack like any other column change.
   const handleWithdraw = useCallback(() => {
     if (selectedCard) {
-      updateCard(selectedCard.id, { status: "withdrawn" });
+      moveCard(selectedCard.id, "withdrawn");
       handleClose();
     }
-  }, [selectedCard, updateCard, handleClose]);
+  }, [selectedCard, moveCard, handleClose]);
 
   // Handle send message in chat
   const handleSendMessage = useCallback((content: string, mentions: MentionData[]) => {

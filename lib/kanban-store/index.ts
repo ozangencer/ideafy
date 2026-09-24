@@ -8,6 +8,7 @@ import { createClaudeSlice } from "./slices/claude";
 import { createConversationSlice } from "./slices/conversation";
 import { createDevServerSlice } from "./slices/dev-server";
 import { createDocumentsSlice } from "./slices/documents";
+import { createHistorySlice } from "./slices/history";
 import { createProjectsSlice } from "./slices/projects";
 import { createSettingsSlice } from "./slices/settings";
 import { createSkillsSlice } from "./slices/skills";
@@ -44,6 +45,7 @@ export const useKanbanStore = create<KanbanStore>()(
       ...createActivitySlice(set, get),
       ...createBackgroundProcessesSlice(set, get),
       ...createCardsSlice(set, get),
+      ...createHistorySlice(set, get),
       ...createProjectsSlice(set, get),
       ...createDocumentsSlice(set, get),
       ...createUiSlice(set, get),

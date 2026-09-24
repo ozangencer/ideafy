@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
+import { useUndoShortcut } from "@/hooks/use-undo-shortcut";
 import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter } from "@/lib/types";
 import { summarizeCardGroups } from "@/lib/card-group";
 import { partitionStaleCards } from "@/lib/card-age";
@@ -110,6 +111,7 @@ import { TaskCard } from "./card";
 
 export function KanbanBoard() {
   const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter, boardView, staleThresholds } = useKanbanStore();
+  useUndoShortcut();
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showRightFade, setShowRightFade] = useState(false);

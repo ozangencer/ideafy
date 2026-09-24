@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
+import { trashCard } from "@/lib/card-trash";
 import {
   ensureHtml,
   ensureTestScenariosHtml,
@@ -106,6 +107,12 @@ export async function PUT(
   } else if (newStatus !== 'completed' && oldStatus === 'completed') {
     // Moving FROM completed: clear timestamp
     completedAt = null;
+  }
+
+  // Undo sends the timestamp it is rolling back to, so a card pulled out of
+  // Completed and put back keeps the day it was actually finished.
+  if (body.completedAt !== undefined) {
+    completedAt = typeof body.completedAt === "string" ? body.completedAt : null;
   }
 
   // If projectId changed and new project is selected, assign new taskNumber
@@ -231,22 +238,11 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  const existing = db
-    .select()
-    .from(schema.cards)
-    .where(eq(schema.cards.id, id))
-    .get();
-
-  if (!existing) {
+  // The card goes into card_trash on its way out so the board can undo the
+  // delete (Cmd+Z); see lib/card-trash.ts.
+  if (!trashCard(id)) {
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
-
-  db.delete(schema.cards).where(eq(schema.cards.id, id)).run();
-  // Drop matching activity inbox rows so the bell doesn't keep orphan
-  // entries that 404 on click.
-  db.delete(schema.activityEvents)
-    .where(eq(schema.activityEvents.cardId, id))
-    .run();
 
   return NextResponse.json({ success: true });
 }

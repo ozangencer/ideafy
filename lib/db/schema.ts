@@ -77,6 +77,22 @@ export const cards = sqliteTable("cards", {
 export type CardRecord = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 
+// Card trash: a deleted card's row plus the rows that hang off it, kept as a
+// JSON snapshot so the board can undo a delete. A `deleted_at` column on cards
+// would have done the same with less code, but ~30 readers (and the MCP
+// server, which reads SQLite directly) would each need a filter — and the one
+// that forgets it resurrects a deleted card. Entries older than a week are
+// pruned on the next delete.
+export const cardTrash = sqliteTable("card_trash", {
+  id: text("id").primaryKey(),
+  cardId: text("card_id").notNull(),
+  payload: text("payload").notNull(), // JSON: { card, conversations, chatSessions, activityEvents }
+  deletedAt: text("deleted_at").notNull(),
+});
+
+export type CardTrashRecord = typeof cardTrash.$inferSelect;
+export type NewCardTrash = typeof cardTrash.$inferInsert;
+
 // Settings tablosu - key-value store
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),

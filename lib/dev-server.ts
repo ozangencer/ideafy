@@ -76,15 +76,23 @@ export async function startRunCommand(
   }
   const [bin, ...args] = argv;
 
+  // buildEnv() widens PATH to the usual Homebrew/local bins. Without it a
+  // packaged build launched from Finder inherits a minimal PATH and cannot
+  // even find npm.
+  const env: NodeJS.ProcessEnv = port === null ? buildEnv() : { ...buildEnv(), PORT: String(port) };
+  // The Electron shell pins these to its own checkout. A worktree running
+  // Ideafy itself would inherit them and read the parent's drizzle/ and
+  // skills/, so a migration added on the card's branch never ran.
+  delete env.IDEAFY_APP_RESOURCES;
+  delete env.IDEAFY_ROOT;
+  delete env.IDEAFY_PACKAGED;
+
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       cwd: worktreePath,
       detached: true,
       stdio: ["ignore", "ignore", "pipe"],
-      // buildEnv() widens PATH to the usual Homebrew/local bins. Without it a
-      // packaged build launched from Finder inherits a minimal PATH and cannot
-      // even find npm.
-      env: port === null ? buildEnv() : { ...buildEnv(), PORT: String(port) },
+      env,
     });
 
     let stderrTail = "";

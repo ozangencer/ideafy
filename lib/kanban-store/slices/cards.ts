@@ -1,6 +1,7 @@
-import { Card, CardGroup, Status } from "../../types";
+import { Card, CardGroup, COLUMNS, Status } from "../../types";
 import { nowIso, parseJson, replaceCardById, updateCardById } from "../helpers";
 import { CardUpdatePayload, KanbanStore, StoreSlice } from "../types";
+import { toast } from "@/hooks/use-toast";
 
 const createDraftCard = (status: Status, projectId: string | null, projectFolder: string): Card => ({
   id: `draft-${Date.now()}`,
@@ -32,6 +33,8 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   updatedAt: nowIso(),
   completedAt: null,
 });
+
+const cardLabel = (card: Card | undefined) => (card?.title ? `"${card.title}"` : "card");
 
 export const createCardsSlice: StoreSlice<
   Pick<
@@ -216,21 +219,38 @@ export const createCardsSlice: StoreSlice<
     }
   },
 
-  deleteCard: async (id) => {
+  deleteCard: async (id, { recordHistory = true } = {}) => {
+    const card = get().cards.find((c) => c.id === id);
     try {
-      await fetch(`/api/cards/${id}`, { method: "DELETE" });
+      const response = await fetch(`/api/cards/${id}`, { method: "DELETE" });
+      // A failed delete used to drop the card anyway; it then reappeared on
+      // the next poll with nothing on the undo stack. 404 means it is already
+      // gone, so removing it locally is still right.
+      if (!response.ok && response.status !== 404) {
+        const body = await parseJson<{ error?: string }>(response);
+        toast({
+          variant: "destructive",
+          title: "Couldn't delete card",
+          description: body.error || `Server returned ${response.status}`,
+        });
+        return;
+      }
       set((state) => ({
         cards: state.cards.filter((card) => card.id !== id),
         selectedCard: state.selectedCard?.id === id ? null : state.selectedCard,
         isModalOpen: state.selectedCard?.id === id ? false : state.isModalOpen,
       }));
+      if (response.ok && recordHistory) {
+        get().pushUndoStep({ kind: "delete", cardId: id }, `Deleted ${cardLabel(card)}`);
+      }
     } catch (error) {
       console.error("Failed to delete card:", error);
     }
   },
 
-  moveCard: async (id, newStatus) => {
+  moveCard: async (id, newStatus, { recordHistory = true } = {}) => {
     const previousCards = get().cards;
+    const card = previousCards.find((c) => c.id === id);
     set((state) => ({
       cards: updateCardById(state.cards, id, {
         status: newStatus,
@@ -239,11 +259,25 @@ export const createCardsSlice: StoreSlice<
     }));
 
     try {
-      await fetch(`/api/cards/${id}`, {
+      const response = await fetch(`/api/cards/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+      // A card dropped back into its own column is a reorder, not a move —
+      // recording it would make the next Cmd+Z look like it did nothing.
+      if (response.ok && recordHistory && card && card.status !== newStatus) {
+        const column = COLUMNS.find((c) => c.id === newStatus)?.title ?? newStatus;
+        get().pushUndoStep(
+          {
+            kind: "move",
+            cardId: id,
+            prevStatus: card.status,
+            prevCompletedAt: card.completedAt,
+          },
+          `Moved ${cardLabel(card)} to ${column}`
+        );
+      }
     } catch (error) {
       console.error("Failed to move card:", error);
       set({ cards: previousCards });
