@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,7 @@ import {
 } from "@/components/theme-provider";
 import { UpdateCenter } from "@/components/updates/update-center";
 import { useUpdates } from "@/components/updates/update-provider";
+import { hasSystemNotifications } from "@/lib/system-notifications";
 
 export interface SettingsExtraTab {
   value: string;
@@ -84,6 +86,12 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);
   const [mcpConfigPath, setMcpConfigPath] = useState(DEFAULT_SETTINGS.mcpConfigPath);
   const [terminalApp, setTerminalApp] = useState<TerminalApp>(DEFAULT_SETTINGS.terminalApp);
+  const [systemNotifications, setSystemNotifications] = useState(DEFAULT_SETTINGS.systemNotifications);
+  // Only the desktop app can raise OS banners; the row is hidden in a browser.
+  const [canNotify, setCanNotify] = useState(false);
+  useEffect(() => {
+    setCanNotify(hasSystemNotifications());
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingSkillsFolder, setIsPickingSkillsFolder] = useState(false);
   const [isPickingMcpFile, setIsPickingMcpFile] = useState(false);
@@ -129,6 +137,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
       setSkillsPath(settings.skillsPath ?? DEFAULT_SETTINGS.skillsPath);
       setMcpConfigPath(settings.mcpConfigPath ?? DEFAULT_SETTINGS.mcpConfigPath);
       setTerminalApp(settings.terminalApp ?? DEFAULT_SETTINGS.terminalApp);
+      setSystemNotifications(settings.systemNotifications ?? DEFAULT_SETTINGS.systemNotifications);
       // Sync the ref so the platform-change effect doesn't fire on initial load
       prevPlatformRef.current = safePlatform;
 
@@ -294,6 +303,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
         skillsPath,
         mcpConfigPath,
         terminalApp,
+        systemNotifications,
       });
       onClose();
     } catch (error) {
@@ -602,6 +612,22 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
               </SelectContent>
             </Select>
           </div>
+
+          {canNotify && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="grid gap-0.5 min-w-0">
+                <label htmlFor="systemNotifications" className="text-sm font-medium">System notifications</label>
+                <span className="text-xs text-muted-foreground">
+                  macOS banner when an AI run finishes while Ideafy is in the background
+                </span>
+              </div>
+              <Switch
+                id="systemNotifications"
+                checked={systemNotifications}
+                onCheckedChange={setSystemNotifications}
+              />
+            </div>
+          )}
 
           {aiPlatform === "claude" && (
             <div className="grid gap-1.5">

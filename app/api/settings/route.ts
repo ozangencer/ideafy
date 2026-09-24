@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   mcpConfigPath: "~/.claude.json",
   terminalApp: "iterm2",
   detectedTerminal: null,
+  systemNotifications: true,
 };
 
 // Detect terminal from TERM_PROGRAM env variable
@@ -67,6 +68,7 @@ export async function GET() {
       if (row.key === "skills_path") result.skillsPath = row.value;
       if (row.key === "mcp_config_path") result.mcpConfigPath = row.value;
       if (row.key === "terminal_app") result.terminalApp = row.value as TerminalApp;
+      if (row.key === "system_notifications") result.systemNotifications = row.value !== "false";
     }
 
     // Add detected terminal from environment
@@ -93,10 +95,13 @@ export async function PUT(request: Request) {
       skillsPath: "skills_path",
       mcpConfigPath: "mcp_config_path",
       terminalApp: "terminal_app",
+      systemNotifications: "system_notifications",
     };
 
-    for (const [field, value] of Object.entries(body)) {
+    for (const [field, rawValue] of Object.entries(body)) {
       const dbKey = keyMap[field];
+      // Booleans ride in the same key/value table as strings.
+      const value = typeof rawValue === "boolean" ? String(rawValue) : rawValue;
       if (dbKey && typeof value === "string") {
         // Check if setting exists
         const existing = db

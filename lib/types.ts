@@ -340,6 +340,9 @@ export interface AppSettings {
   mcpConfigPath: string;
   terminalApp: TerminalApp;
   detectedTerminal: TerminalApp | null;
+  // OS banner when an AI run finishes while the window is in the background.
+  // Desktop app only; the browser build has no bridge to raise one.
+  systemNotifications: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -348,6 +351,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mcpConfigPath: "~/.claude.json",
   terminalApp: "iterm2",
   detectedTerminal: null,
+  systemNotifications: true,
 };
 
 export const AI_PLATFORM_OPTIONS: { value: AiPlatform; label: string; description: string }[] = [
@@ -462,7 +466,7 @@ export interface ConversationMessage {
 // Background process tracking
 export type ProcessType = "chat" | "autonomous" | "quick-fix" | "evaluate";
 
-export type ProcessEndReason = "completed" | "aborted";
+export type ProcessEndReason = "completed" | "aborted" | "failed";
 
 export interface BackgroundProcess {
   id: string;              // `${cardId}-${sectionType}` or `${cardId}-${processType}`

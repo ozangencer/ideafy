@@ -16,6 +16,7 @@ const fsp = require("fs/promises");
 const http = require("http");
 const net = require("net");
 const { initUpdater, stopUpdater } = require("./updater");
+const { initNotifications, showNotification } = require("./notifications");
 
 // Paths differ between `npm run electron` in the repo and the packaged DMG.
 // In the DMG, __dirname is inside app.asar; PROJECT_ROOT makes no sense.
@@ -273,6 +274,11 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Keep timers at full speed while hidden behind Cmd+K. Otherwise
+      // Chromium stretches the 10s background-process poll to minutes and the
+      // "run finished" banner lands long after the run did — exactly when the
+      // window is away and the banner matters most.
+      backgroundThrottling: false,
     },
     show: false,
   });
@@ -448,6 +454,21 @@ ipcMain.handle("reveal-path", async (_event, filePath) => {
   return "";
 });
 
+// IPC: renderer asks for an OS banner when an AI run finishes. Clicking it
+// sends the card back on "open-card" so the renderer can open it.
+ipcMain.on("app-notify", (_event, payload) => {
+  if (!payload || typeof payload.title !== "string") return;
+  showNotification({
+    title: payload.title,
+    body: typeof payload.body === "string" ? payload.body : "",
+    onClickChannel: "open-card",
+    payload: {
+      cardId: typeof payload.cardId === "string" ? payload.cardId : null,
+      section: typeof payload.section === "string" ? payload.section : null,
+    },
+  });
+});
+
 // IPC: quick entry window requests to close
 ipcMain.on("close-quick-entry-window", () => {
   hideQuickEntry();
@@ -530,6 +551,7 @@ app.on("ready", async () => {
 
   // Squirrel.Mac needs a signed bundle and a real release feed; neither exists
   // when running from the repo, so dev registers the IPC surface only.
+  initNotifications({ getWindow: () => mainWindow });
   initUpdater({ getWindow: () => mainWindow, enabled: isPackaged });
 });
 

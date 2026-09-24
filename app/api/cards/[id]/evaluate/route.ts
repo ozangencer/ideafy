@@ -208,7 +208,7 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
-    completeProcess(processKey);
+    completeProcess(processKey, "failed");
     if (isMissingDependencyError(error)) {
       return NextResponse.json(
         { error: error.message, dependency: error.binaryName },

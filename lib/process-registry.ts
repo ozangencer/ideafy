@@ -17,7 +17,9 @@ interface ProcessEntry {
   };
 }
 
-export type EndReason = "completed" | "aborted";
+// "failed" is a run that threw or exited non-zero. It is kept apart from
+// "completed" so the toast and the OS banner don't report an error as done.
+export type EndReason = "completed" | "aborted" | "failed";
 
 // Completed process metadata (no ChildProcess ref)
 interface CompletedEntry {
