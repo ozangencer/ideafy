@@ -48,6 +48,7 @@ import { CardModalFooter } from "./card-modal-footer";
 import { SplitPanel } from "./split-panel";
 import { SectionEditor } from "./sections/section-editor";
 import { ConversationPanel } from "./sections/conversation-panel";
+import { CardPhaseActions } from "../card-phase-actions";
 
 // Hooks
 import { useCardModalForm } from "./hooks/use-card-modal-form";
@@ -109,6 +110,7 @@ export function CardModal({
     // Background processes
     backgroundProcesses,
     fetchBackgroundProcesses,
+    lockedCardIds,
     // Activity bell deep-link
     pendingCardSection,
     setPendingCardSection,
@@ -233,9 +235,35 @@ export function CardModal({
   const isOneShotRun = runMode === "xcode";
   const runIsActive = !isOneShotRun && !!devServerPid;
 
-  // Auto-save. skipCondition falls back to `readOnly` when the caller didn't provide one.
-  const effectiveSkipCondition = skipCondition ?? (readOnly ? () => true : undefined);
-  const { saveStatus, cancelPendingAutoSave, markExternalUpdate, autoSaveInFlightRef } = useCardModalAutoSave({
+  // The card as the store has it. startTask and openTerminal write their
+  // results to `cards`; selectedCard only catches up on the next poll, so the
+  // lock and spinner are read from here.
+  const liveCard = selectedCard
+    ? cards.find((c) => c.id === selectedCard.id) ?? selectedCard
+    : null;
+
+  // A run or a terminal session owns the card. The modal stays open and turns
+  // read-only instead of closing: you watch the run from where you started it,
+  // and nothing typed here can race the agent's own writes to the same fields.
+  const isRunLocked =
+    !!selectedCard &&
+    !isDraftMode &&
+    (lockedCardIds.includes(selectedCard.id) ||
+      !!liveCard?.processingType ||
+      backgroundProcesses.some(
+        (p) => p.cardId === selectedCard.id && p.processType !== "chat" && p.status === "running"
+      ));
+  const effectiveReadOnly = readOnly || isRunLocked;
+  const isRunLockedRef = useRef(isRunLocked);
+  isRunLockedRef.current = isRunLocked;
+
+  // Auto-save. skipCondition falls back to `readOnly` when the caller didn't
+  // provide one; a run lock suppresses it either way.
+  const effectiveSkipCondition = useCallback(
+    () => isRunLockedRef.current || (skipCondition ? skipCondition() : readOnly),
+    [skipCondition, readOnly]
+  );
+  const { saveStatus, cancelPendingAutoSave, flushPendingAutoSave, markExternalUpdate, autoSaveInFlightRef } = useCardModalAutoSave({
     selectedCard,
     isDraftMode,
     canSave,
@@ -282,6 +310,48 @@ export function CardModal({
     applyCardToForm,
     applyCardToGit,
   });
+
+  // When a run ends, take what it wrote. startTask finishes by putting the new
+  // plan or checklist into `cards` and releasing the lock in the same update;
+  // waiting for the poll to refresh selectedCard would leave an editable form
+  // showing the old content for up to ten seconds — and an edit made then
+  // would be saved over the run's result.
+  const wasRunLockedRef = useRef(false);
+  useEffect(() => {
+    const wasLocked = wasRunLockedRef.current;
+    wasRunLockedRef.current = isRunLocked;
+    if (!wasLocked || isRunLocked || !selectedCard) return;
+    const fresh = useKanbanStore.getState().cards.find((c) => c.id === selectedCard.id);
+    if (fresh && fresh.updatedAt !== selectedCard.updatedAt) selectCard(fresh);
+  }, [isRunLocked, selectedCard, selectCard]);
+
+  // Save what is in the form before an action hands the card to an agent,
+  // which reads it from disk. If the save fails the action does not start —
+  // running the previous plan without a word is the failure this prevents.
+  const handleBeforeRun = useCallback(async () => {
+    const ok = await flushPendingAutoSave();
+    if (!ok) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't save your edits",
+        description: isTitleValid
+          ? "Nothing was started, so the agent won't work from an outdated card. Try again."
+          : "Add a title first. Nothing was started.",
+      });
+      return false;
+    }
+    // Line the form and selectedCard up with what was just saved. Otherwise
+    // the form still differs from the pre-save selectedCard, reads as an
+    // unsaved edit, and the resync guard keeps the run's writes out of it.
+    if (selectedCard) {
+      const saved = useKanbanStore.getState().cards.find((c) => c.id === selectedCard.id);
+      if (saved && saved.updatedAt !== selectedCard.updatedAt) {
+        applyCardToForm(saved);
+        selectCard(saved);
+      }
+    }
+    return true;
+  }, [flushPendingAutoSave, toast, isTitleValid, selectedCard, applyCardToForm, selectCard]);
 
   // Section content mapping
   const sectionValues: Record<SectionType, string> = {
@@ -781,6 +851,26 @@ export function CardModal({
 
   if (!selectedCard) return null;
 
+  // Phase actions read the form, not the saved card: a plan pasted a moment
+  // ago should already turn "Plan Task" into "Implement". The flush in
+  // handleBeforeRun makes the saved card match before anything runs.
+  const phaseActions =
+    !isDraftMode && !readOnly && liveCard && status !== "withdrawn" ? (
+      <CardPhaseActions
+        card={{
+          ...liveCard,
+          description,
+          solutionSummary,
+          testScenarios,
+          aiOpinion,
+          status,
+          projectId,
+        }}
+        variant="labeled"
+        beforeRun={handleBeforeRun}
+      />
+    ) : null;
+
   const contextValue: CardModalContextValue = {
     selectedCard,
     projects,
@@ -803,7 +893,9 @@ export function CardModal({
     cardHistory,
     isExpanded,
     setIsExpanded,
-    readOnly,
+    readOnly: effectiveReadOnly,
+    isRunLocked,
+    phaseActions,
     saveStatus,
     handleBack,
     handleExport,
@@ -866,7 +958,7 @@ export function CardModal({
             onClose={handleClose}
             isTitleValid={isTitleValid}
             autoFocusTitle={isDraftMode}
-            isReadOnly={readOnly}
+            isReadOnly={effectiveReadOnly}
             sessionsSlot={
               // Drafts have no persisted id, so nothing could be recorded
               // against them yet.
@@ -1139,7 +1231,7 @@ export function CardModal({
                 onChange={sectionSetters[activeTab]}
                 onCardClick={handleCardClick}
                 projectId={projectId}
-                readOnly={readOnly}
+                readOnly={effectiveReadOnly}
                 cardId={selectedCard.id}
               />
             }
@@ -1184,6 +1276,7 @@ export function CardModal({
             onWithdraw={handleWithdraw}
             onCancel={handleClose}
             onSave={handleSave}
+            rightActionsSlot={phaseActions}
             createdAt={selectedCard?.createdAt}
             updatedAt={selectedCard?.updatedAt}
             completedAt={selectedCard?.completedAt}

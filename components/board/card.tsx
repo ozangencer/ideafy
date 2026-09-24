@@ -8,20 +8,13 @@ import { CardGroupChip } from "./card-group-chip";
 import { cardLastActivityAt, formatAgeLong, getCardStaleness } from "@/lib/card-age";
 import { parseTestProgress } from "@/lib/test-progress";
 import {
-  canRunAutonomousFor,
-  canStartCard,
-  canTestTogetherFor,
-  detectBoardPhase,
-  getPhaseLabels,
-  VERIFY_RUN_BLURB,
+  BOARD_PHASE_ACTIONS,
+  getPhaseActionFlags,
+  isPhaseActionShown,
 } from "@/lib/card-phase";
-import {
-  getEffectiveTerminal,
-  getPasteTipTerminalLabel,
-  PasteTipDialog,
-} from "./paste-tip-dialog";
+import { CardPhaseActions } from "./card-phase-actions";
 import { useKanbanStore } from "@/lib/store";
-import { Play, Loader2, Terminal, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Zap, Unlock, Brain, MessagesSquare, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, X } from "lucide-react";
+import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, GitCommitHorizontal } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
@@ -48,7 +41,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Switch } from "@/components/ui/switch";
 
 // Decode HTML entities and strip tags for preview text
 function stripHtml(html: string): string {
@@ -177,16 +169,10 @@ function TaskCardImpl({
   const openModal = useKanbanStore((s) => s.openModal);
   const projects = useKanbanStore((s) => s.projects);
   const staleThresholds = useKanbanStore((s) => s.staleThresholds);
-  const startTask = useKanbanStore((s) => s.startTask);
   const startingLocal = useKanbanStore((s) => s.startingCardIds.includes(card.id));
-  const openTerminal = useKanbanStore((s) => s.openTerminal);
-  const openIdeationTerminal = useKanbanStore((s) => s.openIdeationTerminal);
-  const openTestTerminal = useKanbanStore((s) => s.openTestTerminal);
   const moveCard = useKanbanStore((s) => s.moveCard);
   const deleteCard = useKanbanStore((s) => s.deleteCard);
-  const quickFixTask = useKanbanStore((s) => s.quickFixTask);
   const quickFixingLocal = useKanbanStore((s) => s.quickFixingCardIds.includes(card.id));
-  const evaluateIdea = useKanbanStore((s) => s.evaluateIdea);
   const evaluatingLocal = useKanbanStore((s) => s.evaluatingCardIds.includes(card.id));
   const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
   // Third signal: the server-side backgroundProcesses list. Covers the edge
@@ -208,8 +194,6 @@ function TaskCardImpl({
     )
   );
   const unlockCard = useKanbanStore((s) => s.unlockCard);
-  const updateCard = useKanbanStore((s) => s.updateCard);
-  const settings = useKanbanStore((s) => s.settings);
   const startDevServer = useKanbanStore((s) => s.startDevServer);
   const stopDevServer = useKanbanStore((s) => s.stopDevServer);
   // Two booleans, not the id list: a toggle re-renders the card it flipped
@@ -222,12 +206,6 @@ function TaskCardImpl({
   const moveCards = useKanbanStore((s) => s.moveCards);
   const setBulkDeleteConfirmOpen = useKanbanStore((s) => s.setBulkDeleteConfirmOpen);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
-  const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
-  const [showIdeationConfirm, setShowIdeationConfirm] = useState(false);
-  const [showAutonomousConfirm, setShowAutonomousConfirm] = useState(false);
-  const [dialogUseWorktree, setDialogUseWorktree] = useState(true);
-  const [showTestTogetherConfirm, setShowTestTogetherConfirm] = useState(false);
   const [isServerLoading, setIsServerLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isBeingDragged } = useDraggable({
     id: card.id,
@@ -238,7 +216,6 @@ function TaskCardImpl({
   const descriptionText = useMemo(() => stripHtml(card.description), [card.description]);
   const solutionSummaryText = useMemo(() => stripHtml(card.solutionSummary), [card.solutionSummary]);
   const testScenariosText = useMemo(() => stripHtml(card.testScenarios), [card.testScenarios]);
-  const aiOpinionText = useMemo(() => stripHtml(card.aiOpinion), [card.aiOpinion]);
   const testProgress = useMemo(() => parseTestProgress(card.testScenarios), [card.testScenarios]);
 
   // Three independent signals converge so the spinner is robust: local
@@ -250,39 +227,16 @@ function TaskCardImpl({
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
-  const canStart = canStartCard(card);
-  const canRunAutonomous = canRunAutonomousFor(card, testProgress);
-  const canQuickFix = card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
-  const canEvaluate = card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
-  const canTestTogether = canTestTogetherFor(card, testScenariosText);
-  const hasAiOpinion = !!aiOpinionText;
 
-  // Detect current phase for dynamic tooltips
-  const phase = detectBoardPhase(card, solutionSummaryText, testScenariosText);
-  const phaseLabels = getPhaseLabels(phase);
+  // The run buttons themselves live in CardPhaseActions; the card only needs
+  // to know which of them will be drawn, for the footer width budget below.
+  const phaseFlags = getPhaseActionFlags(card, solutionSummaryText, testScenariosText, testProgress);
+  const shownPhaseActions = BOARD_PHASE_ACTIONS.filter((action) =>
+    isPhaseActionShown(action, phaseFlags, isLocked)
+  ).length;
 
-  // Get project info for worktree path calculation
+  // Get project info
   const project = projects.find((p) => p.id === card.projectId);
-  const projectPath = project?.folderPath || card.projectFolder;
-
-  // Calculate expected worktree path for implementation phase
-  const getExpectedWorktreePath = () => {
-    if (!projectPath) return null;
-    // Use existing worktree path if available
-    if (card.gitWorktreePath) return card.gitWorktreePath;
-    // Calculate expected path based on task number
-    if (card.taskNumber && project) {
-      const branchName = `${project.idPrefix}-${card.taskNumber}`;
-      return `${projectPath}/.worktrees/kanban/${branchName}`;
-    }
-    return null;
-  };
-  const expectedWorktreePath = getExpectedWorktreePath();
-  const effectiveTerminal = getEffectiveTerminal(settings);
-  // cmux embeds Ghostty but does not inherit its paste confirmation (verified
-  // in real use), so it stays out of this list.
-  const needsPasteConfirm = effectiveTerminal === "ghostty";
-  const pasteTipTerminalLabel = getPasteTipTerminalLabel(effectiveTerminal);
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -349,127 +303,6 @@ function TaskCardImpl({
   const projectDefaultWorktree = project?.useWorktrees ?? true;
   const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
 
-  const handleStartClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLocked || isStarting || !canRunAutonomous) return;
-    setDialogUseWorktree(effectiveUseWorktree);
-    setShowAutonomousConfirm(true);
-  };
-
-  const handleStart = async () => {
-    setShowAutonomousConfirm(false);
-    if (isStarting || !canRunAutonomous) return;
-
-    // Persist per-card override only when it diverges from project default.
-    // Matching the project default clears the override (back to "follow project").
-    if (phase === "implementation") {
-      const desiredOverride =
-        dialogUseWorktree === projectDefaultWorktree ? null : dialogUseWorktree;
-      if (desiredOverride !== (card.useWorktree ?? null)) {
-        await updateCard(card.id, { useWorktree: desiredOverride });
-      }
-    }
-
-    const result = await startTask(card.id);
-    if (!result.success) {
-      console.error("Failed to start task:", result.error);
-    }
-  };
-
-  const handleOpenTerminalClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLocked || !canStart) return;
-
-    if (needsPasteConfirm) {
-      setShowTerminalConfirm(true);
-    } else {
-      handleOpenTerminal();
-    }
-  };
-
-  const handleOpenTerminal = async () => {
-    setShowTerminalConfirm(false);
-
-    const result = await openTerminal(card.id);
-    if (!result.success) {
-      console.error("Failed to open terminal:", result.error);
-    }
-  };
-
-  const handleQuickFixClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLocked || !canQuickFix) return;
-    setDialogUseWorktree(effectiveUseWorktree);
-    setShowQuickFixConfirm(true);
-  };
-
-  const handleQuickFix = async () => {
-    setShowQuickFixConfirm(false);
-    if (isQuickFixing || !canQuickFix) return;
-
-    // Persist per-card override only when it diverges from project default.
-    const desiredOverride =
-      dialogUseWorktree === projectDefaultWorktree ? null : dialogUseWorktree;
-    if (desiredOverride !== (card.useWorktree ?? null)) {
-      await updateCard(card.id, { useWorktree: desiredOverride });
-    }
-
-    const result = await quickFixTask(card.id);
-    if (!result.success) {
-      console.error("Failed to quick fix:", result.error);
-    }
-  };
-
-  const handleEvaluate = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLocked || isEvaluating || !canEvaluate) return;
-
-    const result = await evaluateIdea(card.id);
-    if (!result.success) {
-      console.error("Failed to evaluate idea:", result.error);
-    }
-  };
-
-  const handleOpenIdeationTerminalClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLocked || !canEvaluate) return;
-
-    if (needsPasteConfirm) {
-      setShowIdeationConfirm(true);
-    } else {
-      handleOpenIdeationTerminal();
-    }
-  };
-
-  const handleOpenIdeationTerminal = async () => {
-    setShowIdeationConfirm(false);
-
-    const result = await openIdeationTerminal(card.id);
-    if (!result.success) {
-      console.error("Failed to open ideation terminal:", result.error);
-    }
-  };
-
-  const handleTestTogetherClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isLocked || !canTestTogether) return;
-
-    if (needsPasteConfirm) {
-      setShowTestTogetherConfirm(true);
-    } else {
-      handleOpenTestTerminal();
-    }
-  };
-
-  const handleOpenTestTerminal = async () => {
-    setShowTestTogetherConfirm(false);
-
-    const result = await openTestTerminal(card.id);
-    if (!result.success) {
-      console.error("Failed to open test terminal:", result.error);
-    }
-  };
-
   const handleExportMarkdown = (e: React.MouseEvent) => {
     e.stopPropagation();
     downloadCardAsMarkdown(card, project);
@@ -530,12 +363,7 @@ function TaskCardImpl({
     !isLocked &&
     (project?.resolvedRunMode ?? "server") !== "none";
   const footerSlots: Array<[boolean, number]> = [
-    [canEvaluate && !isLocked, FOOTER_ICON_W],
-    [canEvaluate, FOOTER_ICON_W],
-    [canQuickFix, FOOTER_ICON_W],
-    [canStart && !isLocked, FOOTER_ICON_W],
-    [canRunAutonomous && phase !== "retest", FOOTER_ICON_W],
-    [canTestTogether && !isLocked, FOOTER_ICON_W],
+    ...Array.from({ length: shownPhaseActions }, (): [boolean, number] => [true, FOOTER_ICON_W]),
     [showsRunButton, FOOTER_ICON_W],
     [!!card.rebaseConflict, FOOTER_ICON_W],
     [!!extraBadges, FOOTER_ICON_W],
@@ -769,143 +597,7 @@ function TaskCardImpl({
 
               {/* Badges and Action Buttons */}
               <div className="flex items-center gap-1 shrink-0">
-                {/* Interactive Ideation button - hidden when locked */}
-                {canEvaluate && !isLocked && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleOpenIdeationTerminalClick}
-                        className="p-1 rounded transition-colors bg-cyan-500/10 text-cyan-500/70 hover:bg-cyan-500/20 hover:text-cyan-500"
-                      >
-                        <MessagesSquare className="w-3.5 h-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Discuss Idea (Interactive)</TooltipContent>
-                  </Tooltip>
-                )}
-                {/* Autonomous Evaluate button - shows spinner when running */}
-                {canEvaluate && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleEvaluate}
-                        disabled={isEvaluating || isLocked}
-                        className={`p-1 rounded transition-colors ${
-                          isEvaluating
-                            ? "bg-ink/20 text-ink cursor-wait"
-                            : isLocked
-                            ? "bg-ink/10 text-ink/30 cursor-not-allowed"
-                            : "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink"
-                        }`}
-                      >
-                        {isEvaluating ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <div className="relative">
-                            <Brain className="w-3.5 h-3.5" />
-                            {hasAiOpinion && (
-                              <span className={`absolute -bottom-1 -right-1 flex items-center justify-center w-2.5 h-2.5 rounded-full ${
-                                card.aiVerdict === 'negative' ? 'bg-red-500' : 'bg-green-500'
-                              }`}>
-                                {card.aiVerdict === 'negative' ? (
-                                  <X className="w-1.5 h-1.5 text-white" strokeWidth={4} />
-                                ) : (
-                                  <Check className="w-1.5 h-1.5 text-white" strokeWidth={4} />
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      {isEvaluating ? "Evaluating..." : hasAiOpinion ? "Re-evaluate Idea" : "Evaluate Idea"}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {/* Autonomous QuickFix button - shows spinner when running */}
-                {canQuickFix && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleQuickFixClick}
-                        disabled={isQuickFixing || isLocked}
-                        className={`p-1 rounded transition-colors ${
-                          isQuickFixing
-                            ? "bg-yellow-500/20 text-yellow-500 cursor-wait"
-                            : isLocked
-                            ? "bg-yellow-500/10 text-yellow-500/30 cursor-not-allowed"
-                            : "bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/20 hover:text-yellow-500"
-                        }`}
-                      >
-                        {isQuickFixing ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      {isQuickFixing ? "Quick fixing..." : "Quick Fix (No Plan)"}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {/* Terminal button - hidden when locked. In Human Test its agenda comes from
-                    the user, not from the card; elsewhere it is Play's interactive twin. */}
-                {canStart && !isLocked && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleOpenTerminalClick}
-                        className="p-1 rounded transition-colors bg-orange-500/10 text-orange-500/70 hover:bg-orange-500/20 hover:text-orange-500"
-                      >
-                        <Terminal className="w-3.5 h-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{phaseLabels.terminal}</TooltipContent>
-                  </Tooltip>
-                )}
-                {/* Autonomous button - shows spinner when running, hidden only for retest phase */}
-                {canRunAutonomous && phase !== "retest" && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleStartClick}
-                        disabled={isStarting || isLocked}
-                        className={`p-1 rounded transition-colors ${
-                          isStarting
-                            ? "bg-ink/20 text-ink cursor-wait"
-                            : isLocked
-                            ? "bg-ink/10 text-ink/30 cursor-not-allowed"
-                            : "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink"
-                        }`}
-                      >
-                        {isStarting ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Play className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      {isStarting ? "Running..." : phaseLabels.play}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {/* Test Together button - hidden when locked */}
-                {canTestTogether && !isLocked && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleTestTogetherClick}
-                        className="p-1 rounded transition-colors bg-emerald-500/10 text-emerald-500/70 hover:bg-emerald-500/20 hover:text-emerald-500"
-                      >
-                        <FlaskConical className="w-3.5 h-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Test Together (Interactive)</TooltipContent>
-                  </Tooltip>
-                )}
+                <CardPhaseActions card={card} softLock={softLock} />
                 {card.status === "test" &&
                   card.gitWorktreeStatus === "active" &&
                   !isLocked &&
@@ -1113,168 +805,6 @@ function TaskCardImpl({
               className="bg-red-500 hover:bg-red-600"
             >
               Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showQuickFixConfirm} onOpenChange={setShowQuickFixConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Quick Fix Mode</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>Are you sure you want to start this card in quick-fix mode?</p>
-                <p>
-                  <strong className="text-amber-500">Warning:</strong> No plan will be written. This runs in autonomous mode with full file access.
-                  After the bug fix is completed, the card will automatically be moved to the Human Test column.
-                </p>
-                <p className="text-muted-foreground text-sm">
-                  Note: Test scenarios are auto-generated with basic placeholder checks; they are not manually authored for this card.
-                </p>
-                {dialogUseWorktree && expectedWorktreePath && (
-                  <p className="text-cyan-500 text-xs font-mono">
-                    {expectedWorktreePath.split('/').slice(-3).join('/')}
-                  </p>
-                )}
-                {!dialogUseWorktree && (
-                  <p className="text-gray-400 text-xs font-mono">
-                    Working directly on main branch
-                  </p>
-                )}
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <div className="space-y-0.5">
-                    <label className="text-sm font-medium">Use git worktree</label>
-                    <p className="text-xs text-muted-foreground">
-                      {dialogUseWorktree
-                        ? "Isolated branch for this fix"
-                        : "Work directly on main (flow mode)"}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={dialogUseWorktree}
-                    onCheckedChange={setDialogUseWorktree}
-                  />
-                </div>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleQuickFix}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black"
-            >
-              Start Quick Fix
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <PasteTipDialog
-        open={showTerminalConfirm}
-        onOpenChange={setShowTerminalConfirm}
-        title="Open Interactive Terminal"
-        terminalLabel={pasteTipTerminalLabel}
-        confirmLabel="Open Terminal"
-        confirmClassName="bg-orange-500 hover:bg-orange-600"
-        onConfirm={handleOpenTerminal}
-      >
-        {phase === "implementation" && (
-          !effectiveUseWorktree ? (
-            <p className="text-gray-400 text-xs font-mono">
-              Working directly on main (worktrees disabled)
-            </p>
-          ) : expectedWorktreePath && (
-            <p className="text-cyan-500 text-xs font-mono">
-              Worktree: {expectedWorktreePath.split('/').slice(-3).join('/')}
-            </p>
-          )
-        )}
-      </PasteTipDialog>
-
-      <PasteTipDialog
-        open={showIdeationConfirm}
-        onOpenChange={setShowIdeationConfirm}
-        title="Interactive Ideation"
-        terminalLabel={pasteTipTerminalLabel}
-        confirmLabel="Start Discussion"
-        confirmClassName="bg-cyan-500 hover:bg-cyan-600"
-        onConfirm={handleOpenIdeationTerminal}
-      />
-
-      <PasteTipDialog
-        open={showTestTogetherConfirm}
-        onOpenChange={setShowTestTogetherConfirm}
-        title="Test Together"
-        lead="Start an interactive test session with Claude as your QA partner."
-        terminalLabel={pasteTipTerminalLabel}
-        confirmLabel="Start Testing"
-        confirmClassName="bg-emerald-500 hover:bg-emerald-600"
-        onConfirm={handleOpenTestTerminal}
-      />
-
-      <AlertDialog open={showAutonomousConfirm} onOpenChange={setShowAutonomousConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start {phaseLabels.play}?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>This will run in autonomous mode with full file access.</p>
-                {phase === "planning" && (
-                  <p className="text-muted-foreground">
-                    The task will be analyzed and a solution plan will be written.
-                  </p>
-                )}
-                {phase === "implementation" && (
-                  <div className="space-y-2">
-                    {dialogUseWorktree ? (
-                      <>
-                        <p className="text-amber-500">
-                          Files in your project may be modified. A new worktree will be created automatically.
-                        </p>
-                        {expectedWorktreePath && (
-                          <p className="text-cyan-500 text-xs font-mono">
-                            {expectedWorktreePath.split('/').slice(-3).join('/')}
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-amber-500">
-                        Files in your project may be modified. Working directly on main branch.
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <div className="space-y-0.5">
-                        <label className="text-sm font-medium">Use git worktree</label>
-                        <p className="text-xs text-muted-foreground">
-                          {dialogUseWorktree
-                            ? "Isolated branch for this task"
-                            : "Work directly on main (flow mode)"}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={dialogUseWorktree}
-                        onCheckedChange={setDialogUseWorktree}
-                      />
-                    </div>
-                  </div>
-                )}
-                {phase === "retest" && (
-                  <p className="text-muted-foreground">
-                    Tests will be re-run and any issues will be fixed.
-                  </p>
-                )}
-                {phase === "verify" && (
-                  <p className="text-muted-foreground">{VERIFY_RUN_BLURB}</p>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleStart}>
-              Start
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

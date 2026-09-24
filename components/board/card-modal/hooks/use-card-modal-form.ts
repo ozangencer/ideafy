@@ -11,7 +11,7 @@ interface UseCardModalFormOptions {
   saveDraftCard: (
     cardData: Omit<Card, "id" | "createdAt" | "updatedAt" | "taskNumber" | "completedAt">
   ) => Promise<void>;
-  updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
+  updateCard: (id: string, updates: CardUpdatePayload) => Promise<boolean | void>;
   discardDraft: () => void;
   closeModal: () => void;
   detachConversation: () => void;

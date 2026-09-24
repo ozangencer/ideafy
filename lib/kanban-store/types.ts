@@ -212,7 +212,8 @@ export interface KanbanStore {
     cardData: Omit<Card, "id" | "createdAt" | "updatedAt" | "taskNumber" | "completedAt">
   ) => Promise<void>;
   discardDraft: () => void;
-  updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
+  /** Resolves false when the write did not land; the optimistic update is rolled back. */
+  updateCard: (id: string, updates: CardUpdatePayload) => Promise<boolean>;
   deleteCard: (id: string, options?: HistoryOptions) => Promise<void>;
   moveCard: (id: string, newStatus: Status, options?: HistoryOptions) => Promise<void>;
   // Bulk versions for the multi-select bar. One Cmd+Z reverses the whole

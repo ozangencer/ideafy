@@ -254,13 +254,22 @@ export const createCardsSlice: StoreSlice<
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
+      // A refused write used to land its error body in place of the card.
+      if (!response.ok) {
+        const body = await parseJson<{ error?: string }>(response);
+        console.error("Failed to update card:", body.error || response.status);
+        set({ cards: previousCards });
+        return false;
+      }
       const updatedCard = await parseJson<Card>(response);
       set((state) => ({
         cards: replaceCardById(state.cards, id, updatedCard),
       }));
+      return true;
     } catch (error) {
       console.error("Failed to update card:", error);
       set({ cards: previousCards });
+      return false;
     }
   },
 

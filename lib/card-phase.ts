@@ -125,3 +125,91 @@ export function canTestTogetherFor(card: Card, testScenariosText: string): boole
  */
 export const VERIFY_RUN_BLURB =
   "The agent runs the core flow only and ticks the steps that pass. Later groups and your own ticks stay untouched.";
+
+export function canQuickFixFor(card: Card): boolean {
+  return card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
+}
+
+export function canEvaluateFor(card: Card): boolean {
+  return card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
+}
+
+/**
+ * Every button that moves a card to its next phase, by name.
+ *
+ * The board card, a Focus row and the card modal all draw some of these. Each
+ * surface picks which ones and in what order; whether a given one exists for a
+ * card is decided once, here.
+ */
+export type PhaseAction =
+  | "discuss"
+  | "evaluate"
+  | "quick-fix"
+  | "terminal"
+  | "play"
+  | "test-together";
+
+/** The board footer's order — the one every other surface started from. */
+export const BOARD_PHASE_ACTIONS: PhaseAction[] = [
+  "discuss",
+  "evaluate",
+  "quick-fix",
+  "terminal",
+  "play",
+  "test-together",
+];
+
+export interface PhaseActionFlags {
+  phase: Phase;
+  labels: { play: string; terminal: string };
+  canStart: boolean;
+  canRunAutonomous: boolean;
+  canQuickFix: boolean;
+  canEvaluate: boolean;
+  canTestTogether: boolean;
+}
+
+export function getPhaseActionFlags(
+  card: Card,
+  solutionText: string,
+  testText: string,
+  testProgress: TestProgress | null
+): PhaseActionFlags {
+  const phase = detectBoardPhase(card, solutionText, testText);
+  return {
+    phase,
+    labels: getPhaseLabels(phase),
+    canStart: canStartCard(card),
+    canRunAutonomous: canRunAutonomousFor(card, testProgress),
+    canQuickFix: canQuickFixFor(card),
+    canEvaluate: canEvaluateFor(card),
+    canTestTogether: canTestTogetherFor(card, testText),
+  };
+}
+
+/**
+ * Whether a button is drawn at all. A locked card keeps its autonomous buttons
+ * — they turn into the spinner that says a run is going — and loses its
+ * interactive ones, since a second session would fight the first.
+ */
+export function isPhaseActionShown(
+  action: PhaseAction,
+  flags: PhaseActionFlags,
+  isLocked: boolean
+): boolean {
+  switch (action) {
+    case "discuss":
+      return flags.canEvaluate && !isLocked;
+    case "evaluate":
+      return flags.canEvaluate;
+    case "quick-fix":
+      return flags.canQuickFix;
+    case "terminal":
+      return flags.canStart && !isLocked;
+    case "play":
+      // Re-test has no autonomous run of its own; the terminal is the way in.
+      return flags.canRunAutonomous && flags.phase !== "retest";
+    case "test-together":
+      return flags.canTestTogether && !isLocked;
+  }
+}

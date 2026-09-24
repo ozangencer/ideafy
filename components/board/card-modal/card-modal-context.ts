@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type {
   AiPlatform,
   Card,
@@ -58,7 +58,16 @@ export interface CardModalContextValue {
   // Modal UI state
   isExpanded: boolean;
   setIsExpanded: Dispatch<SetStateAction<boolean>>;
+  /** True for a read-only modal and while a run or terminal session holds the card. */
   readOnly: boolean;
+  /** A run or terminal session holds the card; the form is read-only until it ends. */
+  isRunLocked: boolean;
+  /**
+   * The card's next-phase buttons, ready to place. The default footer puts
+   * them on its right; a replacement footerSlot should do the same, or the
+   * buttons disappear from that build. Null for drafts and withdrawn cards.
+   */
+  phaseActions: ReactNode;
 
   // Auto-save
   saveStatus: SaveStatus;

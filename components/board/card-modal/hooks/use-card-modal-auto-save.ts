@@ -21,7 +21,7 @@ interface UseCardModalAutoSaveOptions {
   groupId: string | null;
   aiPlatform: AiPlatform | null;
   projects: Project[];
-  updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
+  updateCard: (id: string, updates: CardUpdatePayload) => Promise<boolean | void>;
   /**
    * Ref holding the `updatedAt` of the card state currently reflected in
    * the form. Use this (not the live selectedCard.updatedAt) as
@@ -85,6 +85,35 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
   // Guard: prevent formReset effect from clobbering form state during an auto-save round-trip
   const autoSaveInFlightRef = useRef(false);
 
+  // The save payload as of the latest render. The debounced save and
+  // flushPendingAutoSave both read it, so a flush sends exactly what the
+  // timer would have.
+  const buildPayload = (): CardUpdatePayload | null => {
+    if (!selectedCard) return null;
+    const selectedProject = projects.find((p) => p.id === projectId);
+    const extras = extraFieldsRef.current?.() ?? {};
+    return {
+      title,
+      description,
+      solutionSummary,
+      testScenarios,
+      aiOpinion,
+      status,
+      complexity,
+      priority,
+      projectId,
+      groupId,
+      aiPlatform,
+      projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+      baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
+      ...extras,
+    };
+  };
+  const buildPayloadRef = useRef(buildPayload);
+  buildPayloadRef.current = buildPayload;
+  const flushStateRef = useRef({ selectedCard, isDraftMode, canSave, hasUnsavedChanges });
+  flushStateRef.current = { selectedCard, isDraftMode, canSave, hasUnsavedChanges };
+
   useEffect(() => {
     if (!selectedCard || isDraftMode || !canSave || !hasUnsavedChanges) {
       return;
@@ -102,28 +131,13 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
         return;
       }
 
+      const payload = buildPayloadRef.current();
+      if (!payload) return;
+
       setSaveStatus("saving");
 
-      const selectedProject = projects.find((p) => p.id === projectId);
-      const extras = extraFieldsRef.current?.() ?? {};
-
       autoSaveInFlightRef.current = true;
-      updateCard(selectedCard.id, {
-        title,
-        description,
-        solutionSummary,
-        testScenarios,
-        aiOpinion,
-        status,
-        complexity,
-        priority,
-        projectId,
-        groupId,
-        aiPlatform,
-        projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
-        baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
-        ...extras,
-      }).finally(() => {
+      updateCard(selectedCard.id, payload).finally(() => {
         setTimeout(() => {
           autoSaveInFlightRef.current = false;
         }, 200);
@@ -179,6 +193,47 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
     }
   }, []);
 
+  /**
+   * Write the pending edit now instead of in up to 500ms. Actions that hand
+   * the card to an agent call this first — otherwise a plan edited a moment
+   * ago is still in the form when the server reads the card from disk, and
+   * the agent silently works from the old one. Resolves false when there was
+   * something to save and it did not land.
+   */
+  const flushPendingAutoSave = useCallback(async (): Promise<boolean> => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    const state = flushStateRef.current;
+    if (!state.selectedCard || state.isDraftMode || !state.hasUnsavedChanges) return true;
+    if (skipConditionRef.current?.()) return true;
+    if (!state.canSave) return false;
+
+    const payload = buildPayloadRef.current();
+    if (!payload) return true;
+
+    setSaveStatus("saving");
+    autoSaveInFlightRef.current = true;
+    let ok = true;
+    try {
+      ok = (await updateCard(state.selectedCard.id, payload)) !== false;
+    } finally {
+      setTimeout(() => {
+        autoSaveInFlightRef.current = false;
+      }, 200);
+    }
+
+    setSaveStatus(ok ? "saved" : "idle");
+    if (ok) {
+      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+      savedTimeoutRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 2000);
+    }
+    return ok;
+  }, [updateCard]);
+
   const markExternalUpdate = useCallback(() => {
     lastMcpUpdateRef.current = Date.now();
   }, []);
@@ -186,6 +241,7 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
   return {
     saveStatus,
     cancelPendingAutoSave,
+    flushPendingAutoSave,
     markExternalUpdate,
     autoSaveInFlightRef,
   };

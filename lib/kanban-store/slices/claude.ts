@@ -100,6 +100,10 @@ export const createClaudeSlice: StoreSlice<
         complexity?: Card["complexity"];
         priority?: Card["priority"];
         outputWarning?: string | null;
+        gitBranchName?: Card["gitBranchName"];
+        gitBranchStatus?: Card["gitBranchStatus"];
+        gitWorktreePath?: Card["gitWorktreePath"];
+        gitWorktreeStatus?: Card["gitWorktreeStatus"];
         error?: string;
       }>(response);
 
@@ -131,10 +135,20 @@ export const createClaudeSlice: StoreSlice<
         cards: state.cards.map((card) => {
           if (card.id !== cardId) return card;
 
+          // The route writes the branch/worktree alongside the status, so take
+          // them too. Otherwise the card lands in Human Test looking branchless
+          // (no Start Dev Server, no merge panel) until the next poll, which
+          // never comes while the modal is open.
           const updates: Partial<Card> = {
             status: data.newStatus,
             updatedAt: nowIso(),
             processingType: null,
+            ...(data.gitBranchName !== undefined && {
+              gitBranchName: data.gitBranchName,
+              gitBranchStatus: data.gitBranchStatus ?? null,
+              gitWorktreePath: data.gitWorktreePath ?? null,
+              gitWorktreeStatus: data.gitWorktreeStatus ?? null,
+            }),
           };
 
           if (data.phase === "planning") {
