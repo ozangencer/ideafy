@@ -37,6 +37,7 @@ const markdownSanitizeSchema = {
   },
 };
 import { MentionData } from "@/lib/types";
+import { extractApplicableContent } from "@/lib/apply-content";
 
 // CSS class map for mention types
 const MENTION_CLASS: Record<string, string> = {
@@ -137,24 +138,6 @@ const SECTION_LABEL: Record<SectionType, string> = {
 // message looks like a full rewrite (has headings, enough checkboxes, or
 // comparable length to the existing field), append when it looks like a patch.
 // Existing-empty always defaults to replace (first write).
-// Strip trailing assistant sign-off paragraphs that tell the user to click
-// Append/Replace. These are meta-instructions about the UI, not content the
-// user wants persisted into the card field.
-function stripApplySignoff(content: string): string {
-  let text = content.replace(/\s+$/, "");
-  // Repeatedly peel the last paragraph as long as it looks like a meta sign-off.
-  for (let i = 0; i < 3; i++) {
-    const match = text.match(/(^|\n\n)([^\n][^\n]*?)$/);
-    if (!match) break;
-    const lastPara = match[2];
-    const mentionsApply =
-      /\bAppend\b/i.test(lastPara) && /\bReplace\b/i.test(lastPara);
-    if (!mentionsApply) break;
-    text = text.slice(0, match.index!).replace(/\s+$/, "");
-  }
-  return text;
-}
-
 function pickDefaultMode(
   messageContent: string,
   existingText: string,
@@ -207,19 +190,25 @@ export function ConversationMessage({
     sectionType &&
     !hadPersistToolCall(message.toolCalls);
 
-  const defaultMode = sectionType && showApplyButton
-    ? pickDefaultMode(message.content, existingSectionContent || "", sectionType)
+  // Narration around the content ("reading the opinion…", "apply this with
+  // Replace:") stays in the chat; only the extracted part lands on the card.
+  const applicable = sectionType && showApplyButton
+    ? extractApplicableContent(message.content, sectionType)
+    : null;
+
+  const defaultMode = sectionType && applicable
+    ? pickDefaultMode(applicable.content, existingSectionContent || "", sectionType)
     : "replace";
 
   const sectionLabel = sectionType ? SECTION_LABEL[sectionType] : "";
   const existingIsNonEmpty = (existingSectionContent || "").replace(/<[^>]*>/g, "").trim().length > 0;
 
   const runApply = async (mode: "replace" | "append") => {
-    if (!cardId || !sectionType) return;
+    if (!cardId || !sectionType || !applicable) return;
     setIsApplying(mode);
     try {
       const field = SECTION_FIELD_MAP[sectionType];
-      const cleanedContent = stripApplySignoff(message.content);
+      const cleanedContent = applicable.content;
       const res = await fetch(`/api/cards/${cardId}/apply-message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -465,6 +454,14 @@ export function ConversationMessage({
               </AlertDialogTitle>
               <AlertDialogDescription>
                 This will overwrite the current {sectionLabel.toLowerCase()} with the assistant&apos;s reply. Use &ldquo;Append&rdquo; instead if you only want to add to the existing content.
+                {applicable?.trimmedIntro && (
+                  <span className="block mt-2">
+                    The intro text is left out
+                    {applicable.firstHeading
+                      ? <> — only the content from &ldquo;{applicable.firstHeading}&rdquo; onward is applied.</>
+                      : <>; only the content below it is applied.</>}
+                  </span>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

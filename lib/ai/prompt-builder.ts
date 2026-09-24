@@ -10,6 +10,7 @@ import { testScenariosToMarkdown } from "@/lib/markdown";
 import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { buildVoicePrompt } from "@/lib/prompts/voice-style";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
+import { APPLY_OPEN_MARKER, APPLY_CLOSE_MARKER } from "@/lib/apply-content";
 
 // Card context info
 export interface CardContext {
@@ -150,6 +151,21 @@ You MUST NOT edit, write, or modify any code files. If the user asks you to make
 You MUST NOT edit test scenarios from this section. If the user asks to add/remove/change tests, tell them to switch to the "Tests" tab chat and do not call save_tests from here.`;
 }
 
+// Tells the model to fence card-bound content so Apply can skip the narration
+// around it. The markers are HTML comments: the chat renderer drops them and
+// lib/apply-content.ts reads them.
+function buildApplyMarkerContext(section: SectionType): string {
+  return `
+
+## Marking content for Apply
+${section === "tests"
+  ? "On a turn where you propose scenarios in your reply instead of calling save_tests, wrap"
+  : "When your reply contains content meant for this card field, wrap"} exactly that content between these two lines:
+${APPLY_OPEN_MARKER}
+${APPLY_CLOSE_MARKER}
+Explanations, reasoning, status narration ("reading the opinion…") and pointers like "apply this with Replace" go outside the block — the Apply buttons take only what is inside it. Use one block per reply. Skip the block when you are only asking a question or chatting.`;
+}
+
 // Shared MCP tool usage instructions
 export function buildToolUsageContext(section: SectionType): string {
   return `
@@ -181,7 +197,7 @@ Do NOT automatically generate test scenarios when producing a plan. Only generat
 Do NOT call update_card to write the description. The user reviews your reply and decides whether to Append or Replace via the Apply buttons in the chat UI. If you call update_card with a description, you will silently overwrite their existing content — that is the destructive bug Apply was built to prevent. Respond with your refined content as normal markdown text and let the user click Apply.` : ""}${section === "opinion" ? `
 Do NOT call save_opinion. The user reviews your evaluation and clicks Append or Replace via the Apply buttons in the chat UI; the verdict is parsed from your "## Summary Verdict (...)" line automatically when Apply is clicked. If you call save_opinion you will silently overwrite their existing opinion — that is the destructive bug Apply was built to prevent. Respond with your evaluation as normal markdown (include the Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections) and let the user click Apply.` : ""}${section === "tests" ? `
 On the turns where you do call save_tests, send markdown checkbox format and NEVER use update_card for testScenarios — it bypasses checkbox state preservation. Send the full checklist the card should end up with: existing items plus your additions on an append, or the surviving items only when the user asked for a removal and you pass allowDeletion. save_tests merges checkbox states automatically on appends.
-After a code change, do not reach for save_tests reflexively. Describe what you changed, propose any new scenarios as checkboxes in your reply, and let the user apply them.` : ""}`;
+After a code change, do not reach for save_tests reflexively. Describe what you changed, propose any new scenarios as checkboxes in your reply, and let the user apply them.` : ""}${buildApplyMarkerContext(section)}`;
 }
 
 // Section-specific system prompts
