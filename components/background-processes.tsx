@@ -20,6 +20,11 @@ const PROCESS_TYPE_CONFIG: Record<ProcessType, { label: string; color: string; b
   evaluate: { label: "Evaluate", color: "text-cyan-500", bgColor: "bg-cyan-500" },
 };
 
+/** Short popover suffix for a run that finished with a warning. */
+function warningSuffix(warning: string): string {
+  return /checklist left untouched/i.test(warning) ? "Checklist untouched" : "Check output";
+}
+
 function ProcessItem({
   process,
   onKill,
@@ -34,14 +39,20 @@ function ProcessItem({
   const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
 
   const isAborted = process.status === "completed" && process.endReason === "aborted";
+  const hasWarning = process.status === "completed" && !isAborted && !!process.warning;
 
   // Build label: for chat include section name, for others show process type.
   // Append an "· Interrupted on reload" suffix for aborted entries so users
-  // can tell a reload-killed chat apart from a cleanly finished one.
+  // can tell a reload-killed chat apart from a cleanly finished one, and a
+  // warning suffix so a run that left the card as it was doesn't read as done.
   const baseLabel = process.processType === "chat" && sectionConfig
     ? `Chat (${sectionConfig.label.toLowerCase()})`
     : processConfig.label;
-  const label = isAborted ? `${baseLabel} · Interrupted on reload` : baseLabel;
+  const label = isAborted
+    ? `${baseLabel} · Interrupted on reload`
+    : hasWarning
+    ? `${baseLabel} · ${warningSuffix(process.warning!)}`
+    : baseLabel;
 
   const handleKillClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card modal from opening
@@ -50,7 +61,7 @@ function ProcessItem({
 
   const dotClass = process.status === "running"
     ? `${processConfig.bgColor} animate-pulse`
-    : isAborted
+    : isAborted || hasWarning
     ? "bg-amber-500"
     : process.status === "completed"
     ? "bg-green-500"
@@ -58,7 +69,7 @@ function ProcessItem({
 
   const subLabelClass = process.status === "running"
     ? processConfig.color
-    : isAborted
+    : isAborted || hasWarning
     ? "text-amber-500"
     : "text-muted-foreground";
 
@@ -74,7 +85,10 @@ function ProcessItem({
             <span className="text-xs font-medium text-muted-foreground shrink-0">{displayName}</span>
             <span className="text-sm font-medium truncate">{process.cardTitle}</span>
           </div>
-          <span className={`text-xs ${subLabelClass}`}>
+          <span
+            className={`text-xs ${subLabelClass}`}
+            title={hasWarning ? process.warning ?? undefined : undefined}
+          >
             {label}
           </span>
         </div>
@@ -153,6 +167,10 @@ export function BackgroundProcesses() {
       runningProcesses.map((p) => [p.id, p])
     );
     const previousRunning = runningProcessesRef.current;
+    // The heartbeat returns running and completed lists together, so a
+    // process that just left the running list is already in completed here,
+    // carrying whatever warning its route handed to the registry.
+    const completedById = new Map(completedProcesses.map((p) => [p.id, p]));
 
     // Find processes that were running but are now gone or completed
     previousRunning.forEach((process, id) => {
@@ -180,16 +198,25 @@ export function BackgroundProcesses() {
             description: `${label} was stopped for ${displayName}`,
           });
         } else {
-          toast({
-            title: "Process Completed",
-            description: `${label} finished for ${displayName}`,
-          });
+          const warning = completedById.get(id)?.warning;
+          if (warning) {
+            toast({
+              variant: "warning",
+              title: "Completed with a warning",
+              description: `${displayName}: ${warning}`,
+            });
+          } else {
+            toast({
+              title: "Process Completed",
+              description: `${label} finished for ${displayName}`,
+            });
+          }
         }
       }
     });
 
     runningProcessesRef.current = currentRunning;
-  }, [runningProcesses, toast, clearProcessing]);
+  }, [runningProcesses, completedProcesses, toast, clearProcessing]);
 
   // Always-on heartbeat poll: avoids a chicken-and-egg where local state says
   // "nothing running" but the server actually has a process (spawned via MCP,

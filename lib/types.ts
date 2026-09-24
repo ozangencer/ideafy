@@ -465,6 +465,7 @@ export interface BackgroundProcess {
   startedAt: string;
   completedAt?: string;    // When the process finished
   endReason?: ProcessEndReason; // Present when status === "completed"
+  warning?: string | null; // Finished, but the output was not (fully) written
 }
 
 // Activity inbox: completed AI-work events that back the topbar bell.

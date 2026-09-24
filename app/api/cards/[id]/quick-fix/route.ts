@@ -259,7 +259,7 @@ export async function POST(
       .run();
 
     // Mark process as completed AFTER DB updates
-    completeProcess(processKey);
+    completeProcess(processKey, "completed", { warning });
 
     return NextResponse.json({
       success: true,

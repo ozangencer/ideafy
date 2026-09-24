@@ -99,6 +99,7 @@ export const createClaudeSlice: StoreSlice<
         response: string;
         complexity?: Card["complexity"];
         priority?: Card["priority"];
+        outputWarning?: string | null;
         error?: string;
       }>(response);
 
@@ -146,6 +147,12 @@ export const createClaudeSlice: StoreSlice<
             }
           } else if (data.phase === "implementation" || data.phase === "retest") {
             updates.testScenarios = data.response;
+          } else if (data.phase === "verify" && !data.outputWarning) {
+            // A warned verify left the checklist untouched on the server, so
+            // the local copy must stay as it is too. A clean one has to land
+            // here: the poll that would bring it is paused while the modal
+            // is open.
+            updates.testScenarios = data.response;
           }
 
           return { ...card, ...updates };
@@ -157,7 +164,18 @@ export const createClaudeSlice: StoreSlice<
       // Refresh background processes to remove completed process
       get().fetchBackgroundProcesses();
 
-      return { success: true, phase: data.phase, newStatus: data.newStatus };
+      // The visible notice comes from the completion toast, which reads the
+      // same warning off the process registry — one toast, not two.
+      if (data.outputWarning) {
+        console.warn(`[startTask] ${cardId}: ${data.outputWarning}`);
+      }
+
+      return {
+        success: true,
+        phase: data.phase,
+        newStatus: data.newStatus,
+        warning: data.outputWarning ?? null,
+      };
     } catch (error) {
       console.error("Failed to start task:", error);
       set((state) => ({
@@ -347,6 +365,7 @@ export const createClaudeSlice: StoreSlice<
         newStatus: Card["status"];
         solutionSummary: string;
         testScenarios: string;
+        outputWarning?: string | null;
         error?: string;
       }>(response);
 
@@ -389,7 +408,10 @@ export const createClaudeSlice: StoreSlice<
       // Refresh background processes to remove completed process
       get().fetchBackgroundProcesses();
 
-      return { success: true };
+      if (data.outputWarning) {
+        console.warn(`[quickFixTask] ${cardId}: ${data.outputWarning}`);
+      }
+      return { success: true, warning: data.outputWarning ?? null };
     } catch (error) {
       clearInterval(pollInterval);
       console.error("Failed to quick fix:", error);
@@ -442,6 +464,7 @@ export const createClaudeSlice: StoreSlice<
         aiVerdict?: Card["aiVerdict"];
         priority?: Card["priority"];
         complexity?: Card["complexity"];
+        outputWarning?: string | null;
         error?: string;
       }>(response);
 
@@ -497,7 +520,10 @@ export const createClaudeSlice: StoreSlice<
       // Refresh background processes to remove completed process
       get().fetchBackgroundProcesses();
 
-      return { success: true };
+      if (data.outputWarning) {
+        console.warn(`[evaluateIdea] ${cardId}: ${data.outputWarning}`);
+      }
+      return { success: true, warning: data.outputWarning ?? null };
     } catch (error) {
       clearInterval(pollInterval);
       console.error("Failed to evaluate idea:", error);

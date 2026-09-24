@@ -216,11 +216,14 @@ interface ProcessCompletionInput {
   startedAt: string;
   completedAt: string;
   endReason: "completed" | "aborted";
+  warning?: string | null;
 }
 
 /**
  * Bridge from process-registry → activity bell. Skips short jobs (toast is
  * enough) and aborted runs (a kill is not a "completion" worth pinning).
+ * A run that finished with a warning is always recorded, however short: the
+ * toast is the only other place that explains why the card did not change.
  * Chat is grouped by section so each tab dedups independently; non-chat jobs
  * use a single per-card row per type.
  */
@@ -228,7 +231,8 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
   if (input.endReason !== "completed") return;
 
   const durationMs = new Date(input.completedAt).getTime() - new Date(input.startedAt).getTime();
-  if (durationMs < BELL_MIN_DURATION_MS) return;
+  const warning = input.warning ?? null;
+  if (!warning && durationMs < BELL_MIN_DURATION_MS) return;
 
   let type: ActivityType | null;
   let title: string;
@@ -240,7 +244,8 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
   } else {
     type = nonChatTypeFor(input.processType);
     if (!type) return;
-    title = `${PROCESS_LABEL[input.processType] ?? input.processType} completed`;
+    const label = PROCESS_LABEL[input.processType] ?? input.processType;
+    title = warning ? `${label} finished with a warning` : `${label} completed`;
   }
 
   recordActivity({
@@ -248,11 +253,12 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
     cardId: input.cardId,
     projectId: input.projectId,
     title,
-    summary: `Duration ${formatDuration(durationMs)}`,
+    summary: warning ?? `Duration ${formatDuration(durationMs)}`,
     payload: {
       processType: input.processType,
       sectionType: input.sectionType,
       durationMs,
+      ...(warning ? { warning } : {}),
     },
   });
 }

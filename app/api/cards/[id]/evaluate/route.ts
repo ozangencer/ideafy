@@ -179,7 +179,7 @@ export async function POST(
       .run();
 
     // Mark process as completed AFTER DB updates
-    completeProcess(processKey);
+    completeProcess(processKey, "completed", { warning });
 
     // Record completion in the activity inbox so the bell shows the verdict
     // (e.g. "AI Opinion completed — Verdict: Strong Yes (8/10)") even after

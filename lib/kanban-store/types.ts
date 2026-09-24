@@ -324,12 +324,12 @@ export interface KanbanStore {
   getUnifiedItems: () => UnifiedItem[];
 
   // Claude integration actions
-  startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string }>;
+  startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
   openTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openIdeationTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openTestTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
-  quickFixTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string }>;
-  evaluateIdea: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string }>;
+  quickFixTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
+  evaluateIdea: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
   lockCard: (cardId: string) => void;
   unlockCard: (cardId: string) => void;
   clearProcessing: (cardId: string) => Promise<{ success: boolean; error?: string }>;
