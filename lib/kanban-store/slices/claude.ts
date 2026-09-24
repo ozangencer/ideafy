@@ -131,6 +131,12 @@ export const createClaudeSlice: StoreSlice<
         return { success: false, error: data.error || "Failed to start task" };
       }
 
+      // An open modal reads selectedCard, which only a fetch refreshes, and
+      // the poll that would do it is paused while the modal is open. Fetch
+      // while the card is still locked, so the form never gets a window to
+      // auto-save its pre-run snapshot over what the run wrote (IDE-324).
+      await get().fetchCards();
+
       set((state) => ({
         cards: state.cards.map((card) => {
           if (card.id !== cardId) return card;
@@ -173,6 +179,10 @@ export const createClaudeSlice: StoreSlice<
         }),
         startingCardIds: removeId(state.startingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
+        // The fetched card now differs from the modal's form, which reads as
+        // an unsaved edit and would block the resync. The bump makes the
+        // run's write win, as it does for a chat that ran MCP tools.
+        mcpWriteVersion: state.mcpWriteVersion + 1,
       }));
 
       // Refresh background processes to remove completed process
@@ -407,6 +417,9 @@ export const createClaudeSlice: StoreSlice<
         return { success: false, error: data.error || "Failed to quick fix" };
       }
 
+      // See startTask: refresh the open modal's card before the lock lifts.
+      await get().fetchCards();
+
       set((state) => ({
         cards: updateCardById(state.cards, cardId, {
           status: data.newStatus,
@@ -417,6 +430,8 @@ export const createClaudeSlice: StoreSlice<
         }),
         quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
+        // See startTask: let the run's write win over an open modal's form.
+        mcpWriteVersion: state.mcpWriteVersion + 1,
       }));
 
       // Refresh background processes to remove completed process
@@ -506,6 +521,9 @@ export const createClaudeSlice: StoreSlice<
         return { success: false, error: data.error || "Failed to evaluate idea" };
       }
 
+      // See startTask: refresh the open modal's card before the lock lifts.
+      await get().fetchCards();
+
       set((state) => ({
         cards: state.cards.map((card) => {
           if (card.id !== cardId) return card;
@@ -529,6 +547,8 @@ export const createClaudeSlice: StoreSlice<
         }),
         evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
+        // See startTask: let the run's write win over an open modal's form.
+        mcpWriteVersion: state.mcpWriteVersion + 1,
       }));
 
       // Refresh background processes to remove completed process
