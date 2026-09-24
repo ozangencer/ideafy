@@ -212,6 +212,15 @@ function TaskCardImpl({
   const settings = useKanbanStore((s) => s.settings);
   const startDevServer = useKanbanStore((s) => s.startDevServer);
   const stopDevServer = useKanbanStore((s) => s.stopDevServer);
+  // Two booleans, not the id list: a toggle re-renders the card it flipped
+  // and, on the first and last pick, every card (the checkboxes appear) —
+  // never the whole board on every click in between.
+  const isSelected = useKanbanStore((s) => s.selectedCardIds.includes(card.id));
+  const selectionActive = useKanbanStore((s) => s.selectedCardIds.length > 0);
+  const toggleCardSelection = useKanbanStore((s) => s.toggleCardSelection);
+  const selectCardRange = useKanbanStore((s) => s.selectCardRange);
+  const moveCards = useKanbanStore((s) => s.moveCards);
+  const setBulkDeleteConfirmOpen = useKanbanStore((s) => s.setBulkDeleteConfirmOpen);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -282,11 +291,54 @@ function TaskCardImpl({
     cursor: isBeingDragged ? 'grabbing' : 'grab',
   };
 
-  const handleClick = () => {
+  const openDetails = () => {
     if (!isDragging && !isBeingDragged && (!isLocked || softLock)) {
       selectCard(card);
       openModal();
     }
+  };
+
+  const canSelect = !isLocked && !isDragging;
+
+  // Shift+click picks every card between the anchor and this one, in the order
+  // the column shows them. Read off the DOM because that order is only final
+  // after grouping, folding, the Stale row and the render cap have all had
+  // their say. Ranges stay inside one column: across columns there is no
+  // "between". Running cards in the middle are stepped over, as they would be
+  // one by one.
+  const selectRangeTo = (target: HTMLElement) => {
+    const anchorId = useKanbanStore.getState().selectionAnchorId;
+    const columnEl = target.closest("[data-column-id]");
+    const ids = columnEl
+      ? Array.from(
+          columnEl.querySelectorAll<HTMLElement>("[data-card-id][data-selectable]")
+        ).map(
+          (el) => el.dataset.cardId as string
+        )
+      : [];
+    const from = anchorId ? ids.indexOf(anchorId) : -1;
+    const to = ids.indexOf(card.id);
+    if (from === -1 || to === -1) {
+      toggleCardSelection(card.id);
+      return;
+    }
+    selectCardRange(ids.slice(Math.min(from, to), Math.max(from, to) + 1));
+  };
+
+  const handleSelectionClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (e.shiftKey) selectRangeTo(e.currentTarget);
+    else toggleCardSelection(card.id);
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (isDragging || isBeingDragged) return;
+    // Once anything is picked, a plain click keeps picking — opening a card
+    // mid-selection would throw the selection away (openModal clears it).
+    if (canSelect && (e.shiftKey || e.metaKey || e.ctrlKey || selectionActive)) {
+      handleSelectionClick(e);
+      return;
+    }
+    openDetails();
   };
 
   const handleUnlock = (e: React.MouseEvent) => {
@@ -523,18 +575,58 @@ function TaskCardImpl({
             style={style}
             {...(isLocked ? {} : listeners)}
             {...(isLocked ? {} : attributes)}
+            data-card-id={isDragging ? undefined : card.id}
+            data-selectable={canSelect || undefined}
             onClick={handleClick}
             onContextMenu={handleContextMenu}
-            className={`bg-card border border-border rounded-md p-3 transition-colors group touch-none select-none relative ${
+            // Selected is a solid ink border, not a ring: ring-2 ring-ink/40 is
+            // what the drag overlay looks like, and the two must not be mixed up.
+            className={`bg-card border rounded-md p-3 transition-colors group touch-none select-none relative ${
+              isSelected ? "border-ink" : "border-border"
+            } ${
               isDragging ? "shadow-2xl ring-2 ring-ink/40" : ""
             } ${isBeingDragged ? "z-50" : ""} ${
               isLocked
                 ? "opacity-50 cursor-not-allowed"
+                : isSelected
+                ? ""
                 : extraWrapperClassName
                 ? extraWrapperClassName
                 : "hover:border-ink/40"
             }`}
           >
+            {isSelected && (
+              <div className="absolute inset-0 rounded-md bg-ink/[0.05] pointer-events-none" />
+            )}
+
+            {/* Hangs off the corner rather than sitting in the title row, so
+                showing it on hover moves neither the id chip nor the title.
+                Hover-only until something is picked; after that every card
+                shows one, since a plain click now selects too. */}
+            {canSelect && (
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={isSelected}
+                aria-label={isSelected ? "Deselect card" : "Select card"}
+                // dnd-kit's PointerSensor listens on the card; without this a
+                // click here reads as the start of a drag.
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectionClick(e);
+                }}
+                className={`absolute -top-1.5 -left-1.5 z-10 flex h-4 w-4 items-center justify-center rounded border transition-opacity ${
+                  isSelected
+                    ? "border-ink bg-ink text-background opacity-100"
+                    : `border-ink/40 bg-card text-transparent hover:border-ink ${
+                        selectionActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      }`
+                }`}
+              >
+                <Check className="h-3 w-3" strokeWidth={3} />
+              </button>
+            )}
             {/* Unlock button - only for interactive locks (terminal), not background processing or soft locks */}
             {isLocked && !isBackgroundProcessing && !softLock && (
               <Tooltip>
@@ -958,7 +1050,7 @@ function TaskCardImpl({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-48">
-          <ContextMenuItem onClick={handleClick}>
+          <ContextMenuItem onClick={openDetails}>
             <ExternalLink className="w-4 h-4 mr-2" />
             Open Details
           </ContextMenuItem>
@@ -966,13 +1058,21 @@ function TaskCardImpl({
             <ContextMenuSubTrigger>
               <ArrowRightLeft className="w-4 h-4 mr-2" />
               Change Status
+              {isSelected && <SelectionCount inline />}
             </ContextMenuSubTrigger>
             <ContextMenuSubContent className="w-40">
               {COLUMNS.map((col) => (
                 <ContextMenuItem
                   key={col.id}
-                  onClick={() => moveCard(card.id, col.id)}
-                  disabled={card.status === col.id}
+                  // Right-clicking inside the selection acts on all of it;
+                  // outside it, only on this card, as before.
+                  onClick={() =>
+                    isSelected
+                      ? moveCards(useKanbanStore.getState().selectedCardIds, col.id)
+                      : moveCard(card.id, col.id)
+                  }
+                  // A mixed selection has no single "current" column to grey out.
+                  disabled={!isSelected && card.status === col.id}
                 >
                   {col.title}
                 </ContextMenuItem>
@@ -986,11 +1086,14 @@ function TaskCardImpl({
           {extraContextMenuItems}
           <ContextMenuSeparator />
           <ContextMenuItem
-            onClick={() => setShowDeleteConfirm(true)}
+            onClick={() =>
+              isSelected ? setBulkDeleteConfirmOpen(true) : setShowDeleteConfirm(true)
+            }
             className="text-red-500 focus:text-red-500"
           >
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
+            {isSelected && <SelectionCount />}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -1177,6 +1280,22 @@ function TaskCardImpl({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/**
+ * The selection size, for context-menu labels. Its own subscriber so the count
+ * is only watched while a menu is open, not by every card on the board.
+ */
+function SelectionCount({ inline = false }: { inline?: boolean }) {
+  const count = useKanbanStore((s) => s.selectedCardIds.length);
+  return (
+    // Inline beside a sub-trigger, whose chevron already claims the far edge.
+    <span
+      className={`${inline ? "pl-1.5" : "ml-auto pl-2"} font-mono text-[10px] tabular-nums text-current opacity-70`}
+    >
+      {count}
+    </span>
   );
 }
 

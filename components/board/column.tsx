@@ -533,6 +533,8 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
         setNodeRef(node);
         widthRef.current = node;
       }}
+      // Shift+click ranges read the card order off this node — see card.tsx.
+      data-column-id={id}
       // Grow to fill, never below the old fixed width and never so wide that a
       // card's title line gets uncomfortably long. On a laptop the minimum
       // binds and this behaves exactly as the fixed w-72 did; on a large

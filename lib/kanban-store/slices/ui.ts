@@ -17,6 +17,13 @@ export const createUiSlice: StoreSlice<
     | "staleThresholds"
     | "isQuickEntryOpen"
     | "pendingCardSection"
+    | "selectedCardIds"
+    | "selectionAnchorId"
+    | "isBulkDeleteConfirmOpen"
+    | "toggleCardSelection"
+    | "selectCardRange"
+    | "clearCardSelection"
+    | "setBulkDeleteConfirmOpen"
     | "toggleSidebar"
     | "setSidebarWidth"
     | "toggleProjectListExpanded"
@@ -61,6 +68,9 @@ export const createUiSlice: StoreSlice<
   staleThresholds: {} as StaleThresholds,
   isQuickEntryOpen: false,
   pendingCardSection: null,
+  selectedCardIds: [] as string[],
+  selectionAnchorId: null,
+  isBulkDeleteConfirmOpen: false,
 
   toggleSidebar: () =>
     set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
@@ -120,6 +130,30 @@ export const createUiSlice: StoreSlice<
       else next[status] = days;
       return { staleThresholds: next };
     }),
+
+  toggleCardSelection: (id) =>
+    set((state) => ({
+      selectedCardIds: state.selectedCardIds.includes(id)
+        ? state.selectedCardIds.filter((selected) => selected !== id)
+        : [...state.selectedCardIds, id],
+      selectionAnchorId: id,
+    })),
+
+  // Additive, like Finder and Linear: a Shift+click extends what is already
+  // picked rather than replacing it. The anchor stays put so a second
+  // Shift+click re-measures from the same card.
+  selectCardRange: (ids) =>
+    set((state) => ({
+      selectedCardIds: [
+        ...state.selectedCardIds,
+        ...ids.filter((id) => !state.selectedCardIds.includes(id)),
+      ],
+    })),
+
+  clearCardSelection: () =>
+    set({ selectedCardIds: [], selectionAnchorId: null, isBulkDeleteConfirmOpen: false }),
+
+  setBulkDeleteConfirmOpen: (open) => set({ isBulkDeleteConfirmOpen: open }),
 
   openQuickEntry: () => set({ isQuickEntryOpen: true }),
   closeQuickEntry: () => set({ isQuickEntryOpen: false }),

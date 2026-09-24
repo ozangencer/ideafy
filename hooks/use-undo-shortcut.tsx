@@ -54,7 +54,11 @@ export function useUndoShortcut() {
     const shortcut = isMac() ? "⌘Z" : "Ctrl+Z";
     toast({
       title: top.label,
-      description: `Press ${shortcut} to undo`,
+      // One toast at a time, so a bulk action's "2 skipped" rides on this one
+      // rather than racing it.
+      description: top.note
+        ? `${top.note} · Press ${shortcut} to undo`
+        : `Press ${shortcut} to undo`,
       action: (
         <ToastAction altText={`Undo (${shortcut})`} onClick={() => void runUndo()}>
           Undo

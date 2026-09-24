@@ -42,6 +42,8 @@ export interface UndoEntry {
   label: string;
   steps: UndoStep[];
   at: number;
+  /** Extra line for the announce toast, e.g. cards a bulk action skipped. */
+  note?: string;
 }
 
 export interface UndoResult {
@@ -120,6 +122,15 @@ export interface KanbanStore {
 
   // Quick entry state
   isQuickEntryOpen: boolean;
+
+  // Multi-select on the board. Not `selectedCard`, which is the card open in
+  // the modal — the two are never live at once (openModal clears this). The
+  // anchor is where a Shift+click range starts. Session-only, never persisted.
+  selectedCardIds: string[];
+  selectionAnchorId: string | null;
+  // Lives in the store so the action bar, the ⌫ shortcut and a card's context
+  // menu all open the same confirmation.
+  isBulkDeleteConfirmOpen: boolean;
 
   // Deep-link target for the next card-modal open. Activity bell sets this
   // before calling selectCard()+openModal() so the modal lands on the right
@@ -202,6 +213,10 @@ export interface KanbanStore {
   updateCard: (id: string, updates: CardUpdatePayload) => Promise<void>;
   deleteCard: (id: string, options?: HistoryOptions) => Promise<void>;
   moveCard: (id: string, newStatus: Status, options?: HistoryOptions) => Promise<void>;
+  // Bulk versions for the multi-select bar. One Cmd+Z reverses the whole
+  // group; cards with a run in flight are skipped and reported.
+  deleteCards: (ids: string[]) => Promise<void>;
+  moveCards: (ids: string[], newStatus: Status) => Promise<void>;
   selectCard: (card: Card | null) => void;
   openModal: () => void;
   closeModal: () => void;
@@ -233,7 +248,7 @@ export interface KanbanStore {
   isUndoing: boolean;
   pushUndoStep: (step: UndoStep, label: string) => void;
   beginUndoBatch: (label: string) => void;
-  endUndoBatch: () => void;
+  endUndoBatch: (note?: string) => void;
   undo: () => Promise<UndoResult | null>;
 
   // Project actions
@@ -279,6 +294,13 @@ export interface KanbanStore {
 
   /** Pass null to drop the override and fall back to the column's default. */
   setStaleThreshold: (status: Status, days: number | null) => void;
+
+  // Multi-select actions. selectCardRange adds to the selection; the caller
+  // works out which ids the range covers, since only it knows the visible order.
+  toggleCardSelection: (id: string) => void;
+  selectCardRange: (ids: string[]) => void;
+  clearCardSelection: () => void;
+  setBulkDeleteConfirmOpen: (open: boolean) => void;
 
   // Quick entry actions
   openQuickEntry: () => void;

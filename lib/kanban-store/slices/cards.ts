@@ -36,6 +36,35 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
 
 const cardLabel = (card: Card | undefined) => (card?.title ? `"${card.title}"` : "card");
 
+/**
+ * Cards with a run in flight can't be dragged one by one either, so a bulk
+ * action leaves them alone rather than moving a card out from under its agent.
+ */
+function splitRunningCards(state: KanbanStore, ids: string[]) {
+  const byId = new Map(state.cards.map((c) => [c.id, c]));
+  const eligible: string[] = [];
+  let skipped = 0;
+  for (const id of ids) {
+    const card = byId.get(id);
+    if (!card) continue;
+    if (card.processingType || state.lockedCardIds.includes(id)) skipped += 1;
+    else eligible.push(id);
+  }
+  return { eligible, skipped };
+}
+
+function finishBulk(get: () => KanbanStore, skipped: number, verb: string) {
+  const note = skipped > 0 ? `${skipped} skipped (running)` : undefined;
+  const topBefore = get().undoStack.at(-1)?.id;
+  get().endUndoBatch(note);
+  // Nothing landed on the undo stack, so no announce toast is coming — say
+  // why the selection didn't move instead of leaving the user guessing.
+  if (skipped > 0 && get().undoStack.at(-1)?.id === topBefore) {
+    toast({ title: `Nothing ${verb}`, description: note });
+  }
+  get().clearCardSelection();
+}
+
 export const createCardsSlice: StoreSlice<
   Pick<
     KanbanStore,
@@ -56,6 +85,8 @@ export const createCardsSlice: StoreSlice<
     | "updateCard"
     | "deleteCard"
     | "moveCard"
+    | "deleteCards"
+    | "moveCards"
     | "selectCard"
     | "openModal"
     | "closeModal"
@@ -117,7 +148,21 @@ export const createCardsSlice: StoreSlice<
         }
       }
 
-      set({ cards: mergedCards, cardGroups, selectedCard: newSelectedCard, isLoading: false });
+      // A card deleted or moved away over MCP must not linger in the
+      // selection, where a bulk action would still count it.
+      const liveIds = new Set(mergedCards.map((c) => c.id));
+      const { selectedCardIds } = get();
+      const prunedSelection = selectedCardIds.filter((id) => liveIds.has(id));
+
+      set({
+        cards: mergedCards,
+        cardGroups,
+        selectedCard: newSelectedCard,
+        isLoading: false,
+        ...(prunedSelection.length !== selectedCardIds.length
+          ? { selectedCardIds: prunedSelection }
+          : {}),
+      });
     } catch (error) {
       console.error("Failed to fetch cards:", error);
       set({ isLoading: false });
@@ -284,6 +329,33 @@ export const createCardsSlice: StoreSlice<
     }
   },
 
+  deleteCards: async (ids) => {
+    const { eligible, skipped } = splitRunningCards(get(), ids);
+    get().beginUndoBatch("Deleted selected cards");
+    try {
+      for (const id of eligible) {
+        await get().deleteCard(id);
+      }
+    } finally {
+      finishBulk(get, skipped, "deleted");
+    }
+  },
+
+  moveCards: async (ids, newStatus) => {
+    const { eligible, skipped } = splitRunningCards(get(), ids);
+    const column = COLUMNS.find((c) => c.id === newStatus)?.title ?? newStatus;
+    get().beginUndoBatch(`Moved selected cards to ${column}`);
+    try {
+      // moveCard skips the undo record for a card already in the target
+      // column, so a mixed selection doesn't leave empty steps behind.
+      for (const id of eligible) {
+        await get().moveCard(id, newStatus);
+      }
+    } finally {
+      finishBulk(get, skipped, "moved");
+    }
+  },
+
   // The board renders a group row only for groups it already holds, so the new
   // group is pushed into the store here rather than waiting for the next
   // fetchCards poll — otherwise the card would sit in a chain with no header
@@ -382,7 +454,10 @@ export const createCardsSlice: StoreSlice<
   },
 
   selectCard: (card) => set({ selectedCard: card }),
-  openModal: () => set({ isModalOpen: true }),
+  // The modal and a board selection are never live together: the selection
+  // bar would sit over the panel and ⌫ would mean two things.
+  openModal: () =>
+    set({ isModalOpen: true, selectedCardIds: [], selectionAnchorId: null }),
   closeModal: () => set({ isModalOpen: false, selectedCard: null }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 });

@@ -18,6 +18,7 @@ import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter } from "@/
 import { summarizeCardGroups } from "@/lib/card-group";
 import { partitionStaleCards } from "@/lib/card-age";
 import { FocusView } from "./focus-view";
+import { SelectionBar } from "./selection-bar";
 
 // Priority order: high > medium > low (descending)
 const PRIORITY_ORDER: Record<Priority, number> = {
@@ -110,8 +111,16 @@ import { Column } from "./column";
 import { TaskCard } from "./card";
 
 export function KanbanBoard() {
-  const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter, boardView, staleThresholds } = useKanbanStore();
+  const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter, boardView, staleThresholds, clearCardSelection } = useKanbanStore();
   useUndoShortcut();
+
+  // A selection only means what's on screen. Once the project, a filter or
+  // the view changes, some picked cards may be hidden — and a bulk delete
+  // would take them out without the user seeing it happen.
+  useEffect(() => {
+    clearCardSelection();
+  }, [activeProjectId, searchQuery, completedFilter, boardView, clearCardSelection]);
+
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showRightFade, setShowRightFade] = useState(false);
@@ -269,6 +278,7 @@ export function KanbanBoard() {
           </div>
         )}
       </DragOverlay>
+      <SelectionBar />
     </DndContext>
   );
 }

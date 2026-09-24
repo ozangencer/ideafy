@@ -78,7 +78,7 @@ export const createHistorySlice: StoreSlice<
 
   beginUndoBatch: (label) => set({ undoBatch: { label, steps: [] } }),
 
-  endUndoBatch: () => {
+  endUndoBatch: (note) => {
     const batch = get().undoBatch;
     set({ undoBatch: null });
     if (!batch || batch.steps.length === 0) return;
@@ -87,6 +87,7 @@ export const createHistorySlice: StoreSlice<
       label: batch.steps.length === 1 ? batch.label : `${batch.label} (${batch.steps.length} cards)`,
       steps: batch.steps,
       at: Date.now(),
+      note,
     };
     set((state) => ({ undoStack: [...state.undoStack, entry].slice(-UNDO_LIMIT) }));
   },
