@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
       tx.delete(schema.cards).run();
       tx.delete(schema.cardGroups).run();
       tx.delete(schema.projects).run();
+      // After projects: their section_id points here.
+      tx.delete(schema.projectSections).run();
       // Keep credential rows: they are excluded from the export by construction,
       // so wiping them here would silently sign the user out of team mode on
       // every restore.
@@ -36,7 +38,23 @@ export async function POST(request: NextRequest) {
         .where(notInArray(schema.settings.key, Array.from(SECRET_SETTING_KEYS)))
         .run();
 
-      // 2. Import projects first (cards depend on projects)
+      // 2. Import sections before projects (projects point at them). Backups
+      // written before sections existed have none, so every project lands in
+      // "Other".
+      const importedSectionIds = new Set<string>();
+      for (const section of data.projectSections ?? []) {
+        tx.insert(schema.projectSections).values({
+          id: section.id,
+          name: section.name,
+          order: section.order ?? 0,
+          collapsed: section.collapsed ?? false,
+          createdAt: section.createdAt,
+          updatedAt: section.updatedAt,
+        }).run();
+        importedSectionIds.add(section.id);
+      }
+
+      // 3. Import projects (cards depend on projects)
       for (const project of data.projects) {
         tx.insert(schema.projects).values({
           id: project.id,
@@ -56,12 +74,16 @@ export async function POST(request: NextRequest) {
           runCommand: project.runCommand ?? null,
           previewUrl: project.previewUrl ?? null,
           sharedPaths: project.sharedPaths ?? null,
+          sectionId:
+            project.sectionId && importedSectionIds.has(project.sectionId)
+              ? project.sectionId
+              : null,
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
         }).run();
       }
 
-      // 3. Import card groups (cards reference them by group_id)
+      // 4. Import card groups (cards reference them by group_id)
       if (data.cardGroups) {
         for (const group of data.cardGroups) {
           tx.insert(schema.cardGroups).values({
@@ -75,7 +97,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 4. Import cards
+      // 5. Import cards
       for (const card of data.cards) {
         tx.insert(schema.cards).values({
           id: card.id,
@@ -105,7 +127,7 @@ export async function POST(request: NextRequest) {
         }).run();
       }
 
-      // 5. Import settings
+      // 6. Import settings
       if (data.settings) {
         for (const setting of data.settings) {
           // The backup file is untrusted input. Never let it plant a bearer
@@ -119,7 +141,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 6. Import skill groups
+      // 7. Import skill groups
       if (data.skillGroups) {
         for (const group of data.skillGroups) {
           tx.insert(schema.skillGroups).values({
@@ -134,7 +156,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 7. Import skill group items
+      // 8. Import skill group items
       if (data.skillGroupItems) {
         for (const item of data.skillGroupItems) {
           tx.insert(schema.skillGroupItems).values({
@@ -153,6 +175,7 @@ export async function POST(request: NextRequest) {
       imported: {
         cards: data.cards.length,
         projects: data.projects.length,
+        projectSections: data.projectSections?.length || 0,
         settings: data.settings?.length || 0,
         cardGroups: data.cardGroups?.length || 0,
         skillGroups: data.skillGroups?.length || 0,

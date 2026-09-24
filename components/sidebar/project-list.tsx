@@ -6,13 +6,24 @@ import { ProjectItem } from "./project-item";
 import { AddProjectModal } from "./add-project-modal";
 import { EditProjectModal } from "./edit-project-modal";
 import { UnpushedDialog } from "./unpushed-dialog";
+import { ProjectSectionHeader } from "./project-section-header";
+import { SkillGroupDialog } from "./skill-group-dialog";
 import { Project } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Layers, Plus } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ChevronDown, FolderPlus, Layers, Plus } from "lucide-react";
 
 // Slower than the card poll on purpose: every tick shells out to git once per
 // project, and a commit count is not worth that at the board's cadence.
 const UNPUSHED_POLL_MS = 15000;
+
+type SectionDialogState =
+  | { mode: "create"; project: Project | null }
+  | { mode: "rename"; sectionId: string; initialValue: string };
 
 export function ProjectList() {
   const {
@@ -22,11 +33,19 @@ export function ProjectList() {
     isProjectListExpanded,
     toggleProjectListExpanded,
     cards,
+    projectSections,
+    createProjectSection,
+    renameProjectSection,
+    deleteProjectSection,
+    moveProjectSection,
+    toggleProjectSectionCollapsed,
+    moveProjectToSection,
   } = useKanbanStore();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [unpushedProject, setUnpushedProject] = useState<Project | null>(null);
   const [unpushedCounts, setUnpushedCounts] = useState<Record<string, number>>({});
+  const [sectionDialog, setSectionDialog] = useState<SectionDialogState | null>(null);
 
   // A slow git run must not let ticks stack up on each other.
   const isLoadingCountsRef = useRef(false);
@@ -95,6 +114,47 @@ export function ProjectList() {
       ? null
       : unpinnedProjects.find((project) => project.id === activeProjectId) ?? null;
 
+  const sections = useMemo(
+    () =>
+      [...projectSections].sort(
+        (a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt)
+      ),
+    [projectSections]
+  );
+  const sectionIds = new Set(sections.map((section) => section.id));
+  // A sectionId that names no section (a stale row) reads as "no section".
+  const sectionOf = (project: Project) =>
+    project.sectionId && sectionIds.has(project.sectionId) ? project.sectionId : null;
+  const unsectionedProjects = unpinnedProjects.filter((project) => !sectionOf(project));
+
+  const renderProject = (project: Project) => (
+    <ProjectItem
+      key={project.id}
+      project={project}
+      isActive={project.id === activeProjectId}
+      onEdit={setEditingProject}
+      unpushedCount={unpushedCounts[project.id] ?? 0}
+      onShowUnpushed={setUnpushedProject}
+      sections={sections}
+      currentSectionId={sectionOf(project)}
+      onMoveToSection={(target, sectionId) => moveProjectToSection(target.id, sectionId)}
+      onCreateSection={(target) => setSectionDialog({ mode: "create", project: target })}
+    />
+  );
+
+  const handleSectionDialogSubmit = async (name: string) => {
+    if (!sectionDialog) return;
+    if (sectionDialog.mode === "rename") {
+      await renameProjectSection(sectionDialog.sectionId, name);
+      return;
+    }
+    const created = await createProjectSection(name);
+    // Opened from a project's "New section…": the project goes straight in.
+    if (created && sectionDialog.project) {
+      await moveProjectToSection(sectionDialog.project.id, created.id);
+    }
+  };
+
   return (
     <div className="px-2 relative z-20">
       <button
@@ -158,12 +218,17 @@ export function ProjectList() {
         </button>
       )}
 
+      {/* grid-rows 0fr → 1fr animates to the content's real height, so section
+          headers can never push projects past a fixed max-height. A long list
+          scrolls inside instead of being clipped. */}
       <div
         id="projects-collapsible-content"
-        className={`overflow-hidden transition-[max-height,opacity,margin] duration-200 ease-out ${
-          isProjectListExpanded ? "mt-3 max-h-[40rem] opacity-100" : "mt-0 max-h-0 opacity-0"
+        className={`grid transition-[grid-template-rows,opacity,margin] duration-200 ease-out ${
+          isProjectListExpanded ? "mt-3 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0"
         }`}
       >
+        <div className="min-h-0 overflow-hidden">
+        <div className="max-h-[70vh] overflow-y-auto">
         {/* All Projects option */}
         <button
           onClick={() => setActiveProject(null)}
@@ -183,37 +248,84 @@ export function ProjectList() {
           <span>All Projects</span>
         </button>
 
-        {/* Other Projects */}
-        {unpinnedProjects.length > 0 && (
+        {/* Sections — sidebar grouping only, the board never filters by them.
+            With no sections the list looks exactly as it did before. */}
+        {sections.map((section, index) => {
+          const sectionProjects = unpinnedProjects.filter(
+            (project) => sectionOf(project) === section.id
+          );
+          // A collapsed section still shows the active project, so the
+          // selection never disappears from the sidebar.
+          const visibleProjects = section.collapsed
+            ? sectionProjects.filter((project) => project.id === activeProjectId)
+            : sectionProjects;
+          return (
+            <div key={section.id} className="mt-3">
+              <ProjectSectionHeader
+                section={section}
+                projectCount={sectionProjects.length}
+                isFirst={index === 0}
+                isLast={index === sections.length - 1}
+                onToggle={() => toggleProjectSectionCollapsed(section.id)}
+                onRename={() =>
+                  setSectionDialog({
+                    mode: "rename",
+                    sectionId: section.id,
+                    initialValue: section.name,
+                  })
+                }
+                onMove={(direction) => moveProjectSection(section.id, direction)}
+                onDelete={() => deleteProjectSection(section.id)}
+              />
+              {visibleProjects.length > 0 && (
+                <div className="mt-1 space-y-0.5">{visibleProjects.map(renderProject)}</div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Projects without a section */}
+        {unsectionedProjects.length > 0 && (
           <div className="mt-3">
             <span className="text-xs text-muted-foreground px-3 uppercase tracking-wider font-medium">
-              All Projects
+              {sections.length > 0 ? "Other" : "All Projects"}
             </span>
             <div className="mt-1 space-y-0.5">
-              {unpinnedProjects.map((project) => (
-                <ProjectItem
-                  key={project.id}
-                  project={project}
-                  isActive={project.id === activeProjectId}
-                  onEdit={setEditingProject}
-                  unpushedCount={unpushedCounts[project.id] ?? 0}
-                  onShowUnpushed={setUnpushedProject}
-                />
-              ))}
+              {unsectionedProjects.map(renderProject)}
             </div>
           </div>
         )}
+        </div>
 
-        {/* Add Project Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full mt-3 text-muted-foreground justify-start h-9"
-          onClick={() => setIsAddModalOpen(true)}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Project
-        </Button>
+        {/* Add Project / New section */}
+        <div className="mt-3 flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 text-muted-foreground justify-start h-9"
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Project
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="New section"
+                className="h-9 w-9 shrink-0 text-muted-foreground"
+                onClick={() => setSectionDialog({ mode: "create", project: null })}
+              >
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>New section</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        </div>
       </div>
 
       {isAddModalOpen && (
@@ -226,6 +338,27 @@ export function ProjectList() {
           onClose={() => setEditingProject(null)}
         />
       )}
+
+      <SkillGroupDialog
+        open={sectionDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setSectionDialog(null);
+        }}
+        title={sectionDialog?.mode === "rename" ? "Rename Section" : "New Section"}
+        description={
+          sectionDialog?.mode === "rename"
+            ? "Update the section name shown in the sidebar."
+            : sectionDialog?.project
+              ? `Group projects in the sidebar. ${sectionDialog.project.name} moves into it.`
+              : "Group projects in the sidebar, e.g. Development or Business."
+        }
+        submitLabel={sectionDialog?.mode === "rename" ? "Rename" : "Create"}
+        initialValue={sectionDialog?.mode === "rename" ? sectionDialog.initialValue : ""}
+        existingNames={sections.map((section) => section.name)}
+        placeholder="Section name"
+        conflictMessage="A section with this name already exists."
+        onSubmit={handleSectionDialogSubmit}
+      />
 
       {unpushedProject && (
         <UnpushedDialog

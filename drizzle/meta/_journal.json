@@ -71,6 +71,13 @@
       "when": 1790231869028,
       "tag": "0009_card_trash",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790280960989,
+      "tag": "0010_project_sections",
+      "breakpoints": true
     }
   ]
 }

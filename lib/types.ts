@@ -171,6 +171,17 @@ export interface Project {
   previewUrl: string | null; // Override for the previewed URL ({port} placeholder)
   sharedPaths: string[] | null; // Paths symlinked from main checkout into worktrees, null = auto
   cmuxWorkspaceId: string | null; // cmux workspace UUID for this project's tabs, "new" for a fresh one per run, null = match by folder
+  sectionId: string | null; // Sidebar section, null = listed under "Other"
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Sidebar-only grouping of projects. Never filters the board.
+export interface ProjectSection {
+  id: string;
+  name: string;
+  order: number;
+  collapsed: boolean;
   createdAt: string;
   updatedAt: string;
 }

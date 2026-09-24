@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { Project } from "@/lib/types";
+import { Project, ProjectSection } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ArrowUp, Pencil, Star } from "lucide-react";
 import { hexToRgba } from "@/lib/utils";
+import { ProjectSectionPopover } from "./project-section-popover";
 
 interface ProjectItemProps {
   project: Project;
@@ -18,6 +20,11 @@ interface ProjectItemProps {
   /** Commits on the local default branch that origin has not seen. */
   unpushedCount?: number;
   onShowUnpushed?: (project: Project) => void;
+  sections?: ProjectSection[];
+  /** The project's section, or null when it has none (or it points nowhere). */
+  currentSectionId?: string | null;
+  onMoveToSection?: (project: Project, sectionId: string | null) => void;
+  onCreateSection?: (project: Project) => void;
 }
 
 export function ProjectItem({
@@ -26,10 +33,17 @@ export function ProjectItem({
   onEdit,
   unpushedCount = 0,
   onShowUnpushed,
+  sections = [],
+  currentSectionId = null,
+  onMoveToSection,
+  onCreateSection,
 }: ProjectItemProps) {
   const { setActiveProject, toggleProjectPin } = useKanbanStore();
+  const [isSectionPopoverOpen, setIsSectionPopoverOpen] = useState(false);
 
   const showUnpushed = unpushedCount > 0 && Boolean(onShowUnpushed);
+  // Hover reveals them too; this covers the states that must hold without it.
+  const showButtons = isActive || isSectionPopoverOpen;
 
   const activeStyle = isActive
     ? {
@@ -79,23 +93,24 @@ export function ProjectItem({
       />
 
       {/* Project name */}
-      <span className="truncate flex-1">{project.name}</span>
+      <span className="truncate flex-1 min-w-0">{project.name}</span>
 
-      {/* Prefix badge - hide on hover/active to make room for buttons, and
+      {/* Prefix badge - swapped out for the buttons on hover/active, and
           whenever the unpushed badge is showing: a warning outranks a
           reminder of a prefix that every card ID already carries. */}
-      <span className={`text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded shrink-0 transition-opacity ${
-        isActive || showUnpushed ? "opacity-0" : "group-hover/project:opacity-0"
+      <span className={`text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded shrink-0 ${
+        showButtons || showUnpushed ? "hidden" : "group-hover/project:hidden"
       }`}>
         {project.idPrefix}
       </span>
 
-      {/* Action buttons - absolute positioned to avoid overflow. The unpushed
-          badge sits last so it stays pinned to the right edge whether or not
-          the hover-only buttons are present. */}
-      <div className="absolute right-2 flex items-center gap-0.5">
-        <div className={`flex items-center gap-0.5 transition-opacity ${
-          isActive ? "opacity-100" : "opacity-0 group-hover/project:opacity-100"
+      {/* Action buttons - kept in the flex flow so the name truncates in front
+          of them instead of running underneath. The negative margin stops the
+          24px buttons from growing the row on hover. The unpushed badge sits
+          last so it stays pinned to the right edge. */}
+      <div className="-my-1 -mr-1 flex items-center gap-0.5 shrink-0">
+        <div className={`items-center gap-0.5 ${
+          showButtons ? "flex" : "hidden group-hover/project:flex"
         }`}>
         {/* Edit button */}
         <Tooltip>
@@ -116,6 +131,18 @@ export function ProjectItem({
             <p>Edit project</p>
           </TooltipContent>
         </Tooltip>
+
+        {/* Move to section */}
+        {onMoveToSection && (
+          <ProjectSectionPopover
+            sections={sections}
+            currentSectionId={currentSectionId}
+            open={isSectionPopoverOpen}
+            onOpenChange={setIsSectionPopoverOpen}
+            onMoveToSection={(sectionId) => onMoveToSection(project, sectionId)}
+            onCreateSection={() => onCreateSection?.(project)}
+          />
+        )}
 
         {/* Pin button */}
         <Tooltip>

@@ -61,6 +61,7 @@ export function serializeProject(row: ProjectRecord): Project {
     previewUrl: row.previewUrl,
     sharedPaths: parseStringArray(row.sharedPaths),
     cmuxWorkspaceId: row.cmuxWorkspaceId,
+    sectionId: row.sectionId ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

@@ -82,6 +82,23 @@ export async function PUT(
       cmuxWorkspaceId = body.cmuxWorkspaceId?.trim() || null;
     }
 
+    // Empty string or null takes the project out of its section. An id that
+    // names no section is rejected rather than stored as a dangling pointer.
+    let sectionId = existing.sectionId;
+    if (body.sectionId !== undefined) {
+      sectionId = typeof body.sectionId === "string" ? body.sectionId.trim() || null : null;
+      if (sectionId) {
+        const section = db
+          .select({ id: schema.projectSections.id })
+          .from(schema.projectSections)
+          .where(eq(schema.projectSections.id, sectionId))
+          .get();
+        if (!section) {
+          return NextResponse.json({ error: "Section not found" }, { status: 400 });
+        }
+      }
+    }
+
     const updatedProject = {
       name: body.name ?? existing.name,
       folderPath: body.folderPath ?? existing.folderPath,
@@ -97,6 +114,7 @@ export async function PUT(
       previewUrl,
       sharedPaths,
       cmuxWorkspaceId,
+      sectionId,
       updatedAt: new Date().toISOString(),
     };
 

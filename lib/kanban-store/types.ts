@@ -14,6 +14,7 @@ import {
   DocumentFile,
   MentionData,
   Project,
+  ProjectSection,
   RunMode,
   SectionType,
   SkillListItem,
@@ -73,6 +74,7 @@ export interface KanbanStore {
   projects: Project[];
   activeProjectId: string | null;
   isProjectsLoading: boolean;
+  projectSections: ProjectSection[];
 
   // Documents state
   documents: DocumentFile[];
@@ -254,12 +256,20 @@ export interface KanbanStore {
   // Project actions
   fetchProjects: () => Promise<void>;
   addProject: (
-    project: Omit<Project, "id" | "createdAt" | "updatedAt" | "nextTaskNumber">
+    project: Omit<Project, "id" | "createdAt" | "updatedAt" | "nextTaskNumber" | "sectionId">
   ) => Promise<void>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
   deleteProject: (id: string, deleteCards?: boolean) => Promise<void>;
   setActiveProject: (projectId: string | null) => void;
   toggleProjectPin: (id: string) => Promise<void>;
+
+  // Project section actions (sidebar-only grouping)
+  createProjectSection: (name: string) => Promise<ProjectSection | null>;
+  renameProjectSection: (id: string, name: string) => Promise<void>;
+  deleteProjectSection: (id: string) => Promise<void>;
+  moveProjectSection: (id: string, direction: "up" | "down") => Promise<void>;
+  toggleProjectSectionCollapsed: (id: string) => Promise<void>;
+  moveProjectToSection: (projectId: string, sectionId: string | null) => Promise<void>;
 
   // Document actions
   fetchDocuments: (projectId: string) => Promise<void>;

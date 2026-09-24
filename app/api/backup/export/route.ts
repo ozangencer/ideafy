@@ -46,6 +46,15 @@ export interface ExportData {
     runCommand?: string | null;
     previewUrl?: string | null;
     sharedPaths?: string | null;
+    sectionId?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  projectSections?: Array<{
+    id: string;
+    name: string;
+    order: number;
+    collapsed: boolean;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -86,6 +95,7 @@ export async function GET() {
     // Fetch all data
     const cards = db.select().from(schema.cards).all();
     const projects = db.select().from(schema.projects).all();
+    const projectSections = db.select().from(schema.projectSections).all();
     const settings = db.select().from(schema.settings).all();
     const cardGroups = db.select().from(schema.cardGroups).all();
     const skillGroups = db.select().from(schema.skillGroups).all();
@@ -135,8 +145,17 @@ export async function GET() {
         runCommand: project.runCommand,
         previewUrl: project.previewUrl,
         sharedPaths: project.sharedPaths,
+        sectionId: project.sectionId,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
+      })),
+      projectSections: projectSections.map((section) => ({
+        id: section.id,
+        name: section.name,
+        order: section.order,
+        collapsed: section.collapsed,
+        createdAt: section.createdAt,
+        updatedAt: section.updatedAt,
       })),
       // Credential-bearing rows are excluded by construction — the export is a
       // shareable artifact and must not carry a live Supabase bearer token.

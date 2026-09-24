@@ -21,6 +21,8 @@ type SkillGroupDialogProps = {
   submitLabel: string;
   initialValue?: string;
   existingNames?: string[];
+  placeholder?: string;
+  conflictMessage?: string;
   onSubmit: (name: string) => void | Promise<void>;
 };
 
@@ -32,6 +34,8 @@ export function SkillGroupDialog({
   submitLabel,
   initialValue = "",
   existingNames = [],
+  placeholder = "Group name",
+  conflictMessage = "A group with this name already exists.",
   onSubmit,
 }: SkillGroupDialogProps) {
   const [value, setValue] = useState(initialValue);
@@ -73,7 +77,7 @@ export function SkillGroupDialog({
           <Input
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="Group name"
+            placeholder={placeholder}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
@@ -83,7 +87,7 @@ export function SkillGroupDialog({
           />
           {nameConflict && (
             <p className="text-xs text-destructive">
-              A group with this name already exists.
+              {conflictMessage}
             </p>
           )}
         </div>

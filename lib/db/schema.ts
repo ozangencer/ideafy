@@ -1,6 +1,22 @@
 import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Projects tablosu
+// Project sections: a sidebar-only grouping above projects ("Development",
+// "Business"). Purely visual — the board, card queries, MCP and the team pool
+// never read it. Collapse state lives here rather than in localStorage so the
+// Electron window and a dev port show the same sidebar.
+export const projectSections = sqliteTable("project_sections", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  order: integer("order").notNull().default(0),
+  collapsed: integer("collapsed", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type ProjectSectionRecord = typeof projectSections.$inferSelect;
+export type NewProjectSection = typeof projectSections.$inferInsert;
+
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -18,6 +34,7 @@ export const projects = sqliteTable("projects", {
   previewUrl: text("preview_url"), // Override for the URL opened in server mode ({port} placeholder), null = http://localhost:{port}
   sharedPaths: text("shared_paths"), // JSON array of repo-relative paths symlinked from main checkout into the worktree, null = auto
   cmuxWorkspaceId: text("cmux_workspace_id"), // cmux workspace UUID to open this project's tabs in, "new" for a fresh workspace per run, null = match by folder
+  sectionId: text("section_id").references(() => projectSections.id, { onDelete: "set null" }), // Sidebar section, null = "Other"
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
