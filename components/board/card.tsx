@@ -14,7 +14,7 @@ import {
 } from "@/lib/card-phase";
 import { CardPhaseActions } from "./card-phase-actions";
 import { useKanbanStore } from "@/lib/store";
-import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, GitCommitHorizontal } from "lucide-react";
+import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
