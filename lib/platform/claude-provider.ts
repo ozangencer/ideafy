@@ -17,6 +17,15 @@ import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { appResourcesRoot, resolveUserSkillsDir } from "../paths";
 import { parseClaudeStreamLine } from "./claude-provider/parse-stream-line";
 import { createClaudeRunOutputCollector } from "./claude-provider/collect-run-output";
+
+/** Tools an autonomous `claude -p` run cannot use to any effect; see buildAutonomousArgs. */
+export const AUTONOMOUS_DISALLOWED_TOOLS = [
+  "Monitor",
+  "ScheduleWakeup",
+  "CronCreate",
+  "RemoteTrigger",
+  "AskUserQuestion",
+] as const;
 import {
   listProjectMcps as listProjectMcpsImpl,
   listProjectSkills as listProjectSkillsImpl,
@@ -116,6 +125,12 @@ class ClaudeProvider implements PlatformProvider {
       // Deliberately no --include-partial-messages: nothing consumes deltas
       // here, and the consolidated blocks give cleaner run boundaries.
       "--setting-sources", "user",
+      // A headless run exits the moment its last message is written, so a tool
+      // that waits to be woken up — or asks a user who isn't there — strands
+      // the run mid-task (IDE-319). `run_in_background` is a Bash parameter
+      // and can't be denied by name; the one-shot prompt rule and the
+      // collector's wait detection cover it.
+      "--disallowedTools", AUTONOMOUS_DISALLOWED_TOOLS.join(","),
     ];
     return args;
   }

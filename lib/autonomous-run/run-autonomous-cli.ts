@@ -8,7 +8,11 @@ import {
 import { getProviderForCard } from "@/lib/platform/active";
 import { adaptMcpToolNames } from "@/lib/platform/mcp-tool-names";
 import type { ParsedRunOutput } from "@/lib/platform/types";
-import { selectRunOutput, type RunOutputContract } from "./select-run-output";
+import {
+  ENDED_WHILE_WAITING_WARNING,
+  selectRunOutput,
+  type RunOutputContract,
+} from "./select-run-output";
 
 /** Process-registry label; must match the values the UI filters on. */
 export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix";
@@ -53,6 +57,8 @@ export interface AutonomousRunResult {
   response: string;
   /** Non-null when the output had to be guessed at; surface it to the user. */
   warning: string | null;
+  /** The run stopped on a background wait that never came back (IDE-319). */
+  endedWhileWaiting: boolean;
   cost?: number;
   duration?: number;
 }
@@ -195,9 +201,18 @@ export async function runAutonomousCli(
         );
       }
 
+      if (selected.endedWhileWaiting) {
+        console.warn(`[${label}] ${ENDED_WHILE_WAITING_WARNING}`);
+      }
+
       resolve({
         response: selected.text,
-        warning: selected.warning,
+        // The stranded wait is the real reason the output looks wrong, so it
+        // outranks the format complaint it usually comes with.
+        warning: selected.endedWhileWaiting
+          ? `${ENDED_WHILE_WAITING_WARNING} — output may be incomplete.`
+          : selected.warning,
+        endedWhileWaiting: selected.endedWhileWaiting,
         cost: parsed.cost,
         duration: parsed.duration,
       });

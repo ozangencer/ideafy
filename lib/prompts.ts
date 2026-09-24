@@ -39,6 +39,19 @@ import { DEFAULT_VOICE, type Voice } from "./types";
 const NO_SAVE_TOOLS_RULE =
   "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
 
+// Every phase runs as `claude -p`: the process exits the moment the last
+// message is written, and nothing ever wakes it again. A run that parked itself
+// on Monitor/ScheduleWakeup ended on "a notification will arrive" and wrote
+// nothing to the card (IDE-319). The CLI denies the wait tools outright;
+// `run_in_background` can't be denied by name, so this rule carries it.
+const ONE_SHOT_RUN_RULE = `## This is a one-shot run
+
+This run is a single \`claude -p\` invocation: the process exits as soon as your last message is written, and nothing will ever resume it.
+- Never wait in the background — no Monitor, no ScheduleWakeup, no \`run_in_background\` on Bash, no "I'll continue when the notification arrives". If you need to wait for something (a dev server, a build, an AI response), wait for it in the foreground within this run.
+- If a step would take too long to wait for, leave it unfinished and say why in your final message.
+- Do not ask the user anything — no one is there to answer. Decide when you can; when you can't, leave the related item open and write next to it what you would have asked.
+- Before your final message, shut down whatever you started during this run: dev servers, ports, and any extra git worktrees you created. Leave the directory this run was started in alone.`;
+
 function buildCommitInstructions(commitRef: string | null, inWorktree: boolean): string {
   // The card reference is a trailer rather than a subject prefix so the subject
   // stays the plain sentence it would have been. Without a resolvable display
@@ -147,7 +160,9 @@ The four headings above and both markers are required in every voice — the voi
 
 ${planVoice}
 
-Plan only — do NOT implement. ${NO_SAVE_TOOLS_RULE}`;
+Plan only — do NOT implement. ${NO_SAVE_TOOLS_RULE}
+
+${ONE_SHOT_RUN_RULE}`;
     }
 
     case "implementation": {
@@ -175,7 +190,9 @@ The checklist opens with its core group: \`## Core flow\` on an English card, \`
 
 ${styleContract}
 
-${NO_SAVE_TOOLS_RULE}`;
+${NO_SAVE_TOOLS_RULE}
+
+${ONE_SHOT_RUN_RULE}`;
     }
 
     case "retest": {
@@ -201,7 +218,9 @@ The checklist opens with its core group: \`## Core flow\` on an English card, \`
 
 ${styleContract}
 
-${NO_SAVE_TOOLS_RULE}`;
+${NO_SAVE_TOOLS_RULE}
+
+${ONE_SHOT_RUN_RULE}`;
     }
 
     // Verify is the one phase that takes no voice: it reproduces an existing
@@ -229,8 +248,11 @@ Reproduce the ENTIRE checklist: every group, every item, in the original order a
 - Do not reword, merge, split, add, or drop items. Later groups come back exactly as they were.
 - Leave a core item unticked when it failed or you could not run it.
 - After the checklist, add one short line naming what blocked any core item you left unticked. Nothing else.
+- Your final message is always the checklist itself — even when you could not finish a single item. A message that only says what you are still waiting for leaves the card untouched.
 
-${NO_SAVE_TOOLS_RULE}`;
+${NO_SAVE_TOOLS_RULE}
+
+${ONE_SHOT_RUN_RULE}`;
   }
 }
 

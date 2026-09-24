@@ -17,6 +17,17 @@ const MAX_RAW_FALLBACK = 8 * 1024 * 1024;
 interface TextBlock {
   type?: string;
   text?: string;
+  name?: string;
+  input?: unknown;
+}
+
+/** Tools whose whole point is to be woken up later — which `-p` never does. */
+const WAIT_TOOLS = new Set(["Monitor", "ScheduleWakeup"]);
+
+function isBackgroundWait(block: TextBlock): boolean {
+  if (block.name && WAIT_TOOLS.has(block.name)) return true;
+  const input = block.input as { run_in_background?: unknown } | null | undefined;
+  return input?.run_in_background === true;
 }
 
 /**
@@ -42,6 +53,9 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
   let openRunMessageId: string | null = null;
   let segment = 0;
   let injectedUserMessages = 0;
+  // Index of the first candidate after the latest tool call, when that call
+  // was a background wait. Any later tool call clears it.
+  let waitTailStart: number | null = null;
 
   let result = "";
   let cost: number | undefined;
@@ -85,6 +99,7 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
       } else if (block?.type === "tool_use") {
         // The model stopped talking to act — whatever it said is complete.
         flushRun(true);
+        waitTailStart = isBackgroundWait(block) ? candidates.length : null;
       }
       // `thinking` is not prose the user asked for; it neither joins nor breaks.
     }
@@ -110,6 +125,8 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
     if (!carriesToolResult) {
       segment++;
       injectedUserMessages++;
+      // Whatever the run was waiting on did arrive; it isn't stranded.
+      waitTailStart = null;
     }
   }
 
@@ -232,6 +249,7 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
         isError,
         sawResultEnvelope,
         injectedUserMessages,
+        ...(waitTailStart !== null ? { waitTailStart } : {}),
       };
     },
   };

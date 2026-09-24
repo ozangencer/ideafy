@@ -15,6 +15,7 @@ import {
 import { normalizeVoice } from "@/lib/project-serialize";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
 import {
+  ENDED_WHILE_WAITING_WARNING,
   RUN_OUTPUT_CONTRACTS,
   prependWarningHtml,
 } from "@/lib/autonomous-run/select-run-output";
@@ -193,15 +194,28 @@ export async function POST(
         updates.testScenarios = htmlResponse;
         break;
       case "verify": {
-        // A verify run is only allowed to tick boxes, so anything that comes
-        // back materially shorter than what went in is a rewrite, not a
-        // verification — and writing it would wipe the human's own ticks.
-        const assessment = assessTestRewrite(card.testScenarios ?? "", htmlResponse);
-        if (assessment.safe) {
-          updates.testScenarios = htmlResponse;
+        // Verify is the one phase that must hand back a copy of the existing
+        // checklist, so output that broke the contract is not a copy at all —
+        // not even one long enough to pass the rewrite check below. A run that
+        // stopped on a background wait (IDE-319) is named as such, since that
+        // is the actual cause.
+        if (result.endedWhileWaiting) {
+          verifyWarning = `${ENDED_WHILE_WAITING_WARNING} — checklist left untouched`;
+        } else if (result.warning) {
+          verifyWarning = "Checklist left untouched — run output had no core-flow heading";
         } else {
-          verifyWarning = `Checklist left untouched — ${assessment.reason}`;
-          console.warn(`[Claude CLI] verify rejected for ${id}: ${assessment.reason}`);
+          // A verify run is only allowed to tick boxes, so anything that comes
+          // back materially shorter than what went in is a rewrite, not a
+          // verification — and writing it would wipe the human's own ticks.
+          const assessment = assessTestRewrite(card.testScenarios ?? "", htmlResponse);
+          if (assessment.safe) {
+            updates.testScenarios = htmlResponse;
+          } else {
+            verifyWarning = `Checklist left untouched — ${assessment.reason}`;
+          }
+        }
+        if (verifyWarning) {
+          console.warn(`[Claude CLI] verify rejected for ${id}: ${verifyWarning}`);
         }
         break;
       }
@@ -212,8 +226,12 @@ export async function POST(
       .where(eq(schema.cards.id, id))
       .run();
 
+    const outputWarning = verifyWarning ?? result.warning;
+
     // Mark process as completed AFTER DB updates, so the UI stays in sync.
-    completeProcess(processKey);
+    // The warning rides along so the completion toast can say why the card
+    // did not change instead of reporting a plain success.
+    completeProcess(processKey, "completed", { warning: outputWarning });
 
     return NextResponse.json({
       success: true,
@@ -221,7 +239,7 @@ export async function POST(
       phase,
       newStatus,
       response: htmlResponse,
-      outputWarning: verifyWarning ?? result.warning,
+      outputWarning,
       complexity,
       priority,
       cost: result.cost,

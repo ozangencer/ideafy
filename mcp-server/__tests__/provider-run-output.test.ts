@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import * as claudeNs from "../../lib/platform/claude-provider";
+import * as claudeCollectNs from "../../lib/platform/claude-provider/collect-run-output";
 import * as codexNs from "../../lib/platform/codex-provider";
 import * as geminiNs from "../../lib/platform/gemini-provider";
 import * as opencodeNs from "../../lib/platform/opencode-provider";
@@ -13,6 +15,8 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
+const { claudeProvider, AUTONOMOUS_DISALLOWED_TOOLS } = interop(claudeNs);
+const { createClaudeRunOutputCollector } = interop(claudeCollectNs);
 const { codexProvider } = interop(codexNs);
 const { geminiProvider } = interop(geminiNs);
 const { opencodeProvider } = interop(opencodeNs);
@@ -38,6 +42,103 @@ function collect(collector: RunOutputCollector, ndjson: string): ParsedRunOutput
   }
   return collector.finish();
 }
+
+// ---------------------------------------------------------------------------
+// Claude — one-shot runs (IDE-319)
+// ---------------------------------------------------------------------------
+
+test("claude autonomous runs deny the tools that wait to be woken up", () => {
+  const args = claudeProvider.buildAutonomousArgs({ prompt: "p" });
+  const at = args.indexOf("--disallowedTools");
+  assert.ok(at >= 0, `no --disallowedTools in ${JSON.stringify(args)}`);
+
+  // One comma-joined value: the flag is variadic, so a bare list would run on
+  // into whatever argument follows it.
+  const denied = args[at + 1].split(",");
+  for (const tool of ["Monitor", "ScheduleWakeup", "CronCreate", "RemoteTrigger", "AskUserQuestion"]) {
+    assert.ok(denied.includes(tool), `${tool} is not denied`);
+  }
+  assert.deepEqual(denied, [...AUTONOMOUS_DISALLOWED_TOOLS]);
+});
+
+function claudeAssistant(content: unknown[], id = "m1"): string {
+  return JSON.stringify({
+    type: "assistant",
+    parent_tool_use_id: null,
+    message: { id, content },
+  });
+}
+
+const CLAUDE_RESULT = JSON.stringify({ type: "result", result: "", is_error: false });
+
+test("claude collector flags a run that ends on a backgrounded command", () => {
+  // The IDE-319 shape: the run backgrounds its wait and says nothing more, so
+  // `-p` exits with the checklist never written.
+  const ndjson = [
+    claudeAssistant([{ type: "text", text: "Dev server'ı başlatıyorum." }]),
+    claudeAssistant([
+      {
+        type: "tool_use",
+        id: "t1",
+        name: "Bash",
+        input: { command: "npm run dev", run_in_background: true },
+      },
+    ]),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  const parsed = collect(createClaudeRunOutputCollector(), ndjson);
+  assert.equal(parsed.waitTailStart, 1);
+
+  const selected = selectRunOutput(parsed, RUN_OUTPUT_CONTRACTS.verify);
+  assert.equal(selected.endedWhileWaiting, true);
+});
+
+test("claude collector flags a holding remark after a wait as stranded", () => {
+  const ndjson = [
+    claudeAssistant([{ type: "tool_use", id: "t1", name: "Monitor", input: {} }]),
+    claudeAssistant([{ type: "text", text: "Arka plan betiği tamamlandığında bildirim gelecek." }], "m2"),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  const selected = selectRunOutput(
+    collect(createClaudeRunOutputCollector(), ndjson),
+    RUN_OUTPUT_CONTRACTS.verify,
+  );
+  assert.equal(selected.endedWhileWaiting, true);
+});
+
+test("claude collector does not flag a checklist written after the wait", () => {
+  const ndjson = [
+    claudeAssistant([
+      { type: "tool_use", id: "t1", name: "Bash", input: { command: "sleep 1", run_in_background: true } },
+    ]),
+    claudeAssistant([{ type: "text", text: CHECKLIST }], "m2"),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  const selected = selectRunOutput(
+    collect(createClaudeRunOutputCollector(), ndjson),
+    RUN_OUTPUT_CONTRACTS.verify,
+  );
+  assert.equal(selected.endedWhileWaiting, false);
+  assert.match(selected.text, /^## Temel akış/);
+});
+
+test("claude collector does not flag a wait followed by more work", () => {
+  const ndjson = [
+    claudeAssistant([
+      { type: "tool_use", id: "t1", name: "Bash", input: { command: "npm run dev", run_in_background: true } },
+    ]),
+    claudeAssistant([{ type: "tool_use", id: "t2", name: "Bash", input: { command: "curl localhost" } }], "m2"),
+    claudeAssistant([{ type: "text", text: "Bu kadar." }], "m3"),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  const parsed = collect(createClaudeRunOutputCollector(), ndjson);
+  assert.equal(parsed.waitTailStart, undefined);
+  assert.equal(selectRunOutput(parsed, RUN_OUTPUT_CONTRACTS.verify).endedWhileWaiting, false);
+});
 
 // ---------------------------------------------------------------------------
 // Codex

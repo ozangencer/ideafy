@@ -82,6 +82,14 @@ export interface ParsedRunOutput {
   sawResultEnvelope: boolean;
   /** Re-invocations injected by the harness (task notifications, compaction). */
   injectedUserMessages: number;
+  /**
+   * Set when the run's last action was a background wait — `Monitor`,
+   * `ScheduleWakeup`, or any tool called with `run_in_background: true`: the
+   * index into `candidates` of the first text run after it. A headless run
+   * exits as soon as its last message is written, so whatever that wait was
+   * for never arrives (IDE-319). Only the Claude collector sets it.
+   */
+  waitTailStart?: number;
 }
 
 /**

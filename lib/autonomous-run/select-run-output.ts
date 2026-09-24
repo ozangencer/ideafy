@@ -21,7 +21,17 @@ export interface SelectedRunOutput {
   warning: string | null;
   candidateCount: number;
   segmentCount: number;
+  /**
+   * The run's last action was a background wait and nothing after it met the
+   * contract: it stopped to wait for something a headless run never delivers,
+   * so its output is a holding remark rather than the product (IDE-319).
+   */
+  endedWhileWaiting: boolean;
 }
+
+/** Message for a run that ended on a background wait; see `endedWhileWaiting`. */
+export const ENDED_WHILE_WAITING_WARNING =
+  "Run ended while waiting on a background task";
 
 /**
  * The markdown heading that opens a checklist's core group, in both languages
@@ -105,6 +115,10 @@ export const RUN_OUTPUT_CONTRACTS = {
   },
 } as const satisfies Record<string, RunOutputContract>;
 
+function satisfies(contract: RunOutputContract, text: string): boolean {
+  return contract.requires.every((re) => re.test(text));
+}
+
 function longest(texts: string[]): number {
   let best = 0;
   for (let i = 1; i < texts.length; i++) {
@@ -128,9 +142,17 @@ export function selectRunOutput(
   contract?: RunOutputContract,
 ): SelectedRunOutput {
   const texts = parsed.candidates.map((c) => c.text);
+  // Without a contract there is no telling a real answer from a holding
+  // remark, and ending on a wait is suspect enough to flag either way.
+  const endedWhileWaiting =
+    parsed.waitTailStart !== undefined &&
+    !texts
+      .slice(parsed.waitTailStart)
+      .some((text) => (contract ? satisfies(contract, text) : false));
   const base = {
     candidateCount: texts.length,
     segmentCount: parsed.injectedUserMessages + 1,
+    endedWhileWaiting,
   };
 
   // Nothing to choose between: a run cut short mid-tool-call, or a provider
@@ -145,7 +167,7 @@ export function selectRunOutput(
 
   if (contract) {
     for (let i = texts.length - 1; i >= 0; i--) {
-      if (contract.requires.every((re) => re.test(texts[i]))) {
+      if (satisfies(contract, texts[i])) {
         return { text: texts[i], warning: null, ...base };
       }
     }
