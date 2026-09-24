@@ -10,6 +10,7 @@ import {
   getWorktreePath,
 } from "@/lib/git";
 import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
+import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
 type Phase = "planning" | "implementation" | "retest";
 
 function stripHtml(html: string): string {
@@ -89,8 +90,10 @@ The user tested this implementation but encountered an error.
 ## Instructions
 1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
 2. Review the description field for task requirements
-3. Analyze this task and create a detailed implementation plan
-4. Do NOT implement yet - only plan`;
+3. Read the aiOpinion field and base the plan on it:
+${AI_OPINION_PLANNING_RULE}
+4. Analyze this task and create a detailed implementation plan
+5. Do NOT implement yet - only plan`;
   }
 }
 

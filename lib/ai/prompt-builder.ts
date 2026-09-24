@@ -9,6 +9,7 @@ import { DEFAULT_VOICE } from "@/lib/types";
 import { testScenariosToMarkdown } from "@/lib/markdown";
 import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { buildVoicePrompt } from "@/lib/prompts/voice-style";
+import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { APPLY_OPEN_MARKER, APPLY_CLOSE_MARKER } from "@/lib/apply-content";
 
@@ -24,6 +25,11 @@ export interface CardContext {
   description?: string;
   solutionSummary?: string;
   testScenarios?: string;
+  /**
+   * Stripped text of the card's AI Opinion. The Solution chat plans on top of
+   * it, since it is the evaluation the user already accepted.
+   */
+  aiOpinion?: string;
   /**
    * Project-level voice for AI tone. Defaults to 'builder' when not provided
    * (legacy callers, missing project, etc.).
@@ -98,6 +104,27 @@ CURRENT CARD CONTEXT:
 - Project: ${ctx.projectName || "(none)"}
 ${providerContextLine}
 IMPORTANT: When updating this card, use the UUID "${ctx.uuid}" directly. Do NOT search for the card by display ID.
+`;
+}
+
+// Long enough for a full evaluation; a runaway opinion still cannot crowd out
+// the rest of the prompt.
+const MAX_OPINION_CONTEXT = 6000;
+
+// The accepted AI Opinion, handed to the Solution chat so the plan starts from
+// its recommendations instead of re-deriving an approach from the description.
+function buildOpinionContext(ctx: CardContext): string {
+  const opinion = ctx.aiOpinion?.trim();
+  if (!opinion) return "";
+  const clipped =
+    opinion.length > MAX_OPINION_CONTEXT
+      ? `${opinion.slice(0, MAX_OPINION_CONTEXT)}\n[... opinion truncated ...]`
+      : opinion;
+  return `
+AI Opinion (the accepted evaluation — base the plan on its recommendations):
+${markUntrusted(clipped, ctx.externallyAuthored === true)}
+
+${AI_OPINION_PLANNING_RULE}
 `;
 }
 
@@ -241,7 +268,7 @@ ${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("o
   solution: (ctx) => {
     const voice = buildVoicePrompt(ctx.voice ?? DEFAULT_VOICE, "plan");
     return `You are helping plan the implementation of a development task.
-${buildCardContext(ctx)}
+${buildCardContext(ctx)}${buildOpinionContext(ctx)}
 Current solution plan: ${ctx.sectionContent || "(none)"}
 
 Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.

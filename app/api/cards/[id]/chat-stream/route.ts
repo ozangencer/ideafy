@@ -202,6 +202,7 @@ export async function POST(
     description: stripHtml(card.description || ""),
     solutionSummary: stripHtml(card.solutionSummary || ""),
     testScenarios: stripHtml(card.testScenarios || ""),
+    aiOpinion: stripHtml(card.aiOpinion || ""),
     testScenariosHtml: card.testScenarios || "",
     voice: projectVoice,
     provider: provider.id,
