@@ -226,6 +226,10 @@ export async function POST(
   let isClosed = false;
   let wasAborted = false;
   let fullResponse = "";
+  // Set after a tool_use so the next narration starts its own paragraph.
+  // Claude streams each turn's text with no trailing whitespace, so without
+  // this "Now I'm reading X." and "Found it." fuse into "X.Found it."
+  let lastEventWasTool = false;
   let streamSessionId: string | null = null;
   let stderrBuffer = "";
   const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
@@ -303,6 +307,18 @@ export async function POST(
         } catch {
           isClosed = true;
         }
+      };
+
+      const appendText = (text: string) => {
+        if (lastEventWasTool && text.trim()) {
+          lastEventWasTool = false;
+          if (fullResponse.trim() && !/\n\s*$/.test(fullResponse) && !/^\s*\n/.test(text)) {
+            fullResponse += "\n\n";
+            sendEvent("text", "\n\n");
+          }
+        }
+        fullResponse += text;
+        sendEvent("text", text);
       };
 
       // Emit the session-decision trail before the LLM starts streaming so
@@ -410,8 +426,7 @@ export async function POST(
             for (const event of events) {
               switch (event.type) {
                 case "text":
-                  fullResponse += event.data as string;
-                  sendEvent("text", event.data);
+                  appendText(event.data as string);
                   break;
                 case "text_replace": {
                   const combined = applyTextReplace(String(event.data ?? ""));
@@ -424,6 +439,7 @@ export async function POST(
                   break;
                 case "tool_use":
                   toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
+                  lastEventWasTool = true;
                   sendEvent("tool_use", event.data);
                   break;
                 case "tool_result":
@@ -468,8 +484,7 @@ export async function POST(
             for (const event of events) {
               switch (event.type) {
                 case "text":
-                  fullResponse += event.data as string;
-                  sendEvent("text", event.data);
+                  appendText(event.data as string);
                   break;
                 case "text_replace": {
                   const combined = applyTextReplace(String(event.data ?? ""));
@@ -479,6 +494,7 @@ export async function POST(
                 }
                 case "tool_use":
                   toolCalls.push(event.data as { name: string; input: Record<string, unknown> });
+                  lastEventWasTool = true;
                   sendEvent("tool_use", event.data);
                   break;
                 case "result": {
@@ -518,6 +534,7 @@ export async function POST(
             sendEvent("resume_failed", { message: "Session expired, continuing with full context" });
             didFreshRetry = true;
             fullResponse = "";
+            lastEventWasTool = false;
             streamSessionId = null;
             stderrBuffer = "";
             toolCalls.length = 0;
