@@ -39,6 +39,8 @@ interface SectionEditorProps {
   projectId: string | null;
   readOnly?: boolean;
   cardId?: string;
+  /** Only read for drafts, which have no card row to take the platform from. */
+  aiPlatform?: string | null;
 }
 
 export function SectionEditor({
@@ -49,6 +51,7 @@ export function SectionEditor({
   projectId,
   readOnly,
   cardId,
+  aiPlatform,
 }: SectionEditorProps) {
   const config = SECTION_CONFIG[sectionType];
 
@@ -72,11 +75,19 @@ export function SectionEditor({
 
   return (
     <div className="h-full flex flex-col p-4 overflow-hidden">
-      {/* Detail only, and only once the card exists: enrichment reads the card
-          by id on the server, which a draft has no row for yet. */}
-      {sectionType === "detail" && cardId && !cardId.startsWith("draft-") && (
-        <EnrichButton cardId={cardId} value={value} onChange={onChange} />
-      )}
+      {/* Detail only. A draft has no card row for the server to read, so it
+          sends the form's project and platform instead of its id. */}
+      {sectionType === "detail" &&
+        (cardId && !cardId.startsWith("draft-") ? (
+          <EnrichButton cardId={cardId} value={value} onChange={onChange} />
+        ) : (
+          <EnrichButton
+            projectId={projectId}
+            aiPlatform={aiPlatform}
+            value={value}
+            onChange={onChange}
+          />
+        ))}
       <div className="flex-1 min-h-0 h-full overflow-y-auto section-editor-wrapper">
         <MarkdownEditor
           value={value}

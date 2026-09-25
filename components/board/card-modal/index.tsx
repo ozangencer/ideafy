@@ -1233,6 +1233,7 @@ export function CardModal({
                 projectId={projectId}
                 readOnly={effectiveReadOnly}
                 cardId={selectedCard.id}
+                aiPlatform={aiPlatform}
               />
             }
             rightPanel={

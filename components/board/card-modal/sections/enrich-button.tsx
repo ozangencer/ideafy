@@ -15,7 +15,11 @@ import { useToast } from "@/hooks/use-toast";
 import { stripHtml } from "@/lib/prompts/utils";
 
 interface EnrichButtonProps {
-  cardId: string;
+  /** Saved card: the server reads project and platform off its row. */
+  cardId?: string;
+  /** Draft card (no row yet): the form's project and platform go in the body. */
+  projectId?: string | null;
+  aiPlatform?: string | null;
   value: string;
   onChange: (next: string) => void;
 }
@@ -26,16 +30,18 @@ interface PreviewState {
   memoryFileLabel: string | null;
   hadProjectFile: boolean;
   hadMemoryFile: boolean;
+  warning: string | null;
 }
 
-export function EnrichButton({ cardId, value, onChange }: EnrichButtonProps) {
+export function EnrichButton({ cardId, projectId, aiPlatform, value, onChange }: EnrichButtonProps) {
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
   const plainLength = stripHtml(value).trim().length;
-  const disabled = loading || plainLength < 3;
+  const missingProject = !cardId && !projectId;
+  const disabled = loading || plainLength < 3 || missingProject;
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
@@ -44,10 +50,12 @@ export function EnrichButton({ cardId, value, onChange }: EnrichButtonProps) {
     controllerRef.current = ac;
     setLoading(true);
     try {
-      const res = await fetch(`/api/cards/${cardId}/enrich`, {
+      const res = await fetch(cardId ? `/api/cards/${cardId}/enrich` : "/api/enrich", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ currentValue: value }),
+        body: JSON.stringify(
+          cardId ? { currentValue: value } : { currentValue: value, projectId, aiPlatform }
+        ),
         signal: ac.signal,
       });
       const data = await res.json();
@@ -58,6 +66,7 @@ export function EnrichButton({ cardId, value, onChange }: EnrichButtonProps) {
         memoryFileLabel: data.sources?.memoryFileLabel || null,
         hadProjectFile: !!data.sources?.projectFile,
         hadMemoryFile: !!data.sources?.memoryFile,
+        warning: data.warning || null,
       });
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -93,20 +102,22 @@ export function EnrichButton({ cardId, value, onChange }: EnrichButtonProps) {
             <Loader2 className="size-3 animate-spin mr-1" /> Cancel
           </Button>
         ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleEnrich}
-            disabled={disabled}
+          // The title sits on a wrapper: a disabled Button drops pointer
+          // events, so its own title would never show when it matters most.
+          <span
             title={
-              plainLength < 3
+              missingProject
+                ? "Select a project first"
+                : plainLength < 3
                 ? "Type at least a few characters first"
                 : "Expand this description with project context"
             }
           >
-            <Sparkles className="size-3 mr-1" />
-            Enrich description
-          </Button>
+            <Button size="sm" variant="ghost" onClick={handleEnrich} disabled={disabled}>
+              <Sparkles className="size-3 mr-1" />
+              Enrich description
+            </Button>
+          </span>
         )}
       </div>
 
@@ -133,6 +144,9 @@ export function EnrichButton({ cardId, value, onChange }: EnrichButtonProps) {
                       .join(", ")
                   : "no project context found (model used the description alone)"}
               </p>
+              {preview.warning && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">{preview.warning}</p>
+              )}
             </>
           )}
 
