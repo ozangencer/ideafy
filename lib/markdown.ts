@@ -416,6 +416,330 @@ export function testScenariosToMarkdown(html: string): string {
   return parts.join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Heading-aware append (IDE-334)
+//
+// Appending a chat reply used to glue it onto the end of the field, so a reply
+// that opened with `## Regresyon` produced a second Regresyon section on a card
+// that already had one — and pressing Append twice wrote every item twice.
+// Both tokenizers below cut a document into a flat list of blocks; mergeSections
+// then drops each incoming section's body into the matching existing section
+// and skips blocks that are already there.
+// ---------------------------------------------------------------------------
+
+interface SectionBlock {
+  /** Normalized heading text for heading blocks, null for body blocks. */
+  key: string | null;
+  /** Heading level 1-6, 0 for body blocks. */
+  level: number;
+  raw: string;
+  /** Comparison text for duplicate detection; null when it can't be compared. */
+  dedupe: string | null;
+  /** Markdown list item — consecutive items join with a single newline. */
+  list?: boolean;
+}
+
+type DedupeScope = "document" | "section";
+
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_m, code: string) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, code: string) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
+}
+
+// Level-agnostic on purpose: the AI writes `###` one time and `##` the next.
+function normalizeHeading(text: string): string {
+  return decodeEntities(text.replace(/<[^>]*>/g, ""))
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s*:$/, "")
+    .toLocaleLowerCase("tr");
+}
+
+function dedupeKey(text: string): string | null {
+  return normalizeTaskText(decodeEntities(text.replace(/<[^>]*>/g, " "))) || null;
+}
+
+/** Index where the section opened by `blocks[headingIdx]` ends (exclusive). */
+function sectionEnd(blocks: SectionBlock[], headingIdx: number): number {
+  const level = blocks[headingIdx].level;
+  for (let i = headingIdx + 1; i < blocks.length; i++) {
+    if (blocks[i].key !== null && blocks[i].level <= level) return i;
+  }
+  return blocks.length;
+}
+
+function lastHeadingIndex(blocks: SectionBlock[], key?: string): number {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i].key !== null && (key === undefined || blocks[i].key === key)) return i;
+  }
+  return -1;
+}
+
+function dedupeKeysIn(blocks: SectionBlock[], from: number, to: number): Set<string> {
+  const keys = new Set<string>();
+  for (let i = from; i < to; i++) {
+    const b = blocks[i];
+    if (b.key === null && b.dedupe) keys.add(b.dedupe);
+  }
+  return keys;
+}
+
+/**
+ * Merge `incoming` blocks into `existing`:
+ * - a heading that already exists (last occurrence wins) gets the incoming body
+ *   appended at the end of its section — before the next heading of the same
+ *   or a higher level, so nested subsections stay above it;
+ * - an unknown heading nested under a matched incoming heading lands at the end
+ *   of that section; any other unknown heading goes to the end of the document;
+ * - body text before the first incoming heading goes to the end, as before.
+ * Body blocks whose dedupe key already exists within `scope` are skipped.
+ */
+function mergeSections(
+  existing: SectionBlock[],
+  incoming: SectionBlock[],
+  scope: DedupeScope
+): { blocks: SectionBlock[]; added: number } {
+  const result = [...existing];
+  let added = 0;
+
+  const groups: { heading: SectionBlock | null; body: SectionBlock[] }[] = [];
+  for (const block of incoming) {
+    if (block.key !== null) groups.push({ heading: block, body: [] });
+    else if (groups.length) groups[groups.length - 1].body.push(block);
+    else groups.push({ heading: null, body: [block] });
+  }
+
+  // Incoming headings already placed, mapped to their block in `result`.
+  const stack: { level: number; block: SectionBlock }[] = [];
+
+  for (const group of groups) {
+    let insertAt: number;
+    let scopeStart: number;
+    let target: SectionBlock | null = null;
+
+    if (!group.heading) {
+      insertAt = result.length;
+      scopeStart = Math.max(0, lastHeadingIndex(result));
+    } else {
+      while (stack.length && stack[stack.length - 1].level >= group.heading.level) stack.pop();
+      const matchIdx = lastHeadingIndex(result, group.heading.key!);
+      if (matchIdx >= 0) {
+        target = result[matchIdx];
+        insertAt = sectionEnd(result, matchIdx);
+        scopeStart = matchIdx;
+      } else {
+        const parent = stack[stack.length - 1];
+        insertAt = parent ? sectionEnd(result, result.indexOf(parent.block)) : result.length;
+        scopeStart = insertAt;
+      }
+    }
+
+    const seen =
+      scope === "document"
+        ? dedupeKeysIn(result, 0, result.length)
+        : dedupeKeysIn(result, scopeStart, insertAt);
+    const accepted: SectionBlock[] = [];
+    for (const block of group.body) {
+      if (block.dedupe && seen.has(block.dedupe)) continue;
+      if (block.dedupe) seen.add(block.dedupe);
+      accepted.push(block);
+    }
+
+    if (group.heading && !target) {
+      // A new heading whose every item already exists elsewhere adds nothing.
+      if (group.body.length && !accepted.length) continue;
+      accepted.unshift(group.heading);
+      target = group.heading;
+    }
+
+    if (accepted.length) {
+      result.splice(insertAt, 0, ...accepted);
+      added += accepted.length;
+    }
+    if (group.heading && target) stack.push({ level: group.heading.level, block: target });
+  }
+
+  return { blocks: result, added };
+}
+
+const MD_HEADING = /^ {0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+const MD_LIST_ITEM = /^(?: {0,1})(?:[-*+]|\d+[.)])\s+/;
+const MD_FENCE = /^ {0,3}(```|~~~)/;
+const MD_TASK_PREFIX = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s*)?/;
+
+function tokenizeMarkdownSections(markdown: string): SectionBlock[] {
+  const blocks: SectionBlock[] = [];
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  let current: string[] = [];
+  let currentIsList = false;
+
+  const flush = () => {
+    if (!current.length) return;
+    const raw = current.join("\n");
+    const text = currentIsList ? raw.replace(MD_TASK_PREFIX, "") : raw;
+    blocks.push({ key: null, level: 0, raw, dedupe: dedupeKey(text), list: currentIsList });
+    current = [];
+    currentIsList = false;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const fence = line.match(MD_FENCE);
+    if (fence) {
+      // A fenced block is one opaque body block; `#` lines inside aren't headings.
+      flush();
+      const fenceLines = [line];
+      for (i++; i < lines.length; i++) {
+        fenceLines.push(lines[i]);
+        if (lines[i].trimStart().startsWith(fence[1])) break;
+      }
+      const raw = fenceLines.join("\n");
+      blocks.push({ key: null, level: 0, raw, dedupe: dedupeKey(raw) });
+      continue;
+    }
+
+    const heading = line.match(MD_HEADING);
+    if (heading) {
+      flush();
+      const key = normalizeHeading(heading[2]);
+      if (key) {
+        blocks.push({ key, level: heading[1].length, raw: line.trim(), dedupe: null });
+      }
+      continue;
+    }
+
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+
+    if (MD_LIST_ITEM.test(line)) {
+      flush();
+      current = [line];
+      currentIsList = true;
+      continue;
+    }
+
+    current.push(line);
+  }
+  flush();
+  return blocks;
+}
+
+function joinMarkdownBlocks(blocks: SectionBlock[]): string {
+  let out = "";
+  blocks.forEach((block, i) => {
+    if (i > 0) {
+      // A blank line between list items makes marked emit a loose list
+      // (`<li><p><input…`), which the taskList conversion doesn't recognize.
+      out += blocks[i - 1].list && block.list ? "\n" : "\n\n";
+    }
+    out += block.raw;
+  });
+  return out;
+}
+
+/**
+ * Heading-aware append for test-scenario markdown. `existing` is the stored
+ * checklist round-tripped through testScenariosToMarkdown. A checklist item is
+ * skipped when the same item (after normalizeTaskText) exists anywhere in the
+ * document — exact match on purpose: findFuzzyMatch is fine for carrying a
+ * checked state over but would drop genuinely different scenarios here.
+ */
+export function mergeTestMarkdownSections(
+  existing: string,
+  incoming: string
+): { markdown: string; added: number } {
+  const incomingBlocks = tokenizeMarkdownSections(incoming);
+  if (!existing.trim()) return { markdown: incoming, added: incomingBlocks.length };
+
+  const { blocks, added } = mergeSections(tokenizeMarkdownSections(existing), incomingBlocks, "document");
+  if (added === 0) return { markdown: existing, added };
+  return { markdown: joinMarkdownBlocks(blocks), added };
+}
+
+const HTML_VOID_TAG = /^(area|base|br|col|embed|hr|img|input|link|meta|source|track|wbr)$/i;
+
+/**
+ * Split HTML into its top-level elements. Tiptap stores a flat list of block
+ * nodes, so string-level splitting is safe. Returns null on unbalanced markup.
+ */
+function splitTopLevelHtml(html: string): string[] | null {
+  const parts: string[] = [];
+  const tagRe = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/?)>/g;
+  let depth = 0;
+  let start = -1;
+  let lastEnd = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tagRe.exec(html)) !== null) {
+    if (!match[2]) continue; // comment
+    if (depth === 0) {
+      const text = html.slice(lastEnd, match.index).trim();
+      if (text) parts.push(`<p>${text}</p>`);
+      start = match.index;
+    }
+    const closing = match[1] === "/";
+    const selfClosing = match[3] === "/" || HTML_VOID_TAG.test(match[2]);
+    if (closing) depth--;
+    else if (!selfClosing) depth++;
+    if (depth < 0) return null;
+    if (depth === 0) {
+      parts.push(html.slice(start, tagRe.lastIndex));
+      lastEnd = tagRe.lastIndex;
+    }
+  }
+  if (depth !== 0) return null;
+  const tail = html.slice(lastEnd).trim();
+  if (tail) parts.push(`<p>${tail}</p>`);
+  return parts;
+}
+
+function tokenizeHtmlSections(html: string): SectionBlock[] | null {
+  const parts = splitTopLevelHtml(html);
+  if (!parts) return null;
+  return parts.map((raw) => {
+    const heading = raw.match(/^<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>$/i);
+    if (heading) {
+      const key = normalizeHeading(heading[2]);
+      if (key) return { key, level: parseInt(heading[1], 10), raw, dedupe: null };
+    }
+    return { key: null, level: 0, raw, dedupe: dedupeKey(raw) };
+  });
+}
+
+/**
+ * Heading-aware append for the rich-text fields (Detail, Solution, Opinion).
+ * A top-level block (paragraph, list, …) whose text already exists in the
+ * section it would land in is skipped. Falls back to plain concatenation when
+ * either side can't be split cleanly.
+ */
+export function mergeHtmlSections(
+  existing: string,
+  incoming: string
+): { html: string; added: number } {
+  const incomingBlocks = tokenizeHtmlSections(incoming);
+  if (!existing.trim()) return { html: incoming, added: incomingBlocks?.length ?? 1 };
+
+  const existingBlocks = tokenizeHtmlSections(existing);
+  if (!existingBlocks || !incomingBlocks) {
+    return { html: `${existing}\n${incoming}`, added: 1 };
+  }
+
+  const { blocks, added } = mergeSections(existingBlocks, incomingBlocks, "section");
+  if (added === 0) return { html: existing, added };
+  return { html: blocks.map((b) => b.raw).join("\n"), added };
+}
+
 /**
  * Check if content is already HTML (starts with < tag)
  */

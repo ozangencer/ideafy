@@ -179,6 +179,8 @@ export function ConversationMessage({
   const isStreaming = message.isStreaming;
   const [isApplying, setIsApplying] = useState<"replace" | "append" | null>(null);
   const [applied, setApplied] = useState<"replace" | "append" | null>(null);
+  // Append found every block already on the card (IDE-334).
+  const [nothingNew, setNothingNew] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
 
   // Show "Apply" button when: assistant message, not streaming, has content, no persist tool was called
@@ -215,6 +217,8 @@ export function ConversationMessage({
         body: JSON.stringify({ field, mode, content: cleanedContent }),
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setNothingNew(data.added === 0);
         setApplied(mode);
         onApplied?.();
       }
@@ -403,7 +407,7 @@ export function ConversationMessage({
               disabled={!!isApplying || !!applied}
               className={`h-6 px-2 text-xs ${
                 applied === "append"
-                  ? "text-[#16a34a]"
+                  ? nothingNew ? "text-muted-foreground" : "text-[#16a34a]"
                   : defaultMode === "append"
                     ? "text-ink bg-paper-cream hover:bg-paper-cream hover:text-ink"
                     : "text-ink hover:text-ink hover:bg-paper-cream"
@@ -417,7 +421,9 @@ export function ConversationMessage({
               ) : (
                 <Plus className="w-3 h-3 mr-1" />
               )}
-              {applied === "append" ? "Appended" : `Append to ${sectionLabel}`}
+              {applied === "append"
+                ? nothingNew ? "Nothing new to append" : "Appended"
+                : `Append to ${sectionLabel}`}
             </Button>
             <Button
               variant="ghost"

@@ -5,7 +5,9 @@ import {
   ensureHtml,
   ensureTestScenariosHtml,
   markdownToTiptapHtml,
+  mergeHtmlSections,
   mergeTestCheckState,
+  mergeTestMarkdownSections,
   testScenariosToMarkdown,
 } from "@/lib/markdown";
 import { recordApplyMessage } from "@/lib/activity-registry";
@@ -28,8 +30,12 @@ const FIELD_LABEL: Record<Field, string> = {
  *   - append: preserve existing content and add the message content after it
  *
  * Append is field-aware: for testScenarios we round-trip existing HTML back to
- * markdown so the concatenated payload survives markdownToTiptapHtml +
+ * markdown so the merged payload survives markdownToTiptapHtml +
  * mergeTestCheckState, preserving checkbox states on already-checked items.
+ * Append is also heading-aware: a section the field already has gets the new
+ * body inside it instead of a second copy of the heading, and blocks that are
+ * already there are skipped. `added` in the response counts what was written;
+ * 0 means nothing new, and the card is left untouched.
  */
 export async function POST(
   request: NextRequest,
@@ -61,6 +67,7 @@ export async function POST(
   }
 
   let nextHtml: string;
+  let added: number | undefined;
   if (mode === "replace") {
     nextHtml = field === "testScenarios" ? ensureTestScenariosHtml(content) : ensureHtml(content);
   } else {
@@ -68,17 +75,25 @@ export async function POST(
     // then convert once so formatting stays consistent.
     if (field === "testScenarios") {
       const existingMd = testScenariosToMarkdown(existing.testScenarios || "");
-      const combined = existingMd
-        ? `${existingMd}\n\n${content}`
-        : content;
-      nextHtml = ensureTestScenariosHtml(combined);
+      const merged = mergeTestMarkdownSections(existingMd, content);
+      added = merged.added;
+      nextHtml = ensureTestScenariosHtml(merged.markdown);
     } else {
       const existingHtml = (existing as Record<string, string | null>)[field] || "";
-      const appendedHtml = markdownToTiptapHtml(content);
-      nextHtml = existingHtml
-        ? `${existingHtml}\n${appendedHtml}`
-        : appendedHtml;
+      const merged = mergeHtmlSections(existingHtml, markdownToTiptapHtml(content));
+      added = merged.added;
+      nextHtml = merged.html;
     }
+  }
+
+  if (added === 0) {
+    return NextResponse.json({
+      success: true,
+      field,
+      mode,
+      label: FIELD_LABEL[field],
+      added,
+    });
   }
 
   if (field === "testScenarios" && existing.testScenarios) {
@@ -116,6 +131,7 @@ export async function POST(
     label: FIELD_LABEL[field],
     statusChangedTo: updates.status,
     verdictSet: updates.aiVerdict,
+    added,
   });
 }
 
