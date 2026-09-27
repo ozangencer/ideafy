@@ -247,7 +247,8 @@ export function ProjectList() {
       >
         <div className="min-h-0 overflow-hidden">
         <div className="max-h-[70vh] overflow-y-auto">
-        {/* All Projects option */}
+        {/* All Projects option — nothing to gather in an empty workspace */}
+        {projects.length > 0 && (
         <button
           onClick={() => setActiveProject(null)}
           className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-sm transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 relative overflow-hidden ${
@@ -265,6 +266,7 @@ export function ProjectList() {
           <Layers className="h-4 w-4" />
           <span>All Projects</span>
         </button>
+        )}
 
         {/* Sections — sidebar grouping only, the board never filters by them.
             With no sections the list looks exactly as it did before. */}
@@ -312,7 +314,7 @@ export function ProjectList() {
         {/* The board carries the first-visit guidance; the sidebar only
             says the list is empty. */}
         {projects.length === 0 && (
-          <p className="mt-2 px-3 text-xs text-muted-foreground">
+          <p className="px-3 text-xs text-muted-foreground">
             No {activeWorkspace === "work" ? "Work" : "Development"} projects yet
           </p>
         )}

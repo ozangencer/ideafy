@@ -165,7 +165,7 @@ function Board() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-foreground">
-                {activeProject ? activeProject.name : "ideafy"}
+                {activeProject ? activeProject.name : activeWorkspace === "work" ? "Work" : "ideafy"}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {activeProject

@@ -22,7 +22,7 @@ export function WorkspaceSwitch() {
   const setActiveWorkspace = useKanbanStore((s) => s.setActiveWorkspace);
 
   return (
-    <div className="px-4 pt-3" role="radiogroup" aria-label="Workspace">
+    <div className="px-3 pt-3" role="radiogroup" aria-label="Workspace">
       <div className="grid grid-cols-2 gap-0.5 rounded-md border border-border bg-ink/[0.03] p-0.5">
         {PROJECT_MODE_OPTIONS.map((option) => {
           const isActive = activeWorkspace === option.value;
@@ -35,7 +35,7 @@ export function WorkspaceSwitch() {
               aria-checked={isActive}
               title={option.description}
               onClick={() => void setActiveWorkspace(option.value)}
-              className={`flex min-w-0 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs transition-colors ${
+              className={`flex min-w-0 items-center justify-center gap-1 rounded px-1.5 py-1.5 text-xs transition-colors ${
                 isActive
                   ? "bg-ink/10 font-semibold text-foreground"
                   : "font-medium text-muted-foreground hover:text-foreground"
