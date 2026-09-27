@@ -21,7 +21,11 @@ export const createSettingsSlice: StoreSlice<
     try {
       const response = await fetch("/api/settings");
       const settings = await parseJson<AppSettings>(response);
-      set({ settings, isSettingsLoading: false });
+      set({
+        settings,
+        isSettingsLoading: false,
+        activeWorkspace: settings.activeWorkspace === "work" ? "work" : "development",
+      });
     } catch (error) {
       console.error("Failed to fetch settings:", error);
       set({ isSettingsLoading: false });

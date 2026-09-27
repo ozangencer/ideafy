@@ -225,6 +225,7 @@ export function CardModal({
 
   // Get project and displayId
   const project = projects.find((p) => p.id === projectId);
+  const isWorkProject = project?.mode === "work";
   const displayId = selectedCard ? getDisplayId(selectedCard, project) : null;
 
   // What the run button means here. Cards without a project keep the historical
@@ -1149,7 +1150,9 @@ export function CardModal({
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="text-sm text-ink">
-                  <span className="font-medium">Did this change work?</span>
+                  <span className="font-medium">
+                    {isWorkProject ? "Is this ready?" : "Did this change work?"}
+                  </span>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <Button
@@ -1164,7 +1167,7 @@ export function CardModal({
                     ) : (
                       <Check className="mr-2 h-4 w-4" />
                     )}
-                    Complete
+                    {isWorkProject ? "Done" : "Complete"}
                   </Button>
                   <Button
                     variant="outline"
@@ -1174,13 +1177,14 @@ export function CardModal({
                     className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
                   >
                     <Undo2 className="mr-2 h-4 w-4" />
-                    Didn&apos;t work
+                    {isWorkProject ? "Needs revisions" : <>Didn&apos;t work</>}
                   </Button>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                This card has no branch of its own, so nothing is merged or deleted — only the
-                card moves.
+                {isWorkProject
+                  ? "Only the card moves; nothing in the project folder changes."
+                  : "This card has no branch of its own, so nothing is merged or deleted — only the card moves."}
               </p>
             </div>
           </div>
@@ -1219,7 +1223,12 @@ export function CardModal({
         )}
 
         {/* Section Tabs */}
-        <CardModalTabs activeTab={activeTab} onTabChange={setActiveTab} sectionValues={sectionValues} />
+        <CardModalTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          sectionValues={sectionValues}
+          mode={project?.mode}
+        />
 
         {/* Main Content - Split Panel */}
         <div className="flex-1 overflow-hidden relative">

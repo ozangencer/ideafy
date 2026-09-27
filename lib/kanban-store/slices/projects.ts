@@ -1,4 +1,4 @@
-import { Project, ProjectSection } from "../../types";
+import { Project, ProjectMode, ProjectSection } from "../../types";
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 
@@ -19,6 +19,8 @@ export const createProjectsSlice: StoreSlice<
     | "updateProject"
     | "deleteProject"
     | "setActiveProject"
+    | "activeWorkspace"
+    | "setActiveWorkspace"
     | "toggleProjectPin"
     | "projectSections"
     | "createProjectSection"
@@ -31,6 +33,7 @@ export const createProjectsSlice: StoreSlice<
 > = (set, get) => ({
   projects: [],
   activeProjectId: null,
+  activeWorkspace: "development",
   isProjectsLoading: false,
   projectSections: [],
 
@@ -86,6 +89,13 @@ export const createProjectsSlice: StoreSlice<
         projects: sortProjects(
           state.projects.map((p) => (p.id === id ? updatedProject : p))
         ),
+        // A project moved to the other workspace leaves this sidebar, so it
+        // cannot stay the selection either — the board would show cards from
+        // a project the sidebar no longer lists.
+        activeProjectId:
+          state.activeProjectId === id && updatedProject.mode !== state.activeWorkspace
+            ? null
+            : state.activeProjectId,
       }));
     } catch (error) {
       console.error("Failed to update project:", error);
@@ -138,6 +148,20 @@ export const createProjectsSlice: StoreSlice<
       get().fetchDocuments(projectId);
       get().fetchMemory(projectId);
     }
+  },
+
+  // Optimistic: the toggle has to flip on click. The settings row is what
+  // quick entry reads, so it is written even though this window already knows.
+  setActiveWorkspace: async (workspace: ProjectMode) => {
+    const { activeWorkspace, activeProjectId, projects } = get();
+    if (workspace === activeWorkspace) return;
+    const activeProject = projects.find((p) => p.id === activeProjectId);
+    set({ activeWorkspace: workspace });
+    if (activeProject && activeProject.mode !== workspace) {
+      get().setActiveProject(null);
+    }
+    get().clearCardSelection();
+    await get().updateSettings({ activeWorkspace: workspace });
   },
 
   toggleProjectPin: async (id) => {

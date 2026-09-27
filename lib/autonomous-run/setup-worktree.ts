@@ -6,11 +6,12 @@ import {
   worktreeExists,
 } from "@/lib/git";
 import type { Phase } from "@/lib/prompts";
+import { shouldUseWorktree } from "@/lib/workspace";
 
 interface SetupWorktreeArgs {
   workingDir: string;
   phase: Phase;
-  project: { idPrefix: string; useWorktrees?: boolean | null } | null;
+  project: { idPrefix: string; useWorktrees?: boolean | null; mode?: string | null } | null;
   card: {
     taskNumber?: number | null;
     title: string;
@@ -48,7 +49,8 @@ export async function setupWorktree(args: SetupWorktreeArgs): Promise<WorktreeSe
   const { workingDir, phase, project, card } = args;
 
   // Per-card override wins; otherwise fall back to project setting (default: true).
-  const shouldUseWorktree = card.useWorktree ?? project?.useWorktrees ?? true;
+  // Work projects never get one.
+  const useWorktree = shouldUseWorktree(card, project);
 
   const base: WorktreeSetupResult = {
     actualWorkingDir: workingDir,
@@ -58,7 +60,7 @@ export async function setupWorktree(args: SetupWorktreeArgs): Promise<WorktreeSe
     gitWorktreeStatus: card.gitWorktreeStatus ?? null,
   };
 
-  if (phase === "implementation" && project && card.taskNumber && shouldUseWorktree) {
+  if (phase === "implementation" && project && card.taskNumber && useWorktree) {
     if (!(await isGitRepo(workingDir))) return base;
 
     const branchName =
@@ -93,7 +95,10 @@ export async function setupWorktree(args: SetupWorktreeArgs): Promise<WorktreeSe
     };
   }
 
-  if ((phase === "implementation" || phase === "retest") && card.gitWorktreePath && shouldUseWorktree) {
+  // A worktree opened before its project moved to Work is still where that
+  // card's changes live, so it keeps being used until merged or rolled back.
+  const reuseWorktree = useWorktree || card.gitWorktreeStatus === "active";
+  if ((phase === "implementation" || phase === "retest") && card.gitWorktreePath && reuseWorktree) {
     if (await worktreeExists(workingDir, card.gitWorktreePath)) {
       console.log(`[Git Worktree] Using existing worktree: ${card.gitWorktreePath}`);
       return { ...base, actualWorkingDir: card.gitWorktreePath };
@@ -101,7 +106,7 @@ export async function setupWorktree(args: SetupWorktreeArgs): Promise<WorktreeSe
     return base;
   }
 
-  if (!shouldUseWorktree && (phase === "implementation" || phase === "retest")) {
+  if (!useWorktree && (phase === "implementation" || phase === "retest")) {
     console.log(`[Git] Working directly on main branch (worktrees disabled)`);
   }
 

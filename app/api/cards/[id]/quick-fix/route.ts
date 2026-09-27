@@ -28,6 +28,7 @@ import {
   getWorktreePath,
   git,
 } from "@/lib/git";
+import { shouldUseWorktree } from "@/lib/workspace";
 
 export async function POST(
   request: NextRequest,
@@ -100,9 +101,9 @@ export async function POST(
   let gitWorktreeStatus = card.gitWorktreeStatus;
   let actualWorkingDir = workingDir;
 
-  const shouldUseWorktree = card.useWorktree ?? project?.useWorktrees ?? true;
+  const useWorktree = shouldUseWorktree(card, project);
 
-  if (shouldUseWorktree && project && card.taskNumber) {
+  if (useWorktree && project && card.taskNumber) {
     const isRepo = await isGitRepo(workingDir);
 
     if (isRepo) {
@@ -149,7 +150,7 @@ export async function POST(
         }
       }
     }
-  } else if (!shouldUseWorktree) {
+  } else if (!useWorktree) {
     console.log(`[Quick Fix] Working directly on main branch (worktrees disabled)`);
   }
 

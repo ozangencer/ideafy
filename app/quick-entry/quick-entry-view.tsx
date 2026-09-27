@@ -12,7 +12,7 @@ import {
   PLATFORM_INLINE_MAP,
   PLATFORM_OPTIONS,
   PlatformOption,
-  STATUS_OPTIONS,
+  getStatusOptions,
   StatusOption,
 } from "./constants";
 import {
@@ -119,8 +119,11 @@ export function QuickEntryView({
   const priorityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descPlainTextRef = useRef("");
 
-  const { projects, selectedProject, setSelectedProject, refreshAndRestore, rememberSelection } =
+  const { projects, workspace, selectedProject, setSelectedProject, refreshAndRestore, rememberSelection } =
     useProjects();
+  // Named for the picked project's mode, else the workspace the list came from.
+  const statusMode = selectedProject?.mode ?? workspace;
+  const statusOptions = useMemo(() => getStatusOptions(statusMode), [statusMode]);
   const { closeWindow } = useElectronWindow(containerRef);
 
   // Notify wrappers (e.g. cloud overlay) when the selected project changes.
@@ -202,13 +205,13 @@ export function QuickEntryView({
     }
     if (autocomplete.kind === "status") {
       return q
-        ? STATUS_OPTIONS.filter(
+        ? statusOptions.filter(
             (s) =>
               s.label.toLowerCase().includes(q) ||
               s.key.includes(q) ||
               s.slash.toLowerCase().includes(`/${q}`),
           )
-        : STATUS_OPTIONS;
+        : statusOptions;
     }
     if (autocomplete.kind === "platform") {
       return q
@@ -222,7 +225,7 @@ export function QuickEntryView({
           (c) => c.label.toLowerCase().includes(q) || c.key.includes(q),
         )
       : COMPLEXITY_OPTIONS;
-  }, [autocomplete, projects]);
+  }, [autocomplete, projects, statusOptions]);
 
   const showAutocomplete = autocomplete !== null && acItems.length > 0;
 
@@ -585,6 +588,7 @@ export function QuickEntryView({
           priority={priority}
           onClearPriority={() => setPriority("medium")}
           status={status}
+          statusMode={statusMode}
           statusExplicit={statusExplicit}
           onClearStatus={() => {
             setStatus("ideation");

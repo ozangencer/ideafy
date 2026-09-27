@@ -2,6 +2,7 @@ import * as path from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { generateBranchName } from "@/lib/git";
+import { shouldUseWorktree } from "@/lib/workspace";
 
 // The policy TEXT moved to lib/prompts/phase-policy.ts, which has to stay
 // import-free so scripts/sync-mcp-shared.mjs can copy it into mcp-server
@@ -27,9 +28,9 @@ export function resolveEffectiveWorktree(
     taskNumber: number | null;
     title: string;
   },
-  project: { useWorktrees: boolean; idPrefix: string } | null
+  project: { useWorktrees: boolean; idPrefix: string; mode?: string | null } | null
 ): { enforced: boolean; targetBranch: string | null } {
-  const effective = card.useWorktree ?? project?.useWorktrees ?? true;
+  const effective = shouldUseWorktree(card, project);
   if (!effective) return { enforced: false, targetBranch: null };
 
   if (card.gitBranchName) {

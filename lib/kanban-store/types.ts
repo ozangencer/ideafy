@@ -14,6 +14,7 @@ import {
   DocumentFile,
   MentionData,
   Project,
+  ProjectMode,
   ProjectSection,
   RunMode,
   SectionType,
@@ -73,6 +74,9 @@ export interface KanbanStore {
   // Projects state
   projects: Project[];
   activeProjectId: string | null;
+  // Which half of the board is showing. Mirrors settings.activeWorkspace so
+  // components need not wait for the settings fetch to know it.
+  activeWorkspace: ProjectMode;
   isProjectsLoading: boolean;
   projectSections: ProjectSection[];
 
@@ -262,6 +266,7 @@ export interface KanbanStore {
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
   deleteProject: (id: string, deleteCards?: boolean) => Promise<void>;
   setActiveProject: (projectId: string | null) => void;
+  setActiveWorkspace: (workspace: ProjectMode) => Promise<void>;
   toggleProjectPin: (id: string) => Promise<void>;
 
   // Project section actions (sidebar-only grouping)

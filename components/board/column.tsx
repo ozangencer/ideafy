@@ -9,7 +9,7 @@ import {
   COLUMN_WIP_LIMITS,
   COMPLETED_FILTER_OPTIONS,
   CompletedFilter,
-  COLUMNS,
+  getColumnTitle,
   getDisplayId,
 } from "@/lib/types";
 import {
@@ -341,6 +341,7 @@ function StaleGroupBlock({
   const moveCard = useKanbanStore((s) => s.moveCard);
   const beginUndoBatch = useKanbanStore((s) => s.beginUndoBatch);
   const endUndoBatch = useKanbanStore((s) => s.endUndoBatch);
+  const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
   const [pendingMove, setPendingMove] = useState<Status | null>(null);
 
   const foldKey = groupFoldKey(STALE_GROUP_ID, columnId);
@@ -353,7 +354,7 @@ function StaleGroupBlock({
   const applyMove = async (target: Status) => {
     setPendingMove(null);
     // One Cmd+Z should put the whole stale group back, not one card of it.
-    const column = COLUMNS.find((c) => c.id === target)?.title ?? target;
+    const column = getColumnTitle(target, activeWorkspace);
     beginUndoBatch(`Moved stale cards to ${column}`);
     try {
       for (const card of stale.cards) {

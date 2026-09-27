@@ -50,6 +50,7 @@ function Board() {
     isSkillViewerOpen,
     isAgentViewerOpen,
     activeProjectId,
+    activeWorkspace,
     projects,
   } = useKanbanStore();
 
@@ -162,7 +163,9 @@ function Board() {
               <p className="text-sm text-muted-foreground mt-1">
                 {activeProject
                   ? `${activeProject.idPrefix} - ${activeProject.folderPath}`
-                  : "All projects - Development workflow management"}
+                  : activeWorkspace === "work"
+                    ? "All projects - Work"
+                    : "All projects - Development workflow management"}
               </p>
             </div>
             <div className="flex items-center gap-3">

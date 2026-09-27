@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { COLUMNS, Complexity, Priority, Status, AiPlatform } from "@/lib/types";
+import { Complexity, Priority, Status, AiPlatform, ProjectMode, getColumnTitle } from "@/lib/types";
 import { STATUS_COLORS, PLATFORM_LABELS } from "../constants";
 import { Project } from "../types";
 import { TokenBadge } from "./token-badge";
@@ -10,6 +10,7 @@ interface BadgesBarProps {
   priority: Priority;
   onClearPriority: () => void;
   status: Status;
+  statusMode?: ProjectMode;
   statusExplicit: boolean;
   onClearStatus: () => void;
   complexity: Complexity;
@@ -23,7 +24,7 @@ export function BadgesBar(props: BadgesBarProps) {
   const {
     selectedProject, onClearProject,
     priority, onClearPriority,
-    status, statusExplicit, onClearStatus,
+    status, statusMode, statusExplicit, onClearStatus,
     complexity, onClearComplexity,
     aiPlatform, onClearPlatform,
     extraBadges,
@@ -39,7 +40,7 @@ export function BadgesBar(props: BadgesBarProps) {
 
   if (!hasBadges) return null;
 
-  const statusLabel = COLUMNS.find((c) => c.id === status)?.title;
+  const statusLabel = getColumnTitle(status, statusMode);
 
   return (
     <div className="px-5 pb-3 flex flex-wrap gap-1.5">

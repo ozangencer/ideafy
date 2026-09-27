@@ -1,12 +1,30 @@
 import type { ProjectRecord } from "./db/schema";
 import { detectRunMode } from "./run-target";
-import { DEFAULT_VOICE, Project, RUN_MODES, RunMode, Voice } from "./types";
+import {
+  DEFAULT_PROJECT_MODE,
+  DEFAULT_VOICE,
+  Project,
+  PROJECT_MODES,
+  ProjectMode,
+  RUN_MODES,
+  RunMode,
+  Voice,
+} from "./types";
 
 const VALID_VOICES: Voice[] = ["entrepreneur", "builder", "engineer"];
 
 export function normalizeVoice(v: unknown, fallback: Voice = DEFAULT_VOICE): Voice {
   return typeof v === "string" && (VALID_VOICES as string[]).includes(v)
     ? (v as Voice)
+    : fallback;
+}
+
+export function normalizeProjectMode(
+  v: unknown,
+  fallback: ProjectMode = DEFAULT_PROJECT_MODE
+): ProjectMode {
+  return typeof v === "string" && (PROJECT_MODES as readonly string[]).includes(v)
+    ? (v as ProjectMode)
     : fallback;
 }
 
@@ -54,6 +72,7 @@ export function serializeProject(row: ProjectRecord): Project {
     narrativePath: row.narrativePath,
     useWorktrees: row.useWorktrees ?? true,
     voice: normalizeVoice(row.voice),
+    mode: normalizeProjectMode(row.mode),
     runMode,
     detectedRunMode,
     resolvedRunMode: runMode ?? detectedRunMode,

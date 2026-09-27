@@ -4,6 +4,7 @@ import { createBackup } from "@/lib/backup";
 import { ExportData } from "../export/route";
 import { SECRET_SETTING_KEYS, isSecretSettingKey } from "@/lib/db/secret-settings";
 import { notInArray } from "drizzle-orm";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 
 // POST /api/backup/import - Import data from JSON
 export async function POST(request: NextRequest) {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
           // Backups written before these columns existed simply omit them —
           // the defaults mean "detect", which is what an old project wants.
           ...(project.voice ? { voice: project.voice } : {}),
+          mode: normalizeProjectMode(project.mode),
           runMode: project.runMode ?? null,
           runCommand: project.runCommand ?? null,
           previewUrl: project.previewUrl ?? null,

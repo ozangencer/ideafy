@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useKanbanStore } from "@/lib/store";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -151,7 +153,8 @@ function countWords(text: string): number {
 }
 
 export function AddProjectModal({ onClose }: AddProjectModalProps) {
-  const { addProject } = useKanbanStore();
+  const { activeWorkspace } = useKanbanStore();
+  const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
 
@@ -234,10 +237,32 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
           color,
           isPinned: false,
           narrativePath,
+          // A project added from the Work workspace belongs there; adding it
+          // anywhere else would make it vanish from the sidebar it was added in.
+          mode: activeWorkspace,
         }),
       });
 
       const newProject = await response.json();
+
+      if (newProject.suggestedMode === "work" && activeWorkspace !== "work") {
+        const projectId: string = newProject.id;
+        const projectName: string = newProject.name;
+        toast({
+          title: "No git repo in this folder",
+          description: `${projectName} has no branches or worktrees to manage. The Work workspace fits it better.`,
+          action: (
+            <ToastAction
+              altText="Move to Work"
+              onClick={() =>
+                useKanbanStore.getState().updateProject(projectId, { mode: "work" })
+              }
+            >
+              Move to Work
+            </ToastAction>
+          ),
+        });
+      }
 
       // Create narrative if mode is "create" and has content
       if (narrativeMode === "create" && hasNarrativeContent()) {

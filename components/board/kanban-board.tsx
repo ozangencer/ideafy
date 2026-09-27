@@ -14,7 +14,8 @@ import {
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { useUndoShortcut } from "@/hooks/use-undo-shortcut";
-import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter } from "@/lib/types";
+import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter, getColumns } from "@/lib/types";
+import { isCardInWorkspace } from "@/lib/workspace";
 import { summarizeCardGroups } from "@/lib/card-group";
 import { partitionStaleCards } from "@/lib/card-age";
 import { FocusView } from "./focus-view";
@@ -111,7 +112,7 @@ import { Column } from "./column";
 import { TaskCard } from "./card";
 
 export function KanbanBoard() {
-  const { cards, cardGroups, activeProjectId, searchQuery, moveCard, completedFilter, boardView, staleThresholds, clearCardSelection } = useKanbanStore();
+  const { cards, cardGroups, projects, activeProjectId, activeWorkspace, searchQuery, moveCard, completedFilter, boardView, staleThresholds, clearCardSelection } = useKanbanStore();
   useUndoShortcut();
 
   // A selection only means what's on screen. Once the project, a filter or
@@ -119,7 +120,7 @@ export function KanbanBoard() {
   // would take them out without the user seeing it happen.
   useEffect(() => {
     clearCardSelection();
-  }, [activeProjectId, searchQuery, completedFilter, boardView, clearCardSelection]);
+  }, [activeProjectId, activeWorkspace, searchQuery, completedFilter, boardView, clearCardSelection]);
 
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -170,8 +171,11 @@ export function KanbanBoard() {
   );
 
   const filteredCards = cards.filter((card) => {
-    // Filter by active project
-    const matchesProject = !activeProjectId || card.projectId === activeProjectId;
+    // Filter by active project. "All Projects" means every project in the
+    // workspace that is showing, not every project there is.
+    const matchesProject = activeProjectId
+      ? card.projectId === activeProjectId
+      : isCardInWorkspace(card, projects, activeWorkspace);
     // Filter by search query
     const matchesSearch =
       !searchQuery ||
@@ -223,7 +227,7 @@ export function KanbanBoard() {
           ref={scrollRef}
           className="flex gap-4 p-6 overflow-x-auto min-h-[calc(100vh-80px)] snap-x snap-mandatory"
         >
-          {COLUMNS.map((column) => {
+          {getColumns(activeWorkspace).map((column) => {
             let columnCards = filteredCards.filter((card) => card.status === column.id);
             // Apply date filter only to completed column
             if (column.id === 'completed') {

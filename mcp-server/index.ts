@@ -30,6 +30,7 @@ import {
   getWorktreePath,
   isGitRepo,
   resolveEffectiveWorktree,
+  shouldUseWorktree,
   worktreeExists,
 } from "./git-helpers.js";
 import { existsSync } from "fs";
@@ -1493,9 +1494,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const project = card.projectId
           ? (db
               .prepare(
-                `SELECT
-                   id, folder_path as folderPath,
-                   id_prefix as idPrefix,
+                // SELECT * rather than naming `mode`: a plugin newer than the
+                // app can meet a DB from before that column existed.
+                `SELECT *, folder_path as folderPath, id_prefix as idPrefix,
                    use_worktrees as useWorktrees
                  FROM projects WHERE id = ?`
               )
@@ -1505,6 +1506,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   folderPath: string;
                   idPrefix: string;
                   useWorktrees: number | null;
+                  mode?: string | null;
                 }
               | undefined)
           : undefined;
@@ -1513,7 +1515,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const projectUseWorktrees = project
           ? Boolean(project.useWorktrees ?? 1)
           : null;
-        const effective = cardUseWorktree ?? projectUseWorktrees ?? true;
+        const effective = shouldUseWorktree(
+          { useWorktree: cardUseWorktree },
+          project ? { useWorktrees: projectUseWorktrees, mode: project.mode } : null
+        );
 
         if (!effective) {
           // Distinguish whether the disable came from the card override or
@@ -1521,7 +1526,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           // card, which was misleading when the card was set to "follow
           // project" and the project itself had worktrees turned off.
           const reason =
-            cardUseWorktree === false
+            project?.mode === "work"
+              ? "This card's project is a Work project; Work cards never get a branch."
+              : cardUseWorktree === false
               ? "Worktree enforcement is disabled for this card (card.useWorktree=false)."
               : "Worktree enforcement is disabled at the project level (project.useWorktrees=false) and this card has no override.";
           return {
@@ -1762,10 +1769,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const project = card.projectId
           ? (db
               .prepare(
-                `SELECT id_prefix as idPrefix, use_worktrees as useWorktrees FROM projects WHERE id = ?`
+                // SELECT * for the same reason as ensure_branch: `mode` may
+                // not exist yet on a DB the app has not migrated.
+                `SELECT *, id_prefix as idPrefix, use_worktrees as useWorktrees FROM projects WHERE id = ?`
               )
               .get(card.projectId) as
-              | { idPrefix: string; useWorktrees: number }
+              | { idPrefix: string; useWorktrees: number; mode?: string | null }
               | undefined)
           : undefined;
 
@@ -1788,7 +1797,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   title: card.title,
                 },
                 project
-                  ? { useWorktrees: project.useWorktrees === 1, idPrefix: project.idPrefix }
+                  ? {
+                      useWorktrees: project.useWorktrees === 1,
+                      idPrefix: project.idPrefix,
+                      mode: project.mode,
+                    }
                   : null
               )
             : undefined

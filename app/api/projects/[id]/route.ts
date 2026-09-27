@@ -4,6 +4,7 @@ import { db, schema } from "@/lib/db";
 import { removeIdeafyHook } from "@/lib/hooks";
 import { type Voice } from "@/lib/types";
 import {
+  normalizeProjectMode,
   normalizeRunMode,
   normalizeVoice,
   serializeProject,
@@ -49,6 +50,13 @@ export async function PUT(
     let voice: Voice = normalizeVoice(existing.voice);
     if (body.voice !== undefined) {
       voice = normalizeVoice(body.voice, voice);
+    }
+
+    // Switching mode moves no card: status ids are shared, only the workspace
+    // that lists the project and its column labels change.
+    let mode = normalizeProjectMode(existing.mode);
+    if (body.mode !== undefined) {
+      mode = normalizeProjectMode(body.mode, mode);
     }
 
     // Handle run target settings. Each is an explicit override where null means
@@ -109,6 +117,7 @@ export async function PUT(
       narrativePath,
       useWorktrees,
       voice,
+      mode,
       runMode,
       runCommand,
       previewUrl,

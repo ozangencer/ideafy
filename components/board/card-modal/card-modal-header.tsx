@@ -17,7 +17,7 @@ import {
 import { ChevronsRight, ArrowLeft, FileDown, Maximize2, Minimize2, Settings2 } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
 import { CardGroupPicker } from "./card-group-picker";
-import { Status, COLUMNS, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS, DEFAULT_SETTINGS } from "@/lib/types";
+import { Status, getColumns, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS, DEFAULT_SETTINGS } from "@/lib/types";
 import { Project } from "@/lib/types";
 import { useKanbanStore } from "@/lib/store";
 
@@ -130,6 +130,15 @@ export function CardModalHeader({
   const globalAiPlatform = useKanbanStore((s) => s.settings?.aiPlatform ?? DEFAULT_SETTINGS.aiPlatform);
   const globalAiPlatformLabel =
     AI_PLATFORM_OPTIONS.find((o) => o.value === globalAiPlatform)?.label ?? globalAiPlatform;
+  const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
+  // Labels follow the project picked in this modal, so switching the picker to
+  // a Work project renames the statuses before anything is saved.
+  const selectedProjectMode = projects.find((p) => p.id === projectId)?.mode;
+  // Only this workspace's projects, plus whichever one the card is on now —
+  // hiding that one would leave the picker showing a blank value.
+  const pickableProjects = projects.filter(
+    (p) => (p.mode ?? "development") === activeWorkspace || p.id === projectId
+  );
 
   return (
     <div className="shrink-0 border-b border-border">
@@ -238,7 +247,7 @@ export function CardModalHeader({
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
             <SelectContent>
-              {COLUMNS.map((col) => (
+              {getColumns(selectedProjectMode ?? activeWorkspace).map((col) => (
                 <SelectItem key={col.id} value={col.id}>
                   {col.title}
                 </SelectItem>
@@ -277,7 +286,7 @@ export function CardModalHeader({
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {projects.map((p) => (
+              {pickableProjects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />

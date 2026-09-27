@@ -42,6 +42,7 @@ export interface ExportData {
     narrativePath: string | null;
     useWorktrees: boolean;
     voice?: string;
+    mode?: string;
     runMode?: string | null;
     runCommand?: string | null;
     previewUrl?: string | null;
@@ -141,6 +142,7 @@ export async function GET() {
         narrativePath: project.narrativePath,
         useWorktrees: project.useWorktrees,
         voice: project.voice,
+        mode: project.mode,
         runMode: project.runMode,
         runCommand: project.runCommand,
         previewUrl: project.previewUrl,

@@ -7,11 +7,14 @@ import {
   VOICE_OPTIONS,
   DEFAULT_VOICE,
   RUN_MODE_OPTIONS,
+  PROJECT_MODE_OPTIONS,
+  DEFAULT_PROJECT_MODE,
+  type ProjectMode,
   type RunMode,
   type Voice,
 } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
-import { MessageSquare, Play } from "lucide-react";
+import { Layers, MessageSquare, Play } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -85,6 +88,7 @@ export function EditProjectModal({
   );
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
   const [voice, setVoice] = useState<Voice>(project.voice ?? DEFAULT_VOICE);
+  const [mode, setMode] = useState<ProjectMode>(project.mode ?? DEFAULT_PROJECT_MODE);
   // "" means auto — fall back to whatever detection finds in the project folder.
   const [runMode, setRunMode] = useState<RunMode | "">(project.runMode ?? "");
   const [runCommand, setRunCommand] = useState(project.runCommand || "");
@@ -267,6 +271,7 @@ export function EditProjectModal({
         narrativePath: narrativePath.trim() || null,
         useWorktrees,
         voice,
+        mode,
         runMode: runMode || null,
         runCommand: runCommand.trim() || null,
         previewUrl: previewUrl.trim() || null,
@@ -374,6 +379,56 @@ export function EditProjectModal({
                 );
               })}
             </div>
+          </div>
+
+          {/* Mode */}
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Mode</label>
+              <span className="text-xs text-muted-foreground">— which workspace lists it</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Mode">
+              {PROJECT_MODE_OPTIONS.map((opt) => {
+                const isSelected = mode === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => setMode(opt.value)}
+                    className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                          isSelected ? "border-primary" : "border-muted-foreground/40"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full transition-all ${
+                            isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                          }`}
+                        />
+                      </span>
+                      <span className="font-medium text-sm text-foreground">{opt.label}</span>
+                    </span>
+                    <span className="block text-xs text-muted-foreground leading-snug">{opt.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {mode !== (project.mode ?? DEFAULT_PROJECT_MODE) && (
+              <p className="text-xs text-muted-foreground">
+                Cards keep their columns; only the column names change. The project moves to the{" "}
+                {mode === "work" ? "Work" : "Development"} workspace in the sidebar.
+              </p>
+            )}
           </div>
 
           {teamAssignmentSlot}
@@ -591,8 +646,8 @@ export function EditProjectModal({
             );
           })()}
 
-          {/* Test button */}
-          {(() => {
+          {/* Test button — Work projects have nothing to run. */}
+          {mode === "development" && (() => {
             const effectiveMode: RunMode = runMode || project.detectedRunMode;
             const effectiveLabel =
               RUN_MODE_OPTIONS.find((o) => o.value === effectiveMode)?.label ?? effectiveMode;
@@ -762,7 +817,8 @@ export function EditProjectModal({
             );
           })()}
 
-          {/* Git Worktrees */}
+          {/* Git Worktrees — Work projects never branch. */}
+          {mode === "development" && (
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
@@ -780,6 +836,7 @@ export function EditProjectModal({
               onCheckedChange={setUseWorktrees}
             />
           </div>
+          )}
 
           {/* cmux placement — only meaningful while cmux has workspaces open */}
           {cmuxWorkspaces.length > 0 &&
