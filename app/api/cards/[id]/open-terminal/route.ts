@@ -187,6 +187,22 @@ export async function POST(
         gitWorktreePath = expectedWorktreePath;
         gitWorktreeStatus = "active";
         gitBranchName = branchName;
+
+        // The worktree may have been left behind by a run that never got to
+        // record it — claim it here, or the card reaches Human Test without
+        // its Merge & Complete (IDE-343).
+        if (card.gitBranchName !== branchName || card.gitWorktreePath !== expectedWorktreePath) {
+          db.update(schema.cards)
+            .set({
+              gitBranchName: branchName,
+              gitBranchStatus: "active",
+              gitWorktreePath: expectedWorktreePath,
+              gitWorktreeStatus: "active",
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(schema.cards.id, id))
+            .run();
+        }
       } else {
         // Create new worktree
         console.log(`[Open Terminal] Creating worktree for branch: ${branchName}`);

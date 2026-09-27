@@ -153,6 +153,20 @@ export async function POST(
     console.log(`[Quick Fix] Working directly on main branch (worktrees disabled)`);
   }
 
+  // Record the branch now rather than only on success, so a failed or stopped
+  // run does not leave a worktree the card knows nothing about (IDE-343).
+  if (
+    gitBranchName !== card.gitBranchName ||
+    gitBranchStatus !== card.gitBranchStatus ||
+    gitWorktreePath !== card.gitWorktreePath ||
+    gitWorktreeStatus !== card.gitWorktreeStatus
+  ) {
+    db.update(schema.cards)
+      .set({ gitBranchName, gitBranchStatus, gitWorktreePath, gitWorktreeStatus })
+      .where(eq(schema.cards.id, id))
+      .run();
+  }
+
   try {
     let prompt = buildQuickFixPrompt(card, project?.voice as never, getProviderForCard(card).id);
 

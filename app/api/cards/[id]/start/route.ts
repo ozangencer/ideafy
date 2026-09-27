@@ -98,6 +98,10 @@ export async function POST(
   });
 
   if (worktreeResult.error) {
+    db.update(schema.cards)
+      .set({ processingType: null })
+      .where(eq(schema.cards.id, id))
+      .run();
     return NextResponse.json(
       { error: `Failed to create git worktree: ${worktreeResult.error}` },
       { status: 500 },
@@ -111,6 +115,22 @@ export async function POST(
     gitWorktreePath,
     gitWorktreeStatus,
   } = worktreeResult;
+
+  // Record the branch the moment it exists, not when the run succeeds. A run
+  // that crashes, is stopped or times out leaves the worktree on disk, and
+  // work often carries on there by chat or terminal — a card that forgot its
+  // branch then reaches Human Test with no Merge & Complete to offer (IDE-343).
+  if (
+    gitBranchName !== card.gitBranchName ||
+    gitBranchStatus !== card.gitBranchStatus ||
+    gitWorktreePath !== card.gitWorktreePath ||
+    gitWorktreeStatus !== card.gitWorktreeStatus
+  ) {
+    db.update(schema.cards)
+      .set({ gitBranchName, gitBranchStatus, gitWorktreePath, gitWorktreeStatus })
+      .where(eq(schema.cards.id, id))
+      .run();
+  }
 
   // Built after setupWorktree so the commit instructions describe where the
   // run actually lands: a worktree only when setupWorktree moved the cwd into
