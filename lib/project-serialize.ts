@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import type { ProjectRecord } from "./db/schema";
 import { detectRunMode } from "./run-target";
 import {
@@ -48,6 +50,22 @@ function parseStringArray(value: string | null): string[] | null {
 }
 
 /**
+ * Whether the folder sits inside a git repo, by looking for `.git` in it or
+ * any parent — what `git rev-parse` would find, without spawning git once per
+ * project on every project fetch. `.git` may be a file (worktrees, submodules).
+ */
+export function isInsideGitRepo(folderPath: string): boolean {
+  if (!folderPath) return false;
+  let dir = path.resolve(folderPath);
+  for (;;) {
+    if (fs.existsSync(path.join(dir, ".git"))) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+/**
  * Map a DB row to the client-facing Project.
  *
  * `resolvedRunMode` is computed here, on the server, because detection reads
@@ -76,6 +94,7 @@ export function serializeProject(row: ProjectRecord): Project {
     runMode,
     detectedRunMode,
     resolvedRunMode: runMode ?? detectedRunMode,
+    isGitRepo: isInsideGitRepo(row.folderPath),
     runCommand: row.runCommand,
     previewUrl: row.previewUrl,
     sharedPaths: parseStringArray(row.sharedPaths),

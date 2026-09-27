@@ -101,12 +101,12 @@ export const PROJECT_MODE_OPTIONS: { value: ProjectMode; label: string; descript
   {
     value: "development",
     label: "Development",
-    description: "Code in a git repo. Branches, worktrees, dev server and Human Test.",
+    description: "Code in a git repo. Branches, worktrees, tests and a dev server.",
   },
   {
     value: "work",
     label: "Work",
-    description: "No code. Minutes, mail, proposals, research — reviewed, not tested.",
+    description: "Documents, research, mail, planning. Outputs are saved in this folder.",
   },
 ];
 
@@ -195,6 +195,7 @@ export interface Project {
   runMode: RunMode | null; // Explicit override, null = detect from the project folder
   detectedRunMode: RunMode; // Server-computed: what the project folder looks like
   resolvedRunMode: RunMode; // Server-computed: the override, or the detected mode
+  isGitRepo: boolean; // Server-computed: whether the folder sits inside a git repo — drives the Work suggestion
   runCommand: string | null; // Override for the run command, null = mode default
   previewUrl: string | null; // Override for the previewed URL ({port} placeholder)
   sharedPaths: string[] | null; // Paths symlinked from main checkout into worktrees, null = auto

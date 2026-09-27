@@ -618,6 +618,12 @@ export function QuickEntryView({
               setAutocomplete((ac) => (ac ? { ...ac, index: i } : ac))
             }
             onSelect={handleAcSelect}
+            // Quick entry only offers the main window's workspace; say which.
+            heading={
+              autocomplete.kind === "project"
+                ? `${workspace === "work" ? "Work" : "Development"} projects`
+                : undefined
+            }
           />
         )}
 

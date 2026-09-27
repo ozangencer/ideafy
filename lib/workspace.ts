@@ -10,6 +10,9 @@
 
 import { Card, DEFAULT_PROJECT_MODE, Project, ProjectMode } from "./types";
 
+/** Fired by the board's empty-workspace view to open the sidebar's Add Project modal. */
+export const OPEN_ADD_PROJECT_EVENT = "ideafy:open-add-project";
+
 export function projectModeOf(
   projectId: string | null | undefined,
   projects: Pick<Project, "id" | "mode">[]

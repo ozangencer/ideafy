@@ -9,21 +9,14 @@ import { UnpushedDialog } from "./unpushed-dialog";
 import { ProjectSectionHeader } from "./project-section-header";
 import { SkillGroupDialog } from "./skill-group-dialog";
 import { Project } from "@/lib/types";
-import { projectsInWorkspace } from "@/lib/workspace";
+import { OPEN_ADD_PROJECT_EVENT, projectsInWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ArrowRightLeft, ChevronDown, FolderPlus, Layers, Plus } from "lucide-react";
+import { ChevronDown, FolderPlus, Layers, Plus } from "lucide-react";
 
 // Slower than the card poll on purpose: every tick shells out to git once per
 // project, and a commit count is not worth that at the board's cadence.
@@ -37,7 +30,6 @@ export function ProjectList() {
   const {
     projects: allProjects,
     activeWorkspace,
-    updateProject,
     activeProjectId,
     setActiveProject,
     isProjectListExpanded,
@@ -52,6 +44,15 @@ export function ProjectList() {
     moveProjectToSection,
   } = useKanbanStore();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // The board's empty-workspace view has its own "New … project" button; the
+  // modal lives here, so it asks through a window event rather than a store
+  // flag that only these two places would ever read.
+  useEffect(() => {
+    const open = () => setIsAddModalOpen(true);
+    window.addEventListener(OPEN_ADD_PROJECT_EVENT, open);
+    return () => window.removeEventListener(OPEN_ADD_PROJECT_EVENT, open);
+  }, []);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [unpushedProject, setUnpushedProject] = useState<Project | null>(null);
   const [unpushedCounts, setUnpushedCounts] = useState<Record<string, number>>({});
@@ -123,7 +124,6 @@ export function ProjectList() {
     () => projectsInWorkspace(allProjects, activeWorkspace),
     [allProjects, activeWorkspace]
   );
-  const otherProjects = allProjects.filter((p) => !projects.includes(p));
 
   const pinnedProjects = projects.filter((p) => p.isPinned);
   const unpinnedProjects = projects.filter((p) => !p.isPinned);
@@ -309,64 +309,12 @@ export function ProjectList() {
           );
         })}
 
-        {/* First visit to a workspace: say what it is for and offer the two
-            ways in, instead of an empty list under "All Projects". */}
+        {/* The board carries the first-visit guidance; the sidebar only
+            says the list is empty. */}
         {projects.length === 0 && (
-          <div className="mt-3 mx-1 rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-            <p className="text-foreground font-medium">
-              No {activeWorkspace === "work" ? "Work" : "Development"} projects yet
-            </p>
-            <p className="mt-1">
-              {activeWorkspace === "work"
-                ? "Work projects hold non-code work: minutes, mail, proposals, research. No branches, no dev server."
-                : "Development projects are code in a git repo, with branches, worktrees and Human Test."}
-            </p>
-            <div className="mt-2 flex flex-col gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                // The sidebar is resizable: let the label wrap rather than
-                // spill past the dashed box at narrow widths.
-                className="h-auto min-h-8 justify-start whitespace-normal text-left"
-                onClick={() => setIsAddModalOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5 mr-2 shrink-0" />
-                New {activeWorkspace === "work" ? "Work" : "Development"} project
-              </Button>
-              {otherProjects.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto min-h-8 justify-start whitespace-normal text-left"
-                    >
-                      <ArrowRightLeft className="h-3.5 w-3.5 mr-2 shrink-0" />
-                      Move a project here
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                      Its cards keep their columns; only the labels change.
-                    </DropdownMenuLabel>
-                    {otherProjects.map((project) => (
-                      <DropdownMenuItem
-                        key={project.id}
-                        onClick={() => void updateProject(project.id, { mode: activeWorkspace })}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="mr-2 h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: project.color }}
-                        />
-                        <span className="truncate">{project.name}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-          </div>
+          <p className="mt-2 px-3 text-xs text-muted-foreground">
+            No {activeWorkspace === "work" ? "Work" : "Development"} projects yet
+          </p>
         )}
 
         {/* Projects without a section */}
