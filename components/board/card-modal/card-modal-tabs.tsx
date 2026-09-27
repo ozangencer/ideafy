@@ -2,6 +2,7 @@
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionType, SECTION_CONFIG } from "@/lib/types";
+import { hasContent } from "@/lib/card-initial-tab";
 import { FileText, Brain, Lightbulb, TestTube2 } from "lucide-react";
 
 const SECTION_ICONS: Record<SectionType, typeof FileText> = {
@@ -10,14 +11,6 @@ const SECTION_ICONS: Record<SectionType, typeof FileText> = {
   solution: Lightbulb,
   tests: TestTube2,
 };
-
-// Check if HTML content has meaningful text
-function hasContent(html: string): boolean {
-  if (!html) return false;
-  // Strip HTML tags and check if there's actual text
-  const text = html.replace(/<[^>]*>/g, "").trim();
-  return text.length > 0;
-}
 
 interface CardModalTabsProps {
   activeTab: SectionType;

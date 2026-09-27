@@ -3,6 +3,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import type { Card, SectionType } from "@/lib/types";
 import { useKanbanStore } from "@/lib/kanban-store";
+import { getInitialTabForCard } from "@/lib/card-initial-tab";
 
 interface UseCardModalFormResetOptions {
   selectedCard: Card | null;
@@ -16,6 +17,8 @@ interface UseCardModalFormResetOptions {
   markExternalUpdate: () => void;
   applyCardToForm: (card: Card) => void;
   applyCardToGit: (card: Card) => void;
+  // Set by back navigation: the tab to restore instead of the column's tab.
+  tabOverrideRef: MutableRefObject<SectionType | null>;
 }
 
 export function useCardModalFormReset(options: UseCardModalFormResetOptions) {
@@ -31,6 +34,7 @@ export function useCardModalFormReset(options: UseCardModalFormResetOptions) {
     markExternalUpdate,
     applyCardToForm,
     applyCardToGit,
+    tabOverrideRef,
   } = options;
 
   // Latest-value ref so we can read hasUnsavedChanges without making it a
@@ -90,17 +94,23 @@ export function useCardModalFormReset(options: UseCardModalFormResetOptions) {
       applyCardToForm(selectedCard);
       applyCardToGit(selectedCard);
 
-      // Auto-open Test tab when card is in Human Test column — but only on
-      // initial open. Re-running this on every resync (e.g. after Append/
-      // Replace bumps applyMessageVersion) would yank the user out of the
-      // tab they're actively working in.
-      if (isNewCard && selectedCard.status === "test") {
-        setActiveTab("tests");
+      // Open the tab the card's column calls for — but only on initial open.
+      // Re-running this on every resync (e.g. after Append/Replace bumps
+      // applyMessageVersion) would yank the user out of the tab they're
+      // actively working in.
+      let tab = activeTab;
+      if (isNewCard) {
+        const override = tabOverrideRef.current;
+        tabOverrideRef.current = null;
+        if (!isDraftMode) {
+          tab = override ?? getInitialTabForCard(selectedCard);
+          setActiveTab(tab);
+        }
       }
 
       // Fetch conversation for active tab
       if (!isDraftMode) {
-        fetchConversation(selectedCard.id, activeTab);
+        fetchConversation(selectedCard.id, tab);
       }
     } else {
       prevSelectedCardIdRef.current = null;

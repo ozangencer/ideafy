@@ -173,14 +173,9 @@ export function CardModal({
   }, [isExpanded]);
   const [activeTab, setActiveTab] = useState<SectionType>("detail");
 
-  // Honor the deep-link target set by the activity bell. Apply once per
-  // selectedCard transition and clear so subsequent opens default to "detail".
-  useEffect(() => {
-    if (selectedCard && pendingCardSection) {
-      setActiveTab(pendingCardSection);
-      setPendingCardSection(null);
-    }
-  }, [selectedCard, pendingCardSection, setPendingCardSection]);
+  // Back navigation parks the tab to restore here; the form-reset hook
+  // applies it in place of the column's tab when the card switches.
+  const tabOverrideRef = useRef<SectionType | null>(null);
 
   // Opening a card — from the board, search, the bell or a shortcut — counts
   // as reading its activity, so the bell's row dots don't outlive the result.
@@ -309,7 +304,19 @@ export function CardModal({
     markExternalUpdate,
     applyCardToForm,
     applyCardToGit,
+    tabOverrideRef,
   });
+
+  // Honor the deep-link target set by the activity bell. Apply once per
+  // selectedCard transition and clear so subsequent opens fall back to the
+  // column's tab. Must stay below useCardModalFormReset: effects run in
+  // declaration order, so this setActiveTab lands last and beats the rule.
+  useEffect(() => {
+    if (selectedCard && pendingCardSection) {
+      setActiveTab(pendingCardSection);
+      setPendingCardSection(null);
+    }
+  }, [selectedCard, pendingCardSection, setPendingCardSection]);
 
   // When a run ends, take what it wrote. startTask finishes by putting the new
   // plan or checklist into `cards` and releasing the lock in the same update;
@@ -431,12 +438,12 @@ export function CardModal({
       if (previousEntry) {
         const previousCard = cards.find((c) => c.id === previousEntry.cardId);
         if (previousCard) {
+          tabOverrideRef.current = previousEntry.activeTab;
           selectCard(previousCard);
-          setActiveTab(previousEntry.activeTab);
         }
       }
     }
-  }, [cardHistory, cards, selectCard, setActiveTab, setCardHistory]);
+  }, [cardHistory, cards, selectCard, setCardHistory]);
 
   // Handle export
   const handleExport = useCallback(() => {
