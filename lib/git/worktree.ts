@@ -242,3 +242,49 @@ export async function squashMergeFromWorktree(
     };
   }
 }
+
+/**
+ * Find the branch a card was developed on when the card itself never recorded
+ * it — a run that died before writing its git fields, or work that carried on
+ * in a worktree by chat or terminal.
+ *
+ * Matched on the `kanban/<PREFIX>-<n>-` prefix, not the full generated name:
+ * the slug comes from the title at the time the branch was cut, and titles
+ * change. The trailing dash keeps IDE-33 from claiming IDE-331's branch.
+ *
+ * Returns null unless exactly one branch matches. Binding a card to a branch
+ * we are guessing at would put the wrong work behind Merge & Complete.
+ */
+export async function findCardBranch(
+  projectPath: string,
+  idPrefix: string,
+  taskNumber: number
+): Promise<{ branchName: string; worktreePath: string | null } | null> {
+  const prefix = `kanban/${idPrefix}-${taskNumber}-`;
+
+  const names = new Set<string>();
+  try {
+    const { stdout } = await git(
+      projectPath,
+      "branch",
+      "--list",
+      "--format=%(refname:short)",
+      `${prefix}*`
+    );
+    for (const line of stdout.split("\n")) {
+      const name = line.trim();
+      if (name.startsWith(prefix)) names.add(name);
+    }
+  } catch {
+    return null;
+  }
+
+  if (names.size !== 1) return null;
+
+  const [branchName] = names;
+  const worktree = (await listWorktrees(projectPath)).find(
+    (w) => w.branch === branchName && !w.isPrunable && existsSync(w.path)
+  );
+
+  return { branchName, worktreePath: worktree?.path ?? null };
+}

@@ -529,6 +529,67 @@ export function CardModal({
     };
   }, [shouldCheckMergeReality, cardId]);
 
+  // A Human Test card with no branch may simply have lost track of it: a run
+  // that died before recording its worktree, with the work carried on by chat
+  // or terminal. Ask the server to reclaim it before settling on the
+  // branchless panel, so real commits get a Merge & Complete (IDE-343).
+  const shouldTryLinkBranch =
+    !isDraftMode && !!cardId && status === "test" && !gitBranchName;
+  const [isLinkingBranch, setIsLinkingBranch] = useState(false);
+
+  useEffect(() => {
+    if (!shouldTryLinkBranch || !cardId) {
+      setIsLinkingBranch(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLinkingBranch(true);
+
+    fetch(`/api/cards/${cardId}/git/link`, { method: "POST" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          data: {
+            linked: boolean;
+            gitBranchName?: string;
+            gitBranchStatus?: GitBranchStatus;
+            gitWorktreePath?: string | null;
+            gitWorktreeStatus?: GitWorktreeStatus;
+          } | null
+        ) => {
+          if (cancelled || !data?.linked || !data.gitBranchName) return;
+          const fields = {
+            gitBranchName: data.gitBranchName,
+            gitBranchStatus: data.gitBranchStatus ?? "active",
+            gitWorktreePath: data.gitWorktreePath ?? null,
+            gitWorktreeStatus: data.gitWorktreeStatus ?? null,
+          };
+          setGitBranchName(fields.gitBranchName);
+          setGitBranchStatus(fields.gitBranchStatus);
+          setGitWorktreePath(fields.gitWorktreePath);
+          setGitWorktreeStatus(fields.gitWorktreeStatus);
+          // Patch the store's copies too, or the next resync would put the
+          // stale branchless card back into the modal. The form-reset hook
+          // still skips its resync while the user has unsaved edits.
+          const patch = (c: Card) => (c.id === cardId ? { ...c, ...fields } : c);
+          const { cards, selectedCard: current } = useKanbanStore.getState();
+          useKanbanStore.setState({
+            cards: cards.map(patch),
+            selectedCard: current ? patch(current) : current,
+          });
+        }
+      )
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLinkingBranch(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldTryLinkBranch, cardId]);
+
   // Nothing left to merge — close the card out without pretending a merge ran.
   const handleCompleteWithoutMerge = async () => {
     if (!selectedCard || isCompleting) return;
@@ -1151,7 +1212,14 @@ export function CardModal({
             outside Ideafy leaves nothing to merge or roll back, but the tester
             still has to say whether it worked — and the Status dropdown is a
             poor place to hide that decision. */}
-        {status === "test" && !gitBranchName && (
+        {status === "test" && !gitBranchName && isLinkingBranch && (
+          <div className="mx-6 my-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Checking for this card&apos;s branch…
+          </div>
+        )}
+
+        {status === "test" && !gitBranchName && !isLinkingBranch && (
           <div className="mx-6 my-3 border border-ink rounded-lg p-4 bg-paper-cream">
             <div className="flex flex-col gap-3">
               <div className="flex items-start justify-between gap-3">

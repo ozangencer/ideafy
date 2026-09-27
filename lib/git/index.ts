@@ -25,4 +25,5 @@ export {
   isCwdInsideWorktree,
   pruneWorktrees,
   squashMergeFromWorktree,
+  findCardBranch,
 } from "./worktree";
