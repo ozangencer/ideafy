@@ -125,6 +125,9 @@ const FOOTER_CORE_BADGE_W = 88;
 // Below this the name would clip to two or three letters — a label too short
 // to identify anything while still taking the space of one.
 const FOOTER_NAME_MIN_W = 72;
+// The project dot plus its breathing room. When even this does not fit, the
+// test badge drops to its compact form.
+const FOOTER_DOT_W = 16;
 
 interface TaskCardProps {
   card: Card;
@@ -356,36 +359,62 @@ function TaskCardImpl({
   // right here from the same flags that render it. Getting the estimate a
   // little wrong only shows or hides a label; nothing breaks. Any icon added
   // below should get a line here too, or it will be spent width the estimate
-  // does not know about.
+  // does not know about. The icon row wraps as a last resort, so a miss costs
+  // a second line rather than an icon hanging off the card — but the estimate
+  // is what keeps the normal case on one line.
   const showsRunButton =
     card.status === "test" &&
     card.gitWorktreeStatus === "active" &&
     !isLocked &&
-    (project?.resolvedRunMode ?? "server") !== "none";
-  const footerSlots: Array<[boolean, number]> = [
-    ...Array.from({ length: shownPhaseActions }, (): [boolean, number] => [true, FOOTER_ICON_W]),
-    [showsRunButton, FOOTER_ICON_W],
-    [!!card.rebaseConflict, FOOTER_ICON_W],
-    [!!extraBadges, FOOTER_ICON_W],
-    [card.gitWorktreeStatus === "active" && !isBackgroundProcessing, FOOTER_ICON_W],
-    [!!project && !effectiveUseWorktree && !isBackgroundProcessing, FOOTER_ICON_W],
-    [!!solutionSummaryText && !isBackgroundProcessing, FOOTER_ICON_W],
-    [
-      !!testScenariosText && !isBackgroundProcessing,
-      testProgress?.core ? FOOTER_CORE_BADGE_W : testProgress ? FOOTER_BADGE_W : FOOTER_ICON_W,
-    ],
-  ];
-  const footerRightWidth = footerSlots.reduce(
-    (sum, [shown, width]) => (shown ? sum + width : sum),
-    0
-  );
+    runMode !== "none";
+  // The run button already implies an active worktree; its tooltip says so.
+  const showsWorktreeBadge =
+    card.gitWorktreeStatus === "active" && !isBackgroundProcessing && !showsRunButton;
+  // "Has solution" only informs a decision before work starts. From In Progress
+  // on the card has a plan by definition, and the play button's label says so.
+  const showsSolutionBadge =
+    !!solutionSummaryText &&
+    !isBackgroundProcessing &&
+    (card.status === "ideation" || card.status === "backlog" || card.status === "bugs");
+  const showsTestBadge = !!testScenariosText && !isBackgroundProcessing;
   const cardInnerWidth =
     columnWidth -
     COLUMN_PADDING_W -
     CARD_PADDING_W -
     (group || inGroupFrame ? GROUP_FRAME_W : 0);
+  const fixedFooterSlots: Array<[boolean, number]> = [
+    ...Array.from({ length: shownPhaseActions }, (): [boolean, number] => [true, FOOTER_ICON_W]),
+    [showsRunButton, FOOTER_ICON_W],
+    [!!card.rebaseConflict, FOOTER_ICON_W],
+    [!!extraBadges, FOOTER_ICON_W],
+    [showsWorktreeBadge, FOOTER_ICON_W],
+    [!!project && !effectiveUseWorktree && !isBackgroundProcessing, FOOTER_ICON_W],
+    [showsSolutionBadge, FOOTER_ICON_W],
+  ];
+  const fixedFooterWidth = fixedFooterSlots.reduce(
+    (sum, [shown, width]) => (shown ? sum + width : sum),
+    0
+  );
+  // The core badge spells out "4/5 core +6". Where that would leave no room
+  // for even the project dot, it drops to a bold "4/5" — bold still marks it
+  // as the core count, and the tooltip carries the rest.
+  const compactTestBadge =
+    showsTestBadge &&
+    !!testProgress?.core &&
+    cardInnerWidth - fixedFooterWidth - FOOTER_CORE_BADGE_W < FOOTER_DOT_W;
+  const testBadgeWidth = !showsTestBadge
+    ? 0
+    : testProgress?.core && !compactTestBadge
+      ? FOOTER_CORE_BADGE_W
+      : testProgress
+        ? FOOTER_BADGE_W
+        : FOOTER_ICON_W;
+  const footerRightWidth = fixedFooterWidth + testBadgeWidth;
   const showProjectName =
     !!project && cardInnerWidth - footerRightWidth >= FOOTER_NAME_MIN_W;
+  // A text label on the left of the footer — the project name, or the folder
+  // name when there is no project record — truncates before the icons wrap.
+  const nameYields = showProjectName || (!project && !!projectName);
 
   // Prevent context menu when locked
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -541,7 +570,7 @@ function TaskCardImpl({
               </p>
             )}
 
-            <div className="flex items-center justify-between mt-2">
+            <div className="flex items-start justify-between gap-1 mt-2">
               {/* Project indicator. BOARD-01 balanced this row by letting the
                   name truncate, which on an icon-heavy card left "I…" — a
                   label too short to identify anything, still taking the space
@@ -550,58 +579,68 @@ function TaskCardImpl({
                   identity is still there: the tooltip, and the display-id chip
                   above, tinted with the project colour and prefixed
                   IDE-/ICL-/DIC-. "No project" stays as text — that one is a
-                  warning, not a label, and has no chip to fall back on. */}
-              {project ? (
-                showProjectName ? (
-                  // The name is right there — a tooltip repeating it would be
-                  // a hover that costs a beat and returns nothing.
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <div
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: project.color }}
-                    />
-                    <span className="text-xs text-muted-foreground truncate">
-                      {project.name}
-                    </span>
-                  </div>
+                  warning, not a label, and has no chip to fall back on.
+                  The wrapper holds one icon-row height so the indicator stays
+                  centred on the first line when the icons wrap to a second.
+                  Where a name shows, it takes only what the icons leave
+                  (basis 0, grow) and the icons hold their width, so a name a
+                  few px longer than estimated truncates instead of pushing an
+                  icon onto a second line. With only the dot, the icons are the
+                  side that gives, and they wrap. */}
+              <div
+                className={`flex items-center ${nameYields ? "flex-1 basis-0 min-w-0" : "shrink-0"} ${
+                  footerRightWidth > 0 ? "min-h-[22px]" : ""
+                }`}
+              >
+                {project ? (
+                  showProjectName ? (
+                    // The name is right there — a tooltip repeating it would be
+                    // a hover that costs a beat and returns nothing.
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: project.color }}
+                      />
+                      <span className="text-xs text-muted-foreground truncate">
+                        {project.name}
+                      </span>
+                    </div>
+                  ) : (
+                    // No delay only where the tooltip carries something the card
+                    // dropped. The 100ms default exists to keep tooltips from
+                    // firing as the pointer crosses a row of icons; here the dot
+                    // is the sole target and the name is the label that would
+                    // have been printed, so waiting for it is friction.
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        {/* The dot is 8px, too small to hover reliably. Padding
+                            plus a matching negative margin grows the hit area to
+                            ~24px without moving anything on screen. */}
+                        <div className="p-2 -m-2 shrink-0 cursor-default">
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: project.color }}
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{project.name}</TooltipContent>
+                    </Tooltip>
+                  )
+                ) : projectName ? (
+                  // No project record, only a folder path — there is no chip
+                  // above carrying this, so the text stays.
+                  <span className="text-xs text-muted-foreground truncate min-w-0 max-w-[120px]">
+                    {projectName}
+                  </span>
                 ) : (
-                  // No delay only where the tooltip carries something the card
-                  // dropped. The 100ms default exists to keep tooltips from
-                  // firing as the pointer crosses a row of icons; here the dot
-                  // is the sole target and the name is the label that would
-                  // have been printed, so waiting for it is friction.
-                  <Tooltip delayDuration={0}>
-                    <TooltipTrigger asChild>
-                      {/* The dot is 8px, too small to hover reliably. Padding
-                          plus a matching negative margin grows the hit area to
-                          ~24px without moving anything on screen. */}
-                      <div className="p-2 -m-2 shrink-0 cursor-default">
-                        <div
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: project.color }}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{project.name}</TooltipContent>
-                  </Tooltip>
-                )
-              ) : projectName ? (
-                // No project record, only a folder path — there is no chip
-                // above carrying this, so the text stays.
-                <span className="text-xs text-muted-foreground truncate min-w-0 max-w-[120px]">
-                  {projectName}
-                </span>
-              ) : (
-                <span className="text-xs text-muted-foreground">No project</span>
-              )}
+                  <span className="text-xs text-muted-foreground">No project</span>
+                )}
+              </div>
 
               {/* Badges and Action Buttons */}
-              <div className="flex items-center gap-1 shrink-0">
+              <div className={`flex items-center gap-1 flex-wrap justify-end ${nameYields ? "shrink-0 max-w-full" : "min-w-0"}`}>
                 <CardPhaseActions card={card} softLock={softLock} />
-                {card.status === "test" &&
-                  card.gitWorktreeStatus === "active" &&
-                  !isLocked &&
-                  runMode !== "none" && (
+                {showsRunButton && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
@@ -632,6 +671,7 @@ function TaskCardImpl({
                           ? `${runLabels.running} (port ${card.devServerPort})`
                           : runLabels.running
                         : runLabels.start}
+                      {!isServerLoading && " · worktree active"}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -654,7 +694,7 @@ function TaskCardImpl({
                   </Tooltip>
                 )}
                 {extraBadges}
-                {card.gitWorktreeStatus === "active" && !isBackgroundProcessing && (
+                {showsWorktreeBadge && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="p-1 rounded bg-cyan-500/15 text-cyan-500">
@@ -679,7 +719,7 @@ function TaskCardImpl({
                     </TooltipContent>
                   </Tooltip>
                 )}
-                {solutionSummaryText && !isBackgroundProcessing && (
+                {showsSolutionBadge && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="p-1 rounded bg-green-500/15 text-green-500">
@@ -689,7 +729,7 @@ function TaskCardImpl({
                     <TooltipContent side="top">Has solution</TooltipContent>
                   </Tooltip>
                 )}
-                {testScenariosText && !isBackgroundProcessing && (() => {
+                {showsTestBadge && (() => {
                   const progress = testProgress;
                   const core = progress?.core;
                   // Green tracks the core flow when the checklist declares one:
@@ -711,7 +751,11 @@ function TaskCardImpl({
                           <FlaskConical className="w-3 h-3" />
                           {progress && (
                             <span className="text-[10px] font-mono tabular-nums flex items-center gap-0.5 whitespace-nowrap">
-                              {core ? (
+                              {core && compactTestBadge ? (
+                                <span className="font-semibold">
+                                  {core.checked}/{core.total}
+                                </span>
+                              ) : core ? (
                                 <>
                                   <span className="font-semibold">
                                     {core.checked}/{core.total}
