@@ -325,18 +325,24 @@ export function ProjectList() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 justify-start"
+                // The sidebar is resizable: let the label wrap rather than
+                // spill past the dashed box at narrow widths.
+                className="h-auto min-h-8 justify-start whitespace-normal text-left"
                 onClick={() => setIsAddModalOpen(true)}
               >
-                <Plus className="h-3.5 w-3.5 mr-2" />
+                <Plus className="h-3.5 w-3.5 mr-2 shrink-0" />
                 New {activeWorkspace === "work" ? "Work" : "Development"} project
               </Button>
               {otherProjects.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 justify-start">
-                      <ArrowRightLeft className="h-3.5 w-3.5 mr-2" />
-                      Move an existing project here
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto min-h-8 justify-start whitespace-normal text-left"
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5 mr-2 shrink-0" />
+                      Move a project here
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56">
