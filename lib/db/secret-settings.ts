@@ -17,6 +17,13 @@
  */
 export const SECRET_SETTING_KEYS = new Set<string>([
   "supabase_auth_token",
+  // Not a credential, but the identity the sync layer writes as. A backup that
+  // carries somebody else's id would make this install sync its cards under
+  // that person's name, so it is kept out of exports and never taken from an
+  // import — the same treatment as the token it belongs with. Both spellings:
+  // the camelCase row is a legacy one some installs still hold.
+  "supabase_user_id",
+  "supabaseUserId",
 ]);
 
 export function isSecretSettingKey(key: string): boolean {
@@ -25,9 +32,8 @@ export function isSecretSettingKey(key: string): boolean {
 
 // Note: import filters on this denylist rather than an allow-list of known
 // keys. An allow-list was tried and reverted — real databases carry rows the
-// current keyMap can no longer write (e.g. the legacy camelCase
-// `supabaseUserId`, which cloud code still reads in several places), so an
-// allow-list would silently drop them on every restore. The keys a crafted
-// backup could meaningfully abuse (`ai_platform`, `mcp_config_path`,
-// `skills_path`) are ones the app legitimately defines, so they would have to
-// be on the allow-list anyway — it would buy no protection for that risk.
+// current keyMap can no longer write, so an allow-list would silently drop
+// them on every restore. The keys a crafted backup could meaningfully abuse
+// (`ai_platform`, `mcp_config_path`, `skills_path`) are ones the app
+// legitimately defines, so they would have to be on the allow-list anyway — it
+// would buy no protection for that risk.
