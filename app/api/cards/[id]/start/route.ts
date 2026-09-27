@@ -256,7 +256,7 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
-    completeProcess(processKey);
+    completeProcess(processKey, "failed");
 
     return NextResponse.json(
       {

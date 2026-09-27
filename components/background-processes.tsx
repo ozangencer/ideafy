@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { SECTION_CONFIG } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { notifyFinishedRuns } from "@/lib/system-notifications";
 import type { BackgroundProcess, ProcessType } from "@/lib/types";
 
 // Process type config for display
@@ -39,7 +40,8 @@ function ProcessItem({
   const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
 
   const isAborted = process.status === "completed" && process.endReason === "aborted";
-  const hasWarning = process.status === "completed" && !isAborted && !!process.warning;
+  const isFailed = process.status === "completed" && process.endReason === "failed";
+  const hasWarning = process.status === "completed" && !isAborted && !isFailed && !!process.warning;
 
   // Build label: for chat include section name, for others show process type.
   // Append an "· Interrupted on reload" suffix for aborted entries so users
@@ -50,6 +52,8 @@ function ProcessItem({
     : processConfig.label;
   const label = isAborted
     ? `${baseLabel} · Interrupted on reload`
+    : isFailed
+    ? `${baseLabel} · Failed`
     : hasWarning
     ? `${baseLabel} · ${warningSuffix(process.warning!)}`
     : baseLabel;
@@ -63,7 +67,7 @@ function ProcessItem({
     ? `${processConfig.bgColor} animate-pulse`
     : isAborted || hasWarning
     ? "bg-amber-500"
-    : process.status === "completed"
+    : process.status === "completed" && !isFailed
     ? "bg-green-500"
     : "bg-red-500";
 
@@ -71,6 +75,8 @@ function ProcessItem({
     ? processConfig.color
     : isAborted || hasWarning
     ? "text-amber-500"
+    : isFailed
+    ? "text-destructive"
     : "text-muted-foreground";
 
   return (
@@ -117,6 +123,7 @@ export function BackgroundProcesses() {
     cards,
     selectCard,
     openModal,
+    settings,
   } = useKanbanStore();
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
@@ -171,6 +178,9 @@ export function BackgroundProcesses() {
     // process that just left the running list is already in completed here,
     // carrying whatever warning its route handed to the registry.
     const completedById = new Map(completedProcesses.map((p) => [p.id, p]));
+    // Runs that ended on their own this poll, for one OS banner at the end.
+    // A kill leaves no completed entry, so it never lands here.
+    const finished: BackgroundProcess[] = [];
 
     // Find processes that were running but are now gone or completed
     previousRunning.forEach((process, id) => {
@@ -198,8 +208,16 @@ export function BackgroundProcesses() {
             description: `${label} was stopped for ${displayName}`,
           });
         } else {
-          const warning = completedById.get(id)?.warning;
-          if (warning) {
+          const completed = completedById.get(id);
+          if (completed) finished.push(completed);
+          const warning = completed?.warning;
+          if (completed?.endReason === "failed") {
+            toast({
+              variant: "destructive",
+              title: "Process Failed",
+              description: `${label} failed for ${displayName}`,
+            });
+          } else if (warning) {
             toast({
               variant: "warning",
               title: "Completed with a warning",
@@ -215,8 +233,15 @@ export function BackgroundProcesses() {
       }
     });
 
+    // Deliberately no duration threshold (unlike the bell's 60s): a 20s chat
+    // reply is worth knowing about when the window is in the background, and
+    // main skips the banner entirely while the window is focused.
+    if (finished.length > 0 && settings?.systemNotifications !== false) {
+      notifyFinishedRuns(finished);
+    }
+
     runningProcessesRef.current = currentRunning;
-  }, [runningProcesses, completedProcesses, toast, clearProcessing]);
+  }, [runningProcesses, completedProcesses, toast, clearProcessing, settings?.systemNotifications]);
 
   // Always-on heartbeat poll: avoids a chicken-and-egg where local state says
   // "nothing running" but the server actually has a process (spawned via MCP,

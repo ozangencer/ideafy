@@ -10,7 +10,8 @@
 // generates from the `publish` block in scripts/electron-builder-config.mjs.
 // Both release repos are public, so no token is involved.
 
-const { app, ipcMain, Notification } = require("electron");
+const { app, ipcMain } = require("electron");
+const { showNotification } = require("./notifications");
 
 const FIRST_CHECK_DELAY_MS = 15_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -70,17 +71,6 @@ function normalizeNotes(notes) {
   return null;
 }
 
-function showWindowAndOpenUpdates() {
-  const win = resolveWindow();
-  if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
-  if (win.webContents && !win.webContents.isDestroyed()) {
-    win.webContents.send("open-updates");
-  }
-}
-
 /**
  * Raises an OS notification for a newly-found build.
  *
@@ -91,15 +81,7 @@ function showWindowAndOpenUpdates() {
  */
 /** Returns whether a banner was actually raised, so callers can record it. */
 function notify(title, body) {
-  if (!Notification.isSupported()) return false;
-  const win = resolveWindow();
-  // Focused window: the in-app marker is already in view and a banner on top
-  // of it is just noise.
-  if (win && !win.isDestroyed() && win.isFocused()) return false;
-  const notification = new Notification({ title, body, silent: false });
-  notification.on("click", showWindowAndOpenUpdates);
-  notification.show();
-  return true;
+  return showNotification({ title, body, onClickChannel: "open-updates" });
 }
 
 function notifyUpdateAvailable(version) {

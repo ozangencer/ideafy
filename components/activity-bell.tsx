@@ -10,8 +10,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from "@/hooks/use-toast";
 import { useKanbanStore } from "@/lib/store";
+import { openCardById } from "@/lib/open-card";
 import { getDisplayId } from "@/lib/types";
 import type {
   ActivityEvent,
@@ -68,14 +68,10 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
     markAllActivityRead,
     cards,
     projects,
-    selectCard,
-    openModal,
-    setPendingCardSection,
   } = useKanbanStore();
 
   const [isOpen, setIsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const { toast } = useToast();
 
   // Initial fetch + polling. Runs only when the bell is mounted; the panel is
   // visible across the whole app so the cadence drives the topbar badge for
@@ -122,20 +118,9 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
       markActivityRead([event.id]);
     }
     if (!event.cardId) return;
-    const card = cards.find((c) => c.id === event.cardId);
-    if (!card) {
-      toast({
-        title: "Card not found",
-        description: "This card was deleted. The activity entry stays for history.",
-        variant: "destructive",
-      });
-      return;
+    if (openCardById(event.cardId, sectionForEvent(event))) {
+      setIsOpen(false);
     }
-    const section = sectionForEvent(event);
-    if (section) setPendingCardSection(section);
-    selectCard(card);
-    openModal();
-    setIsOpen(false);
   };
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {

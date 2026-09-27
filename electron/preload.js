@@ -22,6 +22,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   openPath: (filePath) => ipcRenderer.invoke("open-path", filePath),
   revealPath: (filePath) => ipcRenderer.invoke("reveal-path", filePath),
+  // OS banner for a finished AI run; main skips it while the window is focused.
+  notify: (payload) => {
+    ipcRenderer.send("app-notify", payload);
+  },
+  // Fired when the user clicks one of those banners. Returns an unsubscribe.
+  onOpenCard: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("open-card", handler);
+    return () => ipcRenderer.removeListener("open-card", handler);
+  },
   updates: {
     getState: () => ipcRenderer.invoke("updates:get-state"),
     check: () => ipcRenderer.invoke("updates:check"),

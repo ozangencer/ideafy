@@ -13,6 +13,8 @@ import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
 import { ActivityBell } from "@/components/activity-bell";
 import { useKanbanStore } from "@/lib/store";
+import { openCardById } from "@/lib/open-card";
+import { onNotificationOpenCard } from "@/lib/system-notifications";
 import { useKeyboardShortcuts } from "@/lib/use-keyboard-shortcuts";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
@@ -78,6 +80,13 @@ function Board() {
     window.addEventListener("refresh-data", handler);
     return () => window.removeEventListener("refresh-data", handler);
   }, [fetchCards, fetchDocuments, fetchMemory, fetchBackgroundProcesses, activeProjectId]);
+
+  // Electron IPC: a click on a "run finished" OS banner opens that card.
+  useEffect(() => {
+    return onNotificationOpenCard((cardId, section) => {
+      openCardById(cardId, section);
+    });
+  }, []);
 
   // Initial fetch
   useEffect(() => {

@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@/lib/db";
+import { PROCESS_LABEL, SECTION_LABEL } from "@/lib/process-labels";
 import type {
   ActivityHistoryEntry,
   ActivityType,
@@ -166,18 +167,6 @@ export function recordApplyMessage(
   });
 }
 
-const SECTION_LABEL: Record<SectionType, string> = {
-  detail: "Detail",
-  opinion: "AI Opinion",
-  solution: "Solution",
-  tests: "Tests",
-};
-
-const PROCESS_LABEL: Partial<Record<ProcessType, string>> = {
-  autonomous: "Autonomous task",
-  "quick-fix": "Quick Fix",
-};
-
 function chatTypeFor(section: SectionType | null): ActivityType {
   switch (section) {
     case "opinion":
@@ -215,13 +204,13 @@ interface ProcessCompletionInput {
   sectionType: SectionType | null;
   startedAt: string;
   completedAt: string;
-  endReason: "completed" | "aborted";
+  endReason: "completed" | "aborted" | "failed";
   warning?: string | null;
 }
 
 /**
  * Bridge from process-registry → activity bell. Skips short jobs (toast is
- * enough) and aborted runs (a kill is not a "completion" worth pinning).
+ * enough) and aborted or failed runs (neither is a "completion" worth pinning).
  * A run that finished with a warning is always recorded, however short: the
  * toast is the only other place that explains why the card did not change.
  * Chat is grouped by section so each tab dedups independently; non-chat jobs

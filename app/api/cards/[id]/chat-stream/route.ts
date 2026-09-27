@@ -543,7 +543,10 @@ export async function POST(
             return;
           }
 
-          completeProcess(processKey);
+          // A kill through the Stop button or /api/processes already removed
+          // the entry, so this only decides between a clean turn, a crash, and
+          // a signal from outside Ideafy.
+          completeProcess(processKey, aborted ? "aborted" : code === 0 ? "completed" : "failed");
 
           if (fullResponse.trim()) {
             try {
@@ -615,7 +618,7 @@ export async function POST(
         });
 
         cliProcess.on("error", (error) => {
-          completeProcess(processKey);
+          completeProcess(processKey, "failed");
           sendEvent("error", error.message);
           completeLiveStream(bufferKey);
           if (!isClosed) {
