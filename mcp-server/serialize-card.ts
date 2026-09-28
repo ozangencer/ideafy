@@ -1,4 +1,5 @@
 import { AI_OPINION_PLANNING_RULE } from "./opinion.generated.js";
+import { PRIOR_DECISIONS_RULE } from "./prior-decisions.generated.js";
 
 // Normalize SQLite INTEGER boolean columns (stored as 0/1 or NULL) to JS
 // values. Null/undefined stays null so callers can distinguish "no override"
@@ -101,4 +102,17 @@ export function buildOpinionPlanningNote(card: {
   if (!PLANNING_STATUSES.has(card.status)) return null;
   if (!hasOpinionText(card.aiOpinion)) return null;
   return `If you are writing a plan for this card:\n${AI_OPINION_PLANNING_RULE}`;
+}
+
+// ============================================================================
+// Prior decisions note
+// ============================================================================
+
+// Same reach as the opinion note: a session opened by hand plans without any
+// of Ideafy's prompts, so the "check the other cards first" rule rides on
+// get_card. Unlike the opinion it needs nothing on the card itself — every
+// plan should look for contradictions and overlapping work.
+export function buildPriorDecisionsNote(card: { status: string }): string | null {
+  if (!PLANNING_STATUSES.has(card.status)) return null;
+  return `Before you write a plan for this card:\n${PRIOR_DECISIONS_RULE}`;
 }

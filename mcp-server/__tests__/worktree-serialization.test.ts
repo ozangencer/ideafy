@@ -3,11 +3,26 @@ import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import { normalizeUseWorktree } from "../serialize-card.js";
 
-// The SELECT lists used by get_card and list_cards in index.ts.
+// The SELECT list used by get_card in index.ts.
 const CARD_COLUMNS = `
   id, title, description,
   solution_summary as solutionSummary,
   test_scenarios as testScenarios,
+  status, complexity, priority,
+  project_folder as projectFolder,
+  project_id as projectId,
+  task_number as taskNumber,
+  git_worktree_path as gitWorktreePath,
+  git_worktree_status as gitWorktreeStatus,
+  use_worktree as useWorktree,
+  created_at as createdAt,
+  updated_at as updatedAt
+`;
+
+// list_cards' default summary: the same row minus the content fields, which
+// only come back with full: true.
+const LIST_COLUMNS = `
+  id, title,
   status, complexity, priority,
   project_folder as projectFolder,
   project_id as projectId,
@@ -85,7 +100,7 @@ function selectOne(db: Database.Database, id: string) {
 }
 
 function selectAll(db: Database.Database) {
-  const rows = db.prepare(`SELECT ${CARD_COLUMNS} FROM cards ORDER BY id`)
+  const rows = db.prepare(`SELECT ${LIST_COLUMNS} FROM cards ORDER BY id`)
     .all() as Array<Record<string, unknown>>;
   for (const row of rows) {
     row.useWorktree = normalizeUseWorktree(row.useWorktree as number | null);
@@ -219,5 +234,16 @@ test("list_cards: no integer leaks in any row", () => {
     );
     assert.notStrictEqual(row.useWorktree, 0);
     assert.notStrictEqual(row.useWorktree, 1);
+  }
+});
+
+test("list_cards summary leaves the content fields out", () => {
+  const db = makeTestDb();
+  insertCard(db, { id: "c1" });
+
+  const [row] = selectAll(db);
+
+  for (const field of ["description", "solutionSummary", "testScenarios"]) {
+    assert.ok(!(field in row), `${field} leaked into the list_cards summary`);
   }
 });

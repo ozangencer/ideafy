@@ -140,6 +140,40 @@ export async function createWorktree(
   }
 }
 
+// Files a card's unmerged work touches, for list_open_work. Measured from the
+// merge-base with the default branch, so work that landed on main after the
+// branch was cut does not show up as the card's own. With a worktree the diff
+// runs inside it against the working tree, so uncommitted edits count too;
+// without one it compares the branch tip. Any git failure (missing branch,
+// deleted worktree, not a repo) returns [] — the caller skips the card rather
+// than failing the whole list.
+export async function listChangedFiles(
+  repoPath: string,
+  opts: { worktreePath?: string | null; branchName?: string | null }
+): Promise<string[]> {
+  try {
+    const defaultBranch = await getDefaultBranch(repoPath);
+    let stdout: string;
+    if (opts.worktreePath) {
+      if (!existsSync(opts.worktreePath)) return [];
+      const { stdout: base } = await git(opts.worktreePath, "merge-base", defaultBranch, "HEAD");
+      ({ stdout } = await git(opts.worktreePath, "diff", "--name-only", base.trim()));
+    } else if (opts.branchName) {
+      ({ stdout } = await git(
+        repoPath,
+        "diff",
+        "--name-only",
+        `${defaultBranch}...${opts.branchName}`
+      ));
+    } else {
+      return [];
+    }
+    return stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 // Non-worktree mode: create the branch or check it out in the existing cwd.
 // Stashes/restores uncommitted changes so a wrong-branch edit doesn't get
 // marooned.

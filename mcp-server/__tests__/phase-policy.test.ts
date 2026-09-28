@@ -223,6 +223,7 @@ const COPIES = [
   { source: "lib/prompts/test-style.ts", target: "test-style.generated.ts" },
   { source: "lib/prompts/phase-policy.ts", target: "phase-policy.generated.ts" },
   { source: "lib/prompts/opinion.ts", target: "opinion.generated.ts" },
+  { source: "lib/prompts/prior-decisions.ts", target: "prior-decisions.generated.ts" },
 ];
 
 for (const { source, target } of COPIES) {
