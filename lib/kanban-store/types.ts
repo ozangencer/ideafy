@@ -181,6 +181,9 @@ export interface KanbanStore {
   // written card, bypassing the "skip if user has unsaved changes" guard
   // (server-driven differences should win over the form's stale snapshot).
   mcpWriteVersion: number;
+  // The card the latest bump wrote to. Only a modal showing that card takes
+  // the forced resync; any other open card, or a draft, keeps its form.
+  mcpWriteCardId: string | null;
   // Bumped after the user clicks Append/Replace on an assistant message and
   // the apply-message API has merged the new HTML into the card. Modals
   // watch this to force-resync form fields with the freshly written content,

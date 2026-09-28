@@ -183,6 +183,7 @@ export const createClaudeSlice: StoreSlice<
         // an unsaved edit and would block the resync. The bump makes the
         // run's write win, as it does for a chat that ran MCP tools.
         mcpWriteVersion: state.mcpWriteVersion + 1,
+        mcpWriteCardId: cardId,
       }));
 
       // Refresh background processes to remove completed process
@@ -432,6 +433,7 @@ export const createClaudeSlice: StoreSlice<
         lockedCardIds: removeId(state.lockedCardIds, cardId),
         // See startTask: let the run's write win over an open modal's form.
         mcpWriteVersion: state.mcpWriteVersion + 1,
+        mcpWriteCardId: cardId,
       }));
 
       // Refresh background processes to remove completed process
@@ -549,6 +551,7 @@ export const createClaudeSlice: StoreSlice<
         lockedCardIds: removeId(state.lockedCardIds, cardId),
         // See startTask: let the run's write win over an open modal's form.
         mcpWriteVersion: state.mcpWriteVersion + 1,
+        mcpWriteCardId: cardId,
       }));
 
       // Refresh background processes to remove completed process

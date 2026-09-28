@@ -24,6 +24,7 @@ export const createConversationSlice: StoreSlice<
     | "conversationAbortController"
     | "conversationError"
     | "mcpWriteVersion"
+    | "mcpWriteCardId"
     | "applyMessageVersion"
     | "bumpApplyMessageVersion"
     | "fetchConversation"
@@ -43,6 +44,7 @@ export const createConversationSlice: StoreSlice<
   conversationAbortController: null,
   conversationError: null,
   mcpWriteVersion: 0,
+  mcpWriteCardId: null,
   applyMessageVersion: 0,
   bumpApplyMessageVersion: () =>
     set((state) => ({ applyMessageVersion: state.applyMessageVersion + 1 })),
@@ -306,7 +308,7 @@ export const createConversationSlice: StoreSlice<
                     // refresh is server-driven (MCP write) and should win over
                     // any local form state, even if the form thinks it has
                     // unsaved edits (the diff IS the MCP write).
-                    set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1 }));
+                    set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1, mcpWriteCardId: cardId }));
                   }
                   break;
                 }
@@ -545,7 +547,7 @@ export const createConversationSlice: StoreSlice<
               }
               if (hadToolCalls) {
                 await get().fetchCards();
-                set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1 }));
+                set((state) => ({ mcpWriteVersion: state.mcpWriteVersion + 1, mcpWriteCardId: cardId }));
               }
               break;
             }

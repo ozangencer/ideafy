@@ -59,8 +59,13 @@ export function useCardModalFormReset(options: UseCardModalFormResetOptions) {
       // A chat-stream that ran MCP tools just bumped mcpWriteVersion.
       // Force a resync so the form picks up the freshly written fields,
       // bypassing the unsaved-changes guard below — the diff between form
-      // and card IS the MCP write, not a real user edit.
-      const mcpJustWrote = mcpWriteVersion !== lastSeenMcpWriteVersionRef.current;
+      // and card IS the MCP write, not a real user edit. Only when the write
+      // was to this card: a run finishing elsewhere would otherwise wipe the
+      // open form, and for a draft that means reapplying the empty draft.
+      const mcpJustWrote =
+        mcpWriteVersion !== lastSeenMcpWriteVersionRef.current &&
+        !isDraftMode &&
+        useKanbanStore.getState().mcpWriteCardId === selectedCard.id;
       lastSeenMcpWriteVersionRef.current = mcpWriteVersion;
 
       // Append/Replace just wrote merged HTML to the card and the cards array
