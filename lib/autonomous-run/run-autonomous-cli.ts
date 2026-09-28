@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { existsSync } from "fs";
 import {
   completeProcess,
   getProcess,
@@ -225,8 +226,14 @@ export async function runAutonomousCli(
       });
     });
 
-    cliProcess.on("error", (error) => {
+    cliProcess.on("error", (error: NodeJS.ErrnoException) => {
       clearTimeout(timeout);
+      // spawn reports a missing cwd as ENOENT on the binary, which reads as
+      // "CLI not installed" when the project folder is what moved.
+      if (error.code === "ENOENT" && !existsSync(cwd)) {
+        reject(new Error(`Working directory not found: ${cwd}`));
+        return;
+      }
       reject(error);
     });
   });
