@@ -178,9 +178,6 @@ export function BackgroundProcesses() {
     // process that just left the running list is already in completed here,
     // carrying whatever warning its route handed to the registry.
     const completedById = new Map(completedProcesses.map((p) => [p.id, p]));
-    // Runs that ended on their own this poll, for one OS banner at the end.
-    // A kill leaves no completed entry, so it never lands here.
-    const finished: BackgroundProcess[] = [];
 
     // Find processes that were running but are now gone or completed
     previousRunning.forEach((process, id) => {
@@ -209,7 +206,6 @@ export function BackgroundProcesses() {
           });
         } else {
           const completed = completedById.get(id);
-          if (completed) finished.push(completed);
           const warning = completed?.warning;
           if (completed?.endReason === "failed") {
             toast({
@@ -233,15 +229,39 @@ export function BackgroundProcesses() {
       }
     });
 
+    runningProcessesRef.current = currentRunning;
+  }, [runningProcesses, completedProcesses, toast, clearProcessing]);
+
+  // OS banners work off completed entries, not off the running list above:
+  // a run that starts and ends between two polls (MCP, another session, a
+  // quick chat reply) is never seen running, and neither is one that ends
+  // while this component remounts. Each completed entry is keyed by
+  // id@completedAt, so the same chat tab finishing a second turn counts as a
+  // new finish. The first list after launch only primes the set — runs that
+  // ended before Ideafy opened get no banner.
+  const seenCompletedRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    // The store's untouched initial list means no response has landed yet;
+    // priming from it would banner every old entry on the first poll.
+    if (backgroundProcesses === useKanbanStore.getInitialState().backgroundProcesses) return;
+
+    const keys = completedProcesses.map((p) => `${p.id}@${p.completedAt ?? ""}`);
+    const seen = seenCompletedRef.current;
+    seenCompletedRef.current = new Set(keys);
+    if (!seen) return;
+
+    const finished = completedProcesses.filter((_, i) => !seen.has(keys[i]));
+    if (finished.length === 0) return;
+
     // Deliberately no duration threshold (unlike the bell's 60s): a 20s chat
     // reply is worth knowing about when the window is in the background, and
     // main skips the banner entirely while the window is focused.
-    if (finished.length > 0 && settings?.systemNotifications !== false) {
-      notifyFinishedRuns(finished);
+    if (settings?.systemNotifications === false) {
+      console.debug("[notify] system notifications are off, skipping", finished.length, "finished run(s)");
+      return;
     }
-
-    runningProcessesRef.current = currentRunning;
-  }, [runningProcesses, completedProcesses, toast, clearProcessing, settings?.systemNotifications]);
+    notifyFinishedRuns(finished);
+  }, [backgroundProcesses, completedProcesses, settings?.systemNotifications]);
 
   // Always-on heartbeat poll: avoids a chicken-and-egg where local state says
   // "nothing running" but the server actually has a process (spawned via MCP,

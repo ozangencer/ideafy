@@ -456,9 +456,16 @@ ipcMain.handle("reveal-path", async (_event, filePath) => {
 
 // IPC: renderer asks for an OS banner when an AI run finishes. Clicking it
 // sends the card back on "open-card" so the renderer can open it.
+// Every call is logged with its outcome so a "no banner came" report can be
+// traced to the link that dropped it: no line at all means the renderer never
+// asked, "focused" means the window was in front, and "shown" without a
+// following "macOS showed" line means macOS swallowed it.
 ipcMain.on("app-notify", (_event, payload) => {
-  if (!payload || typeof payload.title !== "string") return;
-  showNotification({
+  if (!payload || typeof payload.title !== "string") {
+    console.warn("[notify] ignored a malformed app-notify payload");
+    return;
+  }
+  const result = showNotification({
     title: payload.title,
     body: typeof payload.body === "string" ? payload.body : "",
     onClickChannel: "open-card",
@@ -467,6 +474,21 @@ ipcMain.on("app-notify", (_event, payload) => {
       section: typeof payload.section === "string" ? payload.section : null,
     },
   });
+  console.log(`[notify] "${payload.title}" → ${result}`);
+});
+
+// IPC: Settings' "Send test" button. Skips the focus rule, since the button is
+// clicked with the window in front, and returns the outcome to the renderer.
+ipcMain.handle("app-notify-test", () => {
+  const title = "Ideafy test notification";
+  const result = showNotification({
+    title,
+    body: "If you can see this, AI-run banners will reach you too.",
+    onClickChannel: null,
+    force: true,
+  });
+  console.log(`[notify] "${title}" → ${result}`);
+  return result;
 });
 
 // IPC: quick entry window requests to close

@@ -52,7 +52,9 @@ if (!g.__kanban_completedProcessRegistry) {
 
 const processRegistry = g.__kanban_processRegistry;
 const completedProcessRegistry = g.__kanban_completedProcessRegistry;
-const MAX_COMPLETED = 5;
+// Sized for the renderer's banner diff: it notices a finish only while the entry
+// is still listed, so a burst of runs inside one 10s poll must all fit.
+const MAX_COMPLETED = 20;
 
 export function registerProcess(
   processKey: string,

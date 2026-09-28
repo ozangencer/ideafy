@@ -81,7 +81,7 @@ function normalizeNotes(notes) {
  */
 /** Returns whether a banner was actually raised, so callers can record it. */
 function notify(title, body) {
-  return showNotification({ title, body, onClickChannel: "open-updates" });
+  return showNotification({ title, body, onClickChannel: "open-updates" }) === "shown";
 }
 
 function notifyUpdateAvailable(version) {

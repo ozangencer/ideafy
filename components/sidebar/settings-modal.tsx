@@ -45,7 +45,11 @@ import {
 } from "@/components/theme-provider";
 import { UpdateCenter } from "@/components/updates/update-center";
 import { useUpdates } from "@/components/updates/update-provider";
-import { hasSystemNotifications } from "@/lib/system-notifications";
+import {
+  canTestSystemNotifications,
+  hasSystemNotifications,
+  sendTestNotification,
+} from "@/lib/system-notifications";
 
 export interface SettingsExtraTab {
   value: string;
@@ -89,9 +93,22 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const [systemNotifications, setSystemNotifications] = useState(DEFAULT_SETTINGS.systemNotifications);
   // Only the desktop app can raise OS banners; the row is hidden in a browser.
   const [canNotify, setCanNotify] = useState(false);
+  const [canTestNotify, setCanTestNotify] = useState(false);
+  const [testNotifyStatus, setTestNotifyStatus] = useState<"idle" | "sending" | "shown" | "error">("idle");
   useEffect(() => {
     setCanNotify(hasSystemNotifications());
+    setCanTestNotify(canTestSystemNotifications());
   }, []);
+
+  const handleTestNotification = async () => {
+    setTestNotifyStatus("sending");
+    try {
+      const result = await sendTestNotification();
+      setTestNotifyStatus(result === "shown" ? "shown" : "error");
+    } catch {
+      setTestNotifyStatus("error");
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPickingSkillsFolder, setIsPickingSkillsFolder] = useState(false);
   const [isPickingMcpFile, setIsPickingMcpFile] = useState(false);
@@ -614,18 +631,45 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
           </div>
 
           {canNotify && (
-            <div className="flex items-center justify-between gap-3">
-              <div className="grid gap-0.5 min-w-0">
-                <label htmlFor="systemNotifications" className="text-sm font-medium">System notifications</label>
-                <span className="text-xs text-muted-foreground">
-                  macOS banner when an AI run finishes while Ideafy is in the background
-                </span>
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="grid gap-0.5 min-w-0">
+                  <label htmlFor="systemNotifications" className="text-sm font-medium">System notifications</label>
+                  <span className="text-xs text-muted-foreground">
+                    macOS banner when an AI run finishes while Ideafy is in the background.
+                    With the window in front you get the in-app toast instead.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {canTestNotify && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={handleTestNotification}
+                      disabled={testNotifyStatus === "sending"}
+                    >
+                      Send test
+                    </Button>
+                  )}
+                  <Switch
+                    id="systemNotifications"
+                    checked={systemNotifications}
+                    onCheckedChange={setSystemNotifications}
+                  />
+                </div>
               </div>
-              <Switch
-                id="systemNotifications"
-                checked={systemNotifications}
-                onCheckedChange={setSystemNotifications}
-              />
+              {testNotifyStatus === "shown" && (
+                <p className="text-xs text-muted-foreground">
+                  Sent to macOS. No banner? Check System Settings → Notifications → Ideafy, and whether a Focus mode is on.
+                </p>
+              )}
+              {testNotifyStatus === "error" && (
+                <p className="text-xs text-destructive">
+                  This system reported notifications as unsupported.
+                </p>
+              )}
             </div>
           )}
 

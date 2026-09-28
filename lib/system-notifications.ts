@@ -19,8 +19,12 @@ export interface OpenCardPayload {
   section: string | null;
 }
 
+/** Main's outcome for a test banner; see showNotification in electron/notifications.js. */
+export type TestNotifyResult = "shown" | "focused" | "unsupported";
+
 interface NotificationBridge {
   notify?: (payload: NotifyPayload) => void;
+  testNotify?: () => Promise<TestNotifyResult>;
   onOpenCard?: (callback: (payload: OpenCardPayload) => void) => () => void;
 }
 
@@ -31,6 +35,18 @@ function bridge(): NotificationBridge | undefined {
 
 export function hasSystemNotifications(): boolean {
   return typeof bridge()?.notify === "function";
+}
+
+/** False in builds whose preload predates the test button. */
+export function canTestSystemNotifications(): boolean {
+  return typeof bridge()?.testNotify === "function";
+}
+
+/** Raises a banner even with the window focused, and reports main's outcome. */
+export async function sendTestNotification(): Promise<TestNotifyResult | "unavailable"> {
+  const testNotify = bridge()?.testNotify;
+  if (!testNotify) return "unavailable";
+  return testNotify();
 }
 
 /** Subscribes to banner clicks; the payload is checked before it reaches `callback`. */
@@ -65,10 +81,16 @@ function sectionFor(process: BackgroundProcess): SectionType | null {
  */
 export function notifyFinishedRuns(finished: BackgroundProcess[]): void {
   const notify = bridge()?.notify;
-  if (!notify) return;
+  if (!notify) {
+    console.debug("[notify] no electronAPI.notify bridge, skipping", finished.length, "finished run(s)");
+    return;
+  }
 
   const runs = finished.filter((p) => p.endReason === "completed" || p.endReason === "failed");
-  if (runs.length === 0) return;
+  if (runs.length === 0) {
+    console.debug("[notify] every finished run was aborted, no banner", finished.map((p) => p.id));
+    return;
+  }
 
   if (runs.length === 1) {
     const run = runs[0];

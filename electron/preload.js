@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   notify: (payload) => {
     ipcRenderer.send("app-notify", payload);
   },
+  // Settings' test button: always raises a banner and resolves with main's
+  // outcome ("shown" | "unsupported").
+  testNotify: () => ipcRenderer.invoke("app-notify-test"),
   // Fired when the user clicks one of those banners. Returns an unsubscribe.
   onOpenCard: (callback) => {
     const handler = (_event, payload) => callback(payload);
