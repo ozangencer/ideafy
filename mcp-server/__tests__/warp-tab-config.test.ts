@@ -39,6 +39,18 @@ test("warp tab config: single terminal pane with directory and command", () => {
   assert.doesNotMatch(toml, /^title/m);
 });
 
+test("warp tab config: title labels the tab, a templated one is dropped", () => {
+  const toml = buildWarpTabConfig({
+    name: "Ideafy (temp)",
+    cwd: "/tmp",
+    command: "c",
+    title: `IDE-364 · Warp "tab"`,
+  });
+  assert.match(toml, /^name = "Ideafy \(temp\)"\ntitle = "IDE-364 · Warp \\"tab\\""\n\n\[\[panes\]\]/);
+  const templated = buildWarpTabConfig({ name: "n", cwd: "/tmp", command: "c", title: "{{x}}" });
+  assert.doesNotMatch(templated, /^title/m);
+});
+
 test("warp tab config: quotes, spaces and backslashes are escaped", () => {
   const cwd = `/Users/me/it's a "dir"\\x\u007f`;
   const toml = buildWarpTabConfig({ name: "n", cwd, command: "c" });

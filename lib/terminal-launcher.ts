@@ -17,10 +17,10 @@ export interface LaunchTerminalOptions {
   tag?: string;
   /**
    * Extra context for terminals that can place a run rather than just spawn a
-   * window. Only cmux reads this; the others ignore it.
+   * window. cmux reads all of it, Warp only the title; the others ignore it.
    */
   session?: {
-    /** Sidebar label for the tab. Agents overwrite it once they start. */
+    /** Tab label. Agents overwrite it in cmux once they start; Warp keeps it. */
     title?: string;
     /** Project root, matched against cmux workspace directories. */
     projectFolder?: string | null;
@@ -99,6 +99,7 @@ interface WarpLaunchOptions {
   timestamp: number;
   random: string;
   tag: string;
+  title?: string;
 }
 
 function prepareWarpDir(dir: string): void {
@@ -132,7 +133,12 @@ function openWarpTabConfig(o: WarpLaunchOptions): void {
   const configPath = join(configDir, `${configName}.toml`);
   writeFileSync(
     configPath,
-    buildWarpTabConfig({ name: "Ideafy (temp)", cwd: o.cwd, command: o.command }),
+    buildWarpTabConfig({
+      name: "Ideafy (temp)",
+      cwd: o.cwd,
+      command: o.command,
+      title: o.title,
+    }),
     { mode: 0o600 },
   );
   openWarpUri(`warp://tab_config/${configName}`, configPath, o.tag);
@@ -231,7 +237,14 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
     // launch configs, which always open a new window (see lib/terminal/warp.ts).
     const command = `/bin/bash ${shellQuote(scriptPath)}`;
     if (warpSupportsTabConfigs()) {
-      openWarpTabConfig({ cwd: opts.cwd, command, timestamp, random, tag });
+      openWarpTabConfig({
+        cwd: opts.cwd,
+        command,
+        timestamp,
+        random,
+        tag,
+        title: opts.session?.title,
+      });
     } else {
       openWarpLaunchConfig({ cwd: opts.cwd, command, timestamp, random, tag });
     }

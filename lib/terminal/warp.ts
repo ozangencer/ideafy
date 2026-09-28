@@ -74,23 +74,32 @@ function tomlString(s: string): string {
  * A single-pane tab config that runs `command` on open. The pane stays a
  * `terminal`: `agent` would open Warp's own Agent Mode instead of our CLI.
  *
- * `directory` is only a fallback — the wrapper script cds itself — and Warp
- * treats it as a template, so a path containing `{{` is left out rather than
- * risk the params modal. No `[params.*]` and no `title` either: the first
- * would prompt the user, the second gets overwritten by the agent CLI anyway.
+ * `title` labels the tab in Warp's tab bar; without it Warp falls back to the
+ * cwd, so every Ideafy tab reads the same. Warp's tab list already ignores
+ * the agent CLI's OSC title (it keeps showing the cwd), so unlike iTerm's
+ * session name (IDE-298) this label is expected to stick.
+ *
+ * `directory` is only a fallback — the wrapper script cds itself. Warp treats
+ * both `directory` and `title` as templates, so a value containing `{{` is
+ * left out rather than risk the params modal. No `[params.*]` for the same
+ * reason.
  */
 export function buildWarpTabConfig(opts: {
   name: string;
   cwd: string;
   command: string;
+  title?: string;
 }): string {
-  const lines = [
-    `name = ${tomlString(opts.name)}`,
+  const lines = [`name = ${tomlString(opts.name)}`];
+  if (opts.title && !opts.title.includes("{{")) {
+    lines.push(`title = ${tomlString(opts.title)}`);
+  }
+  lines.push(
     "",
     "[[panes]]",
     `id = "main"`,
     `type = "terminal"`,
-  ];
+  );
   if (!opts.cwd.includes("{{")) {
     lines.push(`directory = ${tomlString(opts.cwd)}`);
   }
