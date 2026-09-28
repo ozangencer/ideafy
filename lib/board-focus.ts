@@ -17,7 +17,7 @@
 
 import { cardLastActivityAt, formatAgeShort, partitionStaleCards } from "./card-age";
 import { parseTestProgress } from "./test-progress";
-import { Card, COLUMNS, SectionType, StaleThresholds, Status } from "./types";
+import { Card, COLUMNS, getColumns, ProjectMode, SectionType, StaleThresholds, Status } from "./types";
 
 export type FocusState =
   | "blocked"
@@ -236,7 +236,8 @@ const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 export function buildFocusBoard(
   cards: Card[],
   staleThresholds?: StaleThresholds,
-  now = Date.now()
+  now = Date.now(),
+  mode: ProjectMode = "development"
 ): FocusBoard {
   const yourTurn: FocusRow[] = [];
   const agentRunning: Card[] = [];
@@ -283,7 +284,7 @@ export function buildFocusBoard(
     );
   });
 
-  const buckets = COLUMNS.filter((column) => waitingByStatus.has(column.id)).map((column) => ({
+  const buckets = getColumns(mode).filter((column) => waitingByStatus.has(column.id)).map((column) => ({
     status: column.id,
     title: column.title,
     count: waitingByStatus.get(column.id) ?? 0,

@@ -1,12 +1,32 @@
+import * as fs from "fs";
+import * as path from "path";
 import type { ProjectRecord } from "./db/schema";
 import { detectRunMode } from "./run-target";
-import { DEFAULT_VOICE, Project, RUN_MODES, RunMode, Voice } from "./types";
+import {
+  DEFAULT_PROJECT_MODE,
+  DEFAULT_VOICE,
+  Project,
+  PROJECT_MODES,
+  ProjectMode,
+  RUN_MODES,
+  RunMode,
+  Voice,
+} from "./types";
 
 const VALID_VOICES: Voice[] = ["entrepreneur", "builder", "engineer"];
 
 export function normalizeVoice(v: unknown, fallback: Voice = DEFAULT_VOICE): Voice {
   return typeof v === "string" && (VALID_VOICES as string[]).includes(v)
     ? (v as Voice)
+    : fallback;
+}
+
+export function normalizeProjectMode(
+  v: unknown,
+  fallback: ProjectMode = DEFAULT_PROJECT_MODE
+): ProjectMode {
+  return typeof v === "string" && (PROJECT_MODES as readonly string[]).includes(v)
+    ? (v as ProjectMode)
     : fallback;
 }
 
@@ -26,6 +46,22 @@ function parseStringArray(value: string | null): string[] | null {
       : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whether the folder sits inside a git repo, by looking for `.git` in it or
+ * any parent — what `git rev-parse` would find, without spawning git once per
+ * project on every project fetch. `.git` may be a file (worktrees, submodules).
+ */
+export function isInsideGitRepo(folderPath: string): boolean {
+  if (!folderPath) return false;
+  let dir = path.resolve(folderPath);
+  for (;;) {
+    if (fs.existsSync(path.join(dir, ".git"))) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
   }
 }
 
@@ -54,9 +90,11 @@ export function serializeProject(row: ProjectRecord): Project {
     narrativePath: row.narrativePath,
     useWorktrees: row.useWorktrees ?? true,
     voice: normalizeVoice(row.voice),
+    mode: normalizeProjectMode(row.mode),
     runMode,
     detectedRunMode,
     resolvedRunMode: runMode ?? detectedRunMode,
+    isGitRepo: isInsideGitRepo(row.folderPath),
     runCommand: row.runCommand,
     previewUrl: row.previewUrl,
     sharedPaths: parseStringArray(row.sharedPaths),

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   Brain,
   Check,
+  FileOutput,
   FlaskConical,
   Loader2,
   MessagesSquare,
@@ -66,6 +67,7 @@ import {
 const PRIMARY_ORDER: PhaseAction[] = [
   "evaluate",
   "quick-fix",
+  "generate",
   "play",
   "test-together",
   "terminal",
@@ -80,6 +82,7 @@ const ICON_TINT: Record<PhaseAction, string> = {
   play: "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink",
   "test-together":
     "bg-emerald-500/10 text-emerald-500/70 hover:bg-emerald-500/20 hover:text-emerald-500",
+  generate: "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink",
 };
 
 // Labeled buttons keep the colour of the icon they stand in for. The icon and
@@ -91,6 +94,7 @@ const PRIMARY_CLASS: Record<PhaseAction, string> = {
   terminal: "bg-orange-500 text-white hover:bg-orange-600",
   play: "",
   "test-together": "bg-emerald-500 text-white hover:bg-emerald-600",
+  generate: "",
 };
 
 // Only emptiness matters here, and an editor-cleared field can be a lone
@@ -104,6 +108,7 @@ const ACTION_ICON: Record<PhaseAction, typeof Play> = {
   terminal: Terminal,
   play: Play,
   "test-together": FlaskConical,
+  generate: FileOutput,
 };
 
 const CHAT_RUNNING_TOOLTIP = "Chat is running on this card";
@@ -213,7 +218,9 @@ export function CardPhaseActions({
   const testProgress = useMemo(() => parseTestProgress(card.testScenarios), [card.testScenarios]);
   const hasAiOpinion = useMemo(() => !!plainText(card.aiOpinion), [card.aiOpinion]);
 
-  const flags = getPhaseActionFlags(card, solutionText, testText, testProgress);
+  const project = projects.find((p) => p.id === card.projectId);
+  const projectMode = project?.mode ?? "development";
+  const flags = getPhaseActionFlags(card, solutionText, testText, testProgress, projectMode);
   const { phase, labels: phaseLabels } = flags;
 
   // Three independent signals converge so the spinner is robust: local
@@ -228,7 +235,6 @@ export function CardPhaseActions({
   // A running chat blocks the same buttons a lock does, without offering Unlock.
   const isBlocked = isLocked || isChatting;
 
-  const project = projects.find((p) => p.id === card.projectId);
   const projectPath = project?.folderPath || card.projectFolder;
   const projectDefaultWorktree = project?.useWorktrees ?? true;
   const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
@@ -396,6 +402,8 @@ export function CardPhaseActions({
     terminal: handleOpenTerminalClick,
     play: handleStartClick,
     "test-together": handleTestTogetherClick,
+    // No route yet; canGenerate keeps the button from being drawn.
+    generate: () => {},
   };
 
   const tooltipFor = (action: PhaseAction): string => {
@@ -412,6 +420,8 @@ export function CardPhaseActions({
         return isStarting ? "Running..." : phaseLabels.play;
       case "test-together":
         return "Test Together (Interactive)";
+      case "generate":
+        return "Generate";
     }
   };
 
@@ -429,6 +439,8 @@ export function CardPhaseActions({
         return phaseLabels.play;
       case "test-together":
         return "Test Together";
+      case "generate":
+        return "Generate";
     }
   };
 
@@ -672,7 +684,7 @@ export function CardPhaseActions({
         confirmClassName="bg-orange-500 hover:bg-orange-600"
         onConfirm={handleOpenTerminal}
       >
-        {phase === "implementation" && (
+        {phase === "implementation" && projectMode !== "work" && (
           !effectiveUseWorktree ? (
             <p className="text-gray-400 text-xs font-mono">
               Working directly on main (worktrees disabled)

@@ -3,7 +3,7 @@
 import { memo, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, CardGroup, getDisplayId, COLUMNS, RUN_MODE_LABELS } from "@/lib/types";
+import { Card, CardGroup, getDisplayId, getColumns, RUN_MODE_LABELS } from "@/lib/types";
 import { CardGroupChip } from "./card-group-chip";
 import { cardLastActivityAt, formatAgeLong, getCardStaleness } from "@/lib/card-age";
 import { parseTestProgress } from "@/lib/test-progress";
@@ -233,15 +233,25 @@ function TaskCardImpl({
 
   // The run buttons themselves live in CardPhaseActions; the card only needs
   // to know which of them will be drawn, for the footer width budget below.
-  const phaseFlags = getPhaseActionFlags(card, solutionSummaryText, testScenariosText, testProgress);
+  // The card's own project decides its mode, not the workspace on screen.
+  const project = projects.find((p) => p.id === card.projectId);
+  const projectMode = project?.mode ?? "development";
+  const phaseFlags = getPhaseActionFlags(
+    card,
+    solutionSummaryText,
+    testScenariosText,
+    testProgress,
+    projectMode
+  );
   // A running chat hides the interactive icons too, so it counts as a lock here.
   const isChatting = useCardChatRunning(card.id);
   const shownPhaseActions = BOARD_PHASE_ACTIONS.filter((action) =>
     isPhaseActionShown(action, phaseFlags, isLocked || isChatting)
   ).length;
-
-  // Get project info
-  const project = projects.find((p) => p.id === card.projectId);
+  const projectDefaultWorktree = project?.useWorktrees ?? true;
+  const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
+  // "Direct on main" only means something where branches exist at all.
+  const showsMainBadge = !!project && !effectiveUseWorktree && phaseFlags.showDevControls;
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -305,8 +315,6 @@ function TaskCardImpl({
     unlockCard(card.id);
   };
 
-  const projectDefaultWorktree = project?.useWorktrees ?? true;
-  const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
 
   const handleExportMarkdown = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -365,6 +373,7 @@ function TaskCardImpl({
   // a second line rather than an icon hanging off the card — but the estimate
   // is what keeps the normal case on one line.
   const showsRunButton =
+    phaseFlags.showDevControls &&
     card.status === "test" &&
     card.gitWorktreeStatus === "active" &&
     !isLocked &&
@@ -390,7 +399,7 @@ function TaskCardImpl({
     [!!card.rebaseConflict, FOOTER_ICON_W],
     [!!extraBadges, FOOTER_ICON_W],
     [showsWorktreeBadge, FOOTER_ICON_W],
-    [!!project && !effectiveUseWorktree && !isBackgroundProcessing, FOOTER_ICON_W],
+    [showsMainBadge && !isBackgroundProcessing, FOOTER_ICON_W],
     [showsSolutionBadge, FOOTER_ICON_W],
   ];
   const fixedFooterWidth = fixedFooterSlots.reduce(
@@ -707,7 +716,7 @@ function TaskCardImpl({
                   </Tooltip>
                 )}
                 {/* Show "Main" badge when effective setting is "no worktree" (card override or project setting) */}
-                {project && !effectiveUseWorktree && !isBackgroundProcessing && (
+                {showsMainBadge && !isBackgroundProcessing && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="p-1 rounded bg-gray-500/15 text-gray-400">
@@ -799,7 +808,7 @@ function TaskCardImpl({
               {isSelected && <SelectionCount inline />}
             </ContextMenuSubTrigger>
             <ContextMenuSubContent className="w-40">
-              {COLUMNS.map((col) => (
+              {getColumns(projectMode).map((col) => (
                 <ContextMenuItem
                   key={col.id}
                   // Right-clicking inside the selection acts on all of it;

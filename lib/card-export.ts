@@ -1,4 +1,4 @@
-import { Card, Project, COLUMNS, getDisplayId, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS } from "./types";
+import { Card, Project, getColumnTitle, getDisplayId, Status, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS } from "./types";
 import { htmlToMarkdown } from "./html-to-markdown";
 
 /**
@@ -8,14 +8,6 @@ function formatDate(dateString: string): string {
   if (!dateString) return "";
   const date = new Date(dateString);
   return date.toISOString().split("T")[0]; // YYYY-MM-DD format
-}
-
-/**
- * Get status display title
- */
-function getStatusTitle(status: string): string {
-  const column = COLUMNS.find((c) => c.id === status);
-  return column?.title || status;
 }
 
 /**
@@ -59,7 +51,7 @@ export function cardToMarkdown(card: Card, project?: Project): string {
   lines.push("");
 
   // Metadata line
-  const statusTitle = getStatusTitle(card.status);
+  const statusTitle = getColumnTitle(card.status as Status, project?.mode);
   const priorityLabel = getPriorityLabel(card.priority);
   const complexityLabel = getComplexityLabel(card.complexity);
 

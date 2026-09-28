@@ -1,4 +1,4 @@
-import { COLUMNS, Complexity, Status, AiPlatform } from "@/lib/types";
+import { Complexity, Status, AiPlatform, ProjectMode, getColumns } from "@/lib/types";
 
 export const STATUS_COLORS: Record<Status, string> = {
   ideation: "#8b5cf6",
@@ -10,12 +10,18 @@ export const STATUS_COLORS: Record<Status, string> = {
   withdrawn: "#6b7280",
 };
 
-export const STATUS_OPTIONS = COLUMNS.map((c) => ({
-  key: c.id as Status,
-  label: c.title,
-  color: STATUS_COLORS[c.id as Status],
-  slash: `/${c.id === "ideation" ? "idea" : c.id === "bugs" ? "bug" : c.id}`,
-}));
+// Slash tokens stay on the status ids, so `/test` still means the fifth column
+// in a Work project; only the label shown next to it changes.
+export function getStatusOptions(mode: ProjectMode) {
+  return getColumns(mode).map((c) => ({
+    key: c.id as Status,
+    label: c.title,
+    color: STATUS_COLORS[c.id as Status],
+    slash: `/${c.id === "ideation" ? "idea" : c.id === "bugs" ? "bug" : c.id}`,
+  }));
+}
+
+export const STATUS_OPTIONS = getStatusOptions("development");
 
 export const COMPLEXITY_OPTIONS = [
   { key: "low" as Complexity, label: "Low", color: "#22c55e", trigger: "c:low" },

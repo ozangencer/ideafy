@@ -215,12 +215,13 @@ export function FocusView({ cards }: { cards: Card[] }) {
   const staleThresholds = useKanbanStore((s) => s.staleThresholds);
   const setBoardView = useKanbanStore((s) => s.setBoardView);
   const projects = useKanbanStore((s) => s.projects);
+  const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
   const selectCard = useKanbanStore((s) => s.selectCard);
   const openModal = useKanbanStore((s) => s.openModal);
 
   const focus = useMemo(
-    () => buildFocusBoard(cards, staleThresholds),
-    [cards, staleThresholds]
+    () => buildFocusBoard(cards, staleThresholds, Date.now(), activeWorkspace),
+    [cards, staleThresholds, activeWorkspace]
   );
 
   const isQuiet =

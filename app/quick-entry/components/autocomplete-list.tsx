@@ -14,11 +14,18 @@ interface AutocompleteListProps {
   activeIndex: number;
   onHover: (index: number) => void;
   onSelect: (index: number) => void;
+  /** Small caps label over the list, e.g. which workspace the projects come from. */
+  heading?: string;
 }
 
-export function AutocompleteList({ kind, items, activeIndex, onHover, onSelect }: AutocompleteListProps) {
+export function AutocompleteList({ kind, items, activeIndex, onHover, onSelect, heading }: AutocompleteListProps) {
   return (
     <div className="border-t border-[hsl(var(--border))]">
+      {heading && (
+        <p className="px-5 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          {heading}
+        </p>
+      )}
       {items.map((item, idx) => {
         const isActive = idx === activeIndex;
         return (

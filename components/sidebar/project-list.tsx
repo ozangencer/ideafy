@@ -9,6 +9,7 @@ import { UnpushedDialog } from "./unpushed-dialog";
 import { ProjectSectionHeader } from "./project-section-header";
 import { SkillGroupDialog } from "./skill-group-dialog";
 import { Project } from "@/lib/types";
+import { OPEN_ADD_PROJECT_EVENT, projectsInWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -27,7 +28,8 @@ type SectionDialogState =
 
 export function ProjectList() {
   const {
-    projects,
+    projects: allProjects,
+    activeWorkspace,
     activeProjectId,
     setActiveProject,
     isProjectListExpanded,
@@ -42,6 +44,15 @@ export function ProjectList() {
     moveProjectToSection,
   } = useKanbanStore();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // The board's empty-workspace view has its own "New … project" button; the
+  // modal lives here, so it asks through a window event rather than a store
+  // flag that only these two places would ever read.
+  useEffect(() => {
+    const open = () => setIsAddModalOpen(true);
+    window.addEventListener(OPEN_ADD_PROJECT_EVENT, open);
+    return () => window.removeEventListener(OPEN_ADD_PROJECT_EVENT, open);
+  }, []);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [unpushedProject, setUnpushedProject] = useState<Project | null>(null);
   const [unpushedCounts, setUnpushedCounts] = useState<Record<string, number>>({});
@@ -106,6 +117,13 @@ export function ProjectList() {
       window.removeEventListener("focus", refreshIfVisible);
     };
   }, [loadUnpushedCounts]);
+
+  // The sidebar only lists the workspace on screen. Everything below — pins,
+  // sections, counts — is computed from this slice, not the whole list.
+  const projects = useMemo(
+    () => projectsInWorkspace(allProjects, activeWorkspace),
+    [allProjects, activeWorkspace]
+  );
 
   const pinnedProjects = projects.filter((p) => p.isPinned);
   const unpinnedProjects = projects.filter((p) => !p.isPinned);
@@ -229,7 +247,8 @@ export function ProjectList() {
       >
         <div className="min-h-0 overflow-hidden">
         <div className="max-h-[70vh] overflow-y-auto">
-        {/* All Projects option */}
+        {/* All Projects option — nothing to gather in an empty workspace */}
+        {projects.length > 0 && (
         <button
           onClick={() => setActiveProject(null)}
           className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-sm transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 relative overflow-hidden ${
@@ -247,6 +266,7 @@ export function ProjectList() {
           <Layers className="h-4 w-4" />
           <span>All Projects</span>
         </button>
+        )}
 
         {/* Sections — sidebar grouping only, the board never filters by them.
             With no sections the list looks exactly as it did before. */}
@@ -254,6 +274,13 @@ export function ProjectList() {
           const sectionProjects = unpinnedProjects.filter(
             (project) => sectionOf(project) === section.id
           );
+          // Sections are shared by both workspaces. One whose projects all
+          // live in the other workspace is noise here; an empty one is kept,
+          // since it was just made and is waiting for projects.
+          const hasProjectsElsewhere = allProjects.some(
+            (project) => !project.isPinned && sectionOf(project) === section.id
+          );
+          if (sectionProjects.length === 0 && hasProjectsElsewhere) return null;
           // A collapsed section still shows the active project, so the
           // selection never disappears from the sidebar.
           const visibleProjects = section.collapsed
@@ -283,6 +310,14 @@ export function ProjectList() {
             </div>
           );
         })}
+
+        {/* The board carries the first-visit guidance; the sidebar only
+            says the list is empty. */}
+        {projects.length === 0 && (
+          <p className="px-3 text-xs text-muted-foreground">
+            No {activeWorkspace === "work" ? "Work" : "Development"} projects yet
+          </p>
+        )}
 
         {/* Projects without a section */}
         {unsectionedProjects.length > 0 && (

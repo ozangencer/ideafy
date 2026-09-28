@@ -83,6 +83,33 @@ export interface CardGroup {
   createdAt: string;
 }
 
+/**
+ * What kind of work a project holds. "development" is the code-and-git flow
+ * the board was built for; "work" is everything with no repo behind it —
+ * minutes, mail, proposals, research. The mode decides which workspace lists
+ * the project, what its columns are called and whether dev-only actions
+ * (branches, dev server, merge) exist. Status ids never change with it, so
+ * MCP, the DB and the pool see the same card either way.
+ */
+export type ProjectMode = "development" | "work";
+
+export const PROJECT_MODES = ["development", "work"] as const;
+
+export const DEFAULT_PROJECT_MODE: ProjectMode = "development";
+
+export const PROJECT_MODE_OPTIONS: { value: ProjectMode; label: string; description: string }[] = [
+  {
+    value: "development",
+    label: "Development",
+    description: "Code in a git repo. Branches, worktrees, tests and a dev server.",
+  },
+  {
+    value: "work",
+    label: "Work",
+    description: "Documents, research, mail, planning. Outputs are saved in this folder.",
+  },
+];
+
 export type Voice = "entrepreneur" | "builder" | "engineer";
 
 export const DEFAULT_VOICE: Voice = "builder";
@@ -164,9 +191,11 @@ export interface Project {
   narrativePath: string | null; // Relative path to narrative file, null = docs/product-narrative.md
   useWorktrees: boolean; // Whether to use git worktrees for isolation (default: true)
   voice: Voice; // Project-level voice for AI outputs (default: 'builder')
+  mode: ProjectMode; // Which workspace lists the project and which card actions exist (default: 'development')
   runMode: RunMode | null; // Explicit override, null = detect from the project folder
   detectedRunMode: RunMode; // Server-computed: what the project folder looks like
   resolvedRunMode: RunMode; // Server-computed: the override, or the detected mode
+  isGitRepo: boolean; // Server-computed: whether the folder sits inside a git repo — drives the Work suggestion
   runCommand: string | null; // Override for the run command, null = mode default
   previewUrl: string | null; // Override for the previewed URL ({port} placeholder)
   sharedPaths: string[] | null; // Paths symlinked from main checkout into worktrees, null = auto
@@ -276,6 +305,27 @@ export const COLUMNS: { id: Status; title: string }[] = [
   { id: "withdrawn", title: "Withdrawn" },
 ];
 
+// Only the titles that name a dev step change; the ids, the order and the
+// colours stay, so a project can switch modes without a single card moving.
+const WORK_COLUMN_TITLES: Partial<Record<Status, string>> = {
+  bugs: "Revisions",
+  test: "In Review",
+  completed: "Done",
+};
+
+const WORK_COLUMNS: { id: Status; title: string }[] = COLUMNS.map((column) => ({
+  id: column.id,
+  title: WORK_COLUMN_TITLES[column.id] ?? column.title,
+}));
+
+export function getColumns(mode: ProjectMode | null | undefined): { id: Status; title: string }[] {
+  return mode === "work" ? WORK_COLUMNS : COLUMNS;
+}
+
+export function getColumnTitle(status: Status, mode: ProjectMode | null | undefined): string {
+  return getColumns(mode).find((column) => column.id === status)?.title ?? status;
+}
+
 export const STATUS_COLORS: Record<Status, string> = {
   ideation: "bg-status-ideation",
   backlog: "bg-status-backlog",
@@ -343,6 +393,10 @@ export interface AppSettings {
   // OS banner when an AI run finishes while the window is in the background.
   // Desktop app only; the browser build has no bridge to raise one.
   systemNotifications: boolean;
+  // Which half of the board is showing. Lives in the settings table rather than
+  // localStorage because quick entry is its own Electron window and has to
+  // offer the same projects the main window is showing.
+  activeWorkspace: ProjectMode;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -352,6 +406,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminalApp: "iterm2",
   detectedTerminal: null,
   systemNotifications: true,
+  activeWorkspace: "development",
 };
 
 export const AI_PLATFORM_OPTIONS: { value: AiPlatform; label: string; description: string }[] = [

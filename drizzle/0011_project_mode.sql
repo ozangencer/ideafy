@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `mode` text DEFAULT 'development' NOT NULL;

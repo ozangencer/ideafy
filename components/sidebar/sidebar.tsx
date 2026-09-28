@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectList } from "./project-list";
+import { WorkspaceSwitch } from "./workspace-switch";
 import { SkillList } from "./skill-list";
 import { McpList } from "./mcp-list";
 import { AgentList } from "./agent-list";
@@ -228,6 +229,8 @@ export function Sidebar() {
             </Tooltip>
           </div>
         </div>
+
+        <WorkspaceSwitch />
 
         {/* Project List - outside ScrollArea to avoid overflow issues */}
         <div className="py-2">

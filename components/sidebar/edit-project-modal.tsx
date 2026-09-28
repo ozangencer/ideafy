@@ -7,11 +7,14 @@ import {
   VOICE_OPTIONS,
   DEFAULT_VOICE,
   RUN_MODE_OPTIONS,
+  PROJECT_MODE_OPTIONS,
+  DEFAULT_PROJECT_MODE,
+  type ProjectMode,
   type RunMode,
   type Voice,
 } from "@/lib/types";
 import { Switch } from "@/components/ui/switch";
-import { MessageSquare, Play } from "lucide-react";
+import { BriefcaseBusiness, MessageSquare, Play } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +55,13 @@ interface EditProjectModalProps {
   modal?: boolean;
 }
 
+const MODE_NOTES: Record<ProjectMode, string> = {
+  development:
+    "Listed under the Development workspace. Columns read Human Test, Bugs and Completed.",
+  work:
+    "Listed under the Work workspace. Columns read Revisions, In Review and Done. Test button and worktrees are off.",
+};
+
 export function EditProjectModal({
   project,
   onClose,
@@ -85,6 +95,10 @@ export function EditProjectModal({
   );
   const [useWorktrees, setUseWorktrees] = useState(project.useWorktrees ?? true);
   const [voice, setVoice] = useState<Voice>(project.voice ?? DEFAULT_VOICE);
+  const [mode, setMode] = useState<ProjectMode>(project.mode ?? DEFAULT_PROJECT_MODE);
+  // Known only for the folder the server last looked at; a path typed into the
+  // field is unchecked until saved, so it gets no hint either way.
+  const folderIsGitRepo = folderPath.trim() === project.folderPath ? project.isGitRepo : null;
   // "" means auto — fall back to whatever detection finds in the project folder.
   const [runMode, setRunMode] = useState<RunMode | "">(project.runMode ?? "");
   const [runCommand, setRunCommand] = useState(project.runCommand || "");
@@ -267,6 +281,7 @@ export function EditProjectModal({
         narrativePath: narrativePath.trim() || null,
         useWorktrees,
         voice,
+        mode,
         runMode: runMode || null,
         runCommand: runCommand.trim() || null,
         previewUrl: previewUrl.trim() || null,
@@ -327,10 +342,69 @@ export function EditProjectModal({
             onColorChange={setColor}
             inputIdPrefix="edit-"
             autoFocusName
+            folderNote={folderIsGitRepo === false ? "not a git repository" : undefined}
           />
           <p className="text-xs text-muted-foreground -mt-2">
             Task IDs: {idPrefix || "PRJ"}-1, {idPrefix || "PRJ"}-2...
           </p>
+
+          {/* Mode — first of the behaviour settings: it decides which of the
+              ones below apply at all. */}
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <BriefcaseBusiness className="h-4 w-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Mode</label>
+              <span className="text-xs text-muted-foreground">
+                — decides the workspace, column names and card actions
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Mode">
+              {PROJECT_MODE_OPTIONS.map((opt) => {
+                const isSelected = mode === opt.value;
+                const isSuggested = opt.value === "work" && folderIsGitRepo === false;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => setMode(opt.value)}
+                    className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                          isSelected ? "border-primary" : "border-muted-foreground/40"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full transition-all ${
+                            isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                          }`}
+                        />
+                      </span>
+                      <span className="font-medium text-sm text-foreground">{opt.label}</span>
+                      {isSuggested && (
+                        <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary">
+                          Suggested
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-xs text-muted-foreground leading-snug">{opt.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {MODE_NOTES[mode]}
+              {mode !== (project.mode ?? DEFAULT_PROJECT_MODE) &&
+                " Cards keep their statuses; only the column names change."}
+            </p>
+          </div>
 
           {/* Voice */}
           <div className="grid gap-2">
@@ -591,8 +665,8 @@ export function EditProjectModal({
             );
           })()}
 
-          {/* Test button */}
-          {(() => {
+          {/* Test button — Work projects have nothing to run. */}
+          {mode === "development" && (() => {
             const effectiveMode: RunMode = runMode || project.detectedRunMode;
             const effectiveLabel =
               RUN_MODE_OPTIONS.find((o) => o.value === effectiveMode)?.label ?? effectiveMode;
@@ -762,7 +836,8 @@ export function EditProjectModal({
             );
           })()}
 
-          {/* Git Worktrees */}
+          {/* Git Worktrees — Work projects never branch. */}
+          {mode === "development" && (
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
@@ -780,6 +855,7 @@ export function EditProjectModal({
               onCheckedChange={setUseWorktrees}
             />
           </div>
+          )}
 
           {/* cmux placement — only meaningful while cmux has workspaces open */}
           {cmuxWorkspaces.length > 0 &&

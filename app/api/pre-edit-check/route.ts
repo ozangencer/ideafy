@@ -79,7 +79,9 @@ export async function POST(request: NextRequest) {
         taskNumber: card.taskNumber,
         title: card.title,
       },
-      project ? { useWorktrees: project.useWorktrees, idPrefix: project.idPrefix } : null
+      project
+        ? { useWorktrees: project.useWorktrees, idPrefix: project.idPrefix, mode: project.mode }
+        : null
     );
 
     if (!enforced || !targetBranch) return ok204();

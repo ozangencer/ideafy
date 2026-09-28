@@ -4,7 +4,8 @@ import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { homedir } from "os";
 import { join } from "path";
-import type { AppSettings, AiPlatform, TerminalApp } from "@/lib/types";
+import { PROJECT_MODES, type AppSettings, type AiPlatform, type TerminalApp } from "@/lib/types";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import { getPlatformProvider } from "@/lib/platform";
 
 // Reads the settings rows at request time; the catch below would otherwise
@@ -36,6 +37,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalApp: "iterm2",
   detectedTerminal: null,
   systemNotifications: true,
+  activeWorkspace: "development",
 };
 
 // Detect terminal from TERM_PROGRAM env variable
@@ -69,6 +71,7 @@ export async function GET() {
       if (row.key === "mcp_config_path") result.mcpConfigPath = row.value;
       if (row.key === "terminal_app") result.terminalApp = row.value as TerminalApp;
       if (row.key === "system_notifications") result.systemNotifications = row.value !== "false";
+      if (row.key === "active_workspace") result.activeWorkspace = normalizeProjectMode(row.value);
     }
 
     // Add detected terminal from environment
@@ -96,12 +99,21 @@ export async function PUT(request: Request) {
       mcpConfigPath: "mcp_config_path",
       terminalApp: "terminal_app",
       systemNotifications: "system_notifications",
+      activeWorkspace: "active_workspace",
     };
 
     for (const [field, rawValue] of Object.entries(body)) {
       const dbKey = keyMap[field];
       // Booleans ride in the same key/value table as strings.
       const value = typeof rawValue === "boolean" ? String(rawValue) : rawValue;
+      // Anything but a known mode would leave both windows on a workspace
+      // that lists no projects.
+      if (
+        dbKey === "active_workspace" &&
+        !(PROJECT_MODES as readonly unknown[]).includes(value)
+      ) {
+        continue;
+      }
       if (dbKey && typeof value === "string") {
         // Check if setting exists
         const existing = db

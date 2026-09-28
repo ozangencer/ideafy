@@ -1,9 +1,12 @@
+import type { ProjectMode } from "@/lib/types";
+
 export interface Project {
   id: string;
   name: string;
   idPrefix: string;
   color: string;
   folderPath: string;
+  mode?: ProjectMode;
   teamId?: string | null;
 }
 

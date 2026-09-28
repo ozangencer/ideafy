@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { ArrowRightLeft, ChevronDown, Trash2, X } from "lucide-react";
 import { useKanbanStore } from "@/lib/store";
-import { COLUMNS, STATUS_COLORS } from "@/lib/types";
+import { getColumns, STATUS_COLORS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -51,6 +51,7 @@ function keyboardBelongsElsewhere(target: EventTarget | null, isModalOpen: boole
  */
 export function SelectionBar() {
   const selectedCardIds = useKanbanStore((s) => s.selectedCardIds);
+  const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
   const isModalOpen = useKanbanStore((s) => s.isModalOpen);
   const isConfirmOpen = useKanbanStore((s) => s.isBulkDeleteConfirmOpen);
   const setConfirmOpen = useKanbanStore((s) => s.setBulkDeleteConfirmOpen);
@@ -96,7 +97,7 @@ export function SelectionBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="center" className="w-40">
-            {COLUMNS.map((col) => (
+            {getColumns(activeWorkspace).map((col) => (
               <DropdownMenuItem
                 key={col.id}
                 onClick={() => void moveCards(selectedCardIds, col.id)}

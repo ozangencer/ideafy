@@ -1,4 +1,5 @@
-import { Card, CardGroup, COLUMNS, Status } from "../../types";
+import { Card, CardGroup, getColumnTitle, Status } from "../../types";
+import { projectModeOf } from "../../workspace";
 import { nowIso, parseJson, replaceCardById, updateCardById } from "../helpers";
 import { CardUpdatePayload, KanbanStore, StoreSlice } from "../types";
 import { toast } from "@/hooks/use-toast";
@@ -321,7 +322,7 @@ export const createCardsSlice: StoreSlice<
       // A card dropped back into its own column is a reorder, not a move —
       // recording it would make the next Cmd+Z look like it did nothing.
       if (response.ok && recordHistory && card && card.status !== newStatus) {
-        const column = COLUMNS.find((c) => c.id === newStatus)?.title ?? newStatus;
+        const column = getColumnTitle(newStatus, projectModeOf(card.projectId, get().projects));
         get().pushUndoStep(
           {
             kind: "move",
@@ -352,7 +353,7 @@ export const createCardsSlice: StoreSlice<
 
   moveCards: async (ids, newStatus) => {
     const { eligible, skipped } = splitRunningCards(get(), ids);
-    const column = COLUMNS.find((c) => c.id === newStatus)?.title ?? newStatus;
+    const column = getColumnTitle(newStatus, get().activeWorkspace);
     get().beginUndoBatch(`Moved selected cards to ${column}`);
     try {
       // moveCard skips the undo record for a card already in the target

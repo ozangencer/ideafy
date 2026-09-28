@@ -16,6 +16,8 @@ interface BasicInfoFieldsProps {
   /** Prefix for HTML input ids so Add and Edit modals don't collide when both mount. */
   inputIdPrefix: string;
   autoFocusName?: boolean;
+  /** Appended to the folder hint, e.g. "not a git repository". */
+  folderNote?: string;
 }
 
 /**
@@ -35,6 +37,7 @@ export function BasicInfoFields(props: BasicInfoFieldsProps) {
     onColorChange,
     inputIdPrefix,
     autoFocusName,
+    folderNote,
   } = props;
 
   const { isPicking, pickFolder } = useFolderPicker();
@@ -84,6 +87,7 @@ export function BasicInfoFields(props: BasicInfoFieldsProps) {
         </div>
         <p className="text-xs text-muted-foreground">
           Full path to the project directory
+          {folderNote ? ` · ${folderNote}` : ""}
         </p>
       </div>
 

@@ -19,7 +19,7 @@
  */
 
 import { TestProgress } from "./test-progress";
-import { Card } from "./types";
+import { Card, ProjectMode } from "./types";
 
 export type Phase = "planning" | "implementation" | "retest" | "verify";
 
@@ -47,7 +47,19 @@ export function detectBoardPhase(
   return "retest";
 }
 
-export function getPhaseLabels(phase: Phase): { play: string; terminal: string } {
+export function getPhaseLabels(
+  phase: Phase,
+  mode: ProjectMode = "development"
+): { play: string; terminal: string } {
+  // A Work card is written, not built: the same session, named for what it does.
+  if (mode === "work") {
+    if (phase === "implementation") {
+      return { play: "Implement (Autonomous)", terminal: "Work on it (Interactive)" };
+    }
+    if (phase === "retest") {
+      return { play: "Re-test (Autonomous)", terminal: "Revise (Interactive)" };
+    }
+  }
   switch (phase) {
     case "planning":
       return {
@@ -147,7 +159,10 @@ export type PhaseAction =
   | "quick-fix"
   | "terminal"
   | "play"
-  | "test-together";
+  | "test-together"
+  // Work cards' one-shot document run. Declared ahead of its route so every
+  // surface already knows the name; `canGenerate` keeps it hidden until then.
+  | "generate";
 
 /**
  * Runs in the background with no one at the keyboard; the rest open a
@@ -175,23 +190,42 @@ export interface PhaseActionFlags {
   canQuickFix: boolean;
   canEvaluate: boolean;
   canTestTogether: boolean;
+  canGenerate: boolean;
+  /**
+   * Dev server, branch badge, merge and rollback. Off for Work cards — unless
+   * the card still has an open worktree from before its project switched,
+   * because then those controls are the only way to land or drop that branch.
+   */
+  showDevControls: boolean;
 }
 
+/**
+ * `mode` is the card's own project's mode, not the workspace on screen — the
+ * two agree on the board, but a pool card or a card opened from search has
+ * only its project to go by.
+ */
 export function getPhaseActionFlags(
   card: Card,
   solutionText: string,
   testText: string,
-  testProgress: TestProgress | null
+  testProgress: TestProgress | null,
+  mode: ProjectMode = "development"
 ): PhaseActionFlags {
   const phase = detectBoardPhase(card, solutionText, testText);
+  const isWork = mode === "work";
   return {
     phase,
-    labels: getPhaseLabels(phase),
+    labels: getPhaseLabels(phase, mode),
     canStart: canStartCard(card),
-    canRunAutonomous: canRunAutonomousFor(card, testProgress),
-    canQuickFix: canQuickFixFor(card),
+    // Autonomous implement writes code on a branch; a Work card has neither.
+    // Planning and pre-verify stay: both read and write the card, not a repo.
+    canRunAutonomous:
+      canRunAutonomousFor(card, testProgress) && !(isWork && phase === "implementation"),
+    canQuickFix: !isWork && canQuickFixFor(card),
     canEvaluate: canEvaluateFor(card),
-    canTestTogether: canTestTogetherFor(card, testText),
+    canTestTogether: !isWork && canTestTogetherFor(card, testText),
+    canGenerate: false,
+    showDevControls: !isWork || card.gitWorktreeStatus === "active",
   };
 }
 
@@ -219,5 +253,7 @@ export function isPhaseActionShown(
       return flags.canRunAutonomous && flags.phase !== "retest";
     case "test-together":
       return flags.canTestTogether && !isLocked;
+    case "generate":
+      return flags.canGenerate;
   }
 }

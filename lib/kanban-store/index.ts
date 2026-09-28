@@ -70,6 +70,10 @@ export const useKanbanStore = create<KanbanStore>()(
         boardViewPreference: state.boardViewPreference,
         staleThresholds: state.staleThresholds,
         expandedDocFolders: state.expandedDocFolders,
+        // A cache of the settings row, not the source of truth: it only saves
+        // the board from painting Development for a frame before the settings
+        // fetch lands. fetchSettings overwrites it.
+        activeWorkspace: state.activeWorkspace,
       }),
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<KanbanStore>;
@@ -118,6 +122,8 @@ export const useKanbanStore = create<KanbanStore>()(
         const expandedDocFolders = Array.isArray(persisted.expandedDocFolders)
           ? persisted.expandedDocFolders
           : currentState.expandedDocFolders;
+        const activeWorkspace =
+          persisted.activeWorkspace === "work" ? "work" : currentState.activeWorkspace;
         return {
           ...currentState,
           ...persisted,
@@ -132,6 +138,7 @@ export const useKanbanStore = create<KanbanStore>()(
           boardView,
           boardViewPreference,
           expandedDocFolders,
+          activeWorkspace,
         };
       },
     }

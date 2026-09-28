@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { KanbanBoard } from "@/components/board/kanban-board";
+import { WorkspaceEmptyState } from "@/components/board/workspace-empty-state";
+import { projectsInWorkspace } from "@/lib/workspace";
 import { BoardViewToggle } from "@/components/board/focus-view";
 import { CardModal } from "@/components/board/card-modal";
 import { DocumentEditor } from "@/components/editor/document-editor";
@@ -52,6 +54,7 @@ function Board() {
     isSkillViewerOpen,
     isAgentViewerOpen,
     activeProjectId,
+    activeWorkspace,
     projects,
   } = useKanbanStore();
 
@@ -154,6 +157,11 @@ function Board() {
 
   // Get active project name for display
   const activeProject = projects.find((p) => p.id === activeProjectId);
+  // A workspace with no projects shows its first-visit guidance instead of an
+  // empty board. Only once projects exist at all, so the initial fetch does
+  // not flash it.
+  const workspaceProjects = projectsInWorkspace(projects, activeWorkspace);
+  const isWorkspaceEmpty = projects.length > 0 && workspaceProjects.length === 0;
 
   return (
     <div className="flex h-screen bg-background">
@@ -166,12 +174,14 @@ function Board() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-foreground">
-                {activeProject ? activeProject.name : "ideafy"}
+                {activeProject ? activeProject.name : activeWorkspace === "work" ? "Work" : "ideafy"}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {activeProject
                   ? `${activeProject.idPrefix} - ${activeProject.folderPath}`
-                  : "All projects - Development workflow management"}
+                  : activeWorkspace === "work"
+                    ? "All projects - Work workspace"
+                    : "All projects - Development workflow management"}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -220,7 +230,11 @@ function Board() {
         </header>
 
         {/* Board - only show loading on initial fetch, not on polling */}
-        {isLoading && cards.length === 0 ? (
+        {isWorkspaceEmpty ? (
+          <WorkspaceEmptyState
+            otherProjects={projects.filter((p) => !workspaceProjects.includes(p))}
+          />
+        ) : isLoading && cards.length === 0 ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-muted-foreground">Loading...</p>
           </div>

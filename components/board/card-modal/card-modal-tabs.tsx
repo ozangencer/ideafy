@@ -1,7 +1,7 @@
 "use client";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SectionType, SECTION_CONFIG } from "@/lib/types";
+import { ProjectMode, SectionType, SECTION_CONFIG } from "@/lib/types";
 import { hasContent } from "@/lib/card-initial-tab";
 import { FileText, Brain, Lightbulb, TestTube2 } from "lucide-react";
 
@@ -16,9 +16,16 @@ interface CardModalTabsProps {
   activeTab: SectionType;
   onTabChange: (tab: SectionType) => void;
   sectionValues: Record<SectionType, string>;
+  mode?: ProjectMode;
 }
 
-export function CardModalTabs({ activeTab, onTabChange, sectionValues }: CardModalTabsProps) {
+// A Work card is reviewed, not tested. Only the tab's name changes: the content
+// keeps its core-flow heading, which is what the progress badge reads.
+const WORK_SECTION_LABELS: Partial<Record<SectionType, string>> = {
+  tests: "Review checklist",
+};
+
+export function CardModalTabs({ activeTab, onTabChange, sectionValues, mode }: CardModalTabsProps) {
   return (
     <div className="shrink-0 border-b border-border px-4">
       <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as SectionType)}>
@@ -43,7 +50,9 @@ export function CardModalTabs({ activeTab, onTabChange, sectionValues }: CardMod
                 <Icon
                   className={`w-4 h-4 ${isActive ? "text-primary" : ""}`}
                 />
-                <span>{config.label}</span>
+                <span>
+                  {(mode === "work" && WORK_SECTION_LABELS[section]) || config.label}
+                </span>
                 {isFilled && !isActive && (
                   <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
                 )}

@@ -3,11 +3,13 @@ import { v4 as uuidv4 } from "uuid";
 import { db, schema } from "@/lib/db";
 import { Project } from "@/lib/types";
 import {
+  normalizeProjectMode,
   normalizeRunMode,
   normalizeVoice,
   serializeProject,
 } from "@/lib/project-serialize";
 import { installIdeafyHook } from "@/lib/hooks";
+import { isGitRepo } from "@/lib/git";
 
 export async function GET() {
   try {
@@ -55,6 +57,7 @@ export async function POST(request: NextRequest) {
       narrativePath: body.narrativePath || null,
       useWorktrees: body.useWorktrees ?? true,
       voice: normalizeVoice(body.voice),
+      mode: normalizeProjectMode(body.mode),
       runMode: normalizeRunMode(body.runMode),
       runCommand: body.runCommand || null,
       previewUrl: body.previewUrl || null,
@@ -75,7 +78,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(serializeProject(newProject), { status: 201 });
+    // A folder with no repo behind it cannot use branches or worktrees, so Work
+    // is the likelier fit. Only a hint: the add modal offers it, the user picks.
+    const suggestedMode =
+      body.folderPath && !(await isGitRepo(body.folderPath)) ? "work" : undefined;
+
+    return NextResponse.json(
+      { ...serializeProject(newProject), ...(suggestedMode ? { suggestedMode } : {}) },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Failed to create project:", error);
     return NextResponse.json(

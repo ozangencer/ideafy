@@ -9,6 +9,7 @@ import {
   worktreeExists,
   getWorktreePath,
 } from "@/lib/git";
+import { shouldUseWorktree } from "@/lib/workspace";
 import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
 import { PRIOR_DECISIONS_RULE } from "@/lib/prompts/prior-decisions";
@@ -162,10 +163,11 @@ export async function POST(
   let gitWorktreeStatus = card.gitWorktreeStatus;
   let actualWorkingDir = workingDir;
 
-  // Per-card override wins; otherwise fall back to project setting (default: true)
-  const shouldUseWorktree = card.useWorktree ?? project?.useWorktrees ?? true;
+  // Per-card override wins; otherwise fall back to project setting (default: true).
+  // Work projects never get one.
+  const useWorktree = shouldUseWorktree(card, project);
 
-  if (phase === "implementation" && project && card.taskNumber && shouldUseWorktree) {
+  if (phase === "implementation" && project && card.taskNumber && useWorktree) {
     const repoCheck = await isGitRepo(workingDir);
 
     if (repoCheck) {
@@ -239,14 +241,20 @@ export async function POST(
         }
       }
     }
-  } else if ((phase === "implementation" || phase === "retest") && card.gitWorktreePath && shouldUseWorktree) {
+  } else if (
+    (phase === "implementation" || phase === "retest") &&
+    card.gitWorktreePath &&
+    // A worktree opened before the project moved to Work is still where this
+    // card's changes live.
+    (useWorktree || card.gitWorktreeStatus === "active")
+  ) {
     // For retest or subsequent implementation runs, use existing worktree
     const worktreeExistsResult = await worktreeExists(workingDir, card.gitWorktreePath);
     if (worktreeExistsResult) {
       actualWorkingDir = card.gitWorktreePath;
       console.log(`[Open Terminal] Using existing worktree: ${actualWorkingDir}`);
     }
-  } else if (!shouldUseWorktree && (phase === "implementation" || phase === "retest")) {
+  } else if (!useWorktree && (phase === "implementation" || phase === "retest")) {
     // No worktree mode - work directly on main branch
     console.log(`[Open Terminal] Working directly on main branch (worktrees disabled)`);
   }

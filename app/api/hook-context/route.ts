@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
               ? {
                   useWorktrees: cardProject.useWorktrees,
                   idPrefix: cardProject.idPrefix,
+                  mode: cardProject.mode,
                 }
               : null
           )
