@@ -131,10 +131,14 @@ export async function runAutonomousCli(
     let stdout = "";
     let stderr = "";
     let stdoutLength = 0;
+    // A collector keeps no raw stdout, so hold on to its tail for the error
+    // message of a run that died without saying why on stderr.
+    let stdoutTail = "";
 
     cliProcess.stdout?.on("data", (data: Buffer) => {
       const text = data.toString();
       stdoutLength += text.length;
+      stdoutTail = (stdoutTail + text).slice(-2000);
       if (collector) {
         collector.push(text);
       } else {
@@ -182,7 +186,10 @@ export async function runAutonomousCli(
       // never fire again. A terminating result envelope is what actually
       // distinguishes a finished run from a crashed one.
       if (code !== 0 && (requireExitZero || !parsed.sawResultEnvelope)) {
-        reject(new Error(`${provider.displayName} exited with code ${code}: ${stderr}`));
+        // Stderr is often empty when the CLI reports its error in the result
+        // envelope or on stdout, and "code 1:" alone tells the user nothing.
+        const output = stderr.trim() || parsed.result?.trim() || stdoutTail.trim().slice(-500);
+        reject(new Error(`${provider.displayName} exited with code ${code}: ${output}`));
         return;
       }
 

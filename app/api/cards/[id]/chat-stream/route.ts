@@ -15,6 +15,7 @@ import {
   getProcess,
   killProcess,
 } from "@/lib/process-registry";
+import { describeRunError } from "@/lib/run-error";
 import { getProviderForCard } from "@/lib/platform/active";
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import { resolveSessionId } from "@/lib/platform/session-resolver";
@@ -546,7 +547,15 @@ export async function POST(
           // A kill through the Stop button or /api/processes already removed
           // the entry, so this only decides between a clean turn, a crash, and
           // a signal from outside Ideafy.
-          completeProcess(processKey, aborted ? "aborted" : code === 0 ? "completed" : "failed");
+          const endReason = aborted ? "aborted" : code === 0 ? "completed" : "failed";
+          // With stderr empty the CLI's last words, if any, are in the reply
+          // itself (an "API Error: …" result), so fall back to its tail.
+          const failureOutput = stderrBuffer.trim() || fullResponse.trim().slice(-500);
+          completeProcess(processKey, endReason, {
+            error: endReason === "failed"
+              ? describeRunError(`${provider.displayName} exited with code ${code}${signal ? ` (${signal})` : ""}: ${failureOutput}`)
+              : null,
+          });
 
           if (fullResponse.trim()) {
             try {
@@ -618,7 +627,7 @@ export async function POST(
         });
 
         cliProcess.on("error", (error) => {
-          completeProcess(processKey, "failed");
+          completeProcess(processKey, "failed", { error: describeRunError(error) });
           sendEvent("error", error.message);
           completeLiveStream(bufferKey);
           if (!isClosed) {

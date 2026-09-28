@@ -33,6 +33,7 @@ interface CompletedEntry {
   completedAt: string;
   endReason: EndReason;
   warning: string | null;
+  error: string | null;
 }
 
 // Use globalThis to ensure the same Map instance is shared across all
@@ -71,13 +72,15 @@ export function unregisterProcess(processKey: string): void {
 // Move process from active to completed registry. `warning` is set when the
 // run finished but its output could not be written as-is (e.g. a verify run
 // that left the checklist untouched), so the UI can say so instead of showing
-// a plain "completed".
+// a plain "completed". `error` carries why a "failed" run failed; pass it
+// through describeRunError so every producer hands over the same shape.
 export function completeProcess(
   processKey: string,
   endReason: EndReason = "completed",
-  options: { warning?: string | null } = {}
+  options: { warning?: string | null; error?: string | null } = {}
 ): void {
   const warning = options.warning ?? null;
+  const error = endReason === "failed" ? options.error ?? null : null;
   const entry = processRegistry.get(processKey);
   if (entry) {
     // Add to completed registry with timestamp
@@ -92,6 +95,7 @@ export function completeProcess(
       completedAt: new Date().toISOString(),
       endReason,
       warning,
+      error,
     };
     completedProcessRegistry.set(processKey, completedEntry);
 
@@ -113,6 +117,7 @@ export function completeProcess(
         completedAt: completedEntry.completedAt,
         endReason,
         warning,
+        error,
       });
     } catch (err) {
       console.error("[process-registry] failed to record activity", err);
@@ -187,6 +192,7 @@ export function getAllProcesses(): BackgroundProcess[] {
       completedAt: entry.completedAt,
       endReason: entry.endReason,
       warning: entry.warning,
+      error: entry.error,
     });
   });
 

@@ -13,6 +13,7 @@ import {
 } from "@/lib/prompts";
 import { getProcess, killProcess } from "@/lib/process-registry";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import { describeRunError } from "@/lib/run-error";
 import {
   RUN_OUTPUT_CONTRACTS,
   splitQuickFixResponse,
@@ -299,7 +300,7 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
-    completeProcess(processKey, "failed");
+    completeProcess(processKey, "failed", { error: describeRunError(error) });
     if (isMissingDependencyError(error)) {
       return NextResponse.json(
         { error: error.message, dependency: error.binaryName },

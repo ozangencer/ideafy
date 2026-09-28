@@ -9,6 +9,7 @@ import {
   updateCardById,
 } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
+import { firstLine } from "../../run-error";
 
 // Force React to commit the spinner-on state synchronously. Without this, a
 // busy render (heavy markdown cards) can collapse the "starting" frame into
@@ -23,6 +24,13 @@ type UntrustedRefusal = {
   code?: string;
   untrustedContent?: { title?: string; description?: string };
 };
+
+// A failed run's 500 carries its cause in `details`; `error` is only the
+// generic "Failed to run …" headline. The first line is enough for a toast —
+// the full text lives behind Details in the Background Processes panel.
+function runFailureMessage(data: { error?: string; details?: string }): string | undefined {
+  return firstLine(data.details) || data.error;
+}
 
 function runBody(acknowledged: boolean): RequestInit {
   return {
@@ -105,6 +113,7 @@ export const createClaudeSlice: StoreSlice<
         gitWorktreePath?: Card["gitWorktreePath"];
         gitWorktreeStatus?: Card["gitWorktreeStatus"];
         error?: string;
+        details?: string;
       }>(response);
 
       if (!response.ok) {
@@ -128,7 +137,7 @@ export const createClaudeSlice: StoreSlice<
             },
           });
         }
-        return { success: false, error: data.error || "Failed to start task" };
+        return { success: false, error: runFailureMessage(data) || "Failed to start task" };
       }
 
       // An open modal reads selectedCard, which only a fetch refreshes, and
@@ -392,6 +401,7 @@ export const createClaudeSlice: StoreSlice<
         testScenarios: string;
         outputWarning?: string | null;
         error?: string;
+        details?: string;
       }>(response);
 
       if (!response.ok) {
@@ -415,7 +425,7 @@ export const createClaudeSlice: StoreSlice<
             },
           });
         }
-        return { success: false, error: data.error || "Failed to quick fix" };
+        return { success: false, error: runFailureMessage(data) || "Failed to quick fix" };
       }
 
       // See startTask: refresh the open modal's card before the lock lifts.
@@ -497,6 +507,7 @@ export const createClaudeSlice: StoreSlice<
         complexity?: Card["complexity"];
         outputWarning?: string | null;
         error?: string;
+        details?: string;
       }>(response);
 
       if (!response.ok) {
@@ -520,7 +531,7 @@ export const createClaudeSlice: StoreSlice<
             },
           });
         }
-        return { success: false, error: data.error || "Failed to evaluate idea" };
+        return { success: false, error: runFailureMessage(data) || "Failed to evaluate idea" };
       }
 
       // See startTask: refresh the open modal's card before the lock lifts.

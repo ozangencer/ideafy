@@ -15,6 +15,7 @@ import {
 } from "@/lib/prompts";
 import { normalizeVoice } from "@/lib/project-serialize";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import { describeRunError } from "@/lib/run-error";
 import {
   ENDED_WHILE_WAITING_WARNING,
   RUN_OUTPUT_CONTRACTS,
@@ -279,7 +280,7 @@ export async function POST(
       .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
-    completeProcess(processKey, "failed");
+    completeProcess(processKey, "failed", { error: describeRunError(error) });
 
     return NextResponse.json(
       {
