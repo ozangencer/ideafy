@@ -17,8 +17,12 @@
  */
 
 const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards before you commit to an approach. Use this card's \`id\` and \`projectId\` (get_card returns both):
-- Past decisions: call \`search_cards\` with the \`projectId\`, 2-3 keywords from the task, and this card's \`id\` as \`excludeCardId\`. If a completed or withdrawn card decided something this work contradicts, name that card by its displayId. A newer decision overrides an older one; \`withdrawn\` means it was tried and abandoned. Open a card with get_card only when its snippet is not enough.
+- Past decisions: call \`search_cards\` with the \`projectId\`, 2-3 keywords from the task, and this card's \`id\` as \`excludeCardId\`. Read each hit by its status:
+  - completed, test or progress: a decision. If this work contradicts it, that is a contradiction. A newer decision overrides an older one, but say why it should.
+  - withdrawn: tried and abandoned, not a decision. Never call it a contradiction. Mention it as a precedent only when the reason it was dropped applies here too.
+  Open a card with get_card only when its snippet is not enough.
 - Open work: call \`list_open_work\` with the same \`projectId\` and \`excludeCardId\`, plus the files this card will change as \`files\` once you know them. Rows that share a file list it under \`overlap\`; otherwise compare against each card's files yourself. On an overlap, name the card, the shared file and which of the two should land first.
+- Name a card by its bare displayId (IDE-318), never in backticks: it becomes a clickable link when saved.
 - If these tools are not available, skip the check.`;
 
 /**
@@ -28,13 +32,16 @@ const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards
  */
 export const PRIOR_DECISIONS_RULE = `${PRIOR_DECISIONS_CHECK}
 - If an open card brings in something this card needs to work correctly, or breaks it, that is extra work. When it is a precondition for this card, add it as its own step under Implementation Steps labelled "(because of <displayId>)"; otherwise suggest it as a note for the other card. Never widen the scope silently.
-- Contradictions and overlaps go under Edge Cases. Do not add a heading for them.
-If there is no contradiction and no overlap, write nothing about it.`;
+- Contradictions, precedents and overlaps go under Edge Cases. Do not add a heading for them.
+If there is no contradiction, precedent or overlap, write nothing about it.`;
 
 /**
  * For the idea evaluation (one-shot Evaluate and the interactive ideation
- * session), which reports what it found in its own optional section.
+ * session), which reports what it found in its own optional section. Only
+ * here do ideas that were never decided count: a new idea can duplicate one
+ * already waiting in Ideation or Backlog, and a plan cannot.
  */
 export const PRIOR_DECISIONS_EVALUATION_RULE = `${PRIOR_DECISIONS_CHECK}
-- Report a contradiction, a precedent or an overlap under \`## Related Cards\`, one line per card with its displayId.
-If there is no contradiction, precedent or overlap, leave \`## Related Cards\` out entirely.`;
+- Duplicates: call \`search_cards\` once more with the same keywords and \`statuses: ["ideation", "backlog"]\`. Those cards are ideas, not decisions; mention one only when it describes the same idea.
+- Report what you found under \`## Related Cards\`, one line per card: its displayId, the kind (contradiction, precedent, duplicate or overlap, written in the output language), then what it decided or touches and why it matters here.
+If there is no contradiction, precedent, duplicate or overlap, leave \`## Related Cards\` out entirely.`;

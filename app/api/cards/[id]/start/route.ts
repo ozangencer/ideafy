@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
 import {
@@ -168,6 +169,8 @@ export async function POST(
     // Convert markdown response to HTML for the TipTap editor.
     const markedHtml = await marked(result.response);
     let htmlResponse = convertToTipTapTaskList(markedHtml);
+    // A plan's Edge Cases names other cards as "IDE-318"; save them as [[ chips.
+    if (phase === "planning") htmlResponse = linkCardsInHtml(htmlResponse, card.projectId);
     if (result.warning) {
       htmlResponse = prependWarningHtml(htmlResponse, result.warning);
     }

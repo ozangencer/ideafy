@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
 import {
@@ -207,9 +208,10 @@ export async function POST(
     const { summary: summaryText, checklist: checklistText } =
       splitQuickFixResponse(responseText);
 
-    let solutionSummary = summaryText
-      ? convertToTipTapTaskList(await marked(summaryText))
-      : htmlResponse;
+    let solutionSummary = linkCardsInHtml(
+      summaryText ? convertToTipTapTaskList(await marked(summaryText)) : htmlResponse,
+      card.projectId
+    );
     if (warning) {
       solutionSummary = prependWarningHtml(solutionSummary, warning);
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import { marked } from "marked";
 import {
   stripHtml,
@@ -113,7 +114,8 @@ export async function POST(
 
     // Convert markdown response to HTML for TipTap editor
     const markedHtml = await marked(responseText);
-    let aiOpinion = convertToTipTapTaskList(markedHtml);
+    // Related Cards names cards as "IDE-318"; save them as clickable [[ chips.
+    let aiOpinion = linkCardsInHtml(convertToTipTapTaskList(markedHtml), card.projectId);
     if (warning) {
       aiOpinion = prependWarningHtml(aiOpinion, warning);
     }

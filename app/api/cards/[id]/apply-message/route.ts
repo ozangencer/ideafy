@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import {
   ensureHtml,
   ensureTestScenariosHtml,
@@ -66,10 +67,16 @@ export async function POST(
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
+  // Plans and opinions name other cards as "IDE-318"; store them as [[ chips.
+  const linkCards = (html: string) =>
+    field === "solutionSummary" || field === "aiOpinion"
+      ? linkCardsInHtml(html, existing.projectId)
+      : html;
+
   let nextHtml: string;
   let added: number | undefined;
   if (mode === "replace") {
-    nextHtml = field === "testScenarios" ? ensureTestScenariosHtml(content) : ensureHtml(content);
+    nextHtml = field === "testScenarios" ? ensureTestScenariosHtml(content) : linkCards(ensureHtml(content));
   } else {
     // Append: reconstruct a markdown payload that represents existing + new,
     // then convert once so formatting stays consistent.
@@ -80,7 +87,7 @@ export async function POST(
       nextHtml = ensureTestScenariosHtml(merged.markdown);
     } else {
       const existingHtml = (existing as Record<string, string | null>)[field] || "";
-      const merged = mergeHtmlSections(existingHtml, markdownToTiptapHtml(content));
+      const merged = mergeHtmlSections(existingHtml, linkCards(markdownToTiptapHtml(content)));
       added = merged.added;
       nextHtml = merged.html;
     }

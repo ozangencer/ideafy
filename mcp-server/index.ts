@@ -42,6 +42,7 @@ import {
   listOpenWork,
   searchCards,
 } from "./card-search.js";
+import { linkCardsInHtml, projectIdOfCard } from "./card-link-resolver.js";
 import { existsSync } from "fs";
 import {
   assertGroupAssignable,
@@ -1097,7 +1098,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             // Convert markdown to HTML for rich text fields
             if (markdownFields.includes(key) && typeof value === "string") {
               const htmlValue = markdownToTiptapHtml(value);
-              values.push(htmlValue);
+              values.push(
+                key === "solutionSummary"
+                  ? linkCardsInHtml(db, htmlValue, updates.projectId ?? projectIdOfCard(db, id))
+                  : htmlValue
+              );
             } else if (key === "useWorktree") {
               // SQLite integer column: true/false → 1/0, null passes through
               values.push(serializeUseWorktreeForDb(value as boolean | null));
@@ -1415,7 +1420,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           cardId,
           title,
           markdownToTiptapHtml(description),
-          markdownToTiptapHtml(solutionSummary),
+          linkCardsInHtml(db, markdownToTiptapHtml(solutionSummary), projectId),
           "", // Test scenarios added after implementation via save_tests
           status,
           complexity,
@@ -1457,8 +1462,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Convert markdown to Tiptap-compatible HTML with TaskList support
-        const htmlContent = markdownToTiptapHtml(solutionSummary);
+        // Convert markdown to Tiptap-compatible HTML with TaskList support;
+        // "IDE-318" in Edge Cases becomes a clickable [[ chip.
+        const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(solutionSummary), projectIdOfCard(db, id));
 
         const result = db.prepare(`
           UPDATE cards
@@ -1592,8 +1598,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Convert markdown to Tiptap-compatible HTML
-        const htmlContent = markdownToTiptapHtml(aiOpinion);
+        // Convert markdown to Tiptap-compatible HTML; "IDE-318" under Related
+        // Cards becomes a clickable [[ chip.
+        const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(aiOpinion), projectIdOfCard(db, id));
 
         const result = db.prepare(`
           UPDATE cards
