@@ -5,7 +5,12 @@ import { basename, join } from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { openCmuxTerminal } from "@/lib/terminal/cmux";
-import { buildWarpTabConfig, warpSupportsTabConfigs } from "@/lib/terminal/warp";
+import {
+  buildWarpLaunchConfig,
+  buildWarpTabConfig,
+  countWarpWindows,
+  warpSupportsTabConfigs,
+} from "@/lib/terminal/warp";
 import type { TerminalApp } from "@/lib/types";
 
 export interface LaunchTerminalOptions {
@@ -116,6 +121,7 @@ function prepareWarpDir(dir: string): void {
 // shortly after. 8s is conservative even on a cold app start. Until then a
 // tab config also shows up in Warp's + menu, hence the "(temp)" name.
 function openWarpUri(uri: string, configPath: string, tag: string): void {
+  console.debug(`[${tag}] Warp: opening ${uri}`);
   const child = spawn("open", [uri], { stdio: ["ignore", "pipe", "pipe"] });
   logChildExit(child, "Warp", tag);
   setTimeout(() => {
@@ -144,30 +150,49 @@ function openWarpTabConfig(o: WarpLaunchOptions): void {
   openWarpUri(`warp://tab_config/${configName}`, configPath, o.tag);
 }
 
-// Legacy path for Warps without tab configs: a YAML launch configuration
-// under ~/.warp/launch_configurations/, which always opens a new window.
+// Legacy path for Warps without tab configs, and for a running Warp with no
+// window open: a YAML launch configuration under ~/.warp/launch_configurations/,
+// which always opens a new window.
 // See: https://docs.warp.dev/terminal/windows/launch-configurations
 function openWarpLaunchConfig(o: WarpLaunchOptions): void {
   const configDir = join(homedir(), ".warp", "launch_configurations");
   prepareWarpDir(configDir);
   const configName = `ideafy-${o.timestamp}-${o.random}`;
   const configPath = join(configDir, `${configName}.yaml`);
-
-  // Single-quoted YAML scalar: a literal quote is escaped by doubling it.
-  // We control every interpolated value, but quoting defends against paths
-  // with colons or special chars that would otherwise break YAML parsing.
-  const yamlQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
-  const yaml =
-    "---\n" +
-    `name: ${configName}\n` +
-    "windows:\n" +
-    "  - tabs:\n" +
-    "      - layout:\n" +
-    `          cwd: ${yamlQuote(o.cwd)}\n` +
-    "          commands:\n" +
-    `            - exec: ${yamlQuote(o.command)}\n`;
-  writeFileSync(configPath, yaml, { mode: 0o600 });
+  writeFileSync(
+    configPath,
+    buildWarpLaunchConfig({
+      name: configName,
+      cwd: o.cwd,
+      command: o.command,
+      title: o.title,
+    }),
+    { mode: 0o600 },
+  );
   openWarpUri(`warp://launch/${configName}`, configPath, o.tag);
+}
+
+// A tab config opened while Warp runs without a window comes up in a new
+// window without its title (IDE-372), so that one case goes through a launch
+// config. A failed check keeps the tab config: better an untitled tab than a
+// second window. A Warp that is not running also keeps it — the restored
+// session gives the tab a window to land in.
+async function openWarp(o: WarpLaunchOptions): Promise<void> {
+  try {
+    if (!warpSupportsTabConfigs()) {
+      openWarpLaunchConfig(o);
+      return;
+    }
+    const windows = await countWarpWindows();
+    console.debug(`[${o.tag}] Warp: ${windows ?? "unknown"} open window(s)`);
+    if (windows === 0) {
+      openWarpLaunchConfig(o);
+    } else {
+      openWarpTabConfig(o);
+    }
+  } catch (err) {
+    console.error(`[${o.tag}] Warp launch failed: ${(err as Error).message}`);
+  }
 }
 
 export function getTerminalPreference(): TerminalApp {
@@ -235,19 +260,15 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
     // so no Accessibility permission and no race with Warp's autocomplete.
     // Tab configs open as a tab in the focused window; older Warps only have
     // launch configs, which always open a new window (see lib/terminal/warp.ts).
-    const command = `/bin/bash ${shellQuote(scriptPath)}`;
-    if (warpSupportsTabConfigs()) {
-      openWarpTabConfig({
-        cwd: opts.cwd,
-        command,
-        timestamp,
-        random,
-        tag,
-        title: opts.session?.title,
-      });
-    } else {
-      openWarpLaunchConfig({ cwd: opts.cwd, command, timestamp, random, tag });
-    }
+    // Picking between them needs a window count, so the open runs async.
+    void openWarp({
+      cwd: opts.cwd,
+      command: `/bin/bash ${shellQuote(scriptPath)}`,
+      timestamp,
+      random,
+      tag,
+      title: opts.session?.title,
+    });
     return { success: true };
   }
 

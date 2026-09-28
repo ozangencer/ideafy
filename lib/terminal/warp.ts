@@ -1,3 +1,4 @@
+import { execFile } from "child_process";
 import { readFileSync } from "fs";
 
 /**
@@ -12,7 +13,10 @@ import { readFileSync } from "fs";
  *   swallows the URI silently and the user sees nothing open at all.
  *
  * So launches go through tab configs when the installed Warp is new enough and
- * fall back to launch configurations otherwise.
+ * fall back to launch configurations otherwise. The one exception is a running
+ * Warp with no window open: a tab config then opens a new window and drops its
+ * `title` (IDE-372), so that case goes through a launch config too — a new
+ * window is coming either way, and launch configs keep the tab title.
  * See: https://docs.warp.dev/terminal/windows/tab-configs
  */
 
@@ -106,4 +110,89 @@ export function buildWarpTabConfig(opts: {
   lines.push(`commands = [${tomlString(opts.command)}]`);
   lines.push("is_focused = true");
   return lines.join("\n") + "\n";
+}
+
+// Single-quoted YAML scalar: a literal quote is escaped by doubling it.
+// We control every interpolated value, but quoting defends against paths
+// with colons or special chars that would otherwise break YAML parsing.
+function yamlQuote(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+/**
+ * A one-window, one-tab launch configuration that runs `command` on open.
+ * `title` labels the tab and follows the same `{{` rule as the tab config:
+ * Warp may read it as a template, so such a title is left out.
+ */
+export function buildWarpLaunchConfig(opts: {
+  name: string;
+  cwd: string;
+  command: string;
+  title?: string;
+}): string {
+  const lines = [
+    "---",
+    `name: ${yamlQuote(opts.name)}`,
+    "windows:",
+    "  - tabs:",
+  ];
+  if (opts.title && !opts.title.includes("{{")) {
+    lines.push(`      - title: ${yamlQuote(opts.title)}`, "        layout:");
+  } else {
+    lines.push("      - layout:");
+  }
+  lines.push(
+    `          cwd: ${yamlQuote(opts.cwd)}`,
+    "          commands:",
+    `            - exec: ${yamlQuote(opts.command)}`,
+  );
+  return lines.join("\n") + "\n";
+}
+
+const WARP_BUNDLE_ID = "dev.warp.Warp-Stable";
+
+// Prints Warp's normal-layer windows, or -1 when Warp is not running. The
+// CGWindowList call needs neither Accessibility nor Screen Recording: owner
+// PID, layer and bounds are public, only window titles are gated. All windows
+// rather than on-screen only, so a minimized window or one on another Space
+// still counts. Warp keeps a few menu-bar-high strips next to each window;
+// the size floor leaves them out. Matching by bundle PID skips Warp Preview.
+const WARP_WINDOW_COUNT_JXA = `
+ObjC.import("AppKit");
+ObjC.import("CoreGraphics");
+(() => {
+  const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier("${WARP_BUNDLE_ID}");
+  const pids = [];
+  for (let i = 0; i < apps.count; i++) pids.push(apps.objectAtIndex(i).processIdentifier);
+  if (pids.length === 0) return -1;
+  const windows = ObjC.deepUnwrap(ObjC.castRefToObject(
+    $.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, $.kCGNullWindowID)));
+  return windows.filter((w) =>
+    pids.includes(w.kCGWindowOwnerPID) && w.kCGWindowLayer === 0 &&
+    w.kCGWindowBounds.Width >= 100 && w.kCGWindowBounds.Height >= 100).length;
+})();
+`;
+
+/** osascript's stdout as a window count; -1 means Warp is not running. */
+export function parseWarpWindowCount(stdout: string): number | null {
+  const trimmed = stdout.trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  return n >= -1 ? n : null;
+}
+
+/**
+ * How many windows the running Warp has open, -1 when it is not running, or
+ * null when the check failed. Takes ~150 ms, which also gives the config file
+ * time to land before Warp is asked to read it.
+ */
+export function countWarpWindows(): Promise<number | null> {
+  return new Promise((resolve) => {
+    execFile(
+      "osascript",
+      ["-l", "JavaScript", "-e", WARP_WINDOW_COUNT_JXA],
+      { timeout: 3000 },
+      (err, stdout) => resolve(err ? null : parseWarpWindowCount(stdout)),
+    );
+  });
 }

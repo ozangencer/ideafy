@@ -9,9 +9,11 @@ function interop<T extends object>(ns: T): T {
 }
 
 const {
+  buildWarpLaunchConfig,
   buildWarpTabConfig,
   compareVersion,
   parseBundleVersion,
+  parseWarpWindowCount,
   WARP_TAB_CONFIG_MIN_VERSION,
 } = interop(warpNs);
 
@@ -87,4 +89,42 @@ test("warp version: read from an Info.plist", () => {
 </dict>`;
   assert.equal(parseBundleVersion(plist), "0.2026.09.16.08.27.02");
   assert.equal(parseBundleVersion("<dict></dict>"), null);
+});
+
+test("warp launch config: one tab, title quoted, no title line when empty or templated", () => {
+  const yaml = buildWarpLaunchConfig({
+    name: "ideafy-1-abc",
+    cwd: "/Users/me/it's here",
+    command: "/bin/bash '/tmp/ideafy-1-abc.sh'",
+    title: "IDE-372 · Warp'da tab adları",
+  });
+  assert.equal(
+    yaml,
+    [
+      "---",
+      "name: 'ideafy-1-abc'",
+      "windows:",
+      "  - tabs:",
+      "      - title: 'IDE-372 · Warp''da tab adları'",
+      "        layout:",
+      "          cwd: '/Users/me/it''s here'",
+      "          commands:",
+      "            - exec: '/bin/bash ''/tmp/ideafy-1-abc.sh'''",
+      "",
+    ].join("\n"),
+  );
+  for (const title of [undefined, "", "{{x}}"]) {
+    const untitled = buildWarpLaunchConfig({ name: "n", cwd: "/tmp", command: "c", title });
+    assert.doesNotMatch(untitled, /title:/);
+    assert.match(untitled, /^ {6}- layout:$/m);
+  }
+});
+
+test("warp window count: osascript output parsed, anything else is unknown", () => {
+  assert.equal(parseWarpWindowCount("0\n"), 0);
+  assert.equal(parseWarpWindowCount("3\n"), 3);
+  assert.equal(parseWarpWindowCount("-1\n"), -1);
+  assert.equal(parseWarpWindowCount(""), null);
+  assert.equal(parseWarpWindowCount("-2"), null);
+  assert.equal(parseWarpWindowCount("execution error: -1712"), null);
 });
