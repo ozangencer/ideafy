@@ -1,5 +1,6 @@
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import { artifactBasename, pathToFileUrl } from "@/lib/artifact-url";
 
 // Create a configured Turndown instance
 function createTurndownService(): TurndownService {
@@ -43,6 +44,23 @@ function createTurndownService(): TurndownService {
     },
     replacement: function (content) {
       return content;
+    },
+  });
+
+  // Artifact chips export as a file:// link so the file's location survives
+  turndownService.addRule("artifactMention", {
+    filter: function (node) {
+      return (
+        node.nodeName === "SPAN" &&
+        node.getAttribute("data-type") === "artifactMention"
+      );
+    },
+    replacement: function (content, node) {
+      const element = node as HTMLElement;
+      const filePath = element.getAttribute("data-path");
+      if (!filePath) return content;
+      const name = element.getAttribute("data-name") || artifactBasename(filePath);
+      return `[${name}](${pathToFileUrl(filePath)})`;
     },
   });
 

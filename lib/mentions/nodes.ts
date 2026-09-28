@@ -5,6 +5,7 @@ import { MentionItem, UnifiedMentionItem } from "@/components/ui/mention-popup";
 import { CardMentionItem } from "@/components/ui/card-mention-popup";
 import { DocumentMentionItem } from "@/components/ui/document-mention-popup";
 import { UnifiedItemType } from "@/lib/types";
+import { artifactBasename, artifactKind, fileUrlToPath } from "@/lib/artifact-url";
 import {
   backspaceMentionShortcut,
   boolDataAttr,
@@ -314,5 +315,73 @@ export const DocumentMention = Node.create<DocumentMentionOptions>({
     return [
       mentionSuggestionPlugin(this.editor, DocumentSuggestionPluginKey, this.options.suggestion),
     ];
+  },
+});
+
+// ----------------------------------------------------------------------
+// Artifact mention — a file an AI chat produced and the user approved
+// (HTML mockup, image, document). Clicking opens it in the default app.
+// ----------------------------------------------------------------------
+
+function artifactDisplayName(text: string | null | undefined, path: string): string {
+  const trimmed = (text || "").trim();
+  // A link whose text is the path itself reads better as just the file name.
+  if (!trimmed || trimmed.startsWith("/") || trimmed.startsWith("file://")) {
+    return artifactBasename(path);
+  }
+  return trimmed;
+}
+
+export const ArtifactMention = Node.create({
+  name: "artifactMention",
+  ...inlineAtomDefaults,
+
+  addAttributes() {
+    return {
+      path: dataAttr("path"),
+      name: dataAttr("name"),
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: `span[data-type="${this.name}"]` },
+      // Apply output and older cards store the artifact as a plain
+      // `<a href="file://…">`. Link drops file: hrefs, so without this rule
+      // the link vanished on load and the next edit erased it from the DB.
+      {
+        tag: 'a[href^="file://"]',
+        priority: 60,
+        getAttrs: (element: HTMLElement) => {
+          const path = fileUrlToPath(element.getAttribute("href"));
+          if (!path) return false;
+          return { path, name: artifactDisplayName(element.textContent, path) };
+        },
+      },
+    ];
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const path = (node.attrs.path as string) || "";
+    const name = (node.attrs.name as string) || artifactBasename(path);
+    return [
+      "span",
+      mergeAttributes({ "data-type": this.name }, HTMLAttributes, {
+        "data-kind": artifactKind(path),
+        title: path,
+        class: "mention artifact-mention",
+      }),
+      name,
+    ];
+  },
+
+  renderText({ node }) {
+    // Copied text keeps the location, so pasting it into a chat still points
+    // Claude at the file.
+    return (node.attrs.path as string) || (node.attrs.name as string) || "";
+  },
+
+  addKeyboardShortcuts() {
+    return { Backspace: backspaceMentionShortcut(this.editor, this.name) };
   },
 });

@@ -1,7 +1,8 @@
 "use client";
 
 import DOMPurify from "isomorphic-dompurify";
-import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { MarkdownEditor, openArtifactChip } from "@/components/ui/markdown-editor";
+import { useToast } from "@/hooks/use-toast";
 import { SectionType, SECTION_CONFIG } from "@/lib/types";
 import { EnrichButton } from "./enrich-button";
 
@@ -54,6 +55,7 @@ export function SectionEditor({
   aiPlatform,
 }: SectionEditorProps) {
   const config = SECTION_CONFIG[sectionType];
+  const { toast } = useToast();
 
   if (readOnly) {
     // DOMPurify default config preserves every tag/attr TipTap produces
@@ -62,7 +64,16 @@ export function SectionEditor({
     const sanitized = value ? shapeTaskItemsForDisplay(DOMPurify.sanitize(value)) : "";
     return (
       <div className="h-full flex flex-col p-4 overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-y-auto prose-kanban">
+        <div
+          className="flex-1 min-h-0 overflow-y-auto prose-kanban"
+          onClick={(event) => {
+            const chip = (event.target as HTMLElement).closest(".artifact-mention") as HTMLElement | null;
+            const filePath = chip?.getAttribute("data-path");
+            if (!filePath) return;
+            event.preventDefault();
+            void openArtifactChip(cardId, filePath, toast);
+          }}
+        >
           {sanitized ? (
             <div dangerouslySetInnerHTML={{ __html: sanitized }} />
           ) : (
@@ -95,6 +106,7 @@ export function SectionEditor({
           placeholder={config.placeholder}
           onCardClick={onCardClick}
           projectId={projectId}
+          cardId={cardId}
           preferSelectionOnDrop
         />
       </div>

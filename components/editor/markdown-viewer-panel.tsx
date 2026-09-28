@@ -14,34 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-
-type ElectronOpenAPI = {
-  openPath?: (filePath: string) => Promise<string>;
-  revealPath?: (filePath: string) => Promise<string>;
-};
-
-function getElectronOpenAPI(): ElectronOpenAPI | undefined {
-  if (typeof window === "undefined") return undefined;
-  return (window as unknown as { electronAPI?: ElectronOpenAPI }).electronAPI;
-}
-
-async function openViaApi(
-  filePath: string,
-  action: "open" | "reveal"
-): Promise<string> {
-  const res = await fetch("/api/open-file", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(action === "reveal" ? { path: filePath, action } : { path: filePath }),
-  });
-  if (res.ok) return "";
-  try {
-    const data = (await res.json()) as { error?: string };
-    return data.error || `HTTP ${res.status}`;
-  } catch {
-    return `HTTP ${res.status}`;
-  }
-}
+import { openLocalPath, revealLocalPath } from "@/lib/open-path";
 
 type MarkdownViewerPanelProps = {
   title: string;
@@ -77,14 +50,7 @@ export function MarkdownViewerPanel({
   const handleOpen = async () => {
     setIsOpening(true);
     try {
-      const electron = getElectronOpenAPI();
-      let error = "";
-      if (electron?.openPath) {
-        // shell.openPath returns "" on success, error string on failure.
-        error = (await electron.openPath(path)) || "";
-      } else {
-        error = await openViaApi(path, "open");
-      }
+      const error = await openLocalPath(path);
 
       if (error) {
         toast({
@@ -112,13 +78,7 @@ export function MarkdownViewerPanel({
   const handleReveal = async () => {
     setIsRevealing(true);
     try {
-      const electron = getElectronOpenAPI();
-      let error = "";
-      if (electron?.revealPath) {
-        error = (await electron.revealPath(path)) || "";
-      } else {
-        error = await openViaApi(path, "reveal");
-      }
+      const error = await revealLocalPath(path);
 
       if (error) {
         toast({

@@ -13,6 +13,7 @@ import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
 import { PRIOR_DECISIONS_RULE } from "@/lib/prompts/prior-decisions";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { APPLY_OPEN_MARKER, APPLY_CLOSE_MARKER } from "@/lib/apply-content";
+import { artifactHtmlToMarkdownLinks } from "@/lib/artifact-url";
 
 // Card context info
 export interface CardContext {
@@ -55,6 +56,12 @@ export interface CardContext {
    * Never set in the solo edition — there is no pool there.
    */
   externallyAuthored?: boolean;
+  /**
+   * The card's permanent folder (`~/.ideafy/images/<uuid>`). Approved
+   * artifacts are saved here and linked from the applied content. Callers
+   * without file access (remote runner) leave it unset and get no rule.
+   */
+  artifactDir?: string;
 }
 
 // Get allowed tools for non-test sections (test section uses --dangerously-skip-permissions)
@@ -165,6 +172,16 @@ ${APPLY_CLOSE_MARKER}
 Explanations, reasoning, status narration ("reading the opinion…") and pointers like "apply this with Replace" go outside the block — the Apply buttons take only what is inside it. Use one block per reply. Skip the block when you are only asking a question or chatting.`;
 }
 
+// Approved artifacts must land on the card as a link the user can click;
+// otherwise the file only lives in chat history and a temp folder.
+export function buildArtifactLinkRule(ctx: CardContext): string {
+  if (!ctx.artifactDir) return "";
+  return `
+
+## Artifacts (mockups, images, documents)
+When the user approves an artifact you produced for this card — an HTML mockup, an image, a document — save the file under \`${ctx.artifactDir}/\` and make the FIRST line inside your apply block a markdown link to it with its absolute path: \`[mockup name](file://${ctx.artifactDir}/file-name.html)\`. Encode spaces as %20. The card shows that link as a clickable chip that opens the file; without it the artifact is lost to the card. A claude.ai artifact is linked with its normal https:// URL instead.`;
+}
+
 // Shared MCP tool usage instructions
 export function buildToolUsageContext(section: SectionType): string {
   return `
@@ -209,7 +226,7 @@ Current description: ${ctx.sectionContent || "(empty)"}
 
 Provide helpful suggestions, clarifications, or improvements. Be concise and practical.
 
-${voice}${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail")}`;
+${voice}${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail")}${buildArtifactLinkRule(ctx)}`;
   },
 
   opinion: (ctx) => {
@@ -233,7 +250,7 @@ ${ctx.narrativeContent}
 
 Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity. Be direct and constructive.
 
-${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion")}`;
+${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion")}${buildArtifactLinkRule(ctx)}`;
     return prompt;
   },
 
@@ -247,7 +264,7 @@ Current solution plan: ${ctx.sectionContent || "(none)"}
 
 Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.
 
-${voice}${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution")}`;
+${voice}${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution")}${buildArtifactLinkRule(ctx)}`;
   },
 
   tests: (ctx) => {
@@ -275,7 +292,9 @@ ${voice}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tes
 // Strip HTML tags for cleaner prompts
 export function stripHtml(html: string): string {
   if (!html) return "";
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  // Artifact chips keep their file location as a markdown link, so the next
+  // chat turn still knows where the approved file lives.
+  return artifactHtmlToMarkdownLinks(html).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 // Build conversation context from history

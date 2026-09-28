@@ -563,6 +563,33 @@ button:disabled {
   @apply bg-orange-200 text-orange-900;
 }
 
+/* Artifact mention — approved chat output (mockup, image, doc) */
+.artifact-mention {
+  @apply bg-violet-500/20 text-violet-300 cursor-pointer transition-colors;
+}
+.artifact-mention:hover {
+  @apply bg-violet-500/35 text-violet-200 underline;
+}
+.light .artifact-mention {
+  @apply bg-violet-100 text-violet-800;
+}
+.light .artifact-mention:hover {
+  @apply bg-violet-200 text-violet-900 underline;
+}
+.artifact-mention::before {
+  @apply mr-1 opacity-70;
+  content: "↗";
+}
+.artifact-mention[data-kind="html"]::before {
+  content: "</>";
+}
+.artifact-mention[data-kind="image"]::before {
+  content: "▣";
+}
+.artifact-mention[data-kind="doc"]::before {
+  content: "≡";
+}
+
 /* Image attachment marker (paste chip ↔ inline pill link) */
 .image-attachment {
   @apply inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-xs font-mono border-l-2 select-none align-baseline;

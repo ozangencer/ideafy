@@ -7,6 +7,7 @@ export {
   UnifiedMention,
   CardMention,
   DocumentMention,
+  ArtifactMention,
 } from "./mentions/nodes";
 export type {
   MentionOptions,

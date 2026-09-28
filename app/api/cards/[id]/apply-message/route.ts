@@ -12,6 +12,8 @@ import {
   testScenariosToMarkdown,
 } from "@/lib/markdown";
 import { recordApplyMessage } from "@/lib/activity-registry";
+import { persistArtifacts as persistArtifactFiles } from "@/lib/artifact-links";
+import { getCardImageDir } from "@/lib/prompts";
 
 type Field = "description" | "solutionSummary" | "aiOpinion" | "testScenarios";
 type Mode = "replace" | "append";
@@ -73,10 +75,19 @@ export async function POST(
       ? linkCardsInHtml(html, existing.projectId)
       : html;
 
+  // An approved artifact (mockup, image, doc) linked as file://… is copied
+  // out of /var/folders or /tmp into the card's own folder so the chip keeps
+  // opening after macOS cleans the temp dir.
+  const persistArtifacts = (html: string) =>
+    html.includes("file://") ? persistArtifactFiles(html, getCardImageDir(id)) : html;
+
   let nextHtml: string;
   let added: number | undefined;
   if (mode === "replace") {
-    nextHtml = field === "testScenarios" ? ensureTestScenariosHtml(content) : linkCards(ensureHtml(content));
+    nextHtml =
+      field === "testScenarios"
+        ? ensureTestScenariosHtml(content)
+        : persistArtifacts(linkCards(ensureHtml(content)));
   } else {
     // Append: reconstruct a markdown payload that represents existing + new,
     // then convert once so formatting stays consistent.
@@ -87,7 +98,10 @@ export async function POST(
       nextHtml = ensureTestScenariosHtml(merged.markdown);
     } else {
       const existingHtml = (existing as Record<string, string | null>)[field] || "";
-      const merged = mergeHtmlSections(existingHtml, linkCards(markdownToTiptapHtml(content)));
+      const merged = mergeHtmlSections(
+        existingHtml,
+        persistArtifacts(linkCards(markdownToTiptapHtml(content)))
+      );
       added = merged.added;
       nextHtml = merged.html;
     }

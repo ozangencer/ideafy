@@ -15,10 +15,12 @@ import type { EditorView } from "@tiptap/pm/view";
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { buildUnifiedItems } from "@/lib/mentions/unified-items";
-import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
+import { UnifiedMention, CardMention, DocumentMention, ArtifactMention } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
 import { buildDroppedFilePathText, getDroppedEditorFiles } from "@/lib/dropped-file-paths";
+import { openCardArtifact } from "@/lib/open-path";
+import { useToast } from "@/hooks/use-toast";
 import tippy, { Instance } from "tippy.js";
 
 // Extend HTMLElement to include tippy instance
@@ -34,7 +36,42 @@ interface MarkdownEditorProps {
   placeholder?: string;
   onCardClick?: (cardId: string) => void;
   projectId?: string | null;
+  /** Card whose content this is. Artifact and document chips open through it. */
+  cardId?: string;
   preferSelectionOnDrop?: boolean;
+}
+
+type ToastFn = ReturnType<typeof useToast>["toast"];
+
+/**
+ * Open a file chip in its default app. The click never navigates the window:
+ * inside Electron a `file://` navigation would replace the whole board.
+ */
+export async function openArtifactChip(
+  cardId: string | undefined,
+  filePath: string,
+  toast: ToastFn,
+): Promise<void> {
+  if (!cardId || cardId.startsWith("draft-")) {
+    toast({
+      title: "Couldn't open file",
+      description: "Save the card first, then open its files.",
+      variant: "destructive",
+    });
+    return;
+  }
+  try {
+    const error = await openCardArtifact(cardId, filePath);
+    if (error) {
+      toast({ title: "Couldn't open file", description: `${error}: ${filePath}`, variant: "destructive" });
+    }
+  } catch (err) {
+    toast({
+      title: "Couldn't open file",
+      description: err instanceof Error ? err.message : "Unknown error",
+      variant: "destructive",
+    });
+  }
 }
 
 export function MarkdownEditor({
@@ -43,8 +80,10 @@ export function MarkdownEditor({
   placeholder = "Write here...",
   onCardClick,
   projectId,
+  cardId,
   preferSelectionOnDrop = false,
 }: MarkdownEditorProps) {
+  const { toast } = useToast();
   const isUpdatingFromExternal = useRef(false);
   const lastSyncedValue = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -317,6 +356,7 @@ export function MarkdownEditor({
       DocumentMention.configure({
         suggestion: documentSuggestion,
       }),
+      ArtifactMention,
       ImageResize.configure({
         inline: false,
         allowBase64: true,
@@ -475,19 +515,30 @@ export function MarkdownEditor({
     };
   }, [value, cards, projects]);
 
-  // Handle card mention clicks
+  // Handle card, artifact and document mention clicks
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.classList.contains("card-mention") || target.closest(".card-mention")) {
       const mention = target.classList.contains("card-mention") ? target : target.closest(".card-mention") as HTMLElement;
-      const cardId = mention?.getAttribute("data-id");
-      if (cardId && onCardClick) {
+      const mentionedCardId = mention?.getAttribute("data-id");
+      if (mentionedCardId && onCardClick) {
         e.preventDefault();
         e.stopPropagation();
-        onCardClick(cardId);
+        onCardClick(mentionedCardId);
       }
+      return;
     }
-  }, [onCardClick]);
+
+    const fileChip = target.closest(".artifact-mention, .document-mention") as HTMLElement | null;
+    if (!fileChip) return;
+    const filePath = fileChip.classList.contains("artifact-mention")
+      ? fileChip.getAttribute("data-path")
+      : fileChip.getAttribute("data-absolute-path") || fileChip.getAttribute("data-path");
+    if (!filePath) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void openArtifactChip(cardId, filePath, toast);
+  }, [onCardClick, cardId, toast]);
 
   return (
     <div
