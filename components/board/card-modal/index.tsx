@@ -36,6 +36,7 @@ import {
   Terminal,
   Check,
   X,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
@@ -1173,9 +1174,14 @@ export function CardModal({
                 <button
                   type="button"
                   onClick={() => setShowGitDetails((v) => !v)}
-                  className="self-start text-xs text-muted-foreground hover:text-ink transition-colors"
+                  aria-expanded={showGitDetails}
+                  className="self-start inline-flex items-center gap-1.5 rounded-md border border-ink/20 px-2 py-1 text-xs font-medium text-ink hover:bg-ink/[0.06] hover:border-ink/40 transition-colors"
                 >
-                  {showGitDetails ? "Hide details" : "Details"}
+                  <ChevronRight
+                    className={`h-3.5 w-3.5 transition-transform ${showGitDetails ? "rotate-90" : ""}`}
+                  />
+                  <GitBranch className="h-3.5 w-3.5" />
+                  {showGitDetails ? "Hide branch details" : "Branch details"}
                 </button>
                 {showGitDetails && (
                   <div className="flex flex-col gap-1 pl-3 border-l-2 border-border">
