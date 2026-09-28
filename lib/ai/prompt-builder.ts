@@ -10,6 +10,7 @@ import { testScenariosToMarkdown } from "@/lib/markdown";
 import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { buildVoicePrompt } from "@/lib/prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
+import { PRIOR_DECISIONS_RULE } from "@/lib/prompts/prior-decisions";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { APPLY_OPEN_MARKER, APPLY_CLOSE_MARKER } from "@/lib/apply-content";
 
@@ -269,6 +270,8 @@ ${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("o
     const voice = buildVoicePrompt(ctx.voice ?? DEFAULT_VOICE, "plan");
     return `You are helping plan the implementation of a development task.
 ${buildCardContext(ctx)}${buildOpinionContext(ctx)}
+${PRIOR_DECISIONS_RULE}
+
 Current solution plan: ${ctx.sectionContent || "(none)"}
 
 Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work. Be specific and actionable.

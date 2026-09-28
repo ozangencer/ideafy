@@ -5,6 +5,7 @@ import { detectCardLanguage } from "./test-style";
 import { buildVoicePrompt } from "./voice-style";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
+import { PRIOR_DECISIONS_EVALUATION_RULE } from "./prior-decisions";
 
 /**
  * Shared output schema for idea evaluation. Used by the one-shot evaluate
@@ -13,6 +14,9 @@ import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
  */
 const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
 [One sentence: Strong Yes / Yes / Maybe / No / Strong No]
+
+## Related Cards
+[Optional — only when an earlier card contradicts this idea, set a precedent for it, or open work overlaps it. One line per card: displayId, what it decided or touches, and why it matters here. Leave the whole section out otherwise.]
 
 ## Strengths
 - Key strengths of the idea
@@ -34,11 +38,32 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
 [X/10] — brief justification`;
 
 /**
+ * The "check earlier cards" step for both evaluation prompts. The one-shot
+ * Evaluate run never calls get_card, so the ids the MCP tools need are spelled
+ * out here. Without a project there is nothing to search, so it drops out.
+ */
+function buildPriorDecisionsSection(card: { id: string; projectId?: string | null }): string {
+  if (!card.projectId) return "";
+  return `
+## Earlier Decisions
+Card id: ${card.id} · projectId: ${card.projectId}
+
+${PRIOR_DECISIONS_EVALUATION_RULE}
+`;
+}
+
+/**
  * Evaluate prompt for cards entering the Ideation column.
  * Asks Claude to act as a Product Architect and return a structured verdict.
  */
 export function buildEvaluatePrompt(
-  card: { title: string; description: string; externallyAuthored?: boolean },
+  card: {
+    id: string;
+    projectId?: string | null;
+    title: string;
+    description: string;
+    externallyAuthored?: boolean;
+  },
   narrativePath: string | null | undefined,
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
@@ -52,6 +77,7 @@ export function buildEvaluatePrompt(
     : "@docs/product-narrative.md";
 
   const voicePrompt = buildVoicePrompt(voice, "opinion");
+  const priorDecisions = buildPriorDecisionsSection(card);
 
   return `You are a Product Architect. Evaluate this idea — be brutally honest, point out both good and bad.
 
@@ -67,11 +93,11 @@ ${description}
 
 ## Evaluation Lenses
 YAGNI · scope creep risk · scalability · technical feasibility · alignment with vision · implementation complexity.
-
+${priorDecisions}
 ${voicePrompt}
 
 ## Output Format
-Markdown with exactly these sections:
+Markdown with exactly these sections (Related Cards is the only optional one):
 
 ${EVALUATION_OUTPUT_SCHEMA}`;
 }
@@ -133,7 +159,13 @@ Focus on fixing the bug efficiently. Do NOT write extensive documentation or pla
  * call MCP tools at the end of the session.
  */
 export function buildIdeationPrompt(
-  card: { id: string; title: string; description: string; externallyAuthored?: boolean },
+  card: {
+    id: string;
+    projectId?: string | null;
+    title: string;
+    description: string;
+    externallyAuthored?: boolean;
+  },
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
 ): string {
@@ -156,9 +188,9 @@ ${voicePrompt}
 ${description}
 
 Card ID: ${card.id}
-
+${buildPriorDecisionsSection(card)}
 ## Available MCP Tools
-- mcp__ideafy__get_card · mcp__ideafy__update_card · mcp__ideafy__save_opinion
+- mcp__ideafy__get_card · mcp__ideafy__update_card · mcp__ideafy__save_opinion · mcp__ideafy__search_cards · mcp__ideafy__list_open_work
 
 ## When the Discussion Ends
 Before finishing, do all three:

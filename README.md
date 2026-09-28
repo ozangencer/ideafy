@@ -114,7 +114,9 @@ Ideafy ships an MCP server that exposes the board to any MCP-compatible agent (C
 
 | Tool | Purpose |
 |---|---|
-| `list_cards` | List cards, optionally filtered by column or project. |
+| `list_cards` | List cards as summaries, optionally filtered by column or project (`full: true` for content). |
+| `search_cards` | Keyword search over one project's cards — title, description, plan, opinion — returning short rows with a snippet. |
+| `list_open_work` | Unmerged cards in a project and the files each touches (from its branch, or from its plan). |
 | `get_card` | Fetch a single card by id. |
 | `create_card` | Create a card — usually into Ideation or Bugs. |
 | `update_card` | Update any card field. |

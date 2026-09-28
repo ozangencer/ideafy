@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__ideafy__get_card, mcp__ideafy__update_card, mcp__ideafy__move_card, mcp__ideafy__list_cards, mcp__ideafy__create_card, mcp__ideafy__save_plan, mcp__ideafy__save_tests, mcp__ideafy__save_opinion, mcp__ideafy__get_project_by_folder
+allowed-tools: mcp__ideafy__get_card, mcp__ideafy__update_card, mcp__ideafy__move_card, mcp__ideafy__list_cards, mcp__ideafy__search_cards, mcp__ideafy__list_open_work, mcp__ideafy__create_card, mcp__ideafy__save_plan, mcp__ideafy__save_tests, mcp__ideafy__save_opinion, mcp__ideafy__get_project_by_folder
 argument-hint: [action or query]
 description: Manage ideafy cards - list, create, update, move cards and save plans/tests
 ---
@@ -33,7 +33,19 @@ Supported actions:
 Keywords: list, listele, kartlar, cards, board, show
 - Use `mcp__ideafy__list_cards` with `projectId` from Step 1
 - Optional: filter by `status` if the user specifies a column (e.g., "list backlog", "progress'tekiler")
+- Returns a summary per card (no description/plan/tests); use `get_card` for a card's content
 - Display as a compact table with: ID, Title, Status, Priority, Complexity
+
+#### Search Cards
+Keywords: search, ara, bul, find, daha önce, previously, decided
+- Use `mcp__ideafy__search_cards` with `projectId` from Step 1 and 2-3 keywords as `query`
+- Results are short rows with a snippet; a newer decision overrides an older one, `withdrawn` means tried and abandoned
+- Open a result with `mcp__ideafy__get_card` only when the snippet is not enough
+
+#### Open Work
+Keywords: open work, açık işler, overlap, çakışma, who is touching
+- Use `mcp__ideafy__list_open_work` with `projectId` from Step 1
+- Shows each unmerged card with the files it touches (`git` = live branch/worktree, `plan` = files named in its plan)
 
 #### Card Details
 Keywords: show, detail, detay, gor, KAN-XX, #XX
@@ -69,6 +81,7 @@ Keywords: move, tasi, tasima
 
 #### Save Plan
 Keywords: plan, solution, cozum
+- Before drafting, run `search_cards` and `list_open_work` for the card's project and note any contradiction or file overlap under Edge Cases
 - Use `mcp__ideafy__save_plan`
 - Requires card ID and solution summary
 - Moves card to In Progress

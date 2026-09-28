@@ -34,6 +34,7 @@ import { stripHtml } from "./prompts/utils";
 import { detectCardLanguage } from "./prompts/test-style";
 import { buildVoicePrompt } from "./prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "./prompts/opinion";
+import { PRIOR_DECISIONS_RULE } from "./prompts/prior-decisions";
 import { DEFAULT_VOICE, type Voice } from "./types";
 
 const NO_SAVE_TOOLS_RULE =
@@ -143,6 +144,8 @@ export function buildPhasePrompt(
 Read card via MCP (mcp__ideafy__get_card). Review title, description, and any existing notes.
 
 ${AI_OPINION_PLANNING_RULE}
+
+${PRIOR_DECISIONS_RULE}
 
 Task: Create implementation plan for "${title}".
 

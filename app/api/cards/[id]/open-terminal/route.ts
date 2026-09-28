@@ -11,6 +11,7 @@ import {
 } from "@/lib/git";
 import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
+import { PRIOR_DECISIONS_RULE } from "@/lib/prompts/prior-decisions";
 type Phase = "planning" | "implementation" | "retest";
 
 function stripHtml(html: string): string {
@@ -92,8 +93,10 @@ The user tested this implementation but encountered an error.
 2. Review the description field for task requirements
 3. Read the aiOpinion field and base the plan on it:
 ${AI_OPINION_PLANNING_RULE}
-4. Analyze this task and create a detailed implementation plan
-5. Do NOT implement yet - only plan`;
+4. Check the plan against the project's other cards:
+${PRIOR_DECISIONS_RULE}
+5. Analyze this task and create a detailed implementation plan
+6. Do NOT implement yet - only plan`;
   }
 }
 
