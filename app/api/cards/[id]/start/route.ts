@@ -164,6 +164,7 @@ export async function POST(
         cardTitle: card.title,
         displayId,
         processType: "autonomous",
+        runKind: phase,
       },
     });
 

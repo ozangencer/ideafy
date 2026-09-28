@@ -62,6 +62,9 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
   let duration: number | undefined;
   let isError = false;
   let sawResultEnvelope = false;
+  // `parseClaudeStreamLine` skips `system/init`, so the id is read straight off
+  // the raw lines: init carries it first, the result envelope repeats it.
+  let sessionId: string | undefined;
 
   function flushRun(followedByToolUse = false): void {
     if (openRun.trim()) {
@@ -154,6 +157,10 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
     }
     if (!json || typeof json !== "object") return;
 
+    if (!sessionId && typeof json.session_id === "string" && json.session_id) {
+      sessionId = json.session_id;
+    }
+
     switch (json.type) {
       case "assistant":
         handleAssistant(json);
@@ -221,6 +228,9 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
             isError: !!envelope.is_error,
             sawResultEnvelope: true,
             injectedUserMessages: 0,
+            ...(typeof envelope.session_id === "string" && envelope.session_id
+              ? { sessionId: envelope.session_id }
+              : {}),
           };
         } catch {
           // Not JSON either — hand back the raw text, matching what
@@ -250,6 +260,7 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
         sawResultEnvelope,
         injectedUserMessages,
         ...(waitTailStart !== null ? { waitTailStart } : {}),
+        ...(sessionId ? { sessionId } : {}),
       };
     },
   };

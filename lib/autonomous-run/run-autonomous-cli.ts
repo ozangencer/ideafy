@@ -6,6 +6,7 @@ import {
   killProcess,
   registerProcess,
 } from "@/lib/process-registry";
+import { recordRunSession } from "@/lib/card-sessions";
 import { getProviderForCard } from "@/lib/platform/active";
 import { adaptMcpToolNames } from "@/lib/platform/mcp-tool-names";
 import type { ParsedRunOutput } from "@/lib/platform/types";
@@ -29,6 +30,9 @@ export interface AutonomousTracking {
   cardTitle: string;
   displayId: string | null;
   processType: AutonomousProcessType;
+  /** Label for the card's CLI session list. Defaults to processType; Start
+   *  passes its phase so a plan run and a verify run read differently. */
+  runKind?: string;
 }
 
 export interface RunAutonomousOptions {
@@ -180,6 +184,23 @@ export async function runAutonomousCli(
           sawResultEnvelope: !!stdout.trim(),
           injectedUserMessages: 0,
         };
+      }
+
+      // Before any resolve/reject: a run that failed or timed out is the one
+      // most worth resuming, so it gets recorded too. Timeout already rejected,
+      // but the kill still lands here.
+      if (tracking && parsed.sessionId) {
+        try {
+          recordRunSession({
+            sessionId: parsed.sessionId,
+            cardId: tracking.cardId,
+            provider: provider.id,
+            cwd,
+            runKind: tracking.runKind ?? tracking.processType,
+          });
+        } catch (error) {
+          console.warn(`[${label}] could not record session ${parsed.sessionId}:`, error);
+        }
       }
 
       // Not `!stdout.trim()`: under stream-json a `system/init` line lands

@@ -22,8 +22,9 @@ interface CardSession {
   provider: string;
   cwd: string | null;
   sectionType: string | null;
+  runKind: string | null;
   lastUsedAt: string;
-  source: "chat" | "terminal";
+  source: "chat" | "terminal" | "run";
   command: string | null;
   providerLabel: string;
 }
@@ -185,7 +186,11 @@ export function CardSessionsPopover({ cardId }: { cardId: string }) {
                       {shortId(session.sessionId)}
                     </span>
                     <span className="text-[10px] text-muted-foreground group-hover:text-current shrink-0">
-                      {session.source === "terminal" ? "terminal" : session.sectionType}
+                      {session.source === "chat"
+                        ? session.sectionType
+                        : session.source === "run"
+                          ? session.runKind
+                          : "terminal"}
                     </span>
                   </div>
                   <span className="text-[11px] text-muted-foreground group-hover:text-current">

@@ -90,6 +90,12 @@ export interface ParsedRunOutput {
    * for never arrives (IDE-319). Only the Claude collector sets it.
    */
   waitTailStart?: number;
+  /**
+   * The CLI's own id for this run, so the card can offer to resume it later —
+   * most useful when the run timed out or died halfway (IDE-347). Absent when
+   * the run crashed before announcing one.
+   */
+  sessionId?: string;
 }
 
 /**

@@ -1,0 +1,1 @@
+ALTER TABLE `ideafy_sessions` ADD `run_kind` text;

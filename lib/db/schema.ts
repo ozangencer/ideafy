@@ -157,6 +157,11 @@ export const ideafySessions = sqliteTable("ideafy_sessions", {
   // session started inside a worktree can only be resumed from that same
   // path. Null on rows written before this column existed.
   cwd: text("cwd"),
+  // Set only on rows recorded from a one-shot run (Evaluate, Start, Quick
+  // Fix): what the run was — "evaluate", "planning", "implementation",
+  // "retest", "verify" or "quick-fix". Null for sessions bound from a
+  // terminal, and for runs recorded before this column existed.
+  runKind: text("run_kind"),
   createdAt: text("created_at").notNull(),
   // Refreshed on every bound turn by the hook, so it doubles as "last used"
   // and gives the session list a meaningful sort order.

@@ -88,6 +88,7 @@ export function createStreamRunOutputCollector(
   let duration: number | undefined;
   let isError = false;
   let sawParseableLine = false;
+  let sessionId: string | undefined;
 
   function flushRun(followedByToolUse = false): void {
     if (openRun.trim()) {
@@ -119,8 +120,13 @@ export function createStreamRunOutputCollector(
         // The model stopped talking to act — whatever it said is complete.
         flushRun(true);
         return;
+      case "session_id":
+        // Not the product either, but the card keeps it so the run can be
+        // resumed. The first one is the run's own; keep it.
+        if (!sessionId && event.data) sessionId = String(event.data);
+        return;
       default:
-        // `thinking`, `tool_result`, `session_id`, `system`: not the product.
+        // `thinking`, `tool_result`, `system`: not the product.
         return;
     }
   }
@@ -187,6 +193,7 @@ export function createStreamRunOutputCollector(
           isError: legacy.isError,
           sawResultEnvelope: !!raw.trim(),
           injectedUserMessages: 0,
+          ...(sessionId ? { sessionId } : {}),
         };
       }
 
@@ -212,6 +219,7 @@ export function createStreamRunOutputCollector(
         sawResultEnvelope: sawParseableLine,
         // These streams carry no harness re-invocations to count.
         injectedUserMessages: 0,
+        ...(sessionId ? { sessionId } : {}),
       };
     },
   };

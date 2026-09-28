@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         cardId: cardHint,
         provider: "claude",
         cwd,
+        runKind: null,
         createdAt: now,
         updatedAt: now,
       };

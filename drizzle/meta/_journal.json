@@ -92,6 +92,13 @@
       "when": 1790595679512,
       "tag": "0012_card_output_paths",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790605287406,
+      "tag": "0013_ideafy_sessions_run_kind",
+      "breakpoints": true
     }
   ]
 }

@@ -316,6 +316,53 @@ test("opencode collector still reports session errors", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Session ids — so the card can resume a one-shot run (IDE-347)
+// ---------------------------------------------------------------------------
+
+test("claude collector reads the session id off the init line", () => {
+  const ndjson = [
+    JSON.stringify({ type: "system", subtype: "init", session_id: "init-id" }),
+    claudeAssistant([{ type: "text", text: CHECKLIST }]),
+    JSON.stringify({ type: "result", result: "", is_error: false, session_id: "result-id" }),
+  ].join("\n");
+
+  assert.equal(collect(createClaudeRunOutputCollector(), ndjson).sessionId, "init-id");
+});
+
+test("claude collector falls back to the result envelope's session id", () => {
+  const ndjson = [
+    claudeAssistant([{ type: "text", text: CHECKLIST }]),
+    JSON.stringify({ type: "result", result: "", is_error: false, session_id: "result-id" }),
+  ].join("\n");
+
+  assert.equal(collect(createClaudeRunOutputCollector(), ndjson).sessionId, "result-id");
+});
+
+test("claude collector leaves the session id unset when none arrived", () => {
+  const ndjson = [claudeAssistant([{ type: "text", text: CHECKLIST }]), CLAUDE_RESULT].join("\n");
+  assert.equal(collect(createClaudeRunOutputCollector(), ndjson).sessionId, undefined);
+});
+
+test("codex collector keeps the thread id as the session id", () => {
+  const ndjson = [
+    JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+    JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: CHECKLIST } }),
+  ].join("\n");
+
+  assert.equal(collect(codexProvider.createRunOutputCollector(), ndjson).sessionId, "thread-1");
+});
+
+test("gemini collector keeps the first session id", () => {
+  const ndjson = [
+    JSON.stringify({ type: "init", session_id: "first" }),
+    JSON.stringify({ type: "message", role: "assistant", delta: true, content: CHECKLIST }),
+    JSON.stringify({ type: "init", session_id: "second" }),
+  ].join("\n");
+
+  assert.equal(collect(geminiProvider.createRunOutputCollector(), ndjson).sessionId, "first");
+});
+
+// ---------------------------------------------------------------------------
 // MCP tool naming
 // ---------------------------------------------------------------------------
 

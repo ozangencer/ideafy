@@ -10,8 +10,9 @@ import type { AiPlatform } from "./types";
 //   chat_sessions    — sessions Ideafy itself started (in-app chat, or a
 //                      "Resume CLI (fresh)" launch). Scoped to a section.
 //   ideafy_sessions  — sessions the user started in their own terminal and
-//                      bound to a card via the hook / bind_session_to_card.
-//                      Card-scoped; no section.
+//                      bound to a card via the hook / bind_session_to_card,
+//                      plus the one-shot runs (Evaluate, Start, Quick Fix)
+//                      recorded by recordRunSession. Card-scoped; no section.
 //
 // Until now only the first was readable from the UI, so a session started in
 // the terminal was invisible even though its ID was sitting in the DB.
@@ -20,8 +21,10 @@ export interface CardSession {
   provider: string;
   cwd: string | null;
   sectionType: string | null;
+  // What a one-shot run was ("evaluate", "implementation", …); null otherwise.
+  runKind: string | null;
   lastUsedAt: string;
-  source: "chat" | "terminal";
+  source: "chat" | "terminal" | "run";
 }
 
 const KNOWN_PLATFORMS: readonly AiPlatform[] = ["claude", "gemini", "codex", "opencode"];
@@ -95,6 +98,7 @@ export function listCardSessions(cardId: string): CardSession[] {
       provider: row.provider,
       cwd: null,
       sectionType: row.sectionType,
+      runKind: null,
       lastUsedAt: row.lastUsedAt,
       source: "chat",
     });
@@ -107,14 +111,72 @@ export function listCardSessions(cardId: string): CardSession[] {
       provider: row.provider,
       cwd: row.cwd,
       sectionType: null,
+      runKind: row.runKind,
       lastUsedAt: row.updatedAt,
-      source: "terminal",
+      source: row.runKind ? "run" : "terminal",
     });
   }
 
   return Array.from(byId.values()).sort((a, b) =>
     b.lastUsedAt.localeCompare(a.lastUsedAt)
   );
+}
+
+// Binds a finished one-shot run's session to its card so the card can offer
+// to resume it — the run that timed out or stopped halfway is exactly the one
+// worth reopening (IDE-347). Written after the run ends, never before: a row
+// that is bound while the run is still going would have the hook inject the
+// card's phase policy into a headless run that never asked for it.
+//
+// Upserts by session ID because the hook has usually filed an "offered" row
+// for the same session during the run. A row already bound to another card is
+// left alone.
+export function recordRunSession(args: {
+  sessionId: string;
+  cardId: string;
+  provider: string;
+  cwd: string;
+  runKind: string;
+}): void {
+  const { sessionId, cardId, provider, cwd, runKind } = args;
+  const now = new Date().toISOString();
+
+  const existing = db
+    .select()
+    .from(schema.ideafySessions)
+    .where(eq(schema.ideafySessions.sessionId, sessionId))
+    .get();
+
+  if (existing?.cardId && existing.cardId !== cardId) return;
+
+  const card = db
+    .select({ projectId: schema.cards.projectId })
+    .from(schema.cards)
+    .where(eq(schema.cards.id, cardId))
+    .get();
+  const projectId = existing?.projectId ?? card?.projectId ?? null;
+
+  if (existing) {
+    db.update(schema.ideafySessions)
+      .set({ state: "bound", cardId, projectId, provider, cwd, runKind, updatedAt: now })
+      .where(eq(schema.ideafySessions.sessionId, sessionId))
+      .run();
+    return;
+  }
+
+  db.insert(schema.ideafySessions)
+    .values({
+      sessionId,
+      projectId,
+      state: "bound",
+      cardId,
+      provider,
+      cwd,
+      runKind,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
 }
 
 export interface CardSessionWithCommand extends CardSession {
