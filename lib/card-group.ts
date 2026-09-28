@@ -38,7 +38,7 @@ export interface CardGroupSummary {
   done: number;
   /**
    * The chain's next actionable card: the first member that is neither
-   * completed nor withdrawn, in taskNumber order. Null once the chain is done.
+   * completed nor withdrawn, in chain order. Null once the chain is done.
    */
   nextCard: Card | null;
   /**
@@ -52,15 +52,20 @@ export interface CardGroupSummary {
   isComplete: boolean;
 }
 
-const isFinished = (card: Card): boolean =>
+export const isFinished = (card: Card): boolean =>
   card.status === "completed" || card.status === "withdrawn";
 
 /**
- * taskNumber order is the chain order: a chain is written in one sitting, so
- * the numbers come out in dependency order. Cards without a number (drafts)
- * sort last rather than winning the "next" slot with a 0.
+ * The one ordering a chain has. Everything that asks "which card comes first"
+ * — the next pointer, the open row's members, the chain popover — goes through
+ * here, so the answer cannot differ between two places on the same row.
+ *
+ * Today that is taskNumber order: a chain is written in one sitting, so the
+ * numbers come out in dependency order. Cards without a number (drafts) sort
+ * last rather than winning the "next" slot with a 0. A manual position, once
+ * there is one, goes in front of the number here and nowhere else.
  */
-export function compareByTaskNumber(a: Card, b: Card): number {
+export function compareByChainOrder(a: Card, b: Card): number {
   const an = a.taskNumber ?? Number.MAX_SAFE_INTEGER;
   const bn = b.taskNumber ?? Number.MAX_SAFE_INTEGER;
   return an - bn;
@@ -86,7 +91,7 @@ export function summarizeCardGroups(
 
   const summaries = new Map<string, CardGroupSummary>();
   for (const group of groups) {
-    const members = (byGroup.get(group.id) ?? []).sort(compareByTaskNumber);
+    const members = (byGroup.get(group.id) ?? []).sort(compareByChainOrder);
     if (members.length === 0) continue;
     const done = members.filter((card) => card.status === "completed").length;
     summaries.set(group.id, {
@@ -108,13 +113,18 @@ export type ColumnRow =
   | {
       kind: "group";
       summary: CardGroupSummary;
-      /** This column's members, in the column's own sort order. */
+      /**
+       * This column's members, in chain order. Filtered from the column's
+       * list so its filters still apply, but not in its priority order: the
+       * header names a "next" by chain order, and members listed by priority
+       * right under it put two orders on one row.
+       */
       columnMembers: Card[];
     };
 
 /**
  * Turns a column's already-sorted card list into rows, folding each group into
- * a single entry that sits where its first member fell in the sort. Groups
+ * a single entry that sits where its first member fell in the column's sort. Groups
  * whose chain is finished get no row at all — a done chain has nothing left to
  * say, and its cards are ordinary Completed cards from then on.
  *
@@ -139,7 +149,9 @@ export function buildColumnRows(
     if (seenGroups.has(summary.group.id)) continue;
     seenGroups.add(summary.group.id);
 
-    const columnMembers = sortedCards.filter((c) => c.groupId === summary.group.id);
+    const columnMembers = sortedCards
+      .filter((c) => c.groupId === summary.group.id)
+      .sort(compareByChainOrder);
     rows.push({ kind: "group", summary, columnMembers });
   }
 

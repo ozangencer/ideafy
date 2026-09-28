@@ -23,6 +23,7 @@ import { formatAgeShort, StaleGroup } from "@/lib/card-age";
 import { useKanbanStore } from "@/lib/store";
 import { TaskCard } from "./card";
 import { CardGroupChip } from "./card-group-chip";
+import { CardGroupChain } from "./card-group-chain";
 import { ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import {
   Tooltip,
@@ -268,31 +269,39 @@ function CardGroupBlock({
       // become the loudest thing in the column. Heavier than the chip's border
       // for the same reason — there is far less of it to read.
       railColor={group.color ? `${group.color}99` : undefined}
+      // The chain trigger lives here, not in the header: the header sits
+      // inside the fold toggle's <button>, and a button cannot nest in one.
       sub={
-        (nextDisplayId || hiddenCount > 0) && (
-          <>
-            {nextDisplayId && nextCard && (
-              // The id is the handle, so folding costs no reach: the card the
-              // chain is waiting on is still one click away without a card
-              // body sitting under a closed row.
-              <>
-                next:{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    selectCard(nextCard);
-                    openModal();
-                  }}
-                  className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
-                >
-                  {nextDisplayId}
-                </button>
-              </>
-            )}
-            {nextDisplayId && hiddenCount > 0 && " · "}
-            {hiddenCount > 0 && `${hiddenCount} collapsed`}
-          </>
-        )
+        <>
+          {nextDisplayId && nextCard && (
+            // The id is the handle, so folding costs no reach: the card the
+            // chain is waiting on is still one click away without a card
+            // body sitting under a closed row.
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help">next:</span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  First card in chain order that isn&apos;t completed or withdrawn
+                </TooltipContent>
+              </Tooltip>{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  selectCard(nextCard);
+                  openModal();
+                }}
+                className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+              >
+                {nextDisplayId}
+              </button>
+              {" · "}
+            </>
+          )}
+          <CardGroupChain summary={summary} />
+          {hiddenCount > 0 && ` · ${hiddenCount} collapsed`}
+        </>
       }
     >
       {/* No group chip on a member: the header names the chain once and the
