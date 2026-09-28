@@ -31,7 +31,7 @@ const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards
   Open a card with get_card only when its snippet is not enough.
 - Open work: call \`list_open_work\` with the same \`projectId\` and \`excludeCardId\`, plus the files this card will change as \`files\` once you know them. Rows that share a file list it under \`overlap\`; otherwise compare against each card's files yourself. On an overlap, name the card, the shared file and which of the two should land first.
 - Name a card by its bare displayId (IDE-318), never in backticks: it becomes a clickable link when saved.
-- If these tools are not available, skip the check.`;
+- If \`search_cards\` or \`list_open_work\` is not available, or returns an error, skip this whole check and go straight on to the evaluation or the plan. Do not make up for the missing tool: never open the database (\`kanban.db\`, \`sqlite3\`), never query the card tables or the app's local API, never walk the codebase looking for other cards.`;
 
 /**
  * For every surface that writes a plan. The plan keeps its four headings:
@@ -52,4 +52,5 @@ If there is no contradiction, precedent or overlap, write nothing about it.`;
 export const PRIOR_DECISIONS_EVALUATION_RULE = `${PRIOR_DECISIONS_CHECK}
 - Duplicates: call \`search_cards\` once more with the same keywords and \`statuses: ["ideation", "backlog"]\`. Those cards are ideas, not decisions; mention one only when it describes the same idea.
 - Report what you found under \`## Related Cards\`, one line per card: its displayId, the kind (contradiction, precedent, duplicate or overlap, written in the output language), then what it decided or touches and why it matters here.
-If there is no contradiction, precedent, duplicate or overlap, leave \`## Related Cards\` out entirely.`;
+If there is no contradiction, precedent, duplicate or overlap, leave \`## Related Cards\` out entirely.
+If the check was skipped because the tools were missing, leave \`## Related Cards\` out too, and do not explain why.`;

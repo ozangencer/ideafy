@@ -263,7 +263,11 @@ test("the rule names both tools and stays silent when nothing is found", () => {
     assert.match(rule, /list_open_work/);
     assert.match(rule, /excludeCardId/);
     assert.match(rule, /newer decision overrides/);
+    // A missing tool means skip, never a detour through the database (IDE-361).
+    assert.match(rule, /skip this whole check/);
+    assert.match(rule, /never open the database \(`kanban\.db`, `sqlite3`\)/);
   }
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /skipped because the tools were missing, leave `## Related Cards` out/);
   assert.match(PRIOR_DECISIONS_RULE, /write nothing about it/);
   assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /leave `## Related Cards` out/);
 });
