@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ConversationMessage as Message, ToolCall, SectionType } from "@/lib/types";
+import { thinkingTail } from "@/lib/conversation-activity";
 import { Brain, Wrench, User, Loader2, ArrowUpToLine, Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -355,9 +356,15 @@ export function ConversationMessage({
                 ) : (
                   <Wrench className="w-3 h-3 mt-0.5 flex-shrink-0" />
                 )}
-                <span className={entry.type === "thinking" ? "italic" : ""}>
-                  {entry.content}
-                </span>
+                {entry.type === "thinking" ? (
+                  // One row per thought; it grows as deltas stream in, so
+                  // show the tail (what it is thinking *now*), not the head.
+                  <span className="italic whitespace-pre-wrap break-words">
+                    {thinkingTail(entry.content)}
+                  </span>
+                ) : (
+                  <span>{entry.content}</span>
+                )}
               </div>
             ))}
           </div>

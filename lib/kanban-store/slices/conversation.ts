@@ -5,14 +5,18 @@ import {
   SectionType,
   SessionStatusStep,
 } from "../../types";
+import { appendActivity, sealActivity } from "../../conversation-activity";
 import { nowIso, parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 
-function appendActivityEntry(
-  existing: ConversationActivityEntry[] | undefined,
-  entry: ConversationActivityEntry,
-): ConversationActivityEntry[] {
-  return [...(existing ?? []), entry].slice(-5);
+/**
+ * Visible text means the thought that was growing in the Live Activity strip
+ * is finished: close it so the next `thinking` delta opens its own row.
+ */
+function sealedActivityLog(
+  message: Pick<ConversationMessage, "activityLog">,
+): ConversationActivityEntry[] | undefined {
+  return message.activityLog ? sealActivity(message.activityLog) : message.activityLog;
 }
 
 export const createConversationSlice: StoreSlice<
@@ -211,24 +215,30 @@ export const createConversationSlice: StoreSlice<
                   set((state) => {
                     if (!state.streamingMessage) return state;
                     return {
-                      streamingMessage: { ...state.streamingMessage, content: snapshot },
+                      streamingMessage: {
+                        ...state.streamingMessage,
+                        content: snapshot,
+                        activityLog: sealedActivityLog(state.streamingMessage),
+                      },
                     };
                   });
                   break;
                 }
                 case "thinking": {
-                  const content = String(event.data || "").trim();
-                  if (!content) break;
+                  // Partial-message deltas arrive token by token. Keep them verbatim
+                  // (no trim) so the reducer can stitch "saniye " + "sürecek" back
+                  // into one row instead of four.
+                  const delta = String(event.data ?? "");
+                  if (!delta) break;
                   set((state) => {
                     if (!state.streamingMessage) return state;
+                    const activityLog = appendActivity(
+                      state.streamingMessage.activityLog,
+                      { type: "thinking", content: delta },
+                    );
+                    if (activityLog === state.streamingMessage.activityLog) return state;
                     return {
-                      streamingMessage: {
-                        ...state.streamingMessage,
-                        activityLog: appendActivityEntry(
-                          state.streamingMessage.activityLog,
-                          { type: "thinking", content },
-                        ),
-                      },
+                      streamingMessage: { ...state.streamingMessage, activityLog },
                     };
                   });
                   break;
@@ -241,7 +251,7 @@ export const createConversationSlice: StoreSlice<
                     return {
                       streamingMessage: {
                         ...state.streamingMessage,
-                        activityLog: appendActivityEntry(
+                        activityLog: appendActivity(
                           state.streamingMessage.activityLog,
                           { type: "tool_use", content: `Using: ${toolData.name}` },
                         ),
@@ -259,7 +269,7 @@ export const createConversationSlice: StoreSlice<
                     return {
                       streamingMessage: {
                         ...state.streamingMessage,
-                        activityLog: appendActivityEntry(
+                        activityLog: appendActivity(
                           state.streamingMessage.activityLog,
                           { type: "tool_result", content: `Result from: ${toolData.name || "tool"}` },
                         ),
@@ -442,24 +452,30 @@ export const createConversationSlice: StoreSlice<
               set((state) => {
                 if (!state.streamingMessage) return state;
                 return {
-                  streamingMessage: { ...state.streamingMessage, content: snapshot },
+                  streamingMessage: {
+                    ...state.streamingMessage,
+                    content: snapshot,
+                    activityLog: sealedActivityLog(state.streamingMessage),
+                  },
                 };
               });
               break;
             }
             case "thinking": {
-              const content = String(event.data || "").trim();
-              if (!content) break;
+              // Partial-message deltas arrive token by token. Keep them verbatim
+              // (no trim) so the reducer can stitch "saniye " + "sürecek" back
+              // into one row instead of four.
+              const delta = String(event.data ?? "");
+              if (!delta) break;
               set((state) => {
                 if (!state.streamingMessage) return state;
+                const activityLog = appendActivity(
+                  state.streamingMessage.activityLog,
+                  { type: "thinking", content: delta },
+                );
+                if (activityLog === state.streamingMessage.activityLog) return state;
                 return {
-                  streamingMessage: {
-                    ...state.streamingMessage,
-                    activityLog: appendActivityEntry(
-                      state.streamingMessage.activityLog,
-                      { type: "thinking", content },
-                    ),
-                  },
+                  streamingMessage: { ...state.streamingMessage, activityLog },
                 };
               });
               break;
@@ -472,7 +488,7 @@ export const createConversationSlice: StoreSlice<
                 return {
                   streamingMessage: {
                     ...state.streamingMessage,
-                    activityLog: appendActivityEntry(
+                    activityLog: appendActivity(
                       state.streamingMessage.activityLog,
                       { type: "tool_use", content: `Using: ${toolData.name}` },
                     ),
@@ -490,7 +506,7 @@ export const createConversationSlice: StoreSlice<
                 return {
                   streamingMessage: {
                     ...state.streamingMessage,
-                    activityLog: appendActivityEntry(
+                    activityLog: appendActivity(
                       state.streamingMessage.activityLog,
                       { type: "tool_result", content: `Result from: ${toolData.name || "tool"}` },
                     ),
@@ -589,6 +605,7 @@ export const createConversationSlice: StoreSlice<
         streamingMessage: {
           ...state.streamingMessage,
           content: state.streamingMessage.content + text,
+          activityLog: sealedActivityLog(state.streamingMessage),
         },
       };
     });

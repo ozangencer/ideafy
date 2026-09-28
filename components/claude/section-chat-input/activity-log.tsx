@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Brain, Wrench } from "lucide-react";
+import { thinkingTail } from "@/lib/conversation-activity";
 import { ActivityEntry } from "./use-section-stream";
-import { truncate } from "./section-config";
 
 interface ActivityLogProps {
   entries: ActivityEntry[];
@@ -33,7 +33,9 @@ export function ActivityLog({ entries }: ActivityLogProps) {
           {entry.type === "thinking" && (
             <>
               <Brain className="h-3 w-3 mt-0.5 text-ink flex-shrink-0" />
-              <span className="text-[#3f3f46] italic">{truncate(entry.content, 200)}</span>
+              <span className="text-[#3f3f46] italic whitespace-pre-wrap break-words">
+                {thinkingTail(entry.content)}
+              </span>
             </>
           )}
           {entry.type === "tool_use" && (

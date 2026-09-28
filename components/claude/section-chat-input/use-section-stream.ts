@@ -1,15 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import { marked } from "marked";
-import { SectionType } from "@/lib/types";
+import { ConversationActivityEntry, SectionType } from "@/lib/types";
+import { appendActivity, sealActivity } from "@/lib/conversation-activity";
 import { CardContext, SECTION_CONFIG } from "./section-config";
 
 // One-time global configuration — safe to run at module load.
 marked.setOptions({ gfm: true, breaks: true });
 
-export interface ActivityEntry {
-  type: "thinking" | "tool_use" | "tool_result";
-  content: string;
-}
+export type ActivityEntry = ConversationActivityEntry;
 
 interface UseSectionStreamArgs {
   cardId: string;
@@ -34,8 +32,10 @@ export function useSectionStream(args: UseSectionStreamArgs) {
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const appendActivity = (entry: ActivityEntry) => {
-    setActivityLog((prev) => [...prev, entry]);
+  // Same reducer as the card chat: consecutive thinking deltas grow one row.
+  // No cap here; ActivityLog only renders the last few entries anyway.
+  const pushActivity = (entry: ActivityEntry) => {
+    setActivityLog((prev) => appendActivity(prev, entry, Infinity));
   };
 
   const submit = useCallback(
@@ -105,6 +105,8 @@ export function useSectionStream(args: UseSectionStreamArgs) {
                 case "text":
                   fullOutput += event.data;
                   setStreamingOutput(fullOutput);
+                  // Visible text closes the open thinking row.
+                  setActivityLog((prev) => sealActivity(prev));
                   break;
                 case "result": {
                   const resultText = String(event.data);
@@ -115,13 +117,13 @@ export function useSectionStream(args: UseSectionStreamArgs) {
                   break;
                 }
                 case "thinking":
-                  appendActivity({ type: "thinking", content: event.data });
+                  pushActivity({ type: "thinking", content: String(event.data ?? "") });
                   break;
                 case "tool_use":
-                  appendActivity({ type: "tool_use", content: `Using: ${event.data.name}` });
+                  pushActivity({ type: "tool_use", content: `Using: ${event.data.name}` });
                   break;
                 case "tool_result":
-                  appendActivity({ type: "tool_result", content: `Result from: ${event.data.name}` });
+                  pushActivity({ type: "tool_result", content: `Result from: ${event.data.name}` });
                   break;
                 case "error":
                   setError(event.data);

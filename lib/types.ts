@@ -511,6 +511,12 @@ export interface ToolCall {
 export interface ConversationActivityEntry {
   type: "thinking" | "tool_use" | "tool_result";
   content: string;
+  /**
+   * Stream-only: a thinking block that is still receiving deltas. The next
+   * `thinking` delta appends to it instead of opening a new row. Never
+   * persisted; see lib/conversation-activity.ts.
+   */
+  open?: boolean;
 }
 
 export type SessionStatusStep =
