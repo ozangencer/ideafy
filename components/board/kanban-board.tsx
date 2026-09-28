@@ -99,8 +99,8 @@ function sortCompletedCards(cards: Card[]): Card[] {
   });
 }
 
-// Sort test cards by updatedAt (desc) - most recently updated first
-function sortTestCards(cards: Card[]): Card[] {
+// Sort test and withdrawn cards by updatedAt (desc) - most recently updated first
+function sortByRecentUpdate(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => {
     const dateA = new Date(a.updatedAt).getTime();
     const dateB = new Date(b.updatedAt).getTime();
@@ -232,8 +232,8 @@ export function KanbanBoard() {
             // Use different sorting per column type
             const sortedCards = column.id === 'completed'
               ? sortCompletedCards(columnCards)
-              : column.id === 'test'
-                ? sortTestCards(columnCards)
+              : column.id === 'test' || column.id === 'withdrawn'
+                ? sortByRecentUpdate(columnCards)
                 : sortCards(columnCards);
             // Split after sorting, so the Stale row keeps the column's own
             // order rather than inventing a second one.
