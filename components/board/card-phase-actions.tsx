@@ -161,6 +161,23 @@ export interface PhaseHandOff {
   run: Promise<RunResult>;
 }
 
+/**
+ * The failure toast for a run that did not start. Shared by every surface:
+ * the modal calls it from its onHandOff, and the board card and Focus view,
+ * which pass none, get it from handOff itself — before, their failures only
+ * reached the console.
+ */
+export function reportRunFailure(cardId: string, label: string, error?: string) {
+  // A 409 for untrusted content is a question, not a failure: the app-level
+  // dialog is already asking it.
+  if (useKanbanStore.getState().pendingRunConfirmation?.cardId === cardId) return;
+  toast({
+    variant: "destructive",
+    title: `${label} failed`,
+    description: error || "Nothing was changed on the card.",
+  });
+}
+
 export function CardPhaseActions({
   card,
   variant = "icon",
@@ -272,8 +289,54 @@ export function CardPhaseActions({
   // Every handler reaches here only after prepare() and its dialog agreed, so
   // a failed flush never tells the surface the card is gone.
   const handOff = <T extends RunResult>(action: PhaseAction, run: Promise<T>) => {
-    onHandOff?.({ action, label: labelFor(action).replace(/ \((Autonomous|Interactive)\)$/, ""), run });
+    const label = shortLabel(action);
+    if (onHandOff) {
+      onHandOff({ action, label, run });
+    } else {
+      void run.then((result) => {
+        if (!result.success) reportRunFailure(card.id, label, result.error);
+      });
+    }
     return run;
+  };
+
+  // A click that cannot go anywhere says why instead of doing nothing. The
+  // board hides interactive buttons while blocked, but a lock can land between
+  // render and click, and the modal's buttons stay drawn through a flush.
+  const explainBlocked = (): boolean => {
+    if (isChatting) {
+      toast({ title: "Chat is running", description: "Wait for the chat on this card to finish." });
+      return true;
+    }
+    if (isLocked) {
+      toast({
+        title: "Card is locked",
+        description: softLock
+          ? "Someone else is working on this card."
+          : "A session is open on this card. Unlock it once that session is done.",
+      });
+      return true;
+    }
+    if (isPreparing) {
+      toast({ title: "Still saving", description: "Try again once the card is saved." });
+      return true;
+    }
+    return false;
+  };
+
+  // prepare() and the store action both resolve on the happy path; a throw in
+  // either used to vanish behind the click handlers' `void`.
+  const runInteractive = async (action: PhaseAction, start: () => Promise<RunResult>) => {
+    try {
+      if (!(await prepare())) return;
+      const result = await handOff(action, start());
+      if (!result.success) {
+        console.error(`Failed to open ${action} terminal:`, result.error);
+      }
+    } catch (error) {
+      console.error(`Failed to open ${action} terminal:`, error);
+      reportRunFailure(card.id, shortLabel(action), error instanceof Error ? error.message : undefined);
+    }
   };
 
   // Starting a card out of chain order is allowed — a hard gate would lock a
@@ -285,20 +348,29 @@ export function CardPhaseActions({
   //
   // Implementation only. Planning a whole chain in one sitting is the normal
   // way to work, and there every card after the first would warn.
+  //
+  // The warning is advice, so it never gets to block the start: a throw in
+  // here — a stale dev-server module after a merge (IDE-373), a bad groupOrder
+  // — drops the line and the run goes ahead.
   const [chainWarning, setChainWarning] = useState<string | null>(null);
   const computeChainWarning = (): string | null => {
     if (phase !== "implementation" || !card.groupId) return null;
-    const { cards } = useKanbanStore.getState();
-    const ahead = openPredecessors(
-      cards.filter((c) => c.groupId === card.groupId),
-      card
-    );
-    if (ahead.length === 0) return null;
-    const ids = ahead.map(
-      (c) => getDisplayId(c, projects.find((p) => p.id === c.projectId)) ?? c.title
-    );
-    const shown = ids.slice(0, 3).join(", ") + (ids.length > 3 ? ` +${ids.length - 3}` : "");
-    return `${ahead.length} open card${ahead.length === 1 ? "" : "s"} ahead in the chain: ${shown}`;
+    try {
+      const { cards } = useKanbanStore.getState();
+      const ahead = openPredecessors(
+        cards.filter((c) => c.groupId === card.groupId),
+        card
+      );
+      if (ahead.length === 0) return null;
+      const ids = ahead.map(
+        (c) => getDisplayId(c, projects.find((p) => p.id === c.projectId)) ?? c.title
+      );
+      const shown = ids.slice(0, 3).join(", ") + (ids.length > 3 ? ` +${ids.length - 3}` : "");
+      return `${ahead.length} open card${ahead.length === 1 ? "" : "s"} ahead in the chain: ${shown}`;
+    } catch (error) {
+      console.warn("Chain warning skipped:", error);
+      return null;
+    }
   };
 
   // The board card opens the modal on click; a button inside it must not.
@@ -374,37 +446,22 @@ export function CardPhaseActions({
   // paste tip, so a tip left open for a minute cannot outlive a later edit.
   const handleOpenTerminal = async () => {
     setShowTerminalConfirm(false);
-    if (!(await prepare())) return;
-
-    const result = await handOff("terminal", openTerminal(card.id));
-    if (!result.success) {
-      console.error("Failed to open terminal:", result.error);
-    }
+    await runInteractive("terminal", () => openTerminal(card.id));
   };
 
   const handleOpenIdeationTerminal = async () => {
     setShowIdeationConfirm(false);
-    if (!(await prepare())) return;
-
-    const result = await handOff("discuss", openIdeationTerminal(card.id));
-    if (!result.success) {
-      console.error("Failed to open ideation terminal:", result.error);
-    }
+    await runInteractive("discuss", () => openIdeationTerminal(card.id));
   };
 
   const handleOpenTestTerminal = async () => {
     setShowTestTogetherConfirm(false);
-    if (!(await prepare())) return;
-
-    const result = await handOff("test-together", openTestTerminal(card.id));
-    if (!result.success) {
-      console.error("Failed to open test terminal:", result.error);
-    }
+    await runInteractive("test-together", () => openTestTerminal(card.id));
   };
 
   const handleOpenTerminalClick = (e?: React.MouseEvent) => {
     stop(e);
-    if (isBlocked || isPreparing || !flags.canStart) return;
+    if (explainBlocked() || !flags.canStart) return;
     const warning = computeChainWarning();
     setChainWarning(warning);
     if (needsPasteConfirm) {
@@ -419,14 +476,14 @@ export function CardPhaseActions({
 
   const handleOpenIdeationTerminalClick = (e?: React.MouseEvent) => {
     stop(e);
-    if (isBlocked || isPreparing || !flags.canEvaluate) return;
+    if (explainBlocked() || !flags.canEvaluate) return;
     if (needsPasteConfirm) setShowIdeationConfirm(true);
     else void handleOpenIdeationTerminal();
   };
 
   const handleTestTogetherClick = (e?: React.MouseEvent) => {
     stop(e);
-    if (isBlocked || isPreparing || !flags.canTestTogether) return;
+    if (explainBlocked() || !flags.canTestTogether) return;
     if (needsPasteConfirm) setShowTestTogetherConfirm(true);
     else void handleOpenTestTerminal();
   };
@@ -479,6 +536,10 @@ export function CardPhaseActions({
         return "Generate";
     }
   };
+
+  // Toast titles read "Implement failed", not "Implement (Interactive) failed".
+  const shortLabel = (action: PhaseAction) =>
+    labelFor(action).replace(/ \((Autonomous|Interactive)\)$/, "");
 
   // --- Board-sized icon, identical to the footer row it came from ---
   const renderIcon = (action: PhaseAction) => {

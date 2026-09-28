@@ -49,7 +49,7 @@ import { CardModalFooter } from "./card-modal-footer";
 import { SplitPanel } from "./split-panel";
 import { SectionEditor } from "./sections/section-editor";
 import { ConversationPanel } from "./sections/conversation-panel";
-import { CardPhaseActions, type PhaseHandOff } from "../card-phase-actions";
+import { CardPhaseActions, reportRunFailure, type PhaseHandOff } from "../card-phase-actions";
 import { isAutonomousAction } from "@/lib/card-phase";
 
 // Hooks
@@ -371,17 +371,8 @@ export function CardModal({
   // second, so the modal waits and stays open if it didn't open.
   const handleHandOff = useCallback(
     ({ action, label, run }: PhaseHandOff) => {
-      const cardId = selectedCard?.id;
-      const reportFailure = (error?: string) => {
-        // A 409 for untrusted content is a question, not a failure: the
-        // app-level dialog is already asking it.
-        if (useKanbanStore.getState().pendingRunConfirmation?.cardId === cardId) return;
-        toast({
-          variant: "destructive",
-          title: `${label} failed`,
-          description: error || "Nothing was changed on the card.",
-        });
-      };
+      const cardId = selectedCard?.id ?? "";
+      const reportFailure = (error?: string) => reportRunFailure(cardId, label, error);
 
       if (isAutonomousAction(action)) {
         handleClose();

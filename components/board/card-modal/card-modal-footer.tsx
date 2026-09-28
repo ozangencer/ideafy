@@ -139,7 +139,10 @@ export function CardModalFooter({
             </Button>
           </>
         ) : (
-          <>
+          // The slot is always there at a fixed width. Without it the phase
+          // buttons jumped ~70px left while typing, and a click aimed at the
+          // Terminal icon could land on Implement (Autonomous).
+          <span className="flex w-[5.5rem] shrink-0 items-center" aria-live="polite">
             {saveStatus === "saving" && (
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -152,7 +155,7 @@ export function CardModalFooter({
                 Saved
               </span>
             )}
-          </>
+          </span>
         )}
       </div>
     </div>
