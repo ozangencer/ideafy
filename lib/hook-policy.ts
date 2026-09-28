@@ -15,6 +15,7 @@ export {
   buildPhasePolicyBody,
   buildCreationOfferPolicy,
 } from "@/lib/prompts/phase-policy";
+export type { PhasePolicyMode } from "@/lib/prompts/phase-policy";
 
 // Compute the effective worktree policy for a card: card-level override wins,
 // else project default, else true. Returns the target branch name if

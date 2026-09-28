@@ -123,6 +123,8 @@ export async function POST(request: NextRequest) {
           gitWorktreeStatus: card.gitWorktreeStatus ?? null,
           aiPlatform: card.aiPlatform ?? null,
           useWorktree: card.useWorktree ?? null,
+          // Backups written before output paths existed simply omit them.
+          outputPaths: card.outputPaths ?? null,
           createdAt: card.createdAt,
           updatedAt: card.updatedAt,
           completedAt: card.completedAt,

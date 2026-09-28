@@ -20,6 +20,16 @@ export function serializeUseWorktreeForDb(
   return value ? 1 : 0;
 }
 
+// Which workspace a project belongs to. Mirrors lib/project-serialize.ts's
+// normalizeProjectMode: anything that is not the literal "work" — including
+// `undefined`, which is what a `SELECT *` yields on a DB from before the
+// column existed — is development, the mode every project had until then.
+export type ProjectMode = "development" | "work";
+
+export function normalizeProjectMode(value: unknown): ProjectMode {
+  return value === "work" ? "work" : "development";
+}
+
 // ============================================================================
 // Image extraction
 // ============================================================================

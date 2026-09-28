@@ -14,12 +14,14 @@ import { marked } from "marked";
 import { v4 as uuidv4 } from "uuid";
 import {
   normalizeUseWorktree,
+  normalizeProjectMode,
   serializeUseWorktreeForDb,
   extractCardImages,
   buildOpinionPlanningNote,
   buildPriorDecisionsNote,
   type ExtractedImage,
 } from "./serialize-card.js";
+import { hasColumn, parseOutputPaths, recordOutputPath } from "./output-paths.js";
 import { buildTestStyleContract } from "./test-style.generated.js";
 import { AI_OPINION_PLANNING_RULE } from "./opinion.generated.js";
 import { PRIOR_DECISIONS_RULE } from "./prior-decisions.generated.js";
@@ -460,6 +462,9 @@ interface Card {
   projectId: string | null;
   groupId: string | null;
   taskNumber: number | null;
+  // Only get_card selects it: files the card's work produced, relative to
+  // the project folder, as recorded by save_output. null when none.
+  outputPaths?: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -518,7 +523,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "update_card",
-        description: "Update a kanban card fields (title, description, solutionSummary, status, complexity, priority, useWorktree, groupId). For testScenarios, use save_tests instead — update_card rejects it to protect checkbox states.",
+        description: "Update a kanban card fields (title, description, solutionSummary, status, complexity, priority, useWorktree, groupId). For testScenarios, use save_tests instead — update_card rejects it to protect checkbox states. For outputPaths, use save_output — it validates the file against the project folder.",
         inputSchema: {
           type: "object",
           properties: {
@@ -815,6 +820,24 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
         },
       },
       {
+        name: "save_output",
+        description: `Record a file this card's work produced. This is the file-delivery contract for a Work card: when the deliverable is a document, a draft, a note, a spreadsheet — anything written to disk — call save_output with its path once the file exists. The path is resolved against the card's project folder (a relative path is fine) and must point at an existing file under that folder. Files anywhere else (~/Desktop, /tmp, another project) are rejected, symlinks that lead outside included — write the deliverable into the project folder first. Idempotent: recording the same file twice lists it once. The card stores the path relative to the project folder and get_card returns the list as \`outputPaths\`. This tool does NOT move the card.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
+            },
+            path: {
+              type: "string",
+              description: "Path of the file that was written — absolute, or relative to the card's project folder.",
+            },
+          },
+          required: ["id", "path"],
+        },
+      },
+      {
         name: "list_groups",
         description: "List card groups with their id, code, name and member count. A group is a chain of cards that belong to one piece of work; the board folds its cards into one row. It is membership only: no status, no completion state, no date, so do not treat it as an epic. With projectId, returns what a card in that project can join: the project's own groups plus groups not tied to any project.",
         inputSchema: {
@@ -947,6 +970,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+        // output_paths arrived with a migration the app may not have run yet
+        // (the plugin and the app update independently), so it is selected
+        // only when the column exists and reads as "none" otherwise.
+        const outputPathsColumn = hasColumn(db, "cards", "output_paths")
+          ? "output_paths as outputPaths,"
+          : "NULL as outputPaths,";
         const card = db.prepare(`
           SELECT
             id, title, description,
@@ -962,6 +991,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             git_worktree_path as gitWorktreePath,
             git_worktree_status as gitWorktreeStatus,
             use_worktree as useWorktree,
+            ${outputPathsColumn}
             created_at as createdAt,
             updated_at as updatedAt
           FROM cards WHERE id = ?
@@ -979,13 +1009,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         (card as unknown as { useWorktree: boolean | null }).useWorktree =
           normalizeUseWorktree(rawUseWorktree);
 
-        // Attach the project's voice so the calling AI can match its tone
-        // without a second tool call. Defaults to 'builder' when missing.
+        // JSON text → array; null when nothing has been recorded, matching
+        // what the app's own card API returns.
+        const outputPaths = parseOutputPaths(card.outputPaths);
+        card.outputPaths = outputPaths.length ? outputPaths : null;
+
+        // Attach the project's voice and mode so the calling AI can match
+        // its tone — and knows whether this is a Work card — without a
+        // second tool call. SELECT * rather than naming `mode`: a plugin
+        // newer than the app can meet a DB from before that column existed,
+        // and an absent column reads as development, the mode every project
+        // had until then. Voice defaults to 'builder' when missing.
         const projectRow = card.projectId
-          ? (db.prepare(`SELECT voice FROM projects WHERE id = ?`).get(card.projectId) as { voice: string | null } | undefined)
+          ? (db.prepare(`SELECT * FROM projects WHERE id = ?`).get(card.projectId) as
+              | { voice?: string | null; mode?: string | null }
+              | undefined)
           : undefined;
         const voice = (projectRow?.voice ?? "builder") as "entrepreneur" | "builder" | "engineer";
-        (card as unknown as { project: { voice: string } }).project = { voice };
+        (card as unknown as { project: { voice: string; mode: string } }).project = {
+          voice,
+          mode: normalizeProjectMode(projectRow?.mode),
+        };
 
         // Extract images from HTML fields
         const { cleanedCard, images } = extractCardImages(card);
@@ -1073,7 +1117,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: "text",
               text: `update_card does not accept: ${unknownKeys.join(", ")}. ` +
                 `Accepted fields: ${Object.keys(fieldMap).join(", ")}. ` +
-                `For testScenarios use save_tests; for aiOpinion use save_opinion.`,
+                `For testScenarios use save_tests; for aiOpinion use save_opinion; for outputPaths use save_output.`,
             }],
             isError: true,
           };
@@ -1626,6 +1670,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "save_output": {
+        const { id: rawId, path: rawPath } = args as { id: string; path: string };
+        const id = resolveCardId(rawId);
+        if (!id) {
+          return {
+            content: [{ type: "text", text: `Card not found: ${rawId}` }],
+            isError: true,
+          };
+        }
+
+        // Every check — column present, file exists, inside the project
+        // folder with symlinks resolved — lives in recordOutputPath and
+        // surfaces as an OutputPathError that says what to do; the catch
+        // below turns it into an isError result like every other handler.
+        const outcome = recordOutputPath(db, id, rawPath);
+
+        const listed = `${outcome.outputPaths.length} output(s) on the card: ${outcome.outputPaths.join(", ")}.`;
+        const summary = outcome.alreadyRecorded
+          ? `Already recorded on card ${id}: ${outcome.relativePath} (${outcome.absolutePath}) — nothing changed.`
+          : `Output recorded on card ${id}: ${outcome.relativePath} (${outcome.absolutePath}).`;
+
+        return {
+          content: [{
+            type: "text",
+            text: `${summary} ${listed} Card is in "${readStatus(id)}" — save_output does not move cards.`,
+          }],
+        };
+      }
+
       case "ensure_branch": {
         const { cardId: rawId } = args as { cardId: string };
         const cardId = resolveCardId(rawId);
@@ -1954,6 +2027,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               | undefined)
           : undefined;
 
+        // A Work card gets the policy without the git-only clauses; an
+        // absent column (older app) reads as development.
+        const mode = normalizeProjectMode(project?.mode);
+
         const policy = buildPhasePolicyBody(
           {
             id: card.id,
@@ -1980,10 +2057,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     }
                   : null
               )
-            : undefined
+            : undefined,
+          mode
         );
 
-        const bound = `Session ${sessionId} bound to card ${card.id} ("${card.title}", column: ${card.status}).`;
+        const bound = `Session ${sessionId} bound to card ${card.id} ("${card.title}", column: ${card.status}, project mode: ${mode}).`;
 
         return {
           content: [

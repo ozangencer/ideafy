@@ -26,6 +26,7 @@ export interface ExportData {
     gitWorktreeStatus: string | null;
     aiPlatform: string | null;
     useWorktree: boolean | null;
+    outputPaths?: string | null; // raw JSON text, as stored
     createdAt: string;
     updatedAt: string;
     completedAt: string | null;
@@ -126,6 +127,7 @@ export async function GET() {
         gitWorktreeStatus: card.gitWorktreeStatus,
         aiPlatform: card.aiPlatform,
         useWorktree: card.useWorktree,
+        outputPaths: card.outputPaths,
         createdAt: card.createdAt,
         updatedAt: card.updatedAt,
         completedAt: card.completedAt,

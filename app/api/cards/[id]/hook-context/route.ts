@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { buildPhasePolicy, isTerminalPhase } from "@/lib/hook-policy";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 
 export async function GET(
   _request: NextRequest,
@@ -23,23 +24,28 @@ export async function GET(
     return new Response(null, { status: 204 });
   }
 
-  // Only for the display ID the commit-trailer clause needs; the branch clause
-  // this route omits is what the full hook-context endpoint adds on top.
+  // Only for the display ID the commit-trailer clause needs and the mode that
+  // decides whether that clause appears; the branch clause this route omits is
+  // what the full hook-context endpoint adds on top.
   const project = row.projectId
     ? db
-        .select({ idPrefix: schema.projects.idPrefix })
+        .select({ idPrefix: schema.projects.idPrefix, mode: schema.projects.mode })
         .from(schema.projects)
         .where(eq(schema.projects.id, row.projectId))
         .get()
     : null;
 
-  const body = buildPhasePolicy({
-    id: row.id,
-    title: row.title,
-    status: row.status,
-    displayId:
-      project && row.taskNumber ? `${project.idPrefix}-${row.taskNumber}` : null,
-  });
+  const body = buildPhasePolicy(
+    {
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      displayId:
+        project && row.taskNumber ? `${project.idPrefix}-${row.taskNumber}` : null,
+    },
+    undefined,
+    normalizeProjectMode(project?.mode)
+  );
 
   if (!body) {
     return new Response(null, { status: 204 });

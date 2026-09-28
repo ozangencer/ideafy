@@ -87,6 +87,7 @@ export const cards = sqliteTable("cards", {
   processingType: text("processing_type"),    // "autonomous" | "quick-fix" | "evaluate" | null (active Claude process indicator)
   aiPlatform: text("ai_platform"),           // "claude" | "gemini" | "codex" | null (null = use global setting)
   useWorktree: integer("use_worktree", { mode: "boolean" }), // null = follow project default, true/false = per-card override
+  outputPaths: text("output_paths"),          // JSON array of project-relative file paths the card's work produced (MCP save_output); null = none yet
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),  // ISO date string, null if not completed

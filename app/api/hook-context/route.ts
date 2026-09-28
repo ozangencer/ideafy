@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { promptLooksLikeCardRequest } from "@/lib/card-request-detection";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import {
   buildCreationOfferPolicy,
   buildPhasePolicy,
@@ -175,7 +176,10 @@ export async function POST(request: NextRequest) {
             ? `${cardProject.idPrefix}-${card.taskNumber}`
             : null,
       },
-      branchPolicy
+      branchPolicy,
+      // Same mode the MCP server passes on bind, so the policy a session gets
+      // on every later turn matches the one it got when it bound.
+      normalizeProjectMode(cardProject?.mode)
     );
     if (!body) {
       return new Response(null, { status: 204 });

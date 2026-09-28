@@ -30,6 +30,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   processingType: null,
   aiPlatform: null,
   useWorktree: null,
+  outputPaths: null,
   createdAt: nowIso(),
   updatedAt: nowIso(),
   completedAt: null,

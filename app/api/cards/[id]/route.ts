@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { trashCard } from "@/lib/card-trash";
+import { parseOutputPaths } from "@/lib/output-paths";
 import {
   ensureHtml,
   ensureTestScenariosHtml,
@@ -52,6 +53,7 @@ export async function GET(
     processingType: (row.processingType as Card["processingType"]) ?? null,
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: row.useWorktree ?? null,
+    outputPaths: parseOutputPaths(row.outputPaths),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
@@ -224,6 +226,7 @@ export async function PUT(
     processingType: (existing.processingType as Card["processingType"]) ?? null,
     aiPlatform: (updatedCard.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: updatedCard.useWorktree ?? null,
+    outputPaths: parseOutputPaths(existing.outputPaths),
     createdAt: existing.createdAt,
     updatedAt: updatedCard.updatedAt,
     completedAt: updatedCard.completedAt,

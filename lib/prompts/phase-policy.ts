@@ -124,6 +124,16 @@ function safeDisplayId(value: string | null | undefined): string | null {
   return value && /^[A-Za-z0-9]{1,16}-\d{1,9}$/.test(value) ? value : null;
 }
 
+// Which workspace the card's project belongs to. "development" is the
+// code-and-git flow every clause below was written for. "work" is a project
+// with no repo behind it — minutes, mail, research — so the clauses that only
+// make sense against git (the branch clause, the commit trailer) are left out
+// there. The phase instructions themselves still read in development wording
+// in both modes; IDE-335 rewrites them for Work. The default is "development"
+// so every caller written before the mode existed keeps its output byte for
+// byte.
+export type PhasePolicyMode = "development" | "work";
+
 // The phase policy's body: the card header plus the numbered clauses, with no
 // <system-reminder> wrapper.
 //
@@ -139,7 +149,8 @@ export function buildPhasePolicyBody(
     status: string;
     displayId?: string | null;
   },
-  branchPolicy?: { enforced: boolean; targetBranch: string | null }
+  branchPolicy?: { enforced: boolean; targetBranch: string | null },
+  mode: PhasePolicyMode = "development"
 ): string | null {
   const phaseInstruction = PHASE_INSTRUCTIONS[card.status];
   if (!phaseInstruction) return null;
@@ -167,7 +178,12 @@ export function buildPhasePolicyBody(
   let clause = phaseLines.filter((line) => /^\d+\./.test(line)).length;
   const next = () => ++clause;
 
-  if (branchPolicy?.enforced && branchPolicy.targetBranch) {
+  // Both git clauses are development-only. A Work project never resolves a
+  // branch policy anyway (shouldUseWorktree says no), but the trailer clause
+  // used to key off the display ID alone — and a Work card has one.
+  const gitClauses = mode !== "work";
+
+  if (gitClauses && branchPolicy?.enforced && branchPolicy.targetBranch) {
     lines.push(
       `${next()}. This card must be implemented on branch "${branchPolicy.targetBranch}".`,
       "   Before the first Edit/Write/NotebookEdit in this session, verify the",
@@ -177,7 +193,7 @@ export function buildPhasePolicyBody(
     );
   }
 
-  if (displayId) {
+  if (gitClauses && displayId) {
     lines.push(
       `${next()}. When a commit advances the work this card describes, reference the`,
       `   card with a trailer: put "Card: ${displayId}" on its own line as the last`,
@@ -204,9 +220,10 @@ export function buildPhasePolicy(
     status: string;
     displayId?: string | null;
   },
-  branchPolicy?: { enforced: boolean; targetBranch: string | null }
+  branchPolicy?: { enforced: boolean; targetBranch: string | null },
+  mode: PhasePolicyMode = "development"
 ): string | null {
-  const body = buildPhasePolicyBody(card, branchPolicy);
+  const body = buildPhasePolicyBody(card, branchPolicy, mode);
   if (body === null) return null;
   return `<system-reminder>\n${body}\n</system-reminder>\n`;
 }

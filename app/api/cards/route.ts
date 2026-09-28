@@ -4,6 +4,7 @@ import { eq, desc, isNotNull, and, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml, ensureTestScenariosHtml } from "@/lib/markdown";
+import { parseOutputPaths } from "@/lib/output-paths";
 
 // Processing timeout in milliseconds (30 minutes)
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
@@ -50,6 +51,7 @@ export async function GET() {
     processingType: (row.processingType as Card["processingType"]) ?? null,
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: row.useWorktree ?? null,
+    outputPaths: parseOutputPaths(row.outputPaths),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
@@ -124,6 +126,7 @@ export async function POST(request: NextRequest) {
     processingType: null,
     aiPlatform: body.aiPlatform || null,
     useWorktree: typeof body.useWorktree === "boolean" ? body.useWorktree : null,
+    outputPaths: null,
     createdAt: now,
     updatedAt: now,
     completedAt: (body.status === 'completed') ? now : null,

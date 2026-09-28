@@ -63,6 +63,11 @@ export interface Card {
   processingType: ProcessingType;
   aiPlatform: AiPlatform | null;
   useWorktree: boolean | null; // null = follow project setting, true/false = per-card override
+  // Files the card's work produced, relative to the project folder, in the
+  // order they were recorded. Written by the MCP save_output tool — the
+  // file-delivery contract a Work card's Generate run reports through. Local
+  // by nature: never sent to the team pool. null = nothing recorded yet.
+  outputPaths: string[] | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;

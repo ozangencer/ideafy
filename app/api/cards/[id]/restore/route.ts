@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { restoreCard } from "@/lib/card-trash";
 import { Card } from "@/lib/types";
+import { parseOutputPaths } from "@/lib/output-paths";
 
 // Brings a deleted card back from card_trash — the server half of the board's
 // Cmd+Z. 404 when there is no snapshot, 409 when restoring would collide.
@@ -42,6 +43,7 @@ export async function POST(
     processingType: (row.processingType as Card["processingType"]) ?? null,
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: row.useWorktree ?? null,
+    outputPaths: parseOutputPaths(row.outputPaths),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
