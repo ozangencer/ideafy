@@ -355,6 +355,10 @@ export interface KanbanStore {
   openTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openIdeationTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openTestTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
+  resolveConflictWithAI: (
+    cardId: string,
+    conflict: { conflictFiles: string[]; worktreePath: string; branchName: string }
+  ) => Promise<{ success: boolean; error?: string }>;
   quickFixTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
   evaluateIdea: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
   lockCard: (cardId: string) => void;

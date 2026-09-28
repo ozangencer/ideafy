@@ -61,6 +61,7 @@ export const createClaudeSlice: StoreSlice<
     | "openTerminal"
     | "openIdeationTerminal"
     | "openTestTerminal"
+    | "resolveConflictWithAI"
     | "quickFixTask"
     | "evaluateIdea"
     | "lockCard"
@@ -275,6 +276,46 @@ export const createClaudeSlice: StoreSlice<
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+
+  // The conflict terminal rebases the card's worktree, so it owns the card
+  // like any other terminal session. The server can't tell when that session
+  // ends — the lock stays until the user hits Unlock after `rebase --continue`.
+  resolveConflictWithAI: async (cardId, conflict) => {
+    set((state) => ({
+      lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
+    }));
+
+    try {
+      const response = await fetch(`/api/cards/${cardId}/resolve-conflict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(conflict),
+      });
+
+      const data = await parseJson<{ error?: string }>(response);
+
+      if (!response.ok) {
+        set((state) => ({
+          lockedCardIds: removeId(state.lockedCardIds, cardId),
+        }));
+        return {
+          success: false,
+          error: data.error || "Could not open terminal for conflict resolution",
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open conflict resolution terminal:", error);
+      set((state) => ({
+        lockedCardIds: removeId(state.lockedCardIds, cardId),
+      }));
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to open terminal",
       };
     }
   },

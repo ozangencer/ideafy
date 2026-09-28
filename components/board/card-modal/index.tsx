@@ -710,7 +710,9 @@ export function CardModal({
 
   // Git operations (same as before)
   const handleMerge = async (commitFirst = false) => {
-    if (!selectedCard) return;
+    // A conflict terminal may be mid-rebase on this worktree; a second merge
+    // would race it or tear the worktree down underneath it.
+    if (!selectedCard || isRunLockedRef.current) return;
 
     setIsMerging(true);
     try {
@@ -798,40 +800,26 @@ export function CardModal({
     if (!selectedCard || !conflictInfo) return;
 
     setShowConflictDialog(false);
-    try {
-      const response = await fetch(`/api/cards/${selectedCard.id}/resolve-conflict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conflictFiles: conflictInfo.conflictFiles,
-          worktreePath: conflictInfo.worktreePath,
-          branchName: conflictInfo.branchName,
-        }),
-      });
+    const result = await useKanbanStore.getState().resolveConflictWithAI(selectedCard.id, {
+      conflictFiles: conflictInfo.conflictFiles,
+      worktreePath: conflictInfo.worktreePath,
+      branchName: conflictInfo.branchName,
+    });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast({
-          variant: "destructive",
-          title: "Failed to Open Terminal",
-          description: data.error || "Could not open terminal for conflict resolution",
-        });
-        return;
-      }
-
-      toast({
-        title: "Terminal Opened",
-        description: "Claude Code is ready to help resolve the conflict",
-      });
-      handleClose();
-    } catch (error) {
+    if (!result.success) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to open terminal",
+        title: "Failed to Open Terminal",
+        description: result.error || "Could not open terminal for conflict resolution",
       });
+      return;
     }
+
+    toast({
+      title: "Terminal Opened",
+      description: "Claude Code is ready to help resolve the conflict",
+    });
+    handleClose();
   };
 
   const handleStartDevServer = async () => {
@@ -1096,7 +1084,7 @@ export function CardModal({
                   {mergeReality && mergeReality.state !== "ready" ? (
                     <Button
                       onClick={handleCompleteWithoutMerge}
-                      disabled={isCompleting || isRollingBack}
+                      disabled={isCompleting || isRollingBack || isRunLocked}
                       size="sm"
                       variant="outline"
                       className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
@@ -1111,7 +1099,7 @@ export function CardModal({
                   ) : (
                     <Button
                       onClick={() => setShowMergeConfirmDialog(true)}
-                      disabled={isMerging || isCheckingMergeReality}
+                      disabled={isMerging || isCheckingMergeReality || isRunLocked}
                       size="sm"
                       className="bg-green-600 hover:bg-green-700"
                     >
@@ -1127,7 +1115,7 @@ export function CardModal({
                     variant="outline"
                     size="sm"
                     onClick={() => setShowRollbackDialog(true)}
-                    disabled={isMerging || isRollingBack || isCompleting}
+                    disabled={isMerging || isRollingBack || isCompleting || isRunLocked}
                     className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
                   >
                     <Undo2 className="mr-2 h-4 w-4" />
