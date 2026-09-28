@@ -22,6 +22,7 @@ import {
   prependWarningHtml,
 } from "@/lib/autonomous-run/select-run-output";
 import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
+import { autonomousRunTimeoutMs } from "@/lib/autonomous-run/run-timeout";
 import { assessTestRewrite } from "@/lib/markdown";
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
@@ -157,6 +158,7 @@ export async function POST(
       prompt,
       cwd: actualWorkingDir,
       aiPlatform: card.aiPlatform,
+      timeoutMs: autonomousRunTimeoutMs(phase, card.complexity),
       contract: RUN_OUTPUT_CONTRACTS[phase],
       tracking: {
         processKey,
