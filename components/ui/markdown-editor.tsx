@@ -15,7 +15,7 @@ import type { EditorView } from "@tiptap/pm/view";
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { buildUnifiedItems } from "@/lib/mentions/unified-items";
-import { UnifiedMention, CardMention, DocumentMention, ArtifactMention } from "@/lib/mention-extension";
+import { UnifiedMention, CardMention, DocumentMention, ArtifactMention, EstimateMarkers } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
 import { buildDroppedFilePathText, getDroppedEditorFiles } from "@/lib/dropped-file-paths";
@@ -357,6 +357,7 @@ export function MarkdownEditor({
         suggestion: documentSuggestion,
       }),
       ArtifactMention,
+      EstimateMarkers,
       ImageResize.configure({
         inline: false,
         allowBase64: true,

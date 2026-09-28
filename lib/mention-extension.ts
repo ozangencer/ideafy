@@ -9,6 +9,7 @@ export {
   DocumentMention,
   ArtifactMention,
 } from "./mentions/nodes";
+export { EstimateMarkers } from "./mentions/estimate-markers-extension";
 export type {
   MentionOptions,
   UnifiedMentionOptions,

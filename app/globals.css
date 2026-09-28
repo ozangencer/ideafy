@@ -590,6 +590,40 @@ button:disabled {
   content: "≡";
 }
 
+/* Estimate markers — [COMPLEXITY: …] / [PRIORITY: …] written by the model.
+   Three adjacent decoration spans (start · value · end) drawn as one chip. */
+.estimate-marker {
+  @apply py-0.5 text-xs font-mono border-y border-border bg-foreground/[0.06] text-muted-foreground;
+}
+.estimate-marker__start {
+  @apply pl-1.5 rounded-l border-l;
+}
+.estimate-marker__end {
+  @apply pr-1.5 rounded-r border-r;
+}
+.light .estimate-marker {
+  @apply bg-ink/[0.04] border-ink/15;
+}
+.estimate-marker__value {
+  @apply font-semibold;
+}
+.estimate-marker--complexity[data-level="trivial"] { @apply text-emerald-400; }
+.estimate-marker--complexity[data-level="low"] { @apply text-green-400; }
+.estimate-marker--complexity[data-level="medium"] { @apply text-amber-400; }
+.estimate-marker--complexity[data-level="high"] { @apply text-orange-400; }
+.estimate-marker--complexity[data-level="very_high"] { @apply text-red-400; }
+.estimate-marker--priority[data-level="low"] { @apply text-gray-400; }
+.estimate-marker--priority[data-level="medium"] { @apply text-blue-400; }
+.estimate-marker--priority[data-level="high"] { @apply text-red-400; }
+.light .estimate-marker--complexity[data-level="trivial"] { @apply text-emerald-700; }
+.light .estimate-marker--complexity[data-level="low"] { @apply text-green-700; }
+.light .estimate-marker--complexity[data-level="medium"] { @apply text-amber-700; }
+.light .estimate-marker--complexity[data-level="high"] { @apply text-orange-700; }
+.light .estimate-marker--complexity[data-level="very_high"] { @apply text-red-700; }
+.light .estimate-marker--priority[data-level="low"] { @apply text-gray-600; }
+.light .estimate-marker--priority[data-level="medium"] { @apply text-blue-700; }
+.light .estimate-marker--priority[data-level="high"] { @apply text-red-700; }
+
 /* Image attachment marker (paste chip ↔ inline pill link) */
 .image-attachment {
   @apply inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-xs font-mono border-l-2 select-none align-baseline;
