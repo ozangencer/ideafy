@@ -5,6 +5,7 @@ import { basename, join } from "path";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { openCmuxTerminal } from "@/lib/terminal/cmux";
+import { buildWarpTabConfig, warpSupportsTabConfigs } from "@/lib/terminal/warp";
 import type { TerminalApp } from "@/lib/types";
 
 export interface LaunchTerminalOptions {
@@ -92,6 +93,77 @@ function logChildExit(child: ReturnType<typeof spawn>, appName: string, tag: str
   });
 }
 
+interface WarpLaunchOptions {
+  cwd: string;
+  command: string;
+  timestamp: number;
+  random: string;
+  tag: string;
+}
+
+function prepareWarpDir(dir: string): void {
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    throw new Error(
+      `Could not prepare Warp config dir at ${dir}: ${(err as Error).message}`,
+    );
+  }
+}
+
+// Warp reads the config when handling the URI; the file can be removed
+// shortly after. 8s is conservative even on a cold app start. Until then a
+// tab config also shows up in Warp's + menu, hence the "(temp)" name.
+function openWarpUri(uri: string, configPath: string, tag: string): void {
+  const child = spawn("open", [uri], { stdio: ["ignore", "pipe", "pipe"] });
+  logChildExit(child, "Warp", tag);
+  setTimeout(() => {
+    try { unlinkSync(configPath); } catch {}
+  }, 8000);
+}
+
+// warp://tab_config/<name> matches <name> against the file stem, and Warp
+// asks for snake_case stems — hence underscores instead of dashes.
+// See: https://docs.warp.dev/terminal/more-features/uri-scheme
+function openWarpTabConfig(o: WarpLaunchOptions): void {
+  const configDir = join(homedir(), ".warp", "tab_configs");
+  prepareWarpDir(configDir);
+  const configName = `ideafy_${o.timestamp}_${o.random}`;
+  const configPath = join(configDir, `${configName}.toml`);
+  writeFileSync(
+    configPath,
+    buildWarpTabConfig({ name: "Ideafy (temp)", cwd: o.cwd, command: o.command }),
+    { mode: 0o600 },
+  );
+  openWarpUri(`warp://tab_config/${configName}`, configPath, o.tag);
+}
+
+// Legacy path for Warps without tab configs: a YAML launch configuration
+// under ~/.warp/launch_configurations/, which always opens a new window.
+// See: https://docs.warp.dev/terminal/windows/launch-configurations
+function openWarpLaunchConfig(o: WarpLaunchOptions): void {
+  const configDir = join(homedir(), ".warp", "launch_configurations");
+  prepareWarpDir(configDir);
+  const configName = `ideafy-${o.timestamp}-${o.random}`;
+  const configPath = join(configDir, `${configName}.yaml`);
+
+  // Single-quoted YAML scalar: a literal quote is escaped by doubling it.
+  // We control every interpolated value, but quoting defends against paths
+  // with colons or special chars that would otherwise break YAML parsing.
+  const yamlQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const yaml =
+    "---\n" +
+    `name: ${configName}\n` +
+    "windows:\n" +
+    "  - tabs:\n" +
+    "      - layout:\n" +
+    `          cwd: ${yamlQuote(o.cwd)}\n` +
+    "          commands:\n" +
+    `            - exec: ${yamlQuote(o.command)}\n`;
+  writeFileSync(configPath, yaml, { mode: 0o600 });
+  openWarpUri(`warp://launch/${configName}`, configPath, o.tag);
+}
+
 export function getTerminalPreference(): TerminalApp {
   const row = db
     .select()
@@ -151,54 +223,18 @@ export function launchTerminal(opts: LaunchTerminalOptions): { success: true } {
   }
 
   if (terminal === "warp") {
-    // Warp does not expose AppleScript hooks like iTerm/Terminal, and `open
-    // -a Warp.app --args` does not surface any "run this command" CLI flag.
-    // The documented programmatic entry point is the `warp://launch/<name>`
-    // URI scheme, which loads a YAML launch configuration from
-    // ~/.warp/launch_configurations/<name>.yaml and runs its `commands` on
-    // start. This avoids the GUI-keystroke approach (which required
-    // Accessibility permission, raced with Warp's autocomplete overlay, and
-    // opened a second window from the initial `open -a` launch).
-    // See: https://docs.warp.dev/terminal/more-features/uri-scheme
-    //      https://docs.warp.dev/terminal/windows/launch-configurations
-    const configDir = join(homedir(), ".warp", "launch_configurations");
-    try {
-      mkdirSync(configDir, { recursive: true });
-    } catch (err) {
-      throw new Error(
-        `Could not prepare Warp launch_configurations dir at ${configDir}: ${(err as Error).message}`,
-      );
+    // Warp has no AppleScript hooks and `open -a Warp.app --args` exposes no
+    // "run this command" flag, so the entry point is its URI scheme, which
+    // loads a config file and runs its commands on open. No GUI keystrokes,
+    // so no Accessibility permission and no race with Warp's autocomplete.
+    // Tab configs open as a tab in the focused window; older Warps only have
+    // launch configs, which always open a new window (see lib/terminal/warp.ts).
+    const command = `/bin/bash ${shellQuote(scriptPath)}`;
+    if (warpSupportsTabConfigs()) {
+      openWarpTabConfig({ cwd: opts.cwd, command, timestamp, random, tag });
+    } else {
+      openWarpLaunchConfig({ cwd: opts.cwd, command, timestamp, random, tag });
     }
-
-    const configName = `ideafy-${timestamp}-${random}`;
-    const configPath = join(configDir, `${configName}.yaml`);
-
-    // Single-quoted YAML scalar: a literal quote is escaped by doubling it.
-    // We control every interpolated value, but quoting defends against paths
-    // with colons or special chars that would otherwise break YAML parsing.
-    const yamlQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
-    const yaml =
-      "---\n" +
-      `name: ${configName}\n` +
-      "windows:\n" +
-      "  - tabs:\n" +
-      "      - layout:\n" +
-      `          cwd: ${yamlQuote(opts.cwd)}\n` +
-      "          commands:\n" +
-      `            - exec: ${yamlQuote(`/bin/bash ${shellQuote(scriptPath)}`)}\n`;
-    writeFileSync(configPath, yaml, { mode: 0o600 });
-
-    const child = spawn("open", [`warp://launch/${configName}`], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    logChildExit(child, "Warp", tag);
-
-    // Warp reads the config when handling the URI; the file can be removed
-    // shortly after. 8s is conservative even on a cold app start.
-    setTimeout(() => {
-      try { unlinkSync(configPath); } catch {}
-    }, 8000);
-
     return { success: true };
   }
 

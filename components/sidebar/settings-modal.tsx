@@ -606,7 +606,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
                   {terminalApp === "ghostty"
                     ? "Opens via app launch args"
                     : terminalApp === "warp"
-                      ? "Opens via Warp launch config"
+                      ? "Opens as a new tab in the active Warp window"
                       : terminalApp === "cmux"
                         ? "Opens a workspace via the cmux CLI"
                         : "Opens via AppleScript"}
