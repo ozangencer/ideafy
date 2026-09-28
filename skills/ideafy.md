@@ -81,7 +81,7 @@ Keywords: move, tasi, tasima
 
 #### Save Plan
 Keywords: plan, solution, cozum
-- Before drafting, run `search_cards` and `list_open_work` for the card's project and note any contradiction or file overlap under Edge Cases
+- Before drafting, run `search_cards` and `list_open_work` (with your planned `files`) for the card's project and note any contradiction or file overlap under Edge Cases
 - Use `mcp__ideafy__save_plan`
 - Requires card ID and solution summary
 - Moves card to In Progress

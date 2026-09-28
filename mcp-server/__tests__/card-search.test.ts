@@ -7,6 +7,7 @@ import {
   foldText,
   htmlToText,
   listOpenWork,
+  MAX_OPEN_WORK_FILES,
   searchCards,
 } from "../card-search.js";
 import { buildPriorDecisionsNote } from "../serialize-card.js";
@@ -199,6 +200,33 @@ test("open work mixes git and plan sources and skips stale worktrees", async () 
   });
   assert.equal(byId["IDE-4"].source, "plan");
   assert.deepEqual(byId["IDE-4"].files, ["lib/x.ts", "lib/y.ts"]);
+});
+
+test("files finds overlap past the cap and puts overlapping cards first", async () => {
+  const db = makeDb();
+  addCard(db, "big", { n: 2, status: "test", worktreePath: "/repo/.worktrees/big", worktreeStatus: "active", branch: "kanban/IDE-2-big" });
+  addCard(db, "planned", { n: 4, status: "backlog", solution: "<p>Files: plugins/ideafy/mcp/*, docs/a.md</p>" });
+  addCard(db, "other", { n: 5, status: "backlog", solution: "<p>Files: lib/z.ts</p>" });
+  // 52 files, like IDE-331: the shared one sorts past the 40-file cut.
+  const bigFiles = [...Array.from({ length: 51 }, (_, i) => `app/f${String(i).padStart(2, "0")}.ts`), "mcp-server/index.ts"];
+
+  const rows = await listOpenWork(
+    db,
+    { projectId: "p1", files: ["./mcp-server/index.ts", "plugins/ideafy/mcp/index.js", "lib/new.ts"] },
+    {
+      isGitRepo: async () => true,
+      pathExists: () => true,
+      changedFiles: async (_repo, { worktreePath }) => (worktreePath === "/repo/.worktrees/big" ? bigFiles : []),
+    }
+  );
+
+  const big = rows.find((r) => r.displayId === "IDE-2")!;
+  assert.equal(big.files.length, MAX_OPEN_WORK_FILES);
+  assert.ok(!big.files.includes("mcp-server/index.ts"));
+  assert.deepEqual(big.overlap, ["mcp-server/index.ts"]);
+  assert.deepEqual(rows.find((r) => r.displayId === "IDE-4")!.overlap, ["plugins/ideafy/mcp/index.js"]);
+  assert.equal(rows.find((r) => r.displayId === "IDE-5")!.overlap, undefined);
+  assert.equal(rows[rows.length - 1].displayId, "IDE-5");
 });
 
 test("a project outside git only reports plan rows and never calls git", async () => {

@@ -18,7 +18,7 @@
 
 const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards before you commit to an approach. Use this card's \`id\` and \`projectId\` (get_card returns both):
 - Past decisions: call \`search_cards\` with the \`projectId\`, 2-3 keywords from the task, and this card's \`id\` as \`excludeCardId\`. If a completed or withdrawn card decided something this work contradicts, name that card by its displayId. A newer decision overrides an older one; \`withdrawn\` means it was tried and abandoned. Open a card with get_card only when its snippet is not enough.
-- Open work: call \`list_open_work\` with the same \`projectId\` and \`excludeCardId\`, and compare what this card will change with the files each open card touches. On an overlap, name the card, the shared file and which of the two should land first.
+- Open work: call \`list_open_work\` with the same \`projectId\` and \`excludeCardId\`, plus the files this card will change as \`files\` once you know them. Rows that share a file list it under \`overlap\`; otherwise compare against each card's files yourself. On an overlap, name the card, the shared file and which of the two should land first.
 - If these tools are not available, skip the check.`;
 
 /**
