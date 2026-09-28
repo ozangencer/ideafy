@@ -106,6 +106,24 @@ const ACTION_ICON: Record<PhaseAction, typeof Play> = {
   "test-together": FlaskConical,
 };
 
+const CHAT_RUNNING_TOOLTIP = "Chat is running on this card";
+
+/**
+ * Whether an in-app chat is streaming on this card. Kept apart from the lock:
+ * a locked card offers Unlock, and Unlock would not stop a chat. The local
+ * stream covers this tab at once; the registry covers chats started from
+ * another tab or over MCP, a poll later.
+ */
+export function useCardChatRunning(cardId: string) {
+  const streamingHere = useKanbanStore((s) => s.streamingMessage?.cardId === cardId);
+  const chatInBg = useKanbanStore((s) =>
+    s.backgroundProcesses.some(
+      (p) => p.cardId === cardId && p.processType === "chat" && p.status === "running"
+    )
+  );
+  return streamingHere || chatInBg;
+}
+
 interface CardPhaseActionsProps {
   card: Card;
   variant?: "icon" | "labeled";
@@ -179,6 +197,8 @@ export function CardPhaseActions({
     )
   );
 
+  const isChatting = useCardChatRunning(card.id);
+
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
   const [showIdeationConfirm, setShowIdeationConfirm] = useState(false);
@@ -205,6 +225,8 @@ export function CardPhaseActions({
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
+  // A running chat blocks the same buttons a lock does, without offering Unlock.
+  const isBlocked = isLocked || isChatting;
 
   const project = projects.find((p) => p.id === card.projectId);
   const projectPath = project?.folderPath || card.projectFolder;
@@ -252,7 +274,7 @@ export function CardPhaseActions({
 
   const handleStartClick = async (e?: React.MouseEvent) => {
     stop(e);
-    if (isLocked || isStarting || isPreparing || !flags.canRunAutonomous) return;
+    if (isBlocked || isStarting || isPreparing || !flags.canRunAutonomous) return;
     if (!(await prepare())) return;
     setDialogUseWorktree(effectiveUseWorktree);
     setShowAutonomousConfirm(true);
@@ -280,7 +302,7 @@ export function CardPhaseActions({
 
   const handleQuickFixClick = async (e?: React.MouseEvent) => {
     stop(e);
-    if (isLocked || isPreparing || !flags.canQuickFix) return;
+    if (isBlocked || isPreparing || !flags.canQuickFix) return;
     if (!(await prepare())) return;
     setDialogUseWorktree(effectiveUseWorktree);
     setShowQuickFixConfirm(true);
@@ -305,7 +327,7 @@ export function CardPhaseActions({
 
   const handleEvaluate = async (e?: React.MouseEvent) => {
     stop(e);
-    if (isLocked || isEvaluating || isPreparing || !flags.canEvaluate) return;
+    if (isBlocked || isEvaluating || isPreparing || !flags.canEvaluate) return;
     if (!(await prepare())) return;
 
     const result = await handOff("evaluate", evaluateIdea(card.id));
@@ -348,21 +370,21 @@ export function CardPhaseActions({
 
   const handleOpenTerminalClick = (e?: React.MouseEvent) => {
     stop(e);
-    if (isLocked || isPreparing || !flags.canStart) return;
+    if (isBlocked || isPreparing || !flags.canStart) return;
     if (needsPasteConfirm) setShowTerminalConfirm(true);
     else void handleOpenTerminal();
   };
 
   const handleOpenIdeationTerminalClick = (e?: React.MouseEvent) => {
     stop(e);
-    if (isLocked || isPreparing || !flags.canEvaluate) return;
+    if (isBlocked || isPreparing || !flags.canEvaluate) return;
     if (needsPasteConfirm) setShowIdeationConfirm(true);
     else void handleOpenIdeationTerminal();
   };
 
   const handleTestTogetherClick = (e?: React.MouseEvent) => {
     stop(e);
-    if (isLocked || isPreparing || !flags.canTestTogether) return;
+    if (isBlocked || isPreparing || !flags.canTestTogether) return;
     if (needsPasteConfirm) setShowTestTogetherConfirm(true);
     else void handleOpenTestTerminal();
   };
@@ -419,7 +441,7 @@ export function CardPhaseActions({
     // Autonomous buttons stay drawn while locked, as a spinner or a dimmed
     // icon; interactive ones are not shown at all then.
     const autonomous = isAutonomousAction(action);
-    const dimmed = autonomous && isLocked && !running;
+    const dimmed = autonomous && isBlocked && !running;
 
     let className = ICON_TINT[action];
     if (running) {
@@ -439,7 +461,7 @@ export function CardPhaseActions({
           <button
             type="button"
             onClick={onAction[action]}
-            disabled={autonomous ? running || isLocked : undefined}
+            disabled={autonomous ? running || isBlocked : undefined}
             className={`p-1 rounded transition-colors ${className}`}
           >
             {running ? (
@@ -466,7 +488,9 @@ export function CardPhaseActions({
             )}
           </button>
         </TooltipTrigger>
-        <TooltipContent side="top">{tooltipFor(action)}</TooltipContent>
+        <TooltipContent side="top">
+          {dimmed && isChatting ? CHAT_RUNNING_TOOLTIP : tooltipFor(action)}
+        </TooltipContent>
       </Tooltip>
     );
   };
@@ -479,6 +503,25 @@ export function CardPhaseActions({
           <Loader2 className="animate-spin" />
           {isEvaluating ? "Evaluating..." : isQuickFixing ? "Quick fixing..." : "Running..."}
         </Button>
+      );
+    }
+
+    // After a background run (it keeps its own "Running..."), before the lock:
+    // once the chat ends, an open terminal session shows its Unlock again.
+    if (isChatting) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* A disabled button swallows hover, so the span carries the tooltip. */}
+            <span tabIndex={0} className="cursor-wait">
+              <Button size="sm" disabled className="disabled:opacity-100 pointer-events-none">
+                <Loader2 className="animate-spin" />
+                Chat running...
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{CHAT_RUNNING_TOOLTIP}</TooltipContent>
+        </Tooltip>
       );
     }
 
@@ -553,7 +596,7 @@ export function CardPhaseActions({
       {variant === "labeled"
         ? renderLabeled()
         : actions
-            .filter((action) => isPhaseActionShown(action, flags, isLocked))
+            .filter((action) => isPhaseActionShown(action, flags, isBlocked))
             .map(renderIcon)}
 
       {/* Dialogs portal out of the DOM but not out of the React tree, so

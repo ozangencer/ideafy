@@ -12,7 +12,7 @@ import {
   getPhaseActionFlags,
   isPhaseActionShown,
 } from "@/lib/card-phase";
-import { CardPhaseActions } from "./card-phase-actions";
+import { CardPhaseActions, useCardChatRunning } from "./card-phase-actions";
 import { useKanbanStore } from "@/lib/store";
 import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
@@ -234,8 +234,10 @@ function TaskCardImpl({
   // The run buttons themselves live in CardPhaseActions; the card only needs
   // to know which of them will be drawn, for the footer width budget below.
   const phaseFlags = getPhaseActionFlags(card, solutionSummaryText, testScenariosText, testProgress);
+  // A running chat hides the interactive icons too, so it counts as a lock here.
+  const isChatting = useCardChatRunning(card.id);
   const shownPhaseActions = BOARD_PHASE_ACTIONS.filter((action) =>
-    isPhaseActionShown(action, phaseFlags, isLocked)
+    isPhaseActionShown(action, phaseFlags, isLocked || isChatting)
   ).length;
 
   // Get project info
