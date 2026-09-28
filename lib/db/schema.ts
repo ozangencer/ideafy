@@ -43,6 +43,33 @@ export const projects = sqliteTable("projects", {
 export type ProjectRecord = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 
+// Project toolkit: the skills and agents pinned to a project so the sidebar
+// and the chat `/` picker surface them first. Keyed by catalog name, not by a
+// provider's file path, so a pin survives switching the AI platform — a name
+// the active provider cannot resolve just renders greyed out. Nothing here is
+// injected into prompts or CLI arguments.
+export const projectToolkitItems = sqliteTable(
+  "project_toolkit_items",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // "skill" | "agent"
+    name: text("name").notNull(), // Catalog name, e.g. "human-test", "ideafy:ideafy-workflow"
+    source: text("source"), // "global" | "project" | null — informational only
+    folder: text("folder"), // One level of grouping inside the Toolkit; null = top level
+    order: integer("order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("project_toolkit_items_project_kind_name_idx").on(table.projectId, table.kind, table.name),
+  ]
+);
+
+export type ProjectToolkitItemRecord = typeof projectToolkitItems.$inferSelect;
+export type NewProjectToolkitItem = typeof projectToolkitItems.$inferInsert;
+
 // Card groups: a chain of cards that belong to one piece of work, so the board
 // can fold 14 cards into 1 slot. Deliberately NOT called "epic" — the row has
 // no status, no completion state and no target date of its own; it is a label
@@ -186,38 +213,6 @@ export const chatSessions = sqliteTable("chat_sessions", {
 
 export type ChatSessionRecord = typeof chatSessions.$inferSelect;
 export type NewChatSession = typeof chatSessions.$inferInsert;
-
-export const skillGroups = sqliteTable("skill_groups", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  scope: text("scope").notNull(), // "global" | "project"
-  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
-  order: integer("order").notNull().default(0),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
-
-export type SkillGroupRecord = typeof skillGroups.$inferSelect;
-export type NewSkillGroup = typeof skillGroups.$inferInsert;
-
-export const skillGroupItems = sqliteTable(
-  "skill_group_items",
-  {
-    id: text("id").primaryKey(),
-    groupId: text("group_id")
-      .notNull()
-      .references(() => skillGroups.id, { onDelete: "cascade" }),
-    skillName: text("skill_name").notNull(),
-    order: integer("order").notNull().default(0),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [
-    uniqueIndex("skill_group_items_group_skill_idx").on(table.groupId, table.skillName),
-  ]
-);
-
-export type SkillGroupItemRecord = typeof skillGroupItems.$inferSelect;
-export type NewSkillGroupItem = typeof skillGroupItems.$inferInsert;
 
 // Activity events: persistent feed of completed AI work (opinion/plan/
 // implementation/autonomous/sync …). Toasts are ephemeral; this table backs the

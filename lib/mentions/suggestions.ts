@@ -87,12 +87,20 @@ export function createUnifiedSuggestion(
     items: ({ query }) =>
       config
         .getItems()
-        .filter((item) =>
-          item.label.toLowerCase().includes(query.toLowerCase()),
-        )
+        // A pin also matches on its Toolkit folder, so "/doc" lists every
+        // tool in a "Documentation" folder.
+        .filter((item) => {
+          const q = query.toLowerCase();
+          return (
+            item.label.toLowerCase().includes(q) ||
+            (!!item.folder && item.folder.toLowerCase().includes(q))
+          );
+        })
         .sort((a, b) => {
-          if (a.type === "skillGroup" && b.type !== "skillGroup") return -1;
-          if (a.type !== "skillGroup" && b.type === "skillGroup") return 1;
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          // Pins keep the Toolkit order they arrive in.
+          if (a.pinned && b.pinned) return 0;
           return a.label.localeCompare(b.label);
         })
         .map((item) => ({
@@ -101,12 +109,11 @@ export function createUnifiedSuggestion(
           type: item.type,
           description: item.description,
           pluginKey: item.pluginKey ?? null,
-          children: item.children,
+          pinned: item.pinned,
+          folder: item.folder ?? null,
         })),
 
     command: ({ editor, range, props }) => {
-      if (props.type === "skillGroup") return;
-
       editor
         .chain()
         .focus()

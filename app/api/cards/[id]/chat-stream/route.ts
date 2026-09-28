@@ -34,6 +34,7 @@ import {
   buildConversationContext,
 } from "@/lib/ai/prompt-builder";
 import { testScenariosToMarkdown } from "@/lib/markdown";
+import { mcpServerKey } from "@/lib/platform/mcp-tool-names";
 
 function processMentions(
   message: string,
@@ -55,7 +56,7 @@ function processMentions(
   // Add context for MCP mentions so Claude uses the right tools
   const mcpMentions = mentions.filter(m => m.type === "mcp");
   if (mcpMentions.length > 0) {
-    const names = mcpMentions.map(m => m.id).join(", ");
+    const names = mcpMentions.map(m => mcpServerKey(m.id)).join(", ");
     processed = `[Referenced MCP tools: ${names} — use the corresponding mcp__* tools]\n\n${processed}`;
   }
 
@@ -125,7 +126,13 @@ export async function POST(
     }
   }
 
-  // Read narrative content for opinion section
+  // The Tests tab on a card past planning runs with every permission, so it gets
+// no allow-list.
+function isTestActionFor(sectionType: string, status: string): boolean {
+  return sectionType === "tests" && ["progress", "test", "completed"].includes(status);
+}
+
+// Read narrative content for opinion section
   if (sectionType === "opinion" && projectFolderPath) {
     narrativeContent = readNarrativeContent(projectFolderPath, projectNarrativePath);
   }
@@ -152,6 +159,17 @@ export async function POST(
     toolCalls: msg.toolCalls ? JSON.parse(msg.toolCalls) : undefined,
     createdAt: msg.createdAt,
   }));
+
+  // Tool permissions follow every MCP the chat has referenced so far, not just
+  // this message's: each turn is a separate CLI spawn with its own allow-list,
+  // so a server mentioned in turn one would otherwise be revoked in turn two.
+  const sessionMentions = [
+    ...parsedHistory.flatMap((msg) => msg.mentions ?? []),
+    ...(mentions ?? []),
+  ];
+  const allowedTools = isTestActionFor(sectionType, card.status)
+    ? undefined
+    : getAllowedTools(sectionType as SectionType, sessionMentions);
 
   // Save user message to database
   const userMessageId = uuidv4();
@@ -291,7 +309,7 @@ export async function POST(
   const initialNewSessionId = (!canResume && provider.capabilities.supportsSessionResume && provider.id === "claude")
     ? uuidv4() : undefined;
 
-  const isTestAction = sectionType === "tests" && ["progress", "test", "completed"].includes(card.status);
+  const isTestAction = isTestActionFor(sectionType, card.status);
 
   const bufferKey = liveStreamKey(cardId, sectionType);
   startLiveStream(bufferKey);
@@ -362,6 +380,7 @@ export async function POST(
             prompt: resumeMessage,
             skipPermissions: isTestAction,
             addDirs: [tmpdir(), getCardImageDir(cardId)],
+            allowedTools,
             resumeSessionId: existingSession.cliSessionId,
           });
           sendEvent("status", { step: "resuming", sessionId: shortId(existingSession.cliSessionId) });
@@ -376,7 +395,7 @@ export async function POST(
           cliArgs = provider.buildStreamArgs({
             prompt: fullPrompt,
             skipPermissions: isTestAction,
-            allowedTools: isTestAction ? undefined : getAllowedTools(sectionType as SectionType, mentions),
+            allowedTools,
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             newSessionId: freshSpawnSessionId,
           });
@@ -391,7 +410,7 @@ export async function POST(
         }
 
         const spawnEnv = provider.getEnv();
-        console.log(`[chat-stream] spawning ${provider.id} (${mode}):`, provider.getCliPath(), JSON.stringify(cliArgs.slice(0, 3)), `(${cliArgs.length} args, cwd: ${cwd}, HOME: ${spawnEnv.HOME}, OPENAI_API_KEY: ${spawnEnv.OPENAI_API_KEY ? 'SET' : 'unset'})`);
+        console.log(`[chat-stream] spawning ${provider.id} (${mode}):`, provider.getCliPath(), JSON.stringify(cliArgs.slice(0, 3)), `(${cliArgs.length} args, cwd: ${cwd}, HOME: ${spawnEnv.HOME}, OPENAI_API_KEY: ${spawnEnv.OPENAI_API_KEY ? 'SET' : 'unset'}, allowedTools: ${allowedTools ? allowedTools.join(" ") : 'none'})`);
 
         const cliProcess = spawn(provider.getCliPath(), cliArgs, {
           cwd,

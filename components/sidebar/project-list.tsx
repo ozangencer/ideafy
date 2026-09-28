@@ -7,7 +7,7 @@ import { AddProjectModal } from "./add-project-modal";
 import { EditProjectModal } from "./edit-project-modal";
 import { UnpushedDialog } from "./unpushed-dialog";
 import { ProjectSectionHeader } from "./project-section-header";
-import { SkillGroupDialog } from "./skill-group-dialog";
+import { NameDialog } from "./name-dialog";
 import { Project } from "@/lib/types";
 import { OPEN_ADD_PROJECT_EVENT, projectsInWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/button";
@@ -374,7 +374,7 @@ export function ProjectList() {
         />
       )}
 
-      <SkillGroupDialog
+      <NameDialog
         open={sectionDialog !== null}
         onOpenChange={(open) => {
           if (!open) setSectionDialog(null);

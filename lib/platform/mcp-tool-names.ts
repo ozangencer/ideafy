@@ -7,6 +7,22 @@ import type { AiPlatform } from "../types";
 export const IDEAFY_MCP_SERVER = "ideafy";
 
 /**
+ * The server key Claude Code registers an MCP mention under.
+ *
+ * A plugin's `.mcp.json` server is listed in the sidebar as `<plugin>:<server>`
+ * (see `listPluginMcps`), but Claude Code namespaces it as
+ * `plugin_<plugin>_<server>` — so an `--allowedTools` pattern built from the
+ * mention id verbatim never matches and every call lands as a permission
+ * denial. A plain server name is already the key.
+ */
+export function mcpServerKey(mentionId: string): string {
+  const i = mentionId.indexOf(":");
+  return i === -1
+    ? mentionId
+    : `plugin_${mentionId.slice(0, i)}_${mentionId.slice(i + 1)}`;
+}
+
+/**
  * Claude Code's naming for an MCP tool, which is what every prompt in this
  * codebase is written in: `mcp__<server>__<tool>`.
  */

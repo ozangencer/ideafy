@@ -234,21 +234,27 @@ export interface SkillListItem {
   name: string;
   title: string;
   path: string;
-  group: string | null;
   description: string | null;
   source: SkillSource;
   pluginKey?: string | null;
 }
 
-export interface UserSkillGroup {
-  id: string;
-  name: string;
-  skillNames: string[];
-}
+// A skill or agent pinned to a project's Toolkit. `name` is the catalog name
+// the active provider lists it under; a pin whose name the provider cannot
+// resolve stays in the list, greyed out.
+export type ToolkitKind = "skill" | "agent";
 
-export interface SkillGroupCollectionsResponse {
-  globalGroups: UserSkillGroup[];
-  projectGroups: Record<string, UserSkillGroup[]>;
+export interface ToolkitItem {
+  id: string;
+  projectId: string;
+  kind: ToolkitKind;
+  name: string;
+  source: SkillSource | null;
+  // Toolkit folder the pin sits in; null keeps it at the top level. A folder
+  // exists only while something is in it.
+  folder: string | null;
+  order: number;
+  createdAt: string;
 }
 
 export interface SkillPreview extends SkillListItem {
@@ -402,6 +408,9 @@ export interface AppSettings {
   // localStorage because quick entry is its own Electron window and has to
   // offer the same projects the main window is showing.
   activeWorkspace: ProjectMode;
+  // Library lists plugin-provided skills and agents only when this is on.
+  // Settings table, not localStorage, for the same Electron/dev-port reason.
+  showPluginItems: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -412,6 +421,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   detectedTerminal: null,
   systemNotifications: true,
   activeWorkspace: "development",
+  showPluginItems: false,
 };
 
 export const AI_PLATFORM_OPTIONS: { value: AiPlatform; label: string; description: string }[] = [
@@ -470,7 +480,7 @@ export const SECTION_CONFIG: Record<SectionType, {
 };
 
 // Mention types for chat input
-export type UnifiedItemType = "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
+export type UnifiedItemType = "skill" | "mcp" | "agent" | "plugin";
 
 export interface MentionData {
   type: "skill" | "mcp" | "agent" | "plugin" | "card" | "document";
@@ -484,8 +494,11 @@ export interface UnifiedItem {
   label: string;
   type: UnifiedItemType;
   description?: string;
-  children?: UnifiedItem[];
   pluginKey?: string | null;
+  // Pinned to the project's Toolkit: listed first in the `/` picker.
+  pinned?: boolean;
+  // The pin's Toolkit folder, shown as a heading in the picker.
+  folder?: string | null;
 }
 
 // Tool call data from Claude responses

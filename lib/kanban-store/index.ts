@@ -12,6 +12,7 @@ import { createHistorySlice } from "./slices/history";
 import { createProjectsSlice } from "./slices/projects";
 import { createSettingsSlice } from "./slices/settings";
 import { createSkillsSlice } from "./slices/skills";
+import { createToolkitSlice } from "./slices/toolkit";
 import { createUiSlice } from "./slices/ui";
 import { KanbanStore } from "./types";
 import { BoardView, BoardViewPreference, CompletedFilter, StaleThresholds, Status } from "../types";
@@ -50,6 +51,7 @@ export const useKanbanStore = create<KanbanStore>()(
       ...createDocumentsSlice(set, get),
       ...createUiSlice(set, get),
       ...createSkillsSlice(set, get),
+      ...createToolkitSlice(set, get),
       ...createClaudeSlice(set, get),
       ...createDevServerSlice(set, get),
       ...createSettingsSlice(set, get),
@@ -64,7 +66,6 @@ export const useKanbanStore = create<KanbanStore>()(
         isSidebarCollapsed: state.isSidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
         isProjectListExpanded: state.isProjectListExpanded,
-        collapsedSkillGroups: state.collapsedSkillGroups,
         completedFilter: state.completedFilter,
         boardView: state.boardView,
         boardViewPreference: state.boardViewPreference,
@@ -76,7 +77,11 @@ export const useKanbanStore = create<KanbanStore>()(
         activeWorkspace: state.activeWorkspace,
       }),
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<KanbanStore>;
+        // Skill groups are gone; drop their fold state from older snapshots so
+        // it does not ride along in `...persisted` forever.
+        const { collapsedSkillGroups: _drop, ...persisted } =
+          (persistedState ?? {}) as Partial<KanbanStore> & { collapsedSkillGroups?: unknown };
+        void _drop;
         const collapsedColumns = persisted.collapsedColumns || [];
         if (!collapsedColumns.includes("withdrawn")) {
           collapsedColumns.push("withdrawn");
@@ -94,9 +99,6 @@ export const useKanbanStore = create<KanbanStore>()(
         const isProjectListExpanded = typeof persisted.isProjectListExpanded === "boolean"
           ? persisted.isProjectListExpanded
           : currentState.isProjectListExpanded;
-        const collapsedSkillGroups = Array.isArray(persisted.collapsedSkillGroups)
-          ? persisted.collapsedSkillGroups
-          : currentState.collapsedSkillGroups;
         const expandedGroups = Array.isArray(persisted.expandedGroups)
           ? persisted.expandedGroups
           : currentState.expandedGroups;
@@ -131,7 +133,6 @@ export const useKanbanStore = create<KanbanStore>()(
           completedFilter,
           sidebarWidth,
           isProjectListExpanded,
-          collapsedSkillGroups,
           expandedGroups,
           uncappedColumns,
           staleThresholds,

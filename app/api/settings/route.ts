@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   detectedTerminal: null,
   systemNotifications: true,
   activeWorkspace: "development",
+  showPluginItems: false,
 };
 
 // Detect terminal from TERM_PROGRAM env variable
@@ -72,6 +73,7 @@ export async function GET() {
       if (row.key === "terminal_app") result.terminalApp = row.value as TerminalApp;
       if (row.key === "system_notifications") result.systemNotifications = row.value !== "false";
       if (row.key === "active_workspace") result.activeWorkspace = normalizeProjectMode(row.value);
+      if (row.key === "show_plugin_items") result.showPluginItems = row.value === "true";
     }
 
     // Add detected terminal from environment
@@ -100,6 +102,7 @@ export async function PUT(request: Request) {
       terminalApp: "terminal_app",
       systemNotifications: "system_notifications",
       activeWorkspace: "active_workspace",
+      showPluginItems: "show_plugin_items",
     };
 
     for (const [field, rawValue] of Object.entries(body)) {

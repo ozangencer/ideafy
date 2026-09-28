@@ -4,9 +4,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectList } from "./project-list";
 import { WorkspaceSwitch } from "./workspace-switch";
-import { SkillList } from "./skill-list";
-import { McpList } from "./mcp-list";
-import { AgentList } from "./agent-list";
+import { ToolkitList } from "./toolkit-list";
+import { LibraryList } from "./library-list";
 import { DocumentList } from "./document-list";
 import { MemoryList } from "./memory-list";
 import { SettingsModal } from "./settings-modal";
@@ -240,14 +239,11 @@ export function Sidebar() {
         {/* Scrollable Content */}
         <ScrollArea className="flex-1">
           <div className="py-2">
-            {/* Skills Section */}
-            <SkillList />
+            {/* Toolkit: the active project's pinned skills and agents */}
+            {activeProjectId && <ToolkitList />}
 
-            {/* MCPs Section */}
-            <McpList />
-
-            {/* Agents Section */}
-            <AgentList />
+            {/* Library: every skill and agent, one search, kind chips */}
+            <LibraryList />
 
             {/* Documents Section - only show when project selected */}
             {activeProjectId && (

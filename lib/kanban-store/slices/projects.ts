@@ -120,9 +120,7 @@ export const createProjectsSlice: StoreSlice<
         projectAgentItems: state.activeProjectId === id ? [] : state.projectAgentItems,
         selectedAgent: state.activeProjectId === id ? null : state.selectedAgent,
         isAgentViewerOpen: state.activeProjectId === id ? false : state.isAgentViewerOpen,
-        projectSkillGroups: Object.fromEntries(
-          Object.entries(state.projectSkillGroups).filter(([projectId]) => projectId !== id)
-        ),
+        toolkitItems: state.activeProjectId === id ? [] : state.toolkitItems,
       }));
     } catch (error) {
       console.error("Failed to delete project:", error);

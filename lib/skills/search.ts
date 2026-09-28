@@ -1,5 +1,3 @@
-import type { ResolvedSkillGroup } from "./grouping";
-
 /**
  * Below this many entries a section is short enough to scan by eye, and the
  * search box costs more sidebar room than it saves.
@@ -23,26 +21,6 @@ export function matchesSearchQuery(
   return [item.name, item.title, item.description].some(
     (field) => !!field && field.toLowerCase().includes(query)
   );
-}
-
-/**
- * A group whose own name matches keeps all of its items: typing a group name
- * is a request to see that group, not to filter inside it.
- */
-export function filterResolvedGroups(
-  groups: ResolvedSkillGroup[],
-  query: string
-): ResolvedSkillGroup[] {
-  if (!query) return groups;
-
-  return groups.flatMap((group) => {
-    const nameMatches = group.name.toLowerCase().includes(query);
-    const items = nameMatches
-      ? group.items
-      : group.items.filter((item) => matchesSearchQuery(item, query));
-
-    return items.length > 0 || nameMatches ? [{ ...group, items }] : [];
-  });
 }
 
 export type MatchSegment = {

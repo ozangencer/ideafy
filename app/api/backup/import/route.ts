@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
     // Wrap entire import in a transaction for atomicity
     db.transaction((tx) => {
       // 1. Delete all existing data
-      tx.delete(schema.skillGroupItems).run();
-      tx.delete(schema.skillGroups).run();
+      // Before projects: toolkit rows point at them.
+      tx.delete(schema.projectToolkitItems).run();
       tx.delete(schema.cards).run();
       tx.delete(schema.cardGroups).run();
       tx.delete(schema.projects).run();
@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
       }
 
       // 3. Import projects (cards depend on projects)
+      const importedProjectIds = new Set<string>();
       for (const project of data.projects) {
+        importedProjectIds.add(project.id);
         tx.insert(schema.projects).values({
           id: project.id,
           name: project.name,
@@ -145,32 +147,21 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 7. Import skill groups
-      if (data.skillGroups) {
-        for (const group of data.skillGroups) {
-          tx.insert(schema.skillGroups).values({
-            id: group.id,
-            name: group.name,
-            scope: group.scope,
-            projectId: group.projectId,
-            order: group.order,
-            createdAt: group.createdAt,
-            updatedAt: group.updatedAt,
-          }).run();
-        }
-      }
-
-      // 8. Import skill group items
-      if (data.skillGroupItems) {
-        for (const item of data.skillGroupItems) {
-          tx.insert(schema.skillGroupItems).values({
-            id: item.id,
-            groupId: item.groupId,
-            skillName: item.skillName,
-            order: item.order,
-            createdAt: item.createdAt,
-          }).run();
-        }
+      // 7. Import toolkit pins. Rows whose project did not come along are
+      // skipped rather than failing the foreign key. Older backups carry
+      // skillGroups/skillGroupItems instead; those are ignored on purpose.
+      for (const item of data.toolkitItems ?? []) {
+        if (!importedProjectIds.has(item.projectId)) continue;
+        tx.insert(schema.projectToolkitItems).values({
+          id: item.id,
+          projectId: item.projectId,
+          kind: item.kind,
+          name: item.name,
+          source: item.source ?? null,
+          folder: item.folder ?? null,
+          order: item.order ?? 0,
+          createdAt: item.createdAt,
+        }).onConflictDoNothing().run();
       }
     });
 
@@ -182,8 +173,7 @@ export async function POST(request: NextRequest) {
         projectSections: data.projectSections?.length || 0,
         settings: data.settings?.length || 0,
         cardGroups: data.cardGroups?.length || 0,
-        skillGroups: data.skillGroups?.length || 0,
-        skillGroupItems: data.skillGroupItems?.length || 0,
+        toolkitItems: data.toolkitItems?.length || 0,
       },
       preImportBackup: preImportBackup.filename,
     });

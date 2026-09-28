@@ -82,7 +82,6 @@ export async function GET(request: NextRequest) {
       path: allowedItem.path,
       name: allowedItem.name,
       title: parsed.displayTitle,
-      group: parsed.group ?? allowedItem.group,
       description: parsed.description ?? allowedItem.description,
       source: allowedItem.source,
       firstHeading: parsed.firstHeading,

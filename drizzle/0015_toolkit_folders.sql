@@ -1,0 +1,1 @@
+ALTER TABLE `project_toolkit_items` ADD `folder` text;

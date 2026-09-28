@@ -73,19 +73,13 @@ export interface ExportData {
     color: string | null;
     createdAt: string;
   }>;
-  skillGroups?: Array<{
+  toolkitItems?: Array<{
     id: string;
+    projectId: string;
+    kind: string;
     name: string;
-    scope: string;
-    projectId: string | null;
-    order: number;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  skillGroupItems?: Array<{
-    id: string;
-    groupId: string;
-    skillName: string;
+    source: string | null;
+    folder?: string | null;
     order: number;
     createdAt: string;
   }>;
@@ -100,8 +94,7 @@ export async function GET() {
     const projectSections = db.select().from(schema.projectSections).all();
     const settings = db.select().from(schema.settings).all();
     const cardGroups = db.select().from(schema.cardGroups).all();
-    const skillGroups = db.select().from(schema.skillGroups).all();
-    const skillGroupItems = db.select().from(schema.skillGroupItems).all();
+    const toolkitItems = db.select().from(schema.projectToolkitItems).all();
 
     const exportData: ExportData = {
       version: "1.0",
@@ -178,19 +171,13 @@ export async function GET() {
         color: group.color,
         createdAt: group.createdAt,
       })),
-      skillGroups: skillGroups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        scope: group.scope,
-        projectId: group.projectId,
-        order: group.order,
-        createdAt: group.createdAt,
-        updatedAt: group.updatedAt,
-      })),
-      skillGroupItems: skillGroupItems.map((item) => ({
+      toolkitItems: toolkitItems.map((item) => ({
         id: item.id,
-        groupId: item.groupId,
-        skillName: item.skillName,
+        projectId: item.projectId,
+        kind: item.kind,
+        name: item.name,
+        source: item.source,
+        folder: item.folder,
         order: item.order,
         createdAt: item.createdAt,
       })),

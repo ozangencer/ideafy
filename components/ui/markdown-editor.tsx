@@ -14,7 +14,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useKanbanStore } from "@/lib/store";
-import { buildSkillGroupUnifiedItems } from "@/lib/skills/grouping";
+import { buildUnifiedItems } from "@/lib/mentions/unified-items";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
@@ -63,8 +63,7 @@ export function MarkdownEditor({
     projectSkillItems,
     agentItems,
     projectAgentItems,
-    globalSkillGroups,
-    projectSkillGroups,
+    toolkitItems,
   } = useKanbanStore();
 
   // Local state for project-specific skills/mcps/agents
@@ -76,6 +75,9 @@ export function MarkdownEditor({
   const [localProjectAgents, setLocalProjectAgents] = useState<string[]>([]);
   const [localProjectAgentItems, setLocalProjectAgentItems] = useState<
     import("@/lib/types").AgentListItem[]
+  >([]);
+  const [localToolkitItems, setLocalToolkitItems] = useState<
+    import("@/lib/types").ToolkitItem[]
   >([]);
   const effectiveProjectId = projectId || activeProjectId;
   const projectFolderPath =
@@ -120,6 +122,7 @@ export function MarkdownEditor({
       setLocalProjectMcps([]);
       setLocalProjectAgents([]);
       setLocalProjectAgentItems([]);
+      setLocalToolkitItems([]);
       return;
     }
 
@@ -128,146 +131,53 @@ export function MarkdownEditor({
       fetch(`/api/projects/${effectiveProjectId}/skills/list`).then(r => r.json()).catch(() => ({ skills: [] })),
       fetch(`/api/projects/${effectiveProjectId}/mcps/list`).then(r => r.json()).catch(() => ({ mcps: [] })),
       fetch(`/api/projects/${effectiveProjectId}/agents/list`).then(r => r.json()).catch(() => ({ agents: [] })),
-    ]).then(([skillsData, mcpsData, agentsData]) => {
+      fetch(`/api/projects/${effectiveProjectId}/toolkit`).then(r => r.json()).catch(() => ({ items: [] })),
+    ]).then(([skillsData, mcpsData, agentsData, toolkitData]) => {
       setLocalProjectSkills(skillsData.skills || []);
       setLocalProjectSkillItems(skillsData.items || []);
       setLocalProjectMcps(mcpsData.mcps || []);
       setLocalProjectAgents(agentsData.agents || []);
       setLocalProjectAgentItems(agentsData.items || []);
+      setLocalToolkitItems(Array.isArray(toolkitData.items) ? toolkitData.items : []);
     });
   }, [projectId, activeProjectId]);
 
-  // Create unified items getter that merges global + card's project items
-  const getUnifiedItems = useCallback(() => {
-    const items: Array<{
-      id: string;
-      label: string;
-      type: "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
-      description?: string;
-      pluginKey?: string | null;
-      children?: Array<{
-        id: string;
-        label: string;
-        type: "skill" | "mcp" | "agent" | "plugin" | "skillGroup";
-        description?: string;
-        pluginKey?: string | null;
-      }>;
-    }> = [];
-    const addedIds = new Set<string>();
-
-    const skillPluginKeyByName = new Map<string, string>();
-    [...skillItems, ...projectSkillItems, ...localProjectSkillItems].forEach((item) => {
-      if (item.pluginKey) skillPluginKeyByName.set(item.name, item.pluginKey);
-    });
-    const agentPluginKeyByName = new Map<string, string>();
-    [...agentItems, ...projectAgentItems, ...localProjectAgentItems].forEach((item) => {
-      if (item.pluginKey) agentPluginKeyByName.set(item.name, item.pluginKey);
-    });
-    const allGlobalSkillItems = skillItems.length
-      ? skillItems
-      : Array.from(new Set(skills)).map((name) => ({
-          name,
-          title: name,
-          path: "",
-          group: null,
-          description: null,
-          source: "global" as const,
-        }));
-
-    const allProjectSkillItems = projectSkillItems.length
-      ? projectSkillItems
-      : Array.from(new Set(localProjectSkills)).map((name) => ({
-          name,
-          title: name,
-          path: "",
-          group: null,
-          description: null,
-          source: "project" as const,
-        }));
-
-    buildSkillGroupUnifiedItems(allGlobalSkillItems, globalSkillGroups, "global").forEach(
-      (group) => {
-        if (!addedIds.has(`skillGroup-${group.id}`)) {
-          addedIds.add(`skillGroup-${group.id}`);
-          items.push(group);
-        }
-      }
-    );
-
-    if (effectiveProjectId) {
-      buildSkillGroupUnifiedItems(
-        allProjectSkillItems,
-        projectSkillGroups[effectiveProjectId] || [],
-        "project"
-      ).forEach((group) => {
-        if (!addedIds.has(`skillGroup-${group.id}`)) {
-          addedIds.add(`skillGroup-${group.id}`);
-          items.push(group);
-        }
-      });
-    }
-
-    // Merge global + project skills
-    const allSkills = Array.from(new Set([...skills, ...localProjectSkills]));
-    allSkills.forEach((skill) => {
-      if (!addedIds.has(`skill-${skill}`)) {
-        addedIds.add(`skill-${skill}`);
-        items.push({
-          id: skill,
-          label: skill,
-          type: "skill",
-          pluginKey: skillPluginKeyByName.get(skill) ?? null,
-        });
-      }
-    });
-
-    // Merge global + project MCPs
-    const allMcps = Array.from(new Set([...mcps, ...localProjectMcps]));
-    allMcps.forEach((mcp) => {
-      if (!addedIds.has(`mcp-${mcp}`)) {
-        addedIds.add(`mcp-${mcp}`);
-        items.push({
-          id: mcp,
-          label: mcp,
-          type: "mcp",
-          pluginKey: mcp.includes(":") ? mcp.split(":")[0] : null,
-        });
-      }
-    });
-
-    // Merge global + project agents
-    const allAgents = Array.from(new Set([...agents, ...localProjectAgents]));
-    allAgents.forEach((agent) => {
-      if (!addedIds.has(`agent-${agent}`)) {
-        addedIds.add(`agent-${agent}`);
-        items.push({
-          id: agent,
-          label: agent,
-          type: "agent",
-          pluginKey: agentPluginKeyByName.get(agent) ?? null,
-        });
-      }
-    });
-
-    return items;
-  }, [
-    activeProjectId,
-    agentItems,
-    agents,
-    globalSkillGroups,
-    localProjectAgentItems,
-    localProjectAgents,
-    localProjectMcps,
-    localProjectSkillItems,
-    localProjectSkills,
-    mcps,
-    projectAgentItems,
-    projectId,
-    projectSkillGroups,
-    projectSkillItems,
-    skillItems,
-    skills,
-  ]);
+  // Create unified items getter that merges global + card's project items.
+  // The Toolkit comes from the store when the card belongs to the active
+  // project, and from the local fetch otherwise.
+  const getUnifiedItems = useCallback(
+    () =>
+      buildUnifiedItems({
+        skills: [...skills, ...localProjectSkills],
+        mcps: [...mcps, ...localProjectMcps],
+        agents: [...agents, ...localProjectAgents],
+        skillItems: [...skillItems, ...projectSkillItems, ...localProjectSkillItems],
+        agentItems: [...agentItems, ...projectAgentItems, ...localProjectAgentItems],
+        toolkit: !effectiveProjectId
+          ? []
+          : effectiveProjectId === activeProjectId
+            ? toolkitItems
+            : localToolkitItems,
+      }),
+    [
+      activeProjectId,
+      agentItems,
+      agents,
+      effectiveProjectId,
+      localProjectAgentItems,
+      localProjectAgents,
+      localProjectMcps,
+      localProjectSkillItems,
+      localProjectSkills,
+      localToolkitItems,
+      mcps,
+      projectAgentItems,
+      projectSkillItems,
+      skillItems,
+      skills,
+      toolkitItems,
+    ]
+  );
 
   // Callback to get current documents (used by suggestion)
   const getDocuments = useCallback(

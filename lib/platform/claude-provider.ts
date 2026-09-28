@@ -166,13 +166,15 @@ class ClaudeProvider implements PlatformProvider {
 
     if (opts.resumeSessionId) {
       args.push("--resume", opts.resumeSessionId);
-    } else {
-      if (opts.newSessionId) {
-        args.push("--session-id", opts.newSessionId);
-      }
-      if (!opts.skipPermissions && opts.allowedTools?.length) {
-        args.push("--allowedTools", ...opts.allowedTools);
-      }
+    } else if (opts.newSessionId) {
+      args.push("--session-id", opts.newSessionId);
+    }
+    // A resumed session does not inherit the allow-list from the spawn that
+    // created it: every `-p` invocation is its own process with its own
+    // flags, so leaving this inside the fresh branch meant the second message
+    // in a chat had no MCP permissions at all.
+    if (!opts.skipPermissions && opts.allowedTools?.length) {
+      args.push("--allowedTools", ...opts.allowedTools);
     }
 
     if (opts.addDirs?.length) {

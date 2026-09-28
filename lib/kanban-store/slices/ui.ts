@@ -7,7 +7,6 @@ export const createUiSlice: StoreSlice<
     | "isSidebarCollapsed"
     | "sidebarWidth"
     | "isProjectListExpanded"
-    | "collapsedSkillGroups"
     | "collapsedColumns"
     | "expandedGroups"
     | "uncappedColumns"
@@ -27,7 +26,6 @@ export const createUiSlice: StoreSlice<
     | "toggleSidebar"
     | "setSidebarWidth"
     | "toggleProjectListExpanded"
-    | "toggleSkillGroupCollapse"
     | "toggleColumnCollapse"
     | "toggleGroupCollapse"
     | "toggleColumnCap"
@@ -44,7 +42,6 @@ export const createUiSlice: StoreSlice<
   isSidebarCollapsed: false,
   sidebarWidth: 256, // Default width (same as w-64)
   isProjectListExpanded: true,
-  collapsedSkillGroups: [],
   collapsedColumns: ["withdrawn"] as Status[],
   // Keys are groupFoldKey(groupId, columnId) — fold state belongs to a group's
   // row in one column, not to the group everywhere. This is the exception set,
@@ -79,13 +76,6 @@ export const createUiSlice: StoreSlice<
 
   toggleProjectListExpanded: () =>
     set((state) => ({ isProjectListExpanded: !state.isProjectListExpanded })),
-
-  toggleSkillGroupCollapse: (groupKey) =>
-    set((state) => ({
-      collapsedSkillGroups: state.collapsedSkillGroups.includes(groupKey)
-        ? state.collapsedSkillGroups.filter((key) => key !== groupKey)
-        : [...state.collapsedSkillGroups, groupKey],
-    })),
 
   toggleColumnCollapse: (columnId) =>
     set((state) => ({

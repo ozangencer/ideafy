@@ -58,38 +58,9 @@ export interface CardContext {
 }
 
 // Get allowed tools for non-test sections (test section uses --dangerously-skip-permissions)
-export function getAllowedTools(
-  section: SectionType,
-  mentions?: Array<{ type: string; id: string; label: string }>
-): string[] {
-  const base = ["Read", "Grep", "Glob"];
-
-  // Add MCP tool patterns for referenced MCP mentions
-  if (mentions?.length) {
-    for (const m of mentions) {
-      if (m.type === "mcp" || m.type === "plugin") {
-        if (section === "tests") {
-          base.push(`mcp__${m.id}__*`);
-          continue;
-        }
-
-        // Outside the Tests tab, never expose save_tests/move_card/etc.
-        // Restrict the model to read-only inspection plus the field-appropriate
-        // persistence tools for the active section.
-        base.push(`mcp__${m.id}__get_card`);
-        // Detail/Solution/Opinion intentionally exclude their write tools
-        // (update_card / save_plan / save_opinion). All content writes go
-        // through the chat-UI Apply buttons (append/replace) so the user
-        // controls when existing content is overwritten. Letting the model
-        // call write tools from here re-introduces the silent-overwrite bug.
-        // Status transition (→ in progress on Solution apply) and verdict
-        // parsing (on Opinion apply) are handled by the apply-message route.
-      }
-    }
-  }
-
-  return Array.from(new Set(base));
-}
+// Lives in its own module so the mcp-server tests can load it without the
+// rest of the prompt builder's dependency tree.
+export { getAllowedTools } from "./allowed-tools";
 
 // Build card context string
 export function buildCardContext(ctx: CardContext): string {

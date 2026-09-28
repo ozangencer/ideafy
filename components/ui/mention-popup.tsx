@@ -1,7 +1,7 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Terminal, Server, Puzzle, Bot, FolderTree, ChevronLeft } from "lucide-react";
+import { Fragment, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Terminal, Server, Puzzle, Bot, Pin, Folder, Library } from "lucide-react";
 import { UnifiedItemType } from "@/lib/types";
 
 export interface MentionItem {
@@ -17,7 +17,8 @@ export interface UnifiedMentionItem {
   type: UnifiedItemType;
   description?: string;
   pluginKey?: string | null;
-  children?: UnifiedMentionItem[];
+  pinned?: boolean;
+  folder?: string | null;
 }
 
 interface MentionPopupProps {
@@ -138,13 +139,24 @@ const TYPE_CONFIG: Record<UnifiedItemType, {
     iconClass: "text-[#71717a]",
     borderClass: "border-l-[#71717a]",
   },
-  skillGroup: {
-    icon: FolderTree,
-    label: "Group",
-    iconClass: "text-sky-500",
-    borderClass: "border-l-sky-500",
-  },
 };
+
+type SectionHeading = { icon: typeof Folder; label: string };
+
+// Once the list holds Toolkit pins it reads as sections: loose pins under
+// "Toolkit", each folder under its name, everything else under "Library". A
+// list with no pins stays a plain list.
+function sectionHeadingAt(items: UnifiedMentionItem[], index: number): SectionHeading | null {
+  if (!items.some((item) => item.pinned)) return null;
+  const item = items[index];
+  const previous = items[index - 1];
+  if (!item.pinned) {
+    return !previous || previous.pinned ? { icon: Library, label: "Library" } : null;
+  }
+  const folder = item.folder ?? null;
+  if (previous?.pinned && (previous.folder ?? null) === folder) return null;
+  return folder ? { icon: Folder, label: folder } : { icon: Pin, label: "Toolkit" };
+}
 
 // Unified mention popup for / trigger
 interface UnifiedMentionPopupProps {
@@ -159,35 +171,25 @@ export interface UnifiedMentionPopupRef {
 export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMentionPopupProps>(
   ({ items, command }, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [activeGroup, setActiveGroup] = useState<UnifiedMentionItem | null>(null);
     const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-    const visibleItems = activeGroup?.children?.length
-      ? activeGroup.children
-      : items;
 
     useEffect(() => {
       itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" });
-    }, [selectedIndex, visibleItems]);
+    }, [selectedIndex, items]);
 
     const selectItem = (index: number) => {
-      const item = visibleItems[index];
+      const item = items[index];
       if (item) {
-        if (item.type === "skillGroup") {
-          setActiveGroup(item);
-          setSelectedIndex(0);
-          return;
-        }
         command(item);
       }
     };
 
     const upHandler = () => {
-      setSelectedIndex((selectedIndex + visibleItems.length - 1) % visibleItems.length);
+      setSelectedIndex((selectedIndex + items.length - 1) % items.length);
     };
 
     const downHandler = () => {
-      setSelectedIndex((selectedIndex + 1) % visibleItems.length);
+      setSelectedIndex((selectedIndex + 1) % items.length);
     };
 
     const enterHandler = () => {
@@ -196,16 +198,10 @@ export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMen
 
     useEffect(() => {
       setSelectedIndex(0);
-      setActiveGroup(null);
     }, [items]);
 
     useImperativeHandle(ref, () => ({
       onKeyDown: (event: KeyboardEvent) => {
-        if (event.key === "ArrowLeft" && activeGroup) {
-          setActiveGroup(null);
-          setSelectedIndex(0);
-          return true;
-        }
         if (event.key === "ArrowUp") {
           upHandler();
           return true;
@@ -222,30 +218,14 @@ export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMen
       },
     }));
 
-    if (visibleItems.length === 0) {
+    if (items.length === 0) {
       return null;
     }
 
-    const selectedItem = visibleItems[selectedIndex] || null;
-    const showingGroupHint = !activeGroup && selectedItem?.type === "skillGroup";
-
     return (
       <div className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden min-w-[260px] max-h-[320px] flex flex-col">
-        {activeGroup && (
-          <button
-            onClick={() => {
-              setActiveGroup(null);
-              setSelectedIndex(0);
-            }}
-            className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-xs uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:bg-muted"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            <span className="truncate">{activeGroup.label}</span>
-          </button>
-        )}
-
         <div className="max-h-[300px] overflow-y-auto">
-          {visibleItems.map((item, index) => {
+          {items.map((item, index) => {
             const config = TYPE_CONFIG[item.type];
             const Icon = config.icon;
             const isSelected = index === selectedIndex;
@@ -258,61 +238,72 @@ export const UnifiedMentionPopup = forwardRef<UnifiedMentionPopupRef, UnifiedMen
               ? "text-accent-blue"
               : config.iconClass;
             const LeadingIcon = isPluginItem ? Puzzle : Icon;
+            // Headings are not selectable rows, so the keyboard index still
+            // walks items only.
+            const heading = sectionHeadingAt(items, index);
+            const HeadingIcon = heading?.icon;
+            const inFolder = !!(item.pinned && item.folder);
 
             return (
-              <button
-                key={`${item.type}-${item.id}`}
-                ref={(el) => { itemRefs.current[index] = el; }}
-                onClick={() => selectItem(index)}
-                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2.5 transition-colors border-l-2 ${
-                  isSelected
-                    ? "border-l-primary bg-muted/90 text-foreground"
-                    : `${borderClass} text-foreground/90 hover:bg-muted hover:text-foreground`
-                }`}
-                title={isPluginItem ? `Plugin: ${item.pluginKey}` : undefined}
-              >
-                <LeadingIcon
-                  className={`h-3.5 w-3.5 shrink-0 ${
-                    isSelected ? "text-foreground/85" : iconClass
-                  }`}
-                />
-                <span className="truncate flex-1">{item.label}</span>
-                {isPluginItem ? (
-                  <span
-                    className={`shrink-0 rounded-sm px-1.5 py-[1px] text-[10px] font-medium uppercase tracking-wide ${
-                      isSelected
-                        ? "bg-accent-blue/15 text-accent-blue"
-                        : "bg-accent-blue/10 text-accent-blue/90"
+              <Fragment key={`${item.type}-${item.id}`}>
+                {heading && HeadingIcon && (
+                  <div
+                    className={`flex items-center gap-1.5 px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground ${
+                      index > 0 ? "mt-1 border-t border-border/60" : ""
                     }`}
                   >
-                    Plugin
-                  </span>
-                ) : (
-                  <span
-                    className={`shrink-0 text-xs ${
-                      isSelected ? "text-muted-foreground/90" : "text-muted-foreground"
-                    }`}
-                  >
-                    {config.label}
-                  </span>
+                    <HeadingIcon className="h-3 w-3" />
+                    <span className="truncate">{heading.label}</span>
+                  </div>
                 )}
-              </button>
+                <button
+                  ref={(el) => { itemRefs.current[index] = el; }}
+                  onClick={() => selectItem(index)}
+                  className={`w-full text-left ${inFolder ? "pl-7" : "pl-3"} pr-3 py-2 text-sm flex items-center gap-2.5 transition-colors border-l-2 ${
+                    isSelected
+                      ? "border-l-primary bg-muted/90 text-foreground"
+                      : `${borderClass} text-foreground/90 hover:bg-muted hover:text-foreground`
+                  }`}
+                  title={isPluginItem ? `Plugin: ${item.pluginKey}` : undefined}
+                >
+                  <LeadingIcon
+                    className={`h-3.5 w-3.5 shrink-0 ${
+                      isSelected ? "text-foreground/85" : iconClass
+                    }`}
+                  />
+                  <span className="truncate flex-1">{item.label}</span>
+                  {item.pinned && (
+                    <Pin
+                      aria-label="Pinned to Toolkit"
+                      className={`h-3 w-3 shrink-0 ${
+                        isSelected ? "text-current opacity-70" : "text-muted-foreground"
+                      }`}
+                    />
+                  )}
+                  {isPluginItem ? (
+                    <span
+                      className={`shrink-0 rounded-sm px-1.5 py-[1px] text-[10px] font-medium uppercase tracking-wide ${
+                        isSelected
+                          ? "bg-accent-blue/15 text-accent-blue"
+                          : "bg-accent-blue/10 text-accent-blue/90"
+                      }`}
+                    >
+                      Plugin
+                    </span>
+                  ) : (
+                    <span
+                      className={`shrink-0 text-xs ${
+                        isSelected ? "text-muted-foreground/90" : "text-muted-foreground"
+                      }`}
+                    >
+                      {config.label}
+                    </span>
+                  )}
+                </button>
+              </Fragment>
             );
           })}
         </div>
-
-        {showingGroupHint && (
-          <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-            <span>Enter or Tab to open group</span>
-            <span className="shrink-0">Then choose a skill</span>
-          </div>
-        )}
-
-        {activeGroup && (
-          <div className="border-t border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-            Press Left Arrow to go back
-          </div>
-        )}
       </div>
     );
   }

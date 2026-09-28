@@ -20,10 +20,12 @@ import {
   SectionType,
   SkillListItem,
   SkillPreview,
+  SkillSource,
   StaleThresholds,
   Status,
+  ToolkitItem,
+  ToolkitKind,
   UnifiedItem,
-  UserSkillGroup,
 } from "../types";
 
 export type CardUpdatePayload = Partial<Card> & {
@@ -95,14 +97,13 @@ export interface KanbanStore {
   projectSkillItems: SkillListItem[];
   selectedSkill: SkillPreview | null;
   isSkillViewerOpen: boolean;
-  globalSkillGroups: UserSkillGroup[];
-  projectSkillGroups: Record<string, UserSkillGroup[]>;
+  // Skills and agents pinned to the active project, in Toolkit order.
+  toolkitItems: ToolkitItem[];
 
   // Sidebar state
   isSidebarCollapsed: boolean;
   sidebarWidth: number;
   isProjectListExpanded: boolean;
-  collapsedSkillGroups: string[];
 
   // Column collapse state
   collapsedColumns: Status[];
@@ -293,7 +294,6 @@ export interface KanbanStore {
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   toggleProjectListExpanded: () => void;
-  toggleSkillGroupCollapse: (groupKey: string) => void;
 
   // Column collapse actions
   toggleColumnCollapse: (columnId: Status) => void;
@@ -331,38 +331,24 @@ export interface KanbanStore {
 
   // Skills, MCPs, Agents & Plugins actions
   fetchSkills: () => Promise<void>;
-  fetchSkillGroups: () => Promise<void>;
   openAgentPreview: (agent: AgentListItem) => Promise<void>;
   closeAgentViewer: () => void;
   openSkillPreview: (skill: SkillListItem) => Promise<void>;
   closeSkillViewer: () => void;
-  createSkillGroup: (
-    name: string,
-    source: "global" | "project",
-    projectId?: string | null
-  ) => Promise<string | null>;
-  renameSkillGroup: (
-    groupId: string,
-    name: string,
-    source: "global" | "project",
-    projectId?: string | null
-  ) => Promise<void>;
-  deleteSkillGroup: (
-    groupId: string,
-    source: "global" | "project",
-    projectId?: string | null
-  ) => Promise<void>;
-  moveSkillToGroup: (
-    skillName: string,
-    groupId: string | null,
-    source: "global" | "project",
-    projectId?: string | null
-  ) => Promise<void>;
   fetchMcps: () => Promise<void>;
   fetchAgents: () => Promise<void>;
   fetchPlugins: () => Promise<void>;
   fetchProjectExtensions: (projectId: string | null) => Promise<void>;
   getUnifiedItems: () => UnifiedItem[];
+
+  // Toolkit actions. Pin/unpin act on the active project and are optimistic.
+  fetchToolkit: (projectId: string | null) => Promise<void>;
+  pinToolkitItem: (kind: ToolkitKind, name: string, source?: SkillSource | null) => Promise<void>;
+  unpinToolkitItem: (kind: ToolkitKind, name: string) => Promise<void>;
+  // `folder` null or empty moves the pin back to the top level.
+  moveToolkitItem: (kind: ToolkitKind, name: string, folder: string | null) => Promise<void>;
+  // An empty `to` dissolves the folder; its pins stay pinned at the top level.
+  renameToolkitFolder: (from: string, to: string | null) => Promise<void>;
 
   // Claude integration actions
   startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;

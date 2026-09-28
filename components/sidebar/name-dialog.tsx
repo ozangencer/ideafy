@@ -11,9 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { normalizeGroupName } from "@/lib/skills/grouping";
 
-type SkillGroupDialogProps = {
+// Whitespace-collapsed, so "  Dev   Tools " and "Dev Tools" are one name.
+function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+type NameDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -26,7 +30,7 @@ type SkillGroupDialogProps = {
   onSubmit: (name: string) => void | Promise<void>;
 };
 
-export function SkillGroupDialog({
+export function NameDialog({
   open,
   onOpenChange,
   title,
@@ -34,10 +38,10 @@ export function SkillGroupDialog({
   submitLabel,
   initialValue = "",
   existingNames = [],
-  placeholder = "Group name",
-  conflictMessage = "A group with this name already exists.",
+  placeholder = "Name",
+  conflictMessage = "This name is already taken.",
   onSubmit,
-}: SkillGroupDialogProps) {
+}: NameDialogProps) {
   const [value, setValue] = useState(initialValue);
 
   useEffect(() => {
@@ -46,7 +50,7 @@ export function SkillGroupDialog({
     }
   }, [initialValue, open]);
 
-  const normalizedValue = useMemo(() => normalizeGroupName(value), [value]);
+  const normalizedValue = useMemo(() => normalizeName(value), [value]);
   const nameConflict = useMemo(
     () =>
       existingNames.some(

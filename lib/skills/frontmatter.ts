@@ -11,7 +11,6 @@ export type ParsedSkillDocument = {
   displayTitle: string;
   listTitle: string;
   description: string | null;
-  group: string | null;
   firstHeading: string | null;
 };
 
@@ -137,7 +136,6 @@ export function parseSkillDocument(
       frontmatter.summary ||
       frontmatter.subtitle ||
       null,
-    group: frontmatter.group || frontmatter.category || null,
     firstHeading: heading,
   };
 }

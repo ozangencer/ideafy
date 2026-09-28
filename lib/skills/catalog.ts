@@ -4,47 +4,10 @@ import { homedir } from "node:os";
 import type { AiPlatform, SkillListItem, SkillSource } from "@/lib/types";
 import { parseSkillDocument } from "./frontmatter";
 
-type GroupOverrides = Map<string, string>;
-
-function readGroupOverrides(rootDir: string): GroupOverrides {
-  const overrides = new Map<string, string>();
-  const configPath = path.join(rootDir, ".ideafy-groups.json");
-
-  if (!fs.existsSync(configPath)) return overrides;
-
-  try {
-    const parsed = JSON.parse(fs.readFileSync(configPath, "utf-8")) as unknown;
-
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return overrides;
-    }
-
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "string") {
-        overrides.set(key, value);
-        continue;
-      }
-
-      if (Array.isArray(value)) {
-        for (const skillName of value) {
-          if (typeof skillName === "string" && skillName.trim()) {
-            overrides.set(skillName, key);
-          }
-        }
-      }
-    }
-  } catch {
-    return overrides;
-  }
-
-  return overrides;
-}
-
 function createSkillItem(
   filePath: string,
   skillName: string,
-  source: SkillSource,
-  groupOverrides: GroupOverrides
+  source: SkillSource
 ): SkillListItem | null {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
@@ -54,7 +17,6 @@ function createSkillItem(
       name: skillName,
       title: metadata.displayTitle,
       path: path.resolve(filePath),
-      group: metadata.group || groupOverrides.get(skillName) || null,
       description: metadata.description,
       source,
     };
@@ -68,7 +30,6 @@ function scanFlatMarkdownSkills(
   source: SkillSource
 ): SkillListItem[] {
   if (!fs.existsSync(rootDir)) return [];
-  const groupOverrides = readGroupOverrides(rootDir);
 
   return fs
     .readdirSync(rootDir)
@@ -81,8 +42,7 @@ function scanFlatMarkdownSkills(
       createSkillItem(
         path.join(rootDir, entry),
         entry.replace(/\.md$/i, ""),
-        source,
-        groupOverrides
+        source
       )
     )
     .filter((item): item is SkillListItem => item !== null);
@@ -93,7 +53,6 @@ function scanDirectorySkills(
   source: SkillSource
 ): SkillListItem[] {
   if (!fs.existsSync(rootDir)) return [];
-  const groupOverrides = readGroupOverrides(rootDir);
 
   return fs
     .readdirSync(rootDir)
@@ -106,8 +65,7 @@ function scanDirectorySkills(
       createSkillItem(
         path.join(rootDir, entry, "SKILL.md"),
         entry,
-        source,
-        groupOverrides
+        source
       )
     )
     .filter((item): item is SkillListItem => item !== null);

@@ -32,8 +32,7 @@ export type ContentSearchResponse = {
  * path narrows the tree the same way typing part of a filename does.
  *
  * A folder whose own name matches keeps its whole subtree: typing `docs` is a
- * request to see that folder, not to filter inside it. This mirrors
- * filterResolvedGroups in lib/skills/search.ts.
+ * request to see that folder, not to filter inside it.
  *
  * Nodes are copied rather than mutated — the caller's tree is memoized.
  */

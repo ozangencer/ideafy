@@ -15,7 +15,6 @@ export function SkillViewer() {
   if (!isSkillViewerOpen || !selectedSkill) return null;
 
   const subtitleParts = [`/${selectedSkill.name}`];
-  if (selectedSkill.group) subtitleParts.push(selectedSkill.group);
   if (selectedSkill.source === "project") subtitleParts.push("Project skill");
 
   const frontmatterEntries = Object.entries(selectedSkill.frontmatter)
