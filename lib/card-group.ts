@@ -57,18 +57,65 @@ export const isFinished = (card: Card): boolean =>
 
 /**
  * The one ordering a chain has. Everything that asks "which card comes first"
- * — the next pointer, the open row's members, the chain popover — goes through
- * here, so the answer cannot differ between two places on the same row.
+ * — the next pointer, the open row's members, the chain popover, the order
+ * route — goes through here, so the answer cannot differ between two places
+ * on the same row.
  *
- * Today that is taskNumber order: a chain is written in one sitting, so the
- * numbers come out in dependency order. Cards without a number (drafts) sort
- * last rather than winning the "next" slot with a 0. A manual position, once
- * there is one, goes in front of the number here and nowhere else.
+ * A manual position wins: once someone uses "Move after…", the whole chain
+ * gets 1..N and that is the order. Members without one — every chain that was
+ * never touched, and a card that joined after the last move — fall back to
+ * taskNumber, behind the placed ones. That fallback is the old rule: a chain
+ * is written in one sitting, so the numbers come out in dependency order.
+ * Cards without a number (drafts) sort last rather than winning the "next"
+ * slot with a 0.
  */
-export function compareByChainOrder(a: Card, b: Card): number {
+export function compareByChainOrder(
+  a: Pick<Card, "groupOrder" | "taskNumber">,
+  b: Pick<Card, "groupOrder" | "taskNumber">
+): number {
+  const ao = a.groupOrder ?? Number.MAX_SAFE_INTEGER;
+  const bo = b.groupOrder ?? Number.MAX_SAFE_INTEGER;
+  if (ao !== bo) return ao - bo;
   const an = a.taskNumber ?? Number.MAX_SAFE_INTEGER;
   const bn = b.taskNumber ?? Number.MAX_SAFE_INTEGER;
   return an - bn;
+}
+
+type ChainMember = Pick<Card, "id" | "groupOrder" | "taskNumber">;
+
+/**
+ * The chain's ids after moving `cardId` to sit right behind `afterCardId`, or
+ * to the front when that is null. Index + 1 is the position each id gets.
+ *
+ * Returns the whole chain, finished members included, so a move rewrites
+ * every position at once. Writing only the moved card would leave the rest on
+ * taskNumber behind it — "move 358 after 331" would put 358 first, ahead of
+ * 331 itself.
+ */
+export function placeAfter(
+  members: ChainMember[],
+  cardId: string,
+  afterCardId: string | null
+): string[] {
+  const rest = [...members]
+    .sort(compareByChainOrder)
+    .map((member) => member.id)
+    .filter((id) => id !== cardId);
+  const at = afterCardId === null ? 0 : rest.indexOf(afterCardId) + 1;
+  rest.splice(at, 0, cardId);
+  return rest;
+}
+
+/**
+ * Members ahead of `card` in the chain that are still open. What the start
+ * warning names: a finished predecessor is done with, so it is no reason to
+ * pause. A card sitting in Human Test is not finished and still counts.
+ */
+export function openPredecessors(members: Card[], card: Pick<Card, "id">): Card[] {
+  const ordered = [...members].sort(compareByChainOrder);
+  const index = ordered.findIndex((member) => member.id === card.id);
+  if (index <= 0) return [];
+  return ordered.slice(0, index).filter((member) => !isFinished(member));
 }
 
 /**

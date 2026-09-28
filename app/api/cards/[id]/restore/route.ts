@@ -31,6 +31,7 @@ export async function POST(
     projectFolder: row.projectFolder,
     projectId: row.projectId,
     groupId: row.groupId,
+    groupOrder: row.groupOrder ?? null,
     taskNumber: row.taskNumber,
     gitBranchName: row.gitBranchName,
     gitBranchStatus: row.gitBranchStatus as Card["gitBranchStatus"],

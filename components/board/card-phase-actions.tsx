@@ -14,7 +14,9 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { Card } from "@/lib/types";
+import { Card, getDisplayId } from "@/lib/types";
+import { openPredecessors } from "@/lib/card-group";
+import { toast } from "@/hooks/use-toast";
 import { stripHtml } from "@/lib/prompts/utils";
 import { parseTestProgress } from "@/lib/test-progress";
 import {
@@ -274,6 +276,31 @@ export function CardPhaseActions({
     return run;
   };
 
+  // Starting a card out of chain order is allowed — a hard gate would lock a
+  // whole chain behind one card parked in Human Test — but it should be a
+  // decision, so the start dialog names what is being skipped. Computed on
+  // click from the store rather than subscribed to: the board card renders
+  // this component, and a cards selector here would re-render every card on
+  // every poll for a line that only exists inside a dialog.
+  //
+  // Implementation only. Planning a whole chain in one sitting is the normal
+  // way to work, and there every card after the first would warn.
+  const [chainWarning, setChainWarning] = useState<string | null>(null);
+  const computeChainWarning = (): string | null => {
+    if (phase !== "implementation" || !card.groupId) return null;
+    const { cards } = useKanbanStore.getState();
+    const ahead = openPredecessors(
+      cards.filter((c) => c.groupId === card.groupId),
+      card
+    );
+    if (ahead.length === 0) return null;
+    const ids = ahead.map(
+      (c) => getDisplayId(c, projects.find((p) => p.id === c.projectId)) ?? c.title
+    );
+    const shown = ids.slice(0, 3).join(", ") + (ids.length > 3 ? ` +${ids.length - 3}` : "");
+    return `${ahead.length} open card${ahead.length === 1 ? "" : "s"} ahead in the chain: ${shown}`;
+  };
+
   // The board card opens the modal on click; a button inside it must not.
   const stop = (e?: React.MouseEvent) => e?.stopPropagation();
   const stopEvent = (e: React.SyntheticEvent) => e.stopPropagation();
@@ -283,6 +310,7 @@ export function CardPhaseActions({
     if (isBlocked || isStarting || isPreparing || !flags.canRunAutonomous) return;
     if (!(await prepare())) return;
     setDialogUseWorktree(effectiveUseWorktree);
+    setChainWarning(computeChainWarning());
     setShowAutonomousConfirm(true);
   };
 
@@ -377,8 +405,16 @@ export function CardPhaseActions({
   const handleOpenTerminalClick = (e?: React.MouseEvent) => {
     stop(e);
     if (isBlocked || isPreparing || !flags.canStart) return;
-    if (needsPasteConfirm) setShowTerminalConfirm(true);
-    else void handleOpenTerminal();
+    const warning = computeChainWarning();
+    setChainWarning(warning);
+    if (needsPasteConfirm) {
+      setShowTerminalConfirm(true);
+      return;
+    }
+    // No dialog to carry the line on this path, so it rides a toast instead —
+    // after the fact, but still before any work lands.
+    if (warning) toast({ title: "Out of chain order", description: warning });
+    void handleOpenTerminal();
   };
 
   const handleOpenIdeationTerminalClick = (e?: React.MouseEvent) => {
@@ -684,6 +720,7 @@ export function CardPhaseActions({
         confirmClassName="bg-orange-500 hover:bg-orange-600"
         onConfirm={handleOpenTerminal}
       >
+        {chainWarning && <p className="text-amber-500 text-xs">{chainWarning}</p>}
         {phase === "implementation" && projectMode !== "work" && (
           !effectiveUseWorktree ? (
             <p className="text-gray-400 text-xs font-mono">
@@ -725,6 +762,9 @@ export function CardPhaseActions({
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>This will run in autonomous mode with full file access.</p>
+                {chainWarning && phase === "implementation" && (
+                  <p className="text-amber-500 text-xs">{chainWarning}</p>
+                )}
                 {phase === "planning" && (
                   <p className="text-muted-foreground">
                     The task will be analyzed and a solution plan will be written.

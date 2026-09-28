@@ -19,6 +19,7 @@ export interface ExportData {
     projectFolder: string;
     projectId: string | null;
     groupId: string | null;
+    groupOrder?: number | null;
     taskNumber: number | null;
     gitBranchName: string | null;
     gitBranchStatus: string | null;
@@ -113,6 +114,7 @@ export async function GET() {
         projectFolder: card.projectFolder,
         projectId: card.projectId,
         groupId: card.groupId,
+        groupOrder: card.groupOrder,
         taskNumber: card.taskNumber,
         gitBranchName: card.gitBranchName,
         gitBranchStatus: card.gitBranchStatus,

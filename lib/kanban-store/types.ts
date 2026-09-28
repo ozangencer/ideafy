@@ -251,6 +251,14 @@ export interface KanbanStore {
   // pointing at a group that is gone renders as an ordinary card with no
   // explanation until the next poll.
   deleteCardGroup: (id: string) => Promise<boolean>;
+  // Puts `cardId` right behind `afterCardId` in its chain (null = the start).
+  // The whole chain is renumbered 1..N locally first, the same way the route
+  // does it, so the popover reorders on click.
+  placeCardInChain: (
+    groupId: string,
+    cardId: string,
+    afterCardId: string | null
+  ) => Promise<boolean>;
 
   // Undo history (Cmd+Z). Session-only: a reload starts with an empty stack,
   // though deleted cards stay restorable server-side for a week.

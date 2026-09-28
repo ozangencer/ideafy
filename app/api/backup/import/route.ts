@@ -118,6 +118,8 @@ export async function POST(request: NextRequest) {
           projectId: card.projectId,
           // Backups written before card groups existed simply omit it.
           groupId: card.groupId ?? null,
+          // Backups written before manual chain order existed simply omit it.
+          groupOrder: card.groupOrder ?? null,
           taskNumber: card.taskNumber,
           gitBranchName: card.gitBranchName ?? null,
           gitBranchStatus: card.gitBranchStatus ?? null,

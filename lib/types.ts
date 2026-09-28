@@ -51,6 +51,11 @@ export interface Card {
   projectFolder: string;
   projectId: string | null;
   groupId: string | null;
+  // Manual position in the group's chain (1..N), written the first time
+  // someone moves a card in it. null = never placed, falls back to task
+  // number order behind the placed ones. Cleared by the DB when the card
+  // changes group.
+  groupOrder: number | null;
   taskNumber: number | null;
   gitBranchName: string | null;
   gitBranchStatus: GitBranchStatus;

@@ -1,5 +1,6 @@
 import { Card, CardGroup, getColumnTitle, Status } from "../../types";
 import { projectModeOf } from "../../workspace";
+import { placeAfter } from "../../card-group";
 import { nowIso, parseJson, replaceCardById, updateCardById } from "../helpers";
 import { CardUpdatePayload, KanbanStore, StoreSlice } from "../types";
 import { toast } from "@/hooks/use-toast";
@@ -18,6 +19,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   projectFolder,
   projectId,
   groupId: null,
+  groupOrder: null,
   taskNumber: null,
   gitBranchName: null,
   gitBranchStatus: null,
@@ -96,6 +98,7 @@ export const createCardsSlice: StoreSlice<
     | "createCardGroup"
     | "updateCardGroup"
     | "deleteCardGroup"
+    | "placeCardInChain"
   >
 > = (set, get) => ({
   cards: [],
@@ -438,11 +441,11 @@ export const createCardsSlice: StoreSlice<
     set((state) => ({
       cardGroups: state.cardGroups.filter((group) => group.id !== id),
       cards: state.cards.map((card) =>
-        card.groupId === id ? { ...card, groupId: null } : card
+        card.groupId === id ? { ...card, groupId: null, groupOrder: null } : card
       ),
       selectedCard:
         state.selectedCard?.groupId === id
-          ? { ...state.selectedCard, groupId: null }
+          ? { ...state.selectedCard, groupId: null, groupOrder: null }
           : state.selectedCard,
     }));
 
@@ -460,6 +463,46 @@ export const createCardsSlice: StoreSlice<
         cards: previousCards,
         selectedCard: previousSelected,
       });
+      return false;
+    }
+  },
+
+  placeCardInChain: async (groupId, cardId, afterCardId) => {
+    const previousCards = get().cards;
+    const previousSelected = get().selectedCard;
+    const applyOrder = (order: Map<string, number>) =>
+      set((state) => ({
+        cards: state.cards.map((card) =>
+          order.has(card.id) ? { ...card, groupOrder: order.get(card.id)! } : card
+        ),
+        selectedCard:
+          state.selectedCard && order.has(state.selectedCard.id)
+            ? { ...state.selectedCard, groupOrder: order.get(state.selectedCard.id)! }
+            : state.selectedCard,
+      }));
+
+    const members = previousCards.filter((card) => card.groupId === groupId);
+    const ids = placeAfter(members, cardId, afterCardId);
+    applyOrder(new Map(ids.map((id, index) => [id, index + 1])));
+
+    try {
+      const response = await fetch(`/api/card-groups/${groupId}/order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId, afterCardId }),
+      });
+      if (!response.ok) {
+        const error = await parseJson<{ error?: string }>(response);
+        throw new Error(error.error || "Failed to reorder chain");
+      }
+      // The server read the chain fresh; its answer wins over our guess.
+      const { order } = await parseJson<{ order: { id: string; groupOrder: number }[] }>(response);
+      applyOrder(new Map(order.map((entry) => [entry.id, entry.groupOrder])));
+      return true;
+    } catch (error) {
+      console.error("Failed to reorder chain:", error);
+      set({ cards: previousCards, selectedCard: previousSelected });
+      toast({ title: "Couldn't reorder the chain", variant: "destructive" });
       return false;
     }
   },

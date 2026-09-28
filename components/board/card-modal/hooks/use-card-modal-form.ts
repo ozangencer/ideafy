@@ -161,6 +161,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         priority,
         projectId,
         groupId,
+        groupOrder: null,
         aiPlatform,
         projectFolder: selectedProject?.folderPath || "",
         gitBranchName: null,

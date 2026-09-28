@@ -8,7 +8,8 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { summarizeCardGroups, buildColumnRows } = interop(cardGroupNs);
+const { summarizeCardGroups, buildColumnRows, placeAfter, openPredecessors } =
+  interop(cardGroupNs);
 
 type Card = Parameters<typeof summarizeCardGroups>[0][number];
 type CardGroup = Parameters<typeof summarizeCardGroups>[1][number];
@@ -37,6 +38,7 @@ function makeCard(id: string, overrides: Partial<Card> = {}): Card {
     projectFolder: "/tmp/ideafy",
     projectId: "p1",
     groupId: "g1",
+    groupOrder: null,
     taskNumber: null,
     gitBranchName: null,
     gitBranchStatus: null,
@@ -118,4 +120,78 @@ test("an open group row lists its column members in chain order", () => {
     groupRow.columnMembers.map((c) => c.id),
     ["ide-5", "ide-6", "ide-7"]
   );
+});
+
+test("a manual position goes ahead of the number; unplaced members follow by number", () => {
+  const summary = summaryOf([
+    makeCard("ide-331", { taskNumber: 331, status: "completed", groupOrder: 1 }),
+    makeCard("ide-358", { taskNumber: 358, groupOrder: 2 }),
+    makeCard("ide-335", { taskNumber: 335, groupOrder: 3 }),
+    makeCard("ide-340", { taskNumber: 340 }),
+    makeCard("ide-339", { taskNumber: 339 }),
+  ]);
+  assert.deepEqual(
+    summary.members.map((c) => c.id),
+    ["ide-331", "ide-358", "ide-335", "ide-339", "ide-340"]
+  );
+  assert.equal(summary.nextCard?.id, "ide-358");
+});
+
+test("placeAfter moves a card behind another and returns the whole chain", () => {
+  const members = [
+    makeCard("ide-335", { taskNumber: 335 }),
+    makeCard("ide-331", { taskNumber: 331 }),
+    makeCard("ide-358", { taskNumber: 358 }),
+    makeCard("ide-336", { taskNumber: 336 }),
+  ];
+  // Writing only 358's position would put it ahead of 331 — the whole
+  // chain comes back so every member gets one.
+  assert.deepEqual(placeAfter(members, "ide-358", "ide-331"), [
+    "ide-331",
+    "ide-358",
+    "ide-335",
+    "ide-336",
+  ]);
+});
+
+test("placeAfter with no anchor moves the card to the start", () => {
+  const members = [
+    makeCard("ide-1", { taskNumber: 1 }),
+    makeCard("ide-2", { taskNumber: 2 }),
+    makeCard("ide-3", { taskNumber: 3 }),
+  ];
+  assert.deepEqual(placeAfter(members, "ide-3", null), ["ide-3", "ide-1", "ide-2"]);
+});
+
+test("placeAfter can anchor on a finished member", () => {
+  const members = [
+    makeCard("ide-1", { taskNumber: 1, status: "completed", groupOrder: 1 }),
+    makeCard("ide-2", { taskNumber: 2, groupOrder: 2 }),
+    makeCard("ide-3", { taskNumber: 3, groupOrder: 3 }),
+  ];
+  assert.deepEqual(placeAfter(members, "ide-3", "ide-1"), ["ide-1", "ide-3", "ide-2"]);
+});
+
+test("placeAfter keeps an unplaced newcomer at the end of an ordered chain", () => {
+  const members = [
+    makeCard("ide-9", { taskNumber: 9, groupOrder: 1 }),
+    makeCard("ide-4", { taskNumber: 4, groupOrder: 2 }),
+    makeCard("ide-2", { taskNumber: 2 }), // joined after the last move
+  ];
+  assert.deepEqual(placeAfter(members, "ide-4", null), ["ide-4", "ide-9", "ide-2"]);
+});
+
+test("openPredecessors names the open cards ahead, skipping finished ones", () => {
+  const members = [
+    makeCard("ide-1", { taskNumber: 1, status: "completed" }),
+    makeCard("ide-2", { taskNumber: 2, status: "test" }),
+    makeCard("ide-3", { taskNumber: 3, status: "withdrawn" }),
+    makeCard("ide-4", { taskNumber: 4 }),
+    makeCard("ide-5", { taskNumber: 5 }),
+  ];
+  assert.deepEqual(
+    openPredecessors(members, members[4]).map((c) => c.id),
+    ["ide-2", "ide-4"]
+  );
+  assert.deepEqual(openPredecessors(members, members[0]), []);
 });

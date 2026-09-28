@@ -41,6 +41,7 @@ export async function GET(
     projectFolder: row.projectFolder,
     projectId: row.projectId,
     groupId: row.groupId,
+    groupOrder: row.groupOrder ?? null,
     taskNumber: row.taskNumber,
     gitBranchName: row.gitBranchName,
     gitBranchStatus: row.gitBranchStatus as Card["gitBranchStatus"],
@@ -214,6 +215,10 @@ export async function PUT(
     projectFolder: updatedCard.projectFolder,
     projectId: updatedCard.projectId,
     groupId: updatedCard.groupId,
+    // The response is built from the body, not re-read, so mirror what the
+    // group_id trigger just did — otherwise the store writes the cleared
+    // position straight back onto a card that moved groups.
+    groupOrder: updatedCard.groupId !== existing.groupId ? null : existing.groupOrder ?? null,
     taskNumber: updatedCard.taskNumber,
     gitBranchName: existing.gitBranchName,
     gitBranchStatus: existing.gitBranchStatus as Card["gitBranchStatus"],
