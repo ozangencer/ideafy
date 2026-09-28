@@ -149,6 +149,14 @@ export type PhaseAction =
   | "play"
   | "test-together";
 
+/**
+ * Runs in the background with no one at the keyboard; the rest open a
+ * terminal. Both hand the card off, but only these keep a spinner going.
+ */
+export function isAutonomousAction(action: PhaseAction): boolean {
+  return action === "play" || action === "quick-fix" || action === "evaluate";
+}
+
 /** The board footer's order — the one every other surface started from. */
 export const BOARD_PHASE_ACTIONS: PhaseAction[] = [
   "discuss",

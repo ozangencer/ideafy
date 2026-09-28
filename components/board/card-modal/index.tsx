@@ -48,7 +48,8 @@ import { CardModalFooter } from "./card-modal-footer";
 import { SplitPanel } from "./split-panel";
 import { SectionEditor } from "./sections/section-editor";
 import { ConversationPanel } from "./sections/conversation-panel";
-import { CardPhaseActions } from "../card-phase-actions";
+import { CardPhaseActions, type PhaseHandOff } from "../card-phase-actions";
+import { isAutonomousAction } from "@/lib/card-phase";
 
 // Hooks
 import { useCardModalForm } from "./hooks/use-card-modal-form";
@@ -237,9 +238,10 @@ export function CardModal({
     ? cards.find((c) => c.id === selectedCard.id) ?? selectedCard
     : null;
 
-  // A run or a terminal session owns the card. The modal stays open and turns
-  // read-only instead of closing: you watch the run from where you started it,
-  // and nothing typed here can race the agent's own writes to the same fields.
+  // A run or a terminal session owns the card. Starting one from here closes
+  // the modal (handleHandOff); this lock covers the card reopened from the
+  // board while the run is still going. It turns the form read-only, so
+  // nothing typed here can race the agent's own writes to the same fields.
   const isRunLocked =
     !!selectedCard &&
     !isDraftMode &&
@@ -359,6 +361,45 @@ export function CardModal({
     }
     return true;
   }, [flushPendingAutoSave, toast, isTitleValid, selectedCard, applyCardToForm, selectCard]);
+
+  // An action that sends the card elsewhere takes the modal with it: the board
+  // is where the column moves and the spinner turns. A background run's
+  // request only returns when the run ends, so the modal closes on the click
+  // and a failure arrives as a toast later. A terminal answers within a
+  // second, so the modal waits and stays open if it didn't open.
+  const handleHandOff = useCallback(
+    ({ action, label, run }: PhaseHandOff) => {
+      const cardId = selectedCard?.id;
+      const reportFailure = (error?: string) => {
+        // A 409 for untrusted content is a question, not a failure: the
+        // app-level dialog is already asking it.
+        if (useKanbanStore.getState().pendingRunConfirmation?.cardId === cardId) return;
+        toast({
+          variant: "destructive",
+          title: `${label} failed`,
+          description: error || "Nothing was changed on the card.",
+        });
+      };
+
+      if (isAutonomousAction(action)) {
+        handleClose();
+        toast({
+          title: `${label} started`,
+          description: "You'll get a notice when it finishes.",
+        });
+        void run.then((result) => {
+          if (!result.success) reportFailure(result.error);
+        });
+        return;
+      }
+
+      void run.then((result) => {
+        if (result.success) handleClose();
+        else reportFailure(result.error);
+      });
+    },
+    [selectedCard, handleClose, toast]
+  );
 
   // Section content mapping
   const sectionValues: Record<SectionType, string> = {
@@ -936,6 +977,7 @@ export function CardModal({
         }}
         variant="labeled"
         beforeRun={handleBeforeRun}
+        onHandOff={handleHandOff}
       />
     ) : null;
 

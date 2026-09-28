@@ -19,6 +19,7 @@ import { parseTestProgress } from "@/lib/test-progress";
 import {
   BOARD_PHASE_ACTIONS,
   getPhaseActionFlags,
+  isAutonomousAction,
   isPhaseActionShown,
   PhaseAction,
   VERIFY_RUN_BLURB,
@@ -116,7 +117,23 @@ interface CardPhaseActionsProps {
    * Returning false cancels the action.
    */
   beforeRun?: () => Promise<boolean>;
+  /**
+   * Called once an action has passed the flush and its dialog and is on its
+   * way out — to a terminal or a background run. `run` settles when the store
+   * action does. The modal uses it to close itself; surfaces that stay put
+   * leave it unset.
+   */
+  onHandOff?: (handOff: PhaseHandOff) => void;
   softLock?: boolean;
+}
+
+export type RunResult = { success: boolean; error?: string };
+
+export interface PhaseHandOff {
+  action: PhaseAction;
+  /** The button's label, without the "(Autonomous)" suffix. */
+  label: string;
+  run: Promise<RunResult>;
 }
 
 export function CardPhaseActions({
@@ -124,6 +141,7 @@ export function CardPhaseActions({
   variant = "icon",
   actions = BOARD_PHASE_ACTIONS,
   beforeRun,
+  onHandOff,
   softLock,
 }: CardPhaseActionsProps) {
   // Narrow selectors: boolean membership checks re-render only when THIS
@@ -221,6 +239,13 @@ export function CardPhaseActions({
     }
   };
 
+  // Every handler reaches here only after prepare() and its dialog agreed, so
+  // a failed flush never tells the surface the card is gone.
+  const handOff = <T extends RunResult>(action: PhaseAction, run: Promise<T>) => {
+    onHandOff?.({ action, label: labelFor(action).replace(/ \((Autonomous|Interactive)\)$/, ""), run });
+    return run;
+  };
+
   // The board card opens the modal on click; a button inside it must not.
   const stop = (e?: React.MouseEvent) => e?.stopPropagation();
   const stopEvent = (e: React.SyntheticEvent) => e.stopPropagation();
@@ -247,7 +272,7 @@ export function CardPhaseActions({
       }
     }
 
-    const result = await startTask(card.id);
+    const result = await handOff("play", startTask(card.id));
     if (!result.success) {
       console.error("Failed to start task:", result.error);
     }
@@ -272,7 +297,7 @@ export function CardPhaseActions({
       await updateCard(card.id, { useWorktree: desiredOverride });
     }
 
-    const result = await quickFixTask(card.id);
+    const result = await handOff("quick-fix", quickFixTask(card.id));
     if (!result.success) {
       console.error("Failed to quick fix:", result.error);
     }
@@ -283,7 +308,7 @@ export function CardPhaseActions({
     if (isLocked || isEvaluating || isPreparing || !flags.canEvaluate) return;
     if (!(await prepare())) return;
 
-    const result = await evaluateIdea(card.id);
+    const result = await handOff("evaluate", evaluateIdea(card.id));
     if (!result.success) {
       console.error("Failed to evaluate idea:", result.error);
     }
@@ -295,7 +320,7 @@ export function CardPhaseActions({
     setShowTerminalConfirm(false);
     if (!(await prepare())) return;
 
-    const result = await openTerminal(card.id);
+    const result = await handOff("terminal", openTerminal(card.id));
     if (!result.success) {
       console.error("Failed to open terminal:", result.error);
     }
@@ -305,7 +330,7 @@ export function CardPhaseActions({
     setShowIdeationConfirm(false);
     if (!(await prepare())) return;
 
-    const result = await openIdeationTerminal(card.id);
+    const result = await handOff("discuss", openIdeationTerminal(card.id));
     if (!result.success) {
       console.error("Failed to open ideation terminal:", result.error);
     }
@@ -315,7 +340,7 @@ export function CardPhaseActions({
     setShowTestTogetherConfirm(false);
     if (!(await prepare())) return;
 
-    const result = await openTestTerminal(card.id);
+    const result = await handOff("test-together", openTestTerminal(card.id));
     if (!result.success) {
       console.error("Failed to open test terminal:", result.error);
     }
@@ -393,7 +418,7 @@ export function CardPhaseActions({
       (action === "evaluate" && isEvaluating);
     // Autonomous buttons stay drawn while locked, as a spinner or a dimmed
     // icon; interactive ones are not shown at all then.
-    const autonomous = action === "play" || action === "quick-fix" || action === "evaluate";
+    const autonomous = isAutonomousAction(action);
     const dimmed = autonomous && isLocked && !running;
 
     let className = ICON_TINT[action];
