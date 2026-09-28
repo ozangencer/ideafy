@@ -97,7 +97,7 @@ ${priorDecisions}
 ${voicePrompt}
 
 ## Output Format
-Markdown with exactly these sections (Related Cards is the only optional one):
+Markdown with exactly these sections (Related Cards is the only optional one). Keep every \`##\` heading exactly as written, in English, even when you write the content in another language: the app reads the verdict and the scores from them.
 
 ${EVALUATION_OUTPUT_SCHEMA}`;
 }
@@ -137,7 +137,7 @@ ${description}
 4. Verify the fix works
 
 ## Output Requirements
-After fixing the bug, provide a brief summary in this format:
+After fixing the bug, provide a brief summary in this format, with the \`## Quick Fix Summary\` heading kept in English whatever language the rest is in:
 
 ## Quick Fix Summary
 - **Root Cause:** Brief description of what caused the bug
