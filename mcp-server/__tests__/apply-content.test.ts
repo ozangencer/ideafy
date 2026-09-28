@@ -8,7 +8,7 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { extractApplicableContent } = interop(applyNs);
+const { extractApplicableContent, hasApplyBlock } = interop(applyNs);
 
 // IDE-319: an unmarked reply shaped like the IDE-316 one that started the card —
 // narration, a divider, the plan, then a divider and a closing offer.
@@ -106,4 +106,14 @@ test("tests section: checkbox lines after a divider are kept", () => {
   const input = "Şu senaryoları öneriyorum:\n\n- [ ] Birinci adım\n\n---\n\n- [ ] İkinci adım";
   const r = extractApplicableContent(input, "tests");
   assert.equal(r.content, "- [ ] Birinci adım\n\n---\n\n- [ ] İkinci adım");
+});
+
+// IDE-343: a Tests reply that recorded a result with save_tests can still
+// offer a new scenario — the explicit block is what keeps Apply visible.
+test("hasApplyBlock sees an explicit apply block and nothing else", () => {
+  assert.equal(
+    hasApplyBlock("İkinci maddeyi işaretledim.\n\n<!-- ideafy:apply -->\n- [ ] Yeni adım\n<!-- /ideafy:apply -->"),
+    true
+  );
+  assert.equal(hasApplyBlock("İkinci maddeyi işaretledim.\n\n- [ ] Yeni adım"), false);
 });

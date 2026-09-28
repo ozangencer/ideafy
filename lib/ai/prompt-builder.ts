@@ -187,7 +187,7 @@ function buildApplyMarkerContext(section: SectionType): string {
 
 ## Marking content for Apply
 ${section === "tests"
-  ? "On a turn where you propose scenarios in your reply instead of calling save_tests, wrap"
+  ? "Whenever your reply proposes scenarios for the user to apply — including a turn where you also called save_tests to record results — wrap"
   : "When your reply contains content meant for this card field, wrap"} exactly that content between these two lines:
 ${APPLY_OPEN_MARKER}
 ${APPLY_CLOSE_MARKER}
@@ -214,7 +214,7 @@ Call save_tests only when:
 - the user asks you to remove scenarios (then pass allowDeletion: true — see the rules above), or
 - a scenario's result becomes known: they report one as passing, or they ask you to run the tests and you verify one yourself. Results are the point of this checklist, so record them without waiting to be asked twice. Check only the boxes actually confirmed; leave failures and anything you could not verify unchecked, and say which is which. Send the full checklist with every existing item's state preserved.
 
-Otherwise, when you have scenarios worth proposing, just write them in your reply as markdown checkboxes and stop. The chat UI puts Append / Replace buttons under your message and the user decides whether they land on the card. Replace is also how they wipe scenarios you proposed and they didn't want — so a reply that skips save_tests keeps that escape hatch open. Calling save_tests hides those buttons.`
+Otherwise, when you have scenarios worth proposing, just write them in your reply as markdown checkboxes and stop. The chat UI puts Append / Replace buttons under your message and the user decides whether they land on the card. Replace is also how they wipe scenarios you proposed and they didn't want — so a reply that skips save_tests keeps that escape hatch open. Calling save_tests hides those buttons unless the reply also carries an apply block.`
   : `When you produce substantive content for a card field, you MUST save it using the appropriate MCP tool.
 Do NOT just respond with text — persist it to the card so it appears in the UI.
 This includes when you agree with, refine, or expand on the user's ideas — always save the resulting content.

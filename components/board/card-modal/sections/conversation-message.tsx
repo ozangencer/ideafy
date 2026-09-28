@@ -37,7 +37,7 @@ const markdownSanitizeSchema = {
   },
 };
 import { MentionData } from "@/lib/types";
-import { extractApplicableContent } from "@/lib/apply-content";
+import { extractApplicableContent, hasApplyBlock } from "@/lib/apply-content";
 
 // CSS class map for mention types
 const MENTION_CLASS: Record<string, string> = {
@@ -183,14 +183,17 @@ export function ConversationMessage({
   const [nothingNew, setNothingNew] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
 
-  // Show "Apply" button when: assistant message, not streaming, has content, no persist tool was called
+  // Show "Apply" button when: assistant message, not streaming, has content,
+  // and either no persist tool was called or the reply still fences a proposal
+  // for Apply — a Tests turn can record a passing result with save_tests and
+  // offer a new scenario in the same reply.
   const showApplyButton =
     !isUser &&
     !isStreaming &&
     message.content?.trim() &&
     cardId &&
     sectionType &&
-    !hadPersistToolCall(message.toolCalls);
+    (!hadPersistToolCall(message.toolCalls) || hasApplyBlock(message.content));
 
   // Narration around the content ("reading the opinion…", "apply this with
   // Replace:") stays in the chat; only the extracted part lands on the card.

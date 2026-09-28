@@ -53,6 +53,11 @@ export function stripApplySignoff(content: string): string {
   return text;
 }
 
+/** True when the reply fences content for Apply with an explicit marker. */
+export function hasApplyBlock(content: string): boolean {
+  return /<!--\s*ideafy:apply\s*-->/i.test(content);
+}
+
 function extractMarkedBlock(content: string): string | null {
   let lastOpenEnd = -1;
   for (const m of Array.from(content.matchAll(OPEN_RE))) {
