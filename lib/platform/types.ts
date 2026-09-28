@@ -12,8 +12,18 @@ export interface PlatformCapabilities {
   mcpConfigFormat: "json" | "toml";
 }
 
+/**
+ * One-shot runs whose cost is predictable enough to pin their own model and
+ * effort instead of inheriting the user's global CLI setting (IDE-361).
+ * Spelled like the process registry's processType on purpose.
+ */
+export type OneShotRunKind = "evaluate" | "quick-fix";
+
 export interface AutonomousOptions {
   prompt: string;
+  /** Omit for today's behaviour: phase runs, narrative and enrich. Providers
+   *  that don't pin a model per run ignore it. */
+  runKind?: OneShotRunKind;
 }
 
 export interface InteractiveOptions {

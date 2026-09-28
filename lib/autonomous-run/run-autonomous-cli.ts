@@ -9,7 +9,7 @@ import {
 import { recordRunSession } from "@/lib/card-sessions";
 import { getProviderForCard } from "@/lib/platform/active";
 import { adaptMcpToolNames } from "@/lib/platform/mcp-tool-names";
-import type { ParsedRunOutput } from "@/lib/platform/types";
+import type { OneShotRunKind, ParsedRunOutput } from "@/lib/platform/types";
 import {
   ENDED_WHILE_WAITING_WARNING,
   selectRunOutput,
@@ -56,6 +56,12 @@ export interface RunAutonomousOptions {
    * Without one the runner falls back to a length heuristic and flags it.
    */
   contract?: RunOutputContract;
+  /**
+   * Pins the provider's model, effort and MCP set for a one-shot run. Unlike
+   * `tracking.runKind`, which only labels the session list, this changes how
+   * the CLI is launched. Omit to inherit the user's global CLI settings.
+   */
+  runKind?: OneShotRunKind;
 }
 
 export interface AutonomousRunResult {
@@ -91,6 +97,7 @@ export async function runAutonomousCli(
     tracking,
     requireExitZero = false,
     contract,
+    runKind,
   } = options;
 
   // Kill any existing process for this card so a second click doesn't race the first.
@@ -104,7 +111,7 @@ export async function runAutonomousCli(
   // differently. Adapting here rather than in each builder keeps the single
   // choke point that every autonomous phase already passes through.
   const adaptedPrompt = adaptMcpToolNames(prompt, provider.id);
-  const args = provider.buildAutonomousArgs({ prompt: adaptedPrompt });
+  const args = provider.buildAutonomousArgs({ prompt: adaptedPrompt, runKind });
 
   console.log(`[${label}] Running in ${cwd}:`);
   console.log(`[${label}] Prompt length: ${adaptedPrompt.length} chars`);

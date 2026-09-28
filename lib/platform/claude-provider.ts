@@ -12,11 +12,14 @@ import type {
   StreamEvent,
   RunOutputCollector,
   Result,
+  OneShotRunKind,
 } from "./types";
 import { findBinary, buildEnv, buildCIEnv } from "./base-provider";
 import { appResourcesRoot, resolveUserSkillsDir } from "../paths";
 import { parseClaudeStreamLine } from "./claude-provider/parse-stream-line";
 import { createClaudeRunOutputCollector } from "./claude-provider/collect-run-output";
+import { buildMcpInvocation } from "./mcp-invocation";
+import { IDEAFY_MCP_SERVER } from "./mcp-tool-names";
 
 /** Tools an autonomous `claude -p` run cannot use to any effect; see buildAutonomousArgs. */
 export const AUTONOMOUS_DISALLOWED_TOOLS = [
@@ -26,6 +29,37 @@ export const AUTONOMOUS_DISALLOWED_TOOLS = [
   "RemoteTrigger",
   "AskUserQuestion",
 ] as const;
+
+/**
+ * Model and effort a one-shot run pins, so a global "frontier model + xhigh"
+ * setting doesn't turn a one-minute Evaluate into four (IDE-361). Aliases, not
+ * full ids, so the table doesn't go stale with every model release.
+ */
+const ONE_SHOT_RUN_PROFILES: Record<OneShotRunKind, { model: string; effort: string }> = {
+  evaluate: { model: "opus", effort: "medium" },
+  "quick-fix": { model: "opus", effort: "medium" },
+};
+
+/**
+ * Evaluate only needs the Ideafy MCP. `--setting-sources user` otherwise spawns
+ * every user-scope server (firecrawl, chrome-devtools, …), which slows init and
+ * hands the model tools it wanders off with. Quick Fix and phase runs keep them:
+ * their verification step can genuinely need chrome-devtools.
+ *
+ * Connecting the app's own server directly also sidesteps the plugin copy, and
+ * names its tools `mcp__ideafy__*` exactly as the prompts spell them.
+ */
+function strictIdeafyMcpArgs(): string[] {
+  try {
+    const config = { mcpServers: { [IDEAFY_MCP_SERVER]: buildMcpInvocation() } };
+    return ["--strict-mcp-config", "--mcp-config", JSON.stringify(config)];
+  } catch (error) {
+    // Packaged build missing its MCP env vars: run with the user's servers as
+    // before rather than fail the evaluation.
+    console.warn("[Claude] Strict MCP config unavailable, falling back to user servers:", error);
+    return [];
+  }
+}
 import {
   listProjectMcps as listProjectMcpsImpl,
   listProjectSkills as listProjectSkillsImpl,
@@ -132,6 +166,13 @@ class ClaudeProvider implements PlatformProvider {
       // collector's wait detection cover it.
       "--disallowedTools", AUTONOMOUS_DISALLOWED_TOOLS.join(","),
     ];
+    if (opts.runKind) {
+      const { model, effort } = ONE_SHOT_RUN_PROFILES[opts.runKind];
+      args.push("--model", model, "--effort", effort);
+    }
+    if (opts.runKind === "evaluate") {
+      args.push(...strictIdeafyMcpArgs());
+    }
     return args;
   }
 

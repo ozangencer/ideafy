@@ -61,6 +61,39 @@ test("claude autonomous runs deny the tools that wait to be woken up", () => {
   assert.deepEqual(denied, [...AUTONOMOUS_DISALLOWED_TOOLS]);
 });
 
+// IDE-361: one-shot runs pin their own model and effort; Evaluate also drops
+// every user MCP server but Ideafy's own.
+
+function flagValue(args: string[], flag: string): string | undefined {
+  const at = args.indexOf(flag);
+  return at >= 0 ? args[at + 1] : undefined;
+}
+
+test("claude evaluate pins opus, medium effort and an Ideafy-only MCP set", () => {
+  const args = claudeProvider.buildAutonomousArgs({ prompt: "p", runKind: "evaluate" });
+  assert.equal(flagValue(args, "--model"), "opus");
+  assert.equal(flagValue(args, "--effort"), "medium");
+  assert.ok(args.includes("--strict-mcp-config"), `no --strict-mcp-config in ${JSON.stringify(args)}`);
+  const config = JSON.parse(flagValue(args, "--mcp-config") ?? "{}");
+  assert.deepEqual(Object.keys(config.mcpServers), ["ideafy"]);
+  assert.ok(config.mcpServers.ideafy.command, "ideafy server has no command");
+});
+
+test("claude quick-fix pins model and effort but keeps the user's MCP servers", () => {
+  const args = claudeProvider.buildAutonomousArgs({ prompt: "p", runKind: "quick-fix" });
+  assert.equal(flagValue(args, "--model"), "opus");
+  assert.equal(flagValue(args, "--effort"), "medium");
+  assert.ok(!args.includes("--strict-mcp-config"));
+  assert.ok(!args.includes("--mcp-config"));
+});
+
+test("claude runs without a runKind inherit the global CLI settings", () => {
+  const args = claudeProvider.buildAutonomousArgs({ prompt: "p" });
+  for (const flag of ["--model", "--effort", "--strict-mcp-config", "--mcp-config"]) {
+    assert.ok(!args.includes(flag), `${flag} leaked into a phase run`);
+  }
+});
+
 function claudeAssistant(content: unknown[], id = "m1"): string {
   return JSON.stringify({
     type: "assistant",

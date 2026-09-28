@@ -103,6 +103,7 @@ export async function POST(
       aiPlatform: card.aiPlatform,
       label: "Evaluate",
       timeoutMs: 5 * 60 * 1000,
+      runKind: "evaluate",
       contract: RUN_OUTPUT_CONTRACTS.evaluate,
       tracking: {
         processKey,

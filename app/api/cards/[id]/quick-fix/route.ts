@@ -188,6 +188,7 @@ export async function POST(
       aiPlatform: card.aiPlatform,
       label: "Quick fix",
       timeoutMs: 10 * 60 * 1000,
+      runKind: "quick-fix",
       contract: RUN_OUTPUT_CONTRACTS.quickFix,
       tracking: {
         processKey,
