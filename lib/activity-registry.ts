@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@/lib/db";
 import { PROCESS_LABEL, SECTION_LABEL } from "@/lib/process-labels";
+import { firstLine } from "@/lib/run-error";
 import type {
   ActivityHistoryEntry,
   ActivityType,
@@ -206,17 +207,22 @@ interface ProcessCompletionInput {
   completedAt: string;
   endReason: "completed" | "aborted" | "failed";
   warning?: string | null;
+  error?: string | null;
 }
 
 /**
  * Bridge from process-registry → activity bell. Skips short jobs (toast is
- * enough) and aborted or failed runs (neither is a "completion" worth pinning).
- * A run that finished with a warning is always recorded, however short: the
- * toast is the only other place that explains why the card did not change.
- * Chat is grouped by section so each tab dedups independently; non-chat jobs
- * use a single per-card row per type.
+ * enough) and aborted runs (stopped on purpose). A run that finished with a
+ * warning is always recorded, however short: the toast is the only other place
+ * that explains why the card did not change. Chat is grouped by section so
+ * each tab dedups independently; non-chat jobs use a single per-card row per
+ * type.
  */
 export function recordProcessCompleted(input: ProcessCompletionInput): void {
+  if (input.endReason === "failed") {
+    recordProcessFailed(input);
+    return;
+  }
   if (input.endReason !== "completed") return;
 
   const durationMs = new Date(input.completedAt).getTime() - new Date(input.startedAt).getTime();
@@ -248,6 +254,43 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
       sectionType: input.sectionType,
       durationMs,
       ...(warning ? { warning } : {}),
+    },
+  });
+}
+
+/**
+ * A failed run is always recorded, however quickly it died: the Background
+ * Processes panel forgets it after 20 runs, a Clear or a restart, and the bell
+ * is the only place its error text survives. Evaluate lands on the opinion row
+ * its success would have written, so the next good run replaces the failure.
+ */
+function recordProcessFailed(input: ProcessCompletionInput): void {
+  const durationMs = new Date(input.completedAt).getTime() - new Date(input.startedAt).getTime();
+  const error = input.error ?? null;
+
+  let type: ActivityType | null;
+  let label: string;
+  if (input.processType === "chat") {
+    type = chatTypeFor(input.sectionType);
+    label = `Chat (${input.sectionType ? SECTION_LABEL[input.sectionType] : "Detail"})`;
+  } else {
+    type = input.processType === "evaluate" ? "opinion" : nonChatTypeFor(input.processType);
+    label = PROCESS_LABEL[input.processType] ?? input.processType;
+  }
+  if (!type) return;
+
+  recordActivity({
+    type,
+    cardId: input.cardId,
+    projectId: input.projectId,
+    title: `${label} failed`,
+    summary: firstLine(error) || `Failed after ${formatDuration(durationMs)}`,
+    payload: {
+      processType: input.processType,
+      sectionType: input.sectionType,
+      durationMs,
+      failed: true,
+      ...(error ? { error } : {}),
     },
   });
 }

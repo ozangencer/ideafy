@@ -11,6 +11,8 @@ import {
 import { SECTION_CONFIG } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { notifyFinishedRuns } from "@/lib/system-notifications";
+import { firstLine } from "@/lib/run-error";
+import { RunErrorDetails, RunErrorToggle } from "@/components/run-error-details";
 import type { BackgroundProcess, ProcessType } from "@/lib/types";
 
 // Process type config for display
@@ -30,10 +32,14 @@ function ProcessItem({
   process,
   onKill,
   onCardClick,
+  detailsOpen,
+  onToggleDetails,
 }: {
   process: BackgroundProcess;
   onKill: () => void;
   onCardClick: () => void;
+  detailsOpen: boolean;
+  onToggleDetails: () => void;
 }) {
   const displayName = process.displayId || process.cardId.slice(0, 8);
   const processConfig = PROCESS_TYPE_CONFIG[process.processType];
@@ -42,6 +48,7 @@ function ProcessItem({
   const isAborted = process.status === "completed" && process.endReason === "aborted";
   const isFailed = process.status === "completed" && process.endReason === "failed";
   const hasWarning = process.status === "completed" && !isAborted && !isFailed && !!process.warning;
+  const error = isFailed ? process.error ?? null : null;
 
   // Build label: for chat include section name, for others show process type.
   // Append an "· Interrupted on reload" suffix for aborted entries so users
@@ -91,12 +98,16 @@ function ProcessItem({
             <span className="text-xs font-medium text-muted-foreground shrink-0">{displayName}</span>
             <span className="text-sm font-medium truncate">{process.cardTitle}</span>
           </div>
-          <span
-            className={`text-xs ${subLabelClass}`}
-            title={hasWarning ? process.warning ?? undefined : undefined}
-          >
-            {label}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`text-xs ${subLabelClass}`}
+              title={hasWarning ? process.warning ?? undefined : undefined}
+            >
+              {label}
+            </span>
+            {error && <RunErrorToggle expanded={detailsOpen} onToggle={onToggleDetails} />}
+          </div>
+          {error && detailsOpen && <RunErrorDetails error={error} />}
         </div>
       </div>
       {process.status === "running" && (
@@ -126,7 +137,19 @@ export function BackgroundProcesses() {
     settings,
   } = useKanbanStore();
   const [isOpen, setIsOpen] = useState(false);
+  const [openDetailIds, setOpenDetailIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  const toggleDetails = (id: string) => {
+    setOpenDetailIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  // A stack trace does not fit the narrow list; widen while one is open.
+  const detailsVisible = backgroundProcesses.some((p) => openDetailIds.has(p.id) && !!p.error);
 
   // Track running processes to detect completion
   const runningProcessesRef = useRef<Map<string, BackgroundProcess>>(new Map());
@@ -211,7 +234,9 @@ export function BackgroundProcesses() {
             toast({
               variant: "destructive",
               title: "Process Failed",
-              description: `${label} failed for ${displayName}`,
+              description: completed.error
+                ? `${label} failed for ${displayName}: ${firstLine(completed.error)}`
+                : `${label} failed for ${displayName}`,
             });
           } else if (warning) {
             toast({
@@ -314,7 +339,7 @@ export function BackgroundProcesses() {
           <span className="sr-only">Background processes</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-0">
+      <PopoverContent align="end" className={`${detailsVisible ? "w-96" : "w-72"} p-0`}>
         <div className="p-3 border-b border-border flex items-center justify-between">
           <div>
             <h4 className="text-sm font-medium">Background Processes</h4>
@@ -333,7 +358,7 @@ export function BackgroundProcesses() {
             </Button>
           )}
         </div>
-        <div className="max-h-64 overflow-y-auto p-2">
+        <div className={`${detailsVisible ? "max-h-96" : "max-h-64"} overflow-y-auto p-2`}>
           {/* Running processes first */}
           {runningProcesses.map((process) => (
             <ProcessItem
@@ -341,6 +366,8 @@ export function BackgroundProcesses() {
               process={process}
               onKill={() => handleKill(process.id)}
               onCardClick={() => handleCardClick(process.cardId)}
+              detailsOpen={openDetailIds.has(process.id)}
+              onToggleDetails={() => toggleDetails(process.id)}
             />
           ))}
           {/* Separator if both running and completed exist */}
@@ -354,6 +381,8 @@ export function BackgroundProcesses() {
               process={process}
               onKill={() => handleKill(process.id)}
               onCardClick={() => handleCardClick(process.cardId)}
+              detailsOpen={openDetailIds.has(process.id)}
+              onToggleDetails={() => toggleDetails(process.id)}
             />
           ))}
         </div>

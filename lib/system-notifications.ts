@@ -2,6 +2,7 @@
 
 import type { BackgroundProcess, ProcessType, SectionType } from "@/lib/types";
 import { PROCESS_LABEL, SECTION_LABEL } from "@/lib/process-labels";
+import { firstLine } from "@/lib/run-error";
 
 // Renderer side of the OS-banner bridge in electron/notifications.js. Every
 // export is a no-op in a plain browser: there is no electronAPI there, and a
@@ -104,9 +105,10 @@ export function notifyFinishedRuns(finished: BackgroundProcess[]): void {
     } else {
       outcome = run.warning ? `${label} finished with a warning` : `${label} completed`;
     }
+    const detail = run.endReason === "failed" ? firstLine(run.error) : run.warning;
     notify({
       title: `${displayName}: ${outcome}`,
-      body: run.warning && run.endReason !== "failed" ? `${run.cardTitle} — ${run.warning}` : run.cardTitle,
+      body: detail ? `${run.cardTitle} — ${detail}` : run.cardTitle,
       cardId: run.cardId,
       section: sectionFor(run),
     });

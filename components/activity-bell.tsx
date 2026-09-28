@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useKanbanStore } from "@/lib/store";
 import { openCardById } from "@/lib/open-card";
 import { getDisplayId } from "@/lib/types";
+import { RunErrorDetails, RunErrorToggle } from "@/components/run-error-details";
 import type {
   ActivityEvent,
   ActivityHistoryEntry,
@@ -72,6 +73,7 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
 
   const [isOpen, setIsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [errorOpenIds, setErrorOpenIds] = useState<Set<string>>(new Set());
 
   // Initial fetch + polling. Runs only when the bell is mounted; the panel is
   // visible across the whole app so the cadence drives the topbar badge for
@@ -126,6 +128,15 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
   const toggleExpand = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleError = (id: string) => {
+    setErrorOpenIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -205,6 +216,8 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
                   expandedIds={expandedIds}
                   onRowClick={handleRowClick}
                   onToggleExpand={toggleExpand}
+                  errorOpenIds={errorOpenIds}
+                  onToggleError={toggleError}
                 />
               ))}
               {extraSources.map((source) =>
@@ -223,6 +236,8 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
                       handleRowClick(event);
                     }}
                     onToggleExpand={toggleExpand}
+                    errorOpenIds={errorOpenIds}
+                    onToggleError={toggleError}
                   />
                 ) : null
               )}
@@ -242,6 +257,8 @@ interface ActivityGroupProps {
   expandedIds: Set<string>;
   onRowClick: (event: ActivityEvent) => void;
   onToggleExpand: (id: string, e: React.MouseEvent) => void;
+  errorOpenIds: Set<string>;
+  onToggleError: (id: string) => void;
 }
 
 function ActivityGroup({
@@ -252,6 +269,8 @@ function ActivityGroup({
   expandedIds,
   onRowClick,
   onToggleExpand,
+  errorOpenIds,
+  onToggleError,
 }: ActivityGroupProps) {
   return (
     <div className="mb-1">
@@ -267,6 +286,9 @@ function ActivityGroup({
         const card = event.cardId ? cards.find((c) => c.id === event.cardId) : null;
         const project = card ? projects.find((p) => p.id === card.projectId) : null;
         const displayId = card ? getDisplayId(card, project) : null;
+        const failed = event.payload?.failed === true;
+        const error = typeof event.payload?.error === "string" ? event.payload.error : null;
+        const errorOpen = errorOpenIds.has(event.id);
         return (
           <div
             key={event.id}
@@ -275,7 +297,7 @@ function ActivityGroup({
           >
             <div className="flex items-start gap-2">
               <span
-                className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${event.isRead ? "bg-transparent" : "bg-ink"}`}
+                className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${event.isRead ? "bg-transparent" : failed ? "bg-red-500" : "bg-ink"}`}
               />
               <div className="min-w-0 flex-1">
                 {(displayId || card) && (
@@ -293,7 +315,12 @@ function ActivityGroup({
                   </div>
                 )}
                 <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-medium truncate">{event.title}</span>
+                  <span className={`text-sm font-medium truncate ${failed ? "text-destructive" : ""}`}>
+                    {event.title}
+                  </span>
+                  {error && (
+                    <RunErrorToggle expanded={errorOpen} onToggle={() => onToggleError(event.id)} />
+                  )}
                   {runCount > 1 && (
                     <button
                       type="button"
@@ -310,6 +337,7 @@ function ActivityGroup({
                 {event.summary && (
                   <div className="text-xs text-muted-foreground mt-0.5">{event.summary}</div>
                 )}
+                {error && errorOpen && <RunErrorDetails error={error} />}
                 <div className="text-[11px] text-muted-foreground mt-0.5">
                   {formatRelative(event.updatedAt)}
                 </div>
