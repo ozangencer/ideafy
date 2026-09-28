@@ -74,10 +74,14 @@ export function ConversationInput({
   // Refs so editorProps don't capture stale props.
   const isLoadingRef = useRef(isLoading);
   const onSendRef = useRef(onSend);
+  // The editor keeps the extensions it was built with, so the placeholder is
+  // read through a ref — otherwise switching tabs leaves the first tab's text.
+  const placeholderRef = useRef(placeholder);
   useLayoutEffect(() => {
     isLoadingRef.current = isLoading;
     onSendRef.current = onSend;
-  }, [isLoading, onSend]);
+    placeholderRef.current = placeholder;
+  }, [isLoading, onSend, placeholder]);
 
   // editorRef lets removePastedImage reach the current editor without forcing
   // the callback identity to change on every editor re-render.
@@ -176,14 +180,17 @@ export function ConversationInput({
         blockquote: false,
         horizontalRule: false,
       }),
-      Placeholder.configure({ placeholder, emptyEditorClass: "is-editor-empty" }),
+      Placeholder.configure({
+        placeholder: () => placeholderRef.current,
+        emptyEditorClass: "is-editor-empty",
+      }),
       ImageResize.configure({ inline: false, allowBase64: true }),
       UnifiedMention.configure({ suggestion: unifiedSuggestion }),
       CardMention.configure({ suggestion: cardSuggestion }),
       DocumentMention.configure({ suggestion: documentSuggestion }),
       ImageAttachment,
     ],
-    [placeholder, unifiedSuggestion, cardSuggestion, documentSuggestion],
+    [unifiedSuggestion, cardSuggestion, documentSuggestion],
   );
 
   const editor = useEditor({
@@ -334,6 +341,12 @@ export function ConversationInput({
   useLayoutEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  // Decorations only rebuild on a transaction; an empty one redraws the
+  // placeholder when the tab changes under an idle editor.
+  useLayoutEffect(() => {
+    if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr);
+  }, [editor, placeholder]);
 
   const handleSend = useCallback(() => {
     if (!editor || isLoading) return;
