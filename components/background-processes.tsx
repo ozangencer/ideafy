@@ -131,6 +131,7 @@ export function BackgroundProcesses() {
     killBackgroundProcess,
     clearCompletedProcesses,
     clearProcessing,
+    syncCardAfterRunEnd,
     cards,
     selectCard,
     openModal,
@@ -218,7 +219,20 @@ export function BackgroundProcesses() {
         // with non-chat flows on the same card — clearing would stomp those.
         const wasKilled = killedIdsRef.current.has(id);
         if (!wasKilled && process.processType !== "chat") {
-          clearProcessing(process.cardId);
+          // A run whose fetch is still pending in this page refreshes the
+          // card itself. One whose fetch was lost (reload mid-run, a run
+          // started elsewhere) has only this path, and clearProcessing alone
+          // leaves the open modal on its pre-run form. Read before clearing:
+          // clearProcessing drops the card from these lists.
+          const { startingCardIds, quickFixingCardIds, evaluatingCardIds } =
+            useKanbanStore.getState();
+          const handlerAlive =
+            startingCardIds.includes(process.cardId) ||
+            quickFixingCardIds.includes(process.cardId) ||
+            evaluatingCardIds.includes(process.cardId);
+          void clearProcessing(process.cardId).then(() => {
+            if (!handlerAlive) void syncCardAfterRunEnd(process.cardId);
+          });
         }
 
         if (wasKilled) {
@@ -255,7 +269,7 @@ export function BackgroundProcesses() {
     });
 
     runningProcessesRef.current = currentRunning;
-  }, [runningProcesses, completedProcesses, toast, clearProcessing]);
+  }, [runningProcesses, completedProcesses, toast, clearProcessing, syncCardAfterRunEnd]);
 
   // OS banners work off completed entries, not off the running list above:
   // a run that starts and ends between two polls (MCP, another session, a

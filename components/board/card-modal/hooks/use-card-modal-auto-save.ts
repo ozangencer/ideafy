@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { AiPlatform, Card, Complexity, Priority, Project, Status } from "@/lib/types";
 import type { CardUpdatePayload } from "@/lib/kanban-store/types";
+import { buildDirtyCardPayload } from "@/lib/card-dirty-fields";
 
 interface UseCardModalAutoSaveOptions {
   selectedCard: Card | null;
@@ -87,24 +88,30 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
 
   // The save payload as of the latest render. The debounced save and
   // flushPendingAutoSave both read it, so a flush sends exactly what the
-  // timer would have.
+  // timer would have. Only the fields the form changed go out, so a stale
+  // form can't write back a status or plan it never touched.
   const buildPayload = (): CardUpdatePayload | null => {
     if (!selectedCard) return null;
-    const selectedProject = projects.find((p) => p.id === projectId);
     const extras = extraFieldsRef.current?.() ?? {};
+    const dirty = buildDirtyCardPayload(
+      {
+        title,
+        description,
+        solutionSummary,
+        testScenarios,
+        aiOpinion,
+        status,
+        complexity,
+        priority,
+        projectId,
+        groupId,
+        aiPlatform,
+      },
+      selectedCard,
+      (id) => projects.find((p) => p.id === id)?.folderPath
+    );
     return {
-      title,
-      description,
-      solutionSummary,
-      testScenarios,
-      aiOpinion,
-      status,
-      complexity,
-      priority,
-      projectId,
-      groupId,
-      aiPlatform,
-      projectFolder: selectedProject?.folderPath || selectedCard.projectFolder,
+      ...dirty,
       baseUpdatedAt: formBaseUpdatedAtRef.current ?? selectedCard.updatedAt,
       ...extras,
     };

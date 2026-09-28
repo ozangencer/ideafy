@@ -67,6 +67,7 @@ export const createClaudeSlice: StoreSlice<
     | "lockCard"
     | "unlockCard"
     | "clearProcessing"
+    | "syncCardAfterRunEnd"
     | "pendingRunConfirmation"
     | "confirmPendingRun"
     | "cancelPendingRun"
@@ -646,18 +647,30 @@ export const createClaudeSlice: StoreSlice<
     }));
   },
 
+  syncCardAfterRunEnd: async (cardId) => {
+    // The heartbeat saw a run end whose own handler is gone (a reload, a run
+    // started elsewhere). Do what startTask does on success: fetch, then bump
+    // so the open modal takes the run's write over its stale form (IDE-324).
+    await get().fetchCards();
+    set((state) => ({
+      mcpWriteVersion: state.mcpWriteVersion + 1,
+      mcpWriteCardId: cardId,
+    }));
+  },
+
   clearProcessing: async (cardId) => {
     try {
       const response = await fetch(`/api/cards/${cardId}/clear-processing`, {
         method: "POST",
       });
 
+      const data = await parseJson<{ error?: string; updatedAt?: string }>(response);
       if (!response.ok) {
-        const data = await parseJson<{ error?: string }>(response);
         return { success: false, error: data.error || "Failed to clear processing" };
       }
 
-      // Update local state
+      // Update local state with the server's timestamp, so the open form's
+      // baseUpdatedAt still matches what is on disk.
       set((state) => ({
         startingCardIds: removeId(state.startingCardIds, cardId),
         quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
@@ -665,7 +678,7 @@ export const createClaudeSlice: StoreSlice<
         lockedCardIds: removeId(state.lockedCardIds, cardId),
         cards: state.cards.map((card) =>
           card.id === cardId
-            ? { ...card, processingType: null, updatedAt: nowIso() }
+            ? { ...card, processingType: null, updatedAt: data.updatedAt ?? card.updatedAt }
             : card
         ),
       }));

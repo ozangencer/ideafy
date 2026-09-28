@@ -364,6 +364,11 @@ export interface KanbanStore {
   lockCard: (cardId: string) => void;
   unlockCard: (cardId: string) => void;
   clearProcessing: (cardId: string) => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Pulls the card from the server after the heartbeat sees a run end that no
+   * in-page handler is waiting on, and forces the open modal to resync.
+   */
+  syncCardAfterRunEnd: (cardId: string) => Promise<void>;
   /** Re-runs the refused action, this time carrying the user's confirmation. */
   confirmPendingRun: () => Promise<{ success: boolean; error?: string }>;
   /** Dismisses the confirmation without running anything. */

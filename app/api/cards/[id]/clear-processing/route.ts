@@ -18,11 +18,14 @@ export async function POST(
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
-  // Clear processing state
+  // Clear processing state. The timestamp goes back in the response so the
+  // client's copy matches the server's; a made-up one turns the open form's
+  // next auto-save into a stale write.
+  const updatedAt = new Date().toISOString();
   db.update(schema.cards)
     .set({
       processingType: null,
-      updatedAt: new Date().toISOString(),
+      updatedAt,
     })
     .where(eq(schema.cards.id, id))
     .run();
@@ -30,6 +33,7 @@ export async function POST(
   return NextResponse.json({
     success: true,
     message: "Processing state cleared",
-    cardId: id
+    cardId: id,
+    updatedAt,
   });
 }
