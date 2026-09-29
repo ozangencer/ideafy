@@ -225,6 +225,7 @@ const COPIES = [
   { source: "lib/prompts/opinion.ts", target: "opinion.generated.ts" },
   { source: "lib/prompts/prior-decisions.ts", target: "prior-decisions.generated.ts" },
   { source: "lib/card-links.ts", target: "card-links.generated.ts" },
+  { source: "lib/chain-order.ts", target: "chain-order.generated.ts" },
 ];
 
 for (const { source, target } of COPIES) {

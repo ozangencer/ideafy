@@ -1,4 +1,5 @@
 import { Card, CardGroup, Status } from "./types";
+import { compareByChainOrder, isFinished } from "./chain-order";
 
 /**
  * Fold state is per (group, column), not per group. A chain spreads across
@@ -52,59 +53,16 @@ export interface CardGroupSummary {
   isComplete: boolean;
 }
 
-export const isFinished = (card: Card): boolean =>
-  card.status === "completed" || card.status === "withdrawn";
-
-/**
- * The one ordering a chain has. Everything that asks "which card comes first"
- * — the next pointer, the open row's members, the chain popover, the order
- * route — goes through here, so the answer cannot differ between two places
- * on the same row.
- *
- * A manual position wins: once someone uses "Move after…", the whole chain
- * gets 1..N and that is the order. Members without one — every chain that was
- * never touched, and a card that joined after the last move — fall back to
- * taskNumber, behind the placed ones. That fallback is the old rule: a chain
- * is written in one sitting, so the numbers come out in dependency order.
- * Cards without a number (drafts) sort last rather than winning the "next"
- * slot with a 0.
- */
-export function compareByChainOrder(
-  a: Pick<Card, "groupOrder" | "taskNumber">,
-  b: Pick<Card, "groupOrder" | "taskNumber">
-): number {
-  const ao = a.groupOrder ?? Number.MAX_SAFE_INTEGER;
-  const bo = b.groupOrder ?? Number.MAX_SAFE_INTEGER;
-  if (ao !== bo) return ao - bo;
-  const an = a.taskNumber ?? Number.MAX_SAFE_INTEGER;
-  const bn = b.taskNumber ?? Number.MAX_SAFE_INTEGER;
-  return an - bn;
-}
-
-type ChainMember = Pick<Card, "id" | "groupOrder" | "taskNumber">;
-
-/**
- * The chain's ids after moving `cardId` to sit right behind `afterCardId`, or
- * to the front when that is null. Index + 1 is the position each id gets.
- *
- * Returns the whole chain, finished members included, so a move rewrites
- * every position at once. Writing only the moved card would leave the rest on
- * taskNumber behind it — "move 358 after 331" would put 358 first, ahead of
- * 331 itself.
- */
-export function placeAfter(
-  members: ChainMember[],
-  cardId: string,
-  afterCardId: string | null
-): string[] {
-  const rest = [...members]
-    .sort(compareByChainOrder)
-    .map((member) => member.id)
-    .filter((id) => id !== cardId);
-  const at = afterCardId === null ? 0 : rest.indexOf(afterCardId) + 1;
-  rest.splice(at, 0, cardId);
-  return rest;
-}
+// The ordering itself lives in an import-free module so the MCP server can
+// carry a verbatim copy of it; re-exported here so the board keeps one import.
+export {
+  buildChainContext,
+  compareByChainOrder,
+  isFinished,
+  placeAfter,
+  type ChainCardRef,
+  type ChainContext,
+} from "./chain-order";
 
 /**
  * Members ahead of `card` in the chain that are still open. What the start

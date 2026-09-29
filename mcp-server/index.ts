@@ -50,7 +50,9 @@ import { existsSync } from "fs";
 import {
   assertGroupAssignable,
   createGroup,
-  listGroups,
+  getChainForCard,
+  listGroupsWithChains,
+  moveCardInChain,
   updateGroup,
 } from "./card-groups.js";
 
@@ -509,7 +511,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "get_card",
-        description: "Get a kanban card by ID",
+        description: "Get a kanban card by ID. When the card belongs to a group, `chain` gives its place in that chain: position/total, predecessors and successors in chain order (displayId, title, status), and `next`, the chain's first member that is neither completed nor withdrawn.",
         inputSchema: {
           type: "object",
           properties: {
@@ -523,7 +525,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "update_card",
-        description: "Update a kanban card fields (title, description, solutionSummary, status, complexity, priority, useWorktree, groupId). For testScenarios, use save_tests instead — update_card rejects it to protect checkbox states. For outputPaths, use save_output — it validates the file against the project folder.",
+        description: "Update a kanban card fields (title, description, solutionSummary, status, complexity, priority, useWorktree, groupId, afterCardId). For testScenarios, use save_tests instead — update_card rejects it to protect checkbox states. For outputPaths, use save_output — it validates the file against the project folder.",
         inputSchema: {
           type: "object",
           properties: {
@@ -565,6 +567,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             groupId: {
               type: ["string", "null"],
               description: "card_groups.id this card belongs to — the chain the board folds it into. null removes it from its group. Get ids from list_groups; create_group makes a new one. A group is membership only: it has no status, no completion state and no date of its own, so do not treat it as an epic.",
+            },
+            afterCardId: {
+              type: ["string", "null"],
+              description: "Move this card within its chain, the same as the board's \"Move after…\": a card id or displayId from the same group puts it right behind that card, null puts it at the start. Omit to leave the order alone. With groupId in the same call, the card joins the new group first and is placed in that chain. Reordering does not bump the card's updatedAt.",
             },
           },
           required: ["id"],
@@ -839,7 +845,7 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
       },
       {
         name: "list_groups",
-        description: "List card groups with their id, code, name and member count. A group is a chain of cards that belong to one piece of work; the board folds its cards into one row. It is membership only: no status, no completion state, no date, so do not treat it as an epic. With projectId, returns what a card in that project can join: the project's own groups plus groups not tied to any project.",
+        description: "List card groups with their id, code, name and member count, plus each chain's members in chain order (displayId, title, status, position) and `next`, the first member that is neither completed nor withdrawn. A group is a chain of cards that belong to one piece of work; the board folds its cards into one row. It is membership only: no status, no completion state, no date, so do not treat it as an epic. With projectId, returns what a card in that project can join: the project's own groups plus groups not tied to any project.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1014,6 +1020,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const outputPaths = parseOutputPaths(card.outputPaths);
         card.outputPaths = outputPaths.length ? outputPaths : null;
 
+        // Where the card sits in its chain, next to groupId. Left off
+        // entirely for a card in no group, so that JSON reads as before.
+        const chain = getChainForCard(db, card);
+        if (chain) {
+          (card as unknown as { chain: typeof chain }).chain = chain;
+        }
+
         // Attach the project's voice and mode so the calling AI can match
         // its tone — and knows whether this is a Work card — without a
         // second tool call. SELECT * rather than naming `mode`: a plugin
@@ -1064,7 +1077,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "update_card": {
-        const { id: rawId, ...updates } = args as { id: string } & Partial<Card>;
+        const { id: rawId, afterCardId: rawAfterCardId, ...updates } = args as {
+          id: string;
+          afterCardId?: string | null;
+        } & Partial<Card>;
         const id = resolveCardId(rawId);
         if (!id) {
           return {
@@ -1072,6 +1088,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+
+        // Not a column: it rewrites the chain's order, so it stays out of
+        // fieldMap and is resolved here — a displayId works as well as a UUID.
+        let afterCardId: string | null | undefined = rawAfterCardId;
+        if (typeof rawAfterCardId === "string") {
+          afterCardId = resolveCardId(rawAfterCardId);
+          if (!afterCardId) {
+            return {
+              content: [{ type: "text", text: `afterCardId not found: ${rawAfterCardId}` }],
+              isError: true,
+            };
+          }
+        }
+        const reorder = afterCardId !== undefined;
 
         // Reject testScenarios via update_card — always route through save_tests
         // so checkbox states and shrink guard apply. Prevents silent list wipes.
@@ -1116,7 +1146,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: [{
               type: "text",
               text: `update_card does not accept: ${unknownKeys.join(", ")}. ` +
-                `Accepted fields: ${Object.keys(fieldMap).join(", ")}. ` +
+                `Accepted fields: ${[...Object.keys(fieldMap), "afterCardId"].join(", ")}. ` +
                 `For testScenarios use save_tests; for aiOpinion use save_opinion; for outputPaths use save_output.`,
             }],
             isError: true,
@@ -1159,8 +1189,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Only `updated_at` in the SET list means the caller passed an id and
         // nothing else. Bumping the timestamp and calling it an update is the
-        // same silent no-op as above, one step further along.
-        if (setClauses.length === 1) {
+        // same silent no-op as above, one step further along. A reorder alone
+        // is an update, but one that must not touch updated_at: the Stale row
+        // measures age from it, and moving a card in its chain is not work.
+        const writeFields = setClauses.length > 1;
+        if (!writeFields && !reorder) {
           return {
             content: [{
               type: "text",
@@ -1172,11 +1205,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         values.push(id);
 
-        const result = db.prepare(`
-          UPDATE cards SET ${setClauses.join(", ")} WHERE id = ?
-        `).run(...values);
+        // One transaction: groupId is written first (0016's trigger clears
+        // the old position), then the order is computed in the new chain. A
+        // rejected afterCardId rolls the field writes back with it.
+        const outcome = db.transaction(() => {
+          if (writeFields) {
+            const result = db.prepare(`
+              UPDATE cards SET ${setClauses.join(", ")} WHERE id = ?
+            `).run(...values);
+            if (result.changes === 0) return null;
+          }
+          return {
+            placed: reorder ? moveCardInChain(db, id, afterCardId ?? null) : null,
+          };
+        })();
 
-        if (result.changes === 0) {
+        if (!outcome) {
           return {
             content: [{ type: "text", text: `Card not found: ${id}` }],
             isError: true,
@@ -1184,10 +1228,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const written = Object.keys(updates).filter((key) => key in fieldMap);
+        if (reorder) written.push("afterCardId");
+        const placedNote = outcome.placed
+          ? ` Chain position ${outcome.placed.position}/${outcome.placed.total}.`
+          : "";
         return {
           content: [{
             type: "text",
-            text: `Card ${id} updated (${written.join(", ")}). Card is in "${readStatus(id)}".`,
+            text: `Card ${id} updated (${written.join(", ")}).${placedNote} Card is in "${readStatus(id)}".`,
           }],
         };
       }
@@ -2077,7 +2125,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "list_groups": {
         const { projectId } = (args ?? {}) as { projectId?: string };
-        const groups = listGroups(db, projectId);
+        const groups = listGroupsWithChains(db, projectId);
         return {
           content: [{ type: "text", text: JSON.stringify(groups, null, 2) }],
         };

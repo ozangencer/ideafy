@@ -29,6 +29,7 @@ const COPIES = [
   { source: "lib/prompts/opinion.ts", target: "mcp-server/opinion.generated.ts" },
   { source: "lib/prompts/prior-decisions.ts", target: "mcp-server/prior-decisions.generated.ts" },
   { source: "lib/card-links.ts", target: "mcp-server/card-links.generated.ts" },
+  { source: "lib/chain-order.ts", target: "mcp-server/chain-order.generated.ts" },
 ];
 
 export function generatedHeader(sourceRelPath) {
