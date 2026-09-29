@@ -34,6 +34,15 @@ const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards
 - If \`search_cards\` or \`list_open_work\` is not available, or returns an error, skip this whole check and go straight on to the evaluation or the plan. Do not make up for the missing tool: never open the database (\`kanban.db\`, \`sqlite3\`), never query the card tables or the app's local API, never walk the codebase looking for other cards.`;
 
 /**
+ * A chain's other members are related work whether or not `search_cards`
+ * finds them — a predecessor with no shared keyword never turns up there. The
+ * chain comes from get_card's `chain` field or the prompt's own `## Chain`
+ * section, so this part stands outside the check above and its "skip it when
+ * the tools are missing" clause.
+ */
+const CHAIN_CONTEXT = `Chain: when get_card returns a \`chain\` field for this card, or this prompt has a \`## Chain\` section, the card is one step of a chain of cards. Its predecessors and successors are related work even when \`search_cards\` does not find them, and this part applies even when the check above was skipped. Name each by its bare displayId; a member without one (a draft) by its title.`;
+
+/**
  * For every surface that writes a plan. The plan keeps its four headings:
  * conflicts go under Edge Cases, and extra work taken into scope becomes its
  * own labelled step under Implementation Steps.
@@ -41,7 +50,11 @@ const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards
 export const PRIOR_DECISIONS_RULE = `${PRIOR_DECISIONS_CHECK}
 - If an open card brings in something this card needs to work correctly, or breaks it, that is extra work. When it is a precondition for this card, add it as its own step under Implementation Steps labelled "(because of <displayId>)"; otherwise suggest it as a note for the other card. Never widen the scope silently.
 - Contradictions, precedents and overlaps go under Edge Cases. Do not add a heading for them.
-If there is no contradiction, precedent or overlap, write nothing about it.`;
+If there is no contradiction, precedent or overlap, write nothing about it.
+
+${CHAIN_CONTEXT}
+- Under Dependencies, list the chain's predecessors and successors in chain order, each with its status.
+- If a predecessor is neither completed nor withdrawn, add one sentence in the same section naming it as a sequencing risk: this card may land before work it builds on. It is a warning, not a blocker — do not stop, and do not reshape the plan around it.`;
 
 /**
  * For the idea evaluation (one-shot Evaluate and the interactive ideation
@@ -52,5 +65,9 @@ If there is no contradiction, precedent or overlap, write nothing about it.`;
 export const PRIOR_DECISIONS_EVALUATION_RULE = `${PRIOR_DECISIONS_CHECK}
 - Duplicates: call \`search_cards\` once more with the same keywords and \`statuses: ["ideation", "backlog"]\`. Those cards are ideas, not decisions; mention one only when it describes the same idea.
 - Report what you found under \`## Related Cards\`, one line per card: its displayId, the kind (contradiction, precedent, duplicate or overlap, written in the output language), then what it decided or touches and why it matters here.
-If there is no contradiction, precedent, duplicate or overlap, leave \`## Related Cards\` out entirely.
-If the check was skipped because the tools were missing, leave \`## Related Cards\` out too, and do not explain why.`;
+
+${CHAIN_CONTEXT}
+- List the chain's predecessors and successors under \`## Related Cards\` too, in chain order, with the kind predecessor or successor (written in the output language) and each one's status. A chain member that is also a contradiction or an overlap gets one line, not two.
+
+If there is no contradiction, precedent, duplicate or overlap and the card is in no chain, leave \`## Related Cards\` out entirely.
+If the check was skipped because the tools were missing, \`## Related Cards\` holds only the chain lines — leave it out when there is no chain — and do not explain why.`;

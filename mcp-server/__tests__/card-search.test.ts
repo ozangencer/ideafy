@@ -267,9 +267,23 @@ test("the rule names both tools and stays silent when nothing is found", () => {
     assert.match(rule, /skip this whole check/);
     assert.match(rule, /never open the database \(`kanban\.db`, `sqlite3`\)/);
   }
-  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /skipped because the tools were missing, leave `## Related Cards` out/);
+  // A skipped check still reports the chain: it comes from get_card or the
+  // prompt, not from the missing tools (IDE-371).
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /skipped because the tools were missing, `## Related Cards` holds only the chain lines/);
   assert.match(PRIOR_DECISIONS_RULE, /write nothing about it/);
   assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /leave `## Related Cards` out/);
+});
+
+test("the chain rule reaches Dependencies in a plan and Related Cards in an evaluation", () => {
+  for (const rule of [PRIOR_DECISIONS_RULE, PRIOR_DECISIONS_EVALUATION_RULE]) {
+    assert.match(rule, /`chain` field/);
+    assert.match(rule, /applies even when the check above was skipped/);
+  }
+  assert.match(PRIOR_DECISIONS_RULE, /Under Dependencies, list the chain's predecessors and successors/);
+  assert.match(PRIOR_DECISIONS_RULE, /sequencing risk/);
+  assert.match(PRIOR_DECISIONS_RULE, /warning, not a blocker/);
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /kind predecessor or successor/);
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /and the card is in no chain, leave `## Related Cards` out entirely/);
 });
 
 test("get_card carries the rule on planning columns only", () => {

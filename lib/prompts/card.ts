@@ -6,6 +6,10 @@ import { buildVoicePrompt } from "./voice-style";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
 import { PRIOR_DECISIONS_EVALUATION_RULE } from "./prior-decisions";
+import type { ChainCardRef, ChainContext } from "@/lib/chain-order";
+
+/** A card's place in its chain, as the evaluate and ideation routes load it. */
+export type PromptChain = ChainContext & { groupCode: string; groupName: string };
 
 /**
  * Shared output schema for idea evaluation. Used by the one-shot evaluate
@@ -16,7 +20,7 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
 [One sentence: Strong Yes / Yes / Maybe / No / Strong No]
 
 ## Related Cards
-[Optional — only when an earlier card contradicts this idea, set a precedent for it, already describes the same idea, or open work overlaps it. One line per card: displayId, the kind (contradiction, precedent, duplicate or overlap), what it decided or touches, and why it matters here. Leave the whole section out otherwise.]
+[Optional — only when an earlier card contradicts this idea, set a precedent for it, already describes the same idea, or open work overlaps it, or when the card is in a chain. One line per card: displayId, the kind (contradiction, precedent, duplicate, overlap, predecessor or successor), what it decided or touches, and why it matters here. Chain predecessors and successors are listed in chain order with their status. Leave the whole section out otherwise.]
 
 ## Strengths
 - Key strengths of the idea
@@ -52,6 +56,33 @@ ${PRIOR_DECISIONS_EVALUATION_RULE}
 `;
 }
 
+function chainLine(ref: ChainCardRef): string {
+  const name = ref.displayId ? `${ref.displayId} · ${ref.title}` : `${ref.title} (draft, no displayId)`;
+  return `${name} — ${ref.status}`;
+}
+
+/**
+ * The card's chain, spelled out. Evaluate is one-shot and never calls
+ * get_card, so its `chain` field would never reach the model; the route loads
+ * it and it travels in the prompt instead. Independent of the project: a
+ * chain is there to be read whether or not the MCP check can run.
+ */
+function buildChainSection(chain: PromptChain | null | undefined): string {
+  if (!chain) return "";
+  const lines = [
+    ...chain.predecessors.map((ref, i) => `${i + 1}. ${chainLine(ref)}`),
+    `${chain.position}. (this card)`,
+    ...chain.successors.map((ref, i) => `${chain.position + i + 1}. ${chainLine(ref)}`),
+  ];
+  const next = chain.next ? chainLine(chain.next) : "none — every member is completed or withdrawn";
+  return `
+## Chain
+This card is ${chain.position}/${chain.total} in chain ${chain.groupCode} (${chain.groupName}), in chain order:
+${lines.join("\n")}
+Next open card in the chain: ${next}
+`;
+}
+
 /**
  * Evaluate prompt for cards entering the Ideation column.
  * Asks Claude to act as a Product Architect and return a structured verdict.
@@ -67,6 +98,7 @@ export function buildEvaluatePrompt(
   narrativePath: string | null | undefined,
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
+  chain?: PromptChain | null,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
@@ -93,7 +125,7 @@ ${description}
 
 ## Evaluation Lenses
 YAGNI · scope creep risk · scalability · technical feasibility · alignment with vision · implementation complexity.
-${priorDecisions}
+${buildChainSection(chain)}${priorDecisions}
 ${voicePrompt}
 
 ## Output Format
@@ -168,6 +200,7 @@ export function buildIdeationPrompt(
   },
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
+  chain?: PromptChain | null,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
@@ -188,7 +221,7 @@ ${voicePrompt}
 ${description}
 
 Card ID: ${card.id}
-${buildPriorDecisionsSection(card)}
+${buildChainSection(chain)}${buildPriorDecisionsSection(card)}
 ## Available MCP Tools
 - mcp__ideafy__get_card · mcp__ideafy__update_card · mcp__ideafy__save_opinion · mcp__ideafy__search_cards · mcp__ideafy__list_open_work
 
