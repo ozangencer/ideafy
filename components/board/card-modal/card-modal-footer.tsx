@@ -57,8 +57,10 @@ export function CardModalFooter({
   const completed = formatDateShort(completedAt);
   const createdDays = daysSince(createdAt);
 
+  // pr-3 matches the chat input's p-3, so the last phase button ends on the
+  // same line as the Send button above it.
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-t border-border shrink-0">
+    <div className="flex items-center justify-between pl-6 pr-3 py-4 border-t border-border shrink-0">
       <div className="flex gap-2">
         {deleteSlot ?? (
           <AlertDialog>
@@ -106,30 +108,53 @@ export function CardModalFooter({
           "Last touched" is deliberate: updatedAt moves on any write, including
           starting a dev server or merging, so calling it "last edited" would
           overstate what it knows. */}
-      {!isDraftMode && created && (
-        <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground min-w-0 px-4">
-          <span className="truncate">
-            Created {created}
-            {createdDays !== null && createdDays >= 31 && ` (${formatAgeLong(createdDays)})`}
+      {!isDraftMode && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 px-4">
+          {created && (
+            <div className="hidden sm:flex items-center gap-2 min-w-0">
+              <span className="truncate">
+                Created {created}
+                {createdDays !== null && createdDays >= 31 && ` (${formatAgeLong(createdDays)})`}
+              </span>
+              {touched && touched !== created && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="truncate">Last touched {touched}</span>
+                </>
+              )}
+              {completed && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="truncate">Completed {completed}</span>
+                </>
+              )}
+            </div>
+          )}
+          {/* The save status sits here, not beside the phase buttons. Next to
+              them it either shoved them ~70px left while typing (a click aimed
+              at Terminal landed on Implement) or, as a fixed reserved slot,
+              left a dead gap at the right edge. Fixed width so the dates
+              don't jump either. */}
+          <span className="flex w-[5.5rem] shrink-0 items-center" aria-live="polite">
+            {saveStatus === "saving" && (
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Saving...
+              </span>
+            )}
+            {saveStatus === "saved" && (
+              <span className="flex items-center gap-2 text-green-500">
+                <Check className="h-3.5 w-3.5" />
+                Saved
+              </span>
+            )}
           </span>
-          {touched && touched !== created && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="truncate">Last touched {touched}</span>
-            </>
-          )}
-          {completed && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="truncate">Completed {completed}</span>
-            </>
-          )}
         </div>
       )}
 
       <div className="flex gap-2 items-center">
         {rightActionsSlot}
-        {isDraftMode ? (
+        {isDraftMode && (
           <>
             <Button variant="outline" onClick={onCancel}>
               Cancel
@@ -138,24 +163,6 @@ export function CardModalFooter({
               Create Card
             </Button>
           </>
-        ) : (
-          // The slot is always there at a fixed width. Without it the phase
-          // buttons jumped ~70px left while typing, and a click aimed at the
-          // Terminal icon could land on Implement (Autonomous).
-          <span className="flex w-[5.5rem] shrink-0 items-center" aria-live="polite">
-            {saveStatus === "saving" && (
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Saving...
-              </span>
-            )}
-            {saveStatus === "saved" && (
-              <span className="flex items-center gap-2 text-sm text-green-500">
-                <Check className="h-4 w-4" />
-                Saved
-              </span>
-            )}
-          </span>
         )}
       </div>
     </div>
