@@ -52,7 +52,12 @@ export function getPhaseLabels(
   mode: ProjectMode = "development"
 ): { play: string; terminal: string } {
   // A Work card is written, not built: the same session, named for what it does.
+  // Its terminal does the work even before a plan exists, so planning's
+  // interactive button says so; the autonomous one still only plans.
   if (mode === "work") {
+    if (phase === "planning") {
+      return { play: "Plan Task (Autonomous)", terminal: "Work on it (Interactive)" };
+    }
     if (phase === "implementation") {
       return { play: "Implement (Autonomous)", terminal: "Work on it (Interactive)" };
     }

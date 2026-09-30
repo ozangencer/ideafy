@@ -1,10 +1,12 @@
-import type { Voice } from "@/lib/types";
+import type { ProjectMode, Voice } from "@/lib/types";
 import { buildVoicePrompt } from "@/lib/prompts/voice-style";
 
 export interface EnrichPromptInput {
   currentValue: string;
   /** Project voice. Colors the register; the four sections below are fixed. */
   voice?: Voice;
+  /** Project mode. A Work project gets the single Work tone instead of a voice. */
+  mode?: ProjectMode;
   projectMd: string | null;
   memoryMd: string | null;
   projectFileLabel: string;
@@ -15,6 +17,7 @@ export function buildEnrichPrompt(input: EnrichPromptInput): string {
   const {
     currentValue,
     voice,
+    mode,
     projectMd,
     memoryMd,
     projectFileLabel,
@@ -62,7 +65,7 @@ export function buildEnrichPrompt(input: EnrichPromptInput): string {
   // touching the four sections above. This text lands on the card beside the
   // plan and the opinion, both of which already speak in this voice; leaving
   // enrichment out would put three tones in one modal.
-  sections.push("", buildVoicePrompt(voice, "description"));
+  sections.push("", buildVoicePrompt(voice, "description", { mode }));
 
   return sections.join("\n");
 }

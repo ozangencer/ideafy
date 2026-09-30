@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildTestTogetherPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
 import { launchTerminal, buildTerminalSession } from "@/lib/terminal-launcher";
@@ -63,7 +64,12 @@ export async function POST(
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
 
-  let prompt = buildTestTogetherPrompt(card, displayId, project?.voice as never);
+  let prompt = buildTestTogetherPrompt(
+    card,
+    displayId,
+    project?.voice as never,
+    normalizeProjectMode(project?.mode),
+  );
 
   // Extract and save images for CLI context
   const savedImages = saveCardImagesToTemp(card.id, card);

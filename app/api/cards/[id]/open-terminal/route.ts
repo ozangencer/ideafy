@@ -13,6 +13,7 @@ import { shouldUseWorktree } from "@/lib/workspace";
 import { launchTerminal, getTerminalPreference, buildTerminalSession } from "@/lib/terminal-launcher";
 import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
 import { PRIOR_DECISIONS_RULE } from "@/lib/prompts/prior-decisions";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 type Phase = "planning" | "implementation" | "retest";
 
 function stripHtml(html: string): string {
@@ -99,6 +100,44 @@ ${PRIOR_DECISIONS_RULE}
 5. Analyze this task and create a detailed implementation plan
 6. Do NOT implement yet - only plan`;
   }
+}
+
+// A Work card is written, not built, so its session does the work instead of
+// planning code: no branch, no plan mode, the output lands in the project
+// folder. Until the card has a plan the session works from the description and
+// the AI Opinion. IDE-337 replaces this with Generate's interactive version.
+function buildWorkPrompt(phase: Phase, ctx: PromptContext): string {
+  const { card, displayId } = ctx;
+  const title = stripHtml(card.title);
+  const taskHeader = displayId ? `[${displayId}] ${title}` : title;
+  const hasPlan = !!card.solutionSummary && stripHtml(card.solutionSummary) !== "";
+
+  if (phase === "retest") {
+    return `# ${taskHeader}
+
+## Context
+The user reviewed this card's output and wants changes.
+
+## Instructions
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}" — outputPaths lists the files the work already produced
+2. Wait for the user to describe what needs to change
+3. Revise the output in the project folder, keeping what already holds
+4. Record any new file with mcp__ideafy__save_output
+5. When done, write a short summary of what changed and update the review checklist using mcp__ideafy__save_tests`;
+  }
+
+  return `# ${taskHeader}
+
+## Instructions
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
+2. ${hasPlan
+    ? "Follow the plan in the solutionSummary field"
+    : "Work from the description field, and from the aiOpinion field when the card has one — its recommendations are the approach the user accepted"}
+3. Check the work against the project's other cards:
+${PRIOR_DECISIONS_RULE}
+4. Do the work with the user — ask what you need to know, then produce the output (a document, a research note, a mail draft, whatever the card asks for) in the project folder
+5. Record each file you produce with mcp__ideafy__save_output
+6. When the output is ready, write a short summary and save a review checklist using mcp__ideafy__save_tests`;
 }
 
 function getNewStatus(phase: Phase, currentStatus: Status): Status {
@@ -264,11 +303,9 @@ export async function POST(
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
 
-  const prompt = buildPrompt(phase, {
-    card,
-    displayId,
-    gitBranchName,
-  });
+  const isWork = normalizeProjectMode(project?.mode) === "work";
+  const promptContext = { card, displayId, gitBranchName };
+  const prompt = isWork ? buildWorkPrompt(phase, promptContext) : buildPrompt(phase, promptContext);
 
   try {
     // Update card status in database BEFORE opening terminal
@@ -286,7 +323,8 @@ export async function POST(
     const provider = await import("@/lib/platform/active").then(m => m.getProviderForCard(card));
 
     // Build the terminal command using the active provider
-    const permissionMode = (phase === "planning" && provider.capabilities.supportsPermissionModes) ? "plan" : null;
+    // Plan mode would stop a Work session from writing the output it opened for.
+    const permissionMode = (phase === "planning" && !isWork && provider.capabilities.supportsPermissionModes) ? "plan" : null;
     const invocation = provider.buildInteractiveCommand(
       { prompt, cardId: id, permissionMode },
       actualWorkingDir

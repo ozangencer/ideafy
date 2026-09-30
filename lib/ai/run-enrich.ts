@@ -4,6 +4,7 @@ import { db, schema } from "@/lib/db";
 import { getProviderForCard } from "@/lib/platform/active";
 import { runAutonomousCli } from "@/lib/autonomous-run/run-autonomous-cli";
 import { buildEnrichPrompt } from "@/lib/ai/enrich-prompt";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import {
   readProviderContext,
   getProjectFileLabel,
@@ -70,6 +71,7 @@ export async function runEnrich(input: RunEnrichInput): Promise<EnrichResult> {
 
   const prompt = buildEnrichPrompt({
     voice: project?.voice as never,
+    mode: normalizeProjectMode(project?.mode),
     currentValue: plain,
     projectMd: ctx.projectMd,
     memoryMd: ctx.memoryMd,

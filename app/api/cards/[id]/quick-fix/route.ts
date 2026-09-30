@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import { marked } from "marked";
 import type { Status } from "@/lib/types";
@@ -171,7 +172,12 @@ export async function POST(
   }
 
   try {
-    let prompt = buildQuickFixPrompt(card, project?.voice as never, getProviderForCard(card).id);
+    let prompt = buildQuickFixPrompt(
+      card,
+      project?.voice as never,
+      getProviderForCard(card).id,
+      normalizeProjectMode(project?.mode),
+    );
 
     // Extract and save images for CLI context
     const savedImages = saveCardImagesToTemp(card.id, card);

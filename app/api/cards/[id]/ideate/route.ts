@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import { loadCardChain } from "@/lib/card-chain";
 import type { TerminalApp } from "@/lib/types";
 import { stripHtml, buildIdeationPrompt, saveCardImagesToTemp, generateImageReferences } from "@/lib/prompts";
@@ -61,7 +62,13 @@ export async function POST(
   const { getProviderForCard } = await import("@/lib/platform/active");
   const provider = getProviderForCard(card);
 
-  let prompt = buildIdeationPrompt(card, project?.voice as never, provider.id, loadCardChain(card));
+  let prompt = buildIdeationPrompt(
+    card,
+    project?.voice as never,
+    provider.id,
+    loadCardChain(card),
+    normalizeProjectMode(project?.mode),
+  );
 
   // Extract and save images for CLI context
   const savedImages = saveCardImagesToTemp(card.id, card);

@@ -1,4 +1,4 @@
-import type { Voice } from "@/lib/types";
+import type { ProjectMode, Voice } from "@/lib/types";
 import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
 import { detectCardLanguage } from "./test-style";
@@ -7,20 +7,52 @@ import { buildVoicePrompt } from "./voice-style";
 /**
  * Interactive QA partner prompt: walks the user through manual test scenarios
  * one by one, helps debug failures, and updates/moves the card when done.
+ *
+ * On a Work card the same walk reviews an output instead of testing a feature:
+ * the checklist is a review checklist, a failed item is fixed in the output,
+ * and the columns carry their Work names.
  */
 export function buildTestTogetherPrompt(
   card: { id: string; title: string; testScenarios: string; description?: string },
   displayId: string | null,
   voice: Voice = DEFAULT_VOICE,
+  mode?: ProjectMode,
 ): string {
+  const isWork = mode === "work";
   const title = stripHtml(card.title);
   const scenarios = stripHtml(card.testScenarios);
   const taskHeader = displayId ? `[${displayId}] ${title}` : title;
   const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
+    mode,
   });
 
-  return `You are a QA Partner. Let's test "${taskHeader}" together step by step.
+  const intro = isWork
+    ? `You are a Review Partner. Let's review the output of "${taskHeader}" together step by step.
+
+## Instructions
+1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
+2. Review the testScenarios field - it holds the review checklist; outputPaths lists the files the work produced in the project folder
+
+## Review Checklist Overview
+${scenarios}
+
+## Your Role
+- Go through each checklist item ONE BY ONE
+- For each item, say which file or draft to open and what to check in it
+- Ask the user to check it and report the result
+- If an item falls short, help fix the output right there
+- Record results as you go: passed = [x], failed or skipped = [ ]
+
+## Workflow
+For each checklist item:
+1. Present the item clearly
+2. Point the user at the part of the output it is about
+3. Ask: "Does this hold? (yes/no)"
+4. If NO → Work out what is missing and revise the output in the project folder
+5. If YES → Move to the next item
+`
+    : `You are a QA Partner. Let's test "${taskHeader}" together step by step.
 
 ## Instructions
 1. First, read the card details using: mcp__ideafy__get_card with id: "${card.id}"
@@ -43,7 +75,9 @@ For each test scenario:
 3. Ask: "Did this test pass? (yes/no)"
 4. If NO → Help debug, suggest fixes, run commands if needed
 5. If YES → Move to the next test
+`;
 
+  return `${intro}
 ## Recording Results
 
 Write results back with \`save_tests\`, not \`update_card\` — \`update_card\`
@@ -73,7 +107,7 @@ mcp__ideafy__move_card({ id: "${card.id}", status: "completed" })
 ### If SOME tests failed:
 1. Make sure the failures are saved as unchecked via \`save_tests\`, and say
    plainly which ones failed and what you observed.
-2. Ask the user: "Should we move this back to In Progress for fixes?"
+2. Ask the user: "${isWork ? "Should we move this back to In Progress for revisions?" : "Should we move this back to In Progress for fixes?"}"
 3. If yes:
 \`\`\`
 mcp__ideafy__move_card({ id: "${card.id}", status: "progress" })
@@ -88,7 +122,9 @@ Card ID: ${card.id}
 
 ${styleContract}
 
-Let's start testing! I'll read the card first and then walk you through each test scenario.`;
+${isWork
+    ? "Let's start the review! I'll read the card first and then walk you through each checklist item."
+    : "Let's start testing! I'll read the card first and then walk you through each test scenario."}`;
 }
 
 /**

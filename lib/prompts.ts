@@ -35,7 +35,7 @@ import { detectCardLanguage } from "./prompts/test-style";
 import { buildVoicePrompt } from "./prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "./prompts/opinion";
 import { PRIOR_DECISIONS_RULE } from "./prompts/prior-decisions";
-import { DEFAULT_VOICE, type Voice } from "./types";
+import { DEFAULT_VOICE, type ProjectMode, type Voice } from "./types";
 
 const NO_SAVE_TOOLS_RULE =
   "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
@@ -124,8 +124,12 @@ export function buildPhasePrompt(
   // Whether the run's cwd is a feature-branch worktree. Defaults to false:
   // flow-mode wording ("commit where you are") is harmless inside a worktree,
   // while worktree wording on main is what sent an agent off to branch itself.
-  inWorktree = false
+  inWorktree = false,
+  // The card's project mode. Work only reaches planning and verify (it has no
+  // implementation run), so those two phases and the voice are what change.
+  mode: ProjectMode = "development"
 ): string {
+  const isWork = mode === "work";
   const title = stripHtml(card.title);
   const commitRef = displayId ?? null;
   const cardLanguage = detectCardLanguage({
@@ -138,7 +142,18 @@ export function buildPhasePrompt(
       // The four headings and the two markers are the plan's contract with the
       // board (see RUN_OUTPUT_CONTRACTS.planning) — voice colours the prose
       // under them and nothing else.
-      const planVoice = buildVoicePrompt(voice, "plan");
+      const planVoice = buildVoicePrompt(voice, "plan", { mode });
+      // Only the two markers are the board's contract; the headings are there
+      // to shape the plan, and a Work card has no files to modify.
+      const planHeadings = isWork
+        ? `- Output (what gets produced and the name it is saved under in the project folder)
+- Steps
+- Sources and Inputs
+- Open Questions`
+        : `- Files to Modify
+- Implementation Steps
+- Edge Cases
+- Dependencies`;
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Review title, description, and any existing notes.
@@ -147,13 +162,10 @@ ${AI_OPINION_PLANNING_RULE}
 
 ${PRIOR_DECISIONS_RULE}
 
-Task: Create implementation plan for "${title}".
+Task: Create ${isWork ? "a work plan" : "implementation plan"} for "${title}".
 
 Plan format:
-- Files to Modify
-- Implementation Steps
-- Edge Cases
-- Dependencies
+${planHeadings}
 
 Must include at the end:
 [COMPLEXITY: trivial/low/medium/high/very_high]
@@ -172,7 +184,7 @@ ${ONE_SHOT_RUN_RULE}`;
       // buildVoicePrompt(..., "tests") returns the shared style contract with
       // the voice persona and its tests accent appended, so the manual-tester
       // format still wins and voice only colours the prose around each step.
-      const styleContract = buildVoicePrompt(voice, "tests", { language: cardLanguage });
+      const styleContract = buildVoicePrompt(voice, "tests", { language: cardLanguage, mode });
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Follow the approved plan in solutionSummary.
@@ -202,7 +214,7 @@ ${ONE_SHOT_RUN_RULE}`;
       // Retest authors a fresh checklist exactly like implementation does, so
       // it needs the same style contract. It went without one for as long as
       // it existed, which is why its output never carried a core group.
-      const styleContract = buildVoicePrompt(voice, "tests", { language: cardLanguage });
+      const styleContract = buildVoicePrompt(voice, "tests", { language: cardLanguage, mode });
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Review previous implementation and test scenarios.
@@ -232,7 +244,7 @@ ${ONE_SHOT_RUN_RULE}`;
     case "verify":
       return `Ideafy: ${card.id}
 
-Read card via MCP (mcp__ideafy__get_card). The card is in Human Test: its checklist is waiting for a person to walk it.
+Read card via MCP (mcp__ideafy__get_card). The card is in ${isWork ? "In Review" : "Human Test"}: its checklist is waiting for a person to walk it.
 
 Task: pre-verify the core flow of "${title}".
 
@@ -242,7 +254,9 @@ Run ONLY the items under the checklist's first group — \`## Core flow\` (Engli
 
 - Do NOT run, tick, or edit items in any later group (\`## Edge cases\`, \`## Regression\`, and so on).
 - If the checklist has no \`## Core flow\` / \`## Temel akış\` group, tick nothing and say so — without that heading you cannot tell which items are essential, and guessing would hand back a checklist that looks verified and is not.
-- Verify by actually exercising the code — read it, run it, run the build or the test the step names. Reasoning that a step "should" pass is not verification.
+- ${isWork
+  ? "Verify by actually checking the output — open the file the step names in the project folder (get_card lists them as outputPaths) and confirm what the step asks. Reasoning that a step \"should\" pass is not verification."
+  : "Verify by actually exercising the code — read it, run it, run the build or the test the step names. Reasoning that a step \"should\" pass is not verification."}
 
 ## FINAL response format
 

@@ -7,8 +7,9 @@ import { v4 as uuidv4 } from "uuid";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import type { SectionType, ConversationMessage, Voice } from "@/lib/types";
-import { DEFAULT_VOICE } from "@/lib/types";
+import type { SectionType, ConversationMessage, ProjectMode, Voice } from "@/lib/types";
+import { DEFAULT_PROJECT_MODE, DEFAULT_VOICE } from "@/lib/types";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import {
   registerProcess,
   completeProcess,
@@ -113,6 +114,7 @@ export async function POST(
   let projectNarrativePath: string | null = null;
   let projectForSession: { idPrefix: string } | null = null;
   let projectVoice: Voice = DEFAULT_VOICE;
+  let projectMode: ProjectMode = DEFAULT_PROJECT_MODE;
 
   if (card.projectId) {
     const [project] = await db.select().from(projects).where(eq(projects.id, card.projectId));
@@ -123,6 +125,7 @@ export async function POST(
       projectNarrativePath = project.narrativePath;
       projectForSession = project;
       projectVoice = (project.voice as Voice) ?? DEFAULT_VOICE;
+      projectMode = normalizeProjectMode(project.mode);
     }
   }
 
@@ -224,6 +227,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
     aiOpinion: stripHtml(card.aiOpinion || ""),
     testScenariosHtml: card.testScenarios || "",
     voice: projectVoice,
+    mode: projectMode,
     provider: provider.id,
     artifactDir: getCardImageDir(cardId),
   };

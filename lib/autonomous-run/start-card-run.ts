@@ -12,7 +12,7 @@ import {
   generateImageReferences,
   type Phase,
 } from "@/lib/prompts";
-import { normalizeVoice } from "@/lib/project-serialize";
+import { normalizeProjectMode, normalizeVoice } from "@/lib/project-serialize";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
 import { getProcess } from "@/lib/process-registry";
 import { describeRunError } from "@/lib/run-error";
@@ -165,6 +165,7 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
     promptDisplayId,
     normalizeVoice(project?.voice),
     actualWorkingDir !== workingDir,
+    normalizeProjectMode(project?.mode),
   );
 
   // Extract and save images for CLI context

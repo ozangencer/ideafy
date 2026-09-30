@@ -1,4 +1,4 @@
-import type { AiPlatform, Voice } from "@/lib/types";
+import type { AiPlatform, ProjectMode, Voice } from "@/lib/types";
 import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
 import { detectCardLanguage } from "./test-style";
@@ -99,19 +99,26 @@ export function buildEvaluatePrompt(
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
   chain?: PromptChain | null,
+  mode?: ProjectMode,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
   const description = markUntrusted(stripHtml(card.description), external);
+  const isWork = mode === "work";
 
   const narrativeRef = narrativePath
     ? `@${narrativePath}`
     : "@docs/product-narrative.md";
 
-  const voicePrompt = buildVoicePrompt(voice, "opinion");
+  const voicePrompt = buildVoicePrompt(voice, "opinion", { mode });
   const priorDecisions = buildPriorDecisionsSection(card);
+  // A Work card has no system to scale or code to keep simple; it is judged on
+  // whether it is worth doing and what it takes.
+  const lenses = isWork
+    ? "worth doing now · scope creep risk · inputs and sources it needs · effort · alignment with the project's goals."
+    : "YAGNI · scope creep risk · scalability · technical feasibility · alignment with vision · implementation complexity.";
 
-  return `You are a Product Architect. Evaluate this idea — be brutally honest, point out both good and bad.
+  return `You are a ${isWork ? "seasoned consultant" : "Product Architect"}. Evaluate this idea — be brutally honest, point out both good and bad.
 
 ## Context Files (read if they exist)
 - ${narrativeRef} (project vision & scope)
@@ -124,7 +131,7 @@ export function buildEvaluatePrompt(
 ${description}
 
 ## Evaluation Lenses
-YAGNI · scope creep risk · scalability · technical feasibility · alignment with vision · implementation complexity.
+${lenses}
 ${buildChainSection(chain)}${priorDecisions}
 ${voicePrompt}
 
@@ -142,14 +149,16 @@ export function buildQuickFixPrompt(
   card: { title: string; description: string; externallyAuthored?: boolean },
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
+  mode?: ProjectMode,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
   const description = markUntrusted(stripHtml(card.description), external);
   const styleContract = buildVoicePrompt(voice, "tests", {
     language: detectCardLanguage({ title: card.title, description: card.description }),
+    mode,
   });
-  const summaryVoice = buildVoicePrompt(voice, "quick_fix");
+  const summaryVoice = buildVoicePrompt(voice, "quick_fix", { mode });
 
   return `You are a senior developer. Fix this bug quickly and efficiently.
 
@@ -201,11 +210,12 @@ export function buildIdeationPrompt(
   voice: Voice = DEFAULT_VOICE,
   provider: AiPlatform,
   chain?: PromptChain | null,
+  mode?: ProjectMode,
 ): string {
   const external = card.externallyAuthored === true;
   const title = markUntrustedInline(stripHtml(card.title), external);
   const description = markUntrusted(stripHtml(card.description), external);
-  const voicePrompt = buildVoicePrompt(voice, "chat");
+  const voicePrompt = buildVoicePrompt(voice, "chat", { mode });
 
   return `You are a Product Strategist. Brainstorm and refine this idea with the user — ask probing questions, challenge assumptions (YAGNI, scope creep), explore alternatives, weigh feasibility and complexity. Be honest but collaborative.
 

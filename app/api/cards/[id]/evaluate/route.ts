@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { normalizeProjectMode } from "@/lib/project-serialize";
 import { loadCardChain } from "@/lib/card-chain";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import { marked } from "marked";
@@ -95,6 +96,7 @@ export async function POST(
       project?.voice as never,
       getProviderForCard(card).id,
       loadCardChain(card),
+      normalizeProjectMode(project?.mode),
     );
 
     console.log(`[Evaluate] Prompt length: ${prompt.length} chars`);
