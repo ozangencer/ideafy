@@ -19,7 +19,7 @@ import { UnifiedMention, CardMention, DocumentMention, ArtifactMention, Estimate
 import { createUnifiedSuggestion, createCardSuggestion, createDocumentSuggestion } from "@/lib/suggestion";
 import { getDisplayId } from "@/lib/types";
 import { buildDroppedFilePathText, getDroppedEditorFiles } from "@/lib/dropped-file-paths";
-import { openCardArtifact } from "@/lib/open-path";
+import { openArtifactChip } from "@/lib/open-path";
 import { useToast } from "@/hooks/use-toast";
 import tippy, { Instance } from "tippy.js";
 
@@ -39,39 +39,6 @@ interface MarkdownEditorProps {
   /** Card whose content this is. Artifact and document chips open through it. */
   cardId?: string;
   preferSelectionOnDrop?: boolean;
-}
-
-type ToastFn = ReturnType<typeof useToast>["toast"];
-
-/**
- * Open a file chip in its default app. The click never navigates the window:
- * inside Electron a `file://` navigation would replace the whole board.
- */
-export async function openArtifactChip(
-  cardId: string | undefined,
-  filePath: string,
-  toast: ToastFn,
-): Promise<void> {
-  if (!cardId || cardId.startsWith("draft-")) {
-    toast({
-      title: "Couldn't open file",
-      description: "Save the card first, then open its files.",
-      variant: "destructive",
-    });
-    return;
-  }
-  try {
-    const error = await openCardArtifact(cardId, filePath);
-    if (error) {
-      toast({ title: "Couldn't open file", description: `${error}: ${filePath}`, variant: "destructive" });
-    }
-  } catch (err) {
-    toast({
-      title: "Couldn't open file",
-      description: err instanceof Error ? err.message : "Unknown error",
-      variant: "destructive",
-    });
-  }
 }
 
 export function MarkdownEditor({

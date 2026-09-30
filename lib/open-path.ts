@@ -2,6 +2,8 @@
 // returns "" on success and an error message otherwise, matching
 // Electron's shell.openPath contract.
 
+import type { useToast } from "@/hooks/use-toast";
+
 type ElectronOpenAPI = {
   openPath?: (filePath: string) => Promise<string>;
   revealPath?: (filePath: string) => Promise<string>;
@@ -58,4 +60,37 @@ export async function openCardArtifact(cardId: string, filePath: string): Promis
     body: JSON.stringify({ path: filePath }),
   });
   return errorFrom(res);
+}
+
+type ToastFn = ReturnType<typeof useToast>["toast"];
+
+/**
+ * Open a file chip in its default app. The click never navigates the window:
+ * inside Electron a `file://` navigation would replace the whole board.
+ */
+export async function openArtifactChip(
+  cardId: string | undefined,
+  filePath: string,
+  toast: ToastFn,
+): Promise<void> {
+  if (!cardId || cardId.startsWith("draft-")) {
+    toast({
+      title: "Couldn't open file",
+      description: "Save the card first, then open its files.",
+      variant: "destructive",
+    });
+    return;
+  }
+  try {
+    const error = await openCardArtifact(cardId, filePath);
+    if (error) {
+      toast({ title: "Couldn't open file", description: `${error}: ${filePath}`, variant: "destructive" });
+    }
+  } catch (err) {
+    toast({
+      title: "Couldn't open file",
+      description: err instanceof Error ? err.message : "Unknown error",
+      variant: "destructive",
+    });
+  }
 }

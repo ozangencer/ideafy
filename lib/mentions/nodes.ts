@@ -5,7 +5,7 @@ import { MentionItem, UnifiedMentionItem } from "@/components/ui/mention-popup";
 import { CardMentionItem } from "@/components/ui/card-mention-popup";
 import { DocumentMentionItem } from "@/components/ui/document-mention-popup";
 import { UnifiedItemType } from "@/lib/types";
-import { artifactBasename, artifactKind, fileUrlToPath } from "@/lib/artifact-url";
+import { artifactBasename, artifactKind, fileUrlToPath, localPathFromText } from "@/lib/artifact-url";
 import {
   backspaceMentionShortcut,
   boolDataAttr,
@@ -356,6 +356,18 @@ export const ArtifactMention = Node.create({
           const path = fileUrlToPath(element.getAttribute("href"));
           if (!path) return false;
           return { path, name: artifactDisplayName(element.textContent, path) };
+        },
+      },
+      // A backticked file path (`<code>/Users/…/mockup.html</code>`) is how
+      // Claude usually names the file; beat the Code mark and make it a chip.
+      {
+        tag: "code",
+        priority: 60,
+        getAttrs: (element: HTMLElement) => {
+          if (element.closest("pre")) return false;
+          const path = localPathFromText(element.textContent);
+          if (!path) return false;
+          return { path, name: artifactBasename(path) };
         },
       },
     ];

@@ -30,6 +30,17 @@ export function pathToFileUrl(absolutePath: string): string {
   return `file://${absolutePath.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+// Text that names a local file: an absolute path under a home, temp or volume
+// folder, or `~/…`. Route-like strings such as `/api/open-file` do not match.
+const LOCAL_PATH_RE = /^(~\/|\/(Users|home|tmp|private|var\/folders|Volumes)\/)\S/;
+
+/** The path, trimmed, when `text` is a single-line local file path; otherwise null. */
+export function localPathFromText(text: string | null | undefined): string | null {
+  if (!text || text.includes("\n")) return null;
+  const trimmed = text.trim();
+  return LOCAL_PATH_RE.test(trimmed) ? trimmed : null;
+}
+
 export function artifactBasename(absolutePath: string): string {
   const parts = absolutePath.split("/").filter(Boolean);
   return parts[parts.length - 1] || absolutePath;
@@ -117,4 +128,36 @@ export function fileLinksToArtifactChips(html: string): string {
       return artifactChipHtml(absolute, name);
     },
   );
+}
+
+// Inline `<code>` only — a `<code>` right after `<pre …>` is a code block.
+const INLINE_CODE_RE = /(?<!<pre\b[^>]*>)<code\b[^>]*>([^<]*)<\/code>/gi;
+
+function replaceCodePaths(html: string, render: (path: string) => string | null): string {
+  if (!html || !html.includes("<code")) return html;
+  return html.replace(INLINE_CODE_RE, (tag, inner: string) => {
+    const path = localPathFromText(decodeEntities(inner));
+    return (path && render(path)) || tag;
+  });
+}
+
+/**
+ * Turn backticked file paths (`<code>/Users/…/mockup.html</code>`) into
+ * artifact chips. Claude often names the file that way instead of writing a
+ * `file://` link; the chip opens it on click. `~/…` stays as written — the
+ * open route expands it.
+ */
+export function codePathsToArtifactChips(html: string): string {
+  return replaceCodePaths(html, (path) => artifactChipHtml(path));
+}
+
+/**
+ * Apply-time variant: rewrite backticked file paths as `file://` links so the
+ * persist pass can copy them into the card folder like any other artifact.
+ */
+export function codePathsToFileLinks(html: string, homeDir: string): string {
+  return replaceCodePaths(html, (path) => {
+    const absolute = path.startsWith("~/") ? `${homeDir}/${path.slice(2)}` : path;
+    return `<a href="${escapeHtml(pathToFileUrl(absolute))}">${escapeHtml(artifactBasename(absolute))}</a>`;
+  });
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import DOMPurify from "isomorphic-dompurify";
-import { MarkdownEditor, openArtifactChip } from "@/components/ui/markdown-editor";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { openArtifactChip } from "@/lib/open-path";
+import { codePathsToArtifactChips } from "@/lib/artifact-url";
 import { useToast } from "@/hooks/use-toast";
 import { SectionType, SECTION_CONFIG } from "@/lib/types";
 import { EnrichButton } from "./enrich-button";
@@ -61,7 +63,9 @@ export function SectionEditor({
     // DOMPurify default config preserves every tag/attr TipTap produces
     // (p, ul, li, table, img, code, blockquote, task-list classes …) while
     // stripping <script>, on* event handlers, and javascript: URLs.
-    const sanitized = value ? shapeTaskItemsForDisplay(DOMPurify.sanitize(value)) : "";
+    const sanitized = value
+      ? shapeTaskItemsForDisplay(codePathsToArtifactChips(DOMPurify.sanitize(value)))
+      : "";
     return (
       <div className="h-full flex flex-col p-4 overflow-hidden">
         <div

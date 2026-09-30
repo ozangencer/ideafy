@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import os from "os";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
@@ -14,6 +15,7 @@ import {
 import { recordApplyMessage } from "@/lib/activity-registry";
 import { persistArtifacts as persistArtifactFiles } from "@/lib/artifact-links";
 import { getCardImageDir } from "@/lib/prompts";
+import { codePathsToFileLinks } from "@/lib/artifact-url";
 
 type Field = "description" | "solutionSummary" | "aiOpinion" | "testScenarios";
 type Mode = "replace" | "append";
@@ -77,9 +79,12 @@ export async function POST(
 
   // An approved artifact (mockup, image, doc) linked as file://… is copied
   // out of /var/folders or /tmp into the card's own folder so the chip keeps
-  // opening after macOS cleans the temp dir.
-  const persistArtifacts = (html: string) =>
-    html.includes("file://") ? persistArtifactFiles(html, getCardImageDir(id)) : html;
+  // opening after macOS cleans the temp dir. A backticked path counts too —
+  // that is how Claude usually names the file.
+  const persistArtifacts = (html: string) => {
+    const linked = codePathsToFileLinks(html, os.homedir());
+    return linked.includes("file://") ? persistArtifactFiles(linked, getCardImageDir(id)) : linked;
+  };
 
   let nextHtml: string;
   let added: number | undefined;

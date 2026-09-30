@@ -3,6 +3,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { realpathSync, statSync } from "fs";
 import path from "path";
+import os from "os";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { getCardImageDir } from "@/lib/prompts";
@@ -77,8 +78,10 @@ export async function POST(
   const projectFolder = project?.folderPath || null;
 
   // Document chips store project-relative paths; artifacts are absolute.
-  const absolute = path.isAbsolute(rawPath)
-    ? rawPath
+  // Chat replies may write `~/…`.
+  const expanded = rawPath.startsWith("~/") ? path.join(os.homedir(), rawPath.slice(2)) : rawPath;
+  const absolute = path.isAbsolute(expanded)
+    ? expanded
     : projectFolder
       ? path.resolve(projectFolder, rawPath)
       : null;

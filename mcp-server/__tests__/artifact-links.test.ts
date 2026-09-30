@@ -13,7 +13,8 @@ function interop<T extends object>(ns: T): T {
 }
 
 const { persistArtifactLinks, persistArtifacts } = interop(linksNs);
-const { fileUrlToPath, pathToFileUrl, artifactHtmlToMarkdownLinks } = interop(urlNs);
+const { fileUrlToPath, pathToFileUrl, artifactHtmlToMarkdownLinks, codePathsToFileLinks, codePathsToArtifactChips } =
+  interop(urlNs);
 
 // IDE-369: an artifact approved in a tab chat is linked as file://… in the
 // applied content. Apply copies it out of the temp folder into the card's own
@@ -124,4 +125,34 @@ test("only absolute local file URLs resolve to a path", () => {
   assert.equal(fileUrlToPath("file://server/share/x"), null);
   assert.equal(fileUrlToPath("https://claude.ai/x"), null);
   assert.equal(pathToFileUrl("/tmp/a#b.html"), "file:///tmp/a%23b.html");
+});
+
+test("a backticked file path is persisted and stored as a chip like a file:// link", () => {
+  const { scratch, cardDir, cleanup } = makeTree();
+  try {
+    const source = join(scratch, "mini.html");
+    writeFileSync(source, "<h1>mini</h1>");
+    const html =
+      `<p>Dosya yolu: <code>${source}</code> ve <code>app/globals.css</code> ve <code>/api/open-file</code></p>` +
+      `<pre><code>${source}</code></pre>`;
+
+    const result = persistArtifacts(codePathsToFileLinks(html, "/home/me"), cardDir);
+
+    assert.deepEqual(readdirSync(cardDir), ["mini.html"]);
+    assert.ok(result.includes(`data-path="${join(cardDir, "mini.html")}"`));
+    assert.ok(result.includes("<code>app/globals.css</code>"), "relative paths stay code");
+    assert.ok(result.includes("<code>/api/open-file</code>"), "route-like code stays code");
+    assert.ok(result.includes(`<pre><code>${source}</code></pre>`), "code blocks stay code");
+  } finally {
+    cleanup();
+  }
+});
+
+test("~/ paths expand to the home folder at apply, and stay as written in the read-only view", () => {
+  const html = "<p><code>~/notes/a b.md</code></p>";
+  assert.equal(
+    codePathsToFileLinks(html, "/home/me"),
+    '<p><a href="file:///home/me/notes/a%20b.md">a b.md</a></p>',
+  );
+  assert.ok(codePathsToArtifactChips(html).includes('data-path="~/notes/a b.md"'));
 });
