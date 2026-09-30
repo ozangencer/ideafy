@@ -42,6 +42,11 @@ const COLUMN_LABEL_TO_STATUS: Record<string, string> = {
   ideation: "ideation",
   bugs: "bugs",
   completed: "completed",
+  // WORK_PHASE_INSTRUCTIONS sits inside the same slice and speaks in the Work
+  // column titles (lib/types.ts WORK_COLUMN_TITLES).
+  revisions: "bugs",
+  "in review": "test",
+  done: "completed",
 };
 
 /** The body of one `case "<tool>": { ... }` block in index.ts. */

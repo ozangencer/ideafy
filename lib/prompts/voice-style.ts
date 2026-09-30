@@ -10,8 +10,8 @@
  * doesn't strip the content, it just describes it in plainer language.
  */
 
-import type { Voice } from "@/lib/types";
-import { DEFAULT_VOICE } from "@/lib/types";
+import type { ProjectMode, Voice } from "../types";
+import { DEFAULT_VOICE } from "../types";
 import { buildTestStyleContract, detectCardLanguage } from "./test-style";
 
 export type VoiceSection =
@@ -108,6 +108,33 @@ const SECTION_ACCENTS: Record<VoiceSection, Partial<Record<Voice, string>>> = {
   },
 };
 
+// A Work project has no files or code to talk about, and the three personas
+// above differ only in how much of that they show — so on a Work card the axis
+// is gone and one fixed tone replaces all three. The project's stored voice is
+// left alone and comes back when the project returns to Development.
+//
+// The axis was not redefined as an audience (team / client / formal) for Work
+// on purpose: the email-tone skill and the Generate templates already decide
+// that, and a third place deciding it would disagree with the other two.
+const WORK_PERSONA = `## Voice: Work
+
+Write for someone doing knowledge work — documents, research, analysis, mail,
+planning — not code.
+- Plain prose. Lead with the result and the decision, then the reasoning.
+- No file paths, code terms, or spec bullets. When the output is a file, call
+  it by its name ("the kick-off minutes, kickoff-notlari.docx"), not its path.
+- One short paragraph per point beats a list of fragments.
+- Trade-offs and open questions get one sentence each.`;
+
+const WORK_SECTION_ACCENTS: Record<VoiceSection, string> = {
+  tests: `\n\n### Tests-tab accent\nThis is a review checklist for an output, not a feature: each step names the file or draft to open and what to check in it — facts, figures, tone, completeness.`,
+  plan: `\n\n### Plan accent\nPlan = what gets produced, from which sources, in which order, in plain prose. Name the deliverable (a document, a research note, a mail draft) and the name it will be saved under in the project folder.`,
+  opinion: `\n\n### Opinion accent\nJudge the work on whether it is worth doing now, what it needs as input, and what could make the output miss. Keep it to the decision and its reasons.`,
+  chat: `\n\n### Chat accent\nDefault tone: plain conversation about the work itself. No code or file-system talk unless the user brings it up.`,
+  quick_fix: `\n\n### Quick-fix accent\nHand back a short prose summary of what changed in the output and why.`,
+  description: `\n\n### Description accent\nWrite Expected Behavior as the output the card should end with — what it contains, who it is for, and what makes it done. No component, store or file names.`,
+};
+
 /**
  * Build the voice contract block to inject into a system prompt. Returns the
  * persona base + section accent. For the `tests` section, the IDE-175
@@ -117,10 +144,11 @@ const SECTION_ACCENTS: Record<VoiceSection, Partial<Record<Voice, string>>> = {
 export function buildVoicePrompt(
   voice: Voice = DEFAULT_VOICE,
   section: VoiceSection,
-  opts: { language?: "tr" | "en" } = {},
+  opts: { language?: "tr" | "en"; mode?: ProjectMode | null } = {},
 ): string {
-  const persona = PERSONA_BASE[voice] ?? PERSONA_BASE[DEFAULT_VOICE];
-  const accent = SECTION_ACCENTS[section]?.[voice] ?? "";
+  const isWork = opts.mode === "work";
+  const persona = isWork ? WORK_PERSONA : PERSONA_BASE[voice] ?? PERSONA_BASE[DEFAULT_VOICE];
+  const accent = isWork ? WORK_SECTION_ACCENTS[section] : SECTION_ACCENTS[section]?.[voice] ?? "";
 
   if (section === "tests") {
     const styleContract = buildTestStyleContract({ language: opts.language });
@@ -139,8 +167,10 @@ export function buildVoicePromptForCard(
   voice: Voice | undefined,
   section: VoiceSection,
   card: { title?: string | null; description?: string | null },
+  mode?: ProjectMode | null,
 ): string {
   return buildVoicePrompt(voice ?? DEFAULT_VOICE, section, {
     language: detectCardLanguage(card),
+    mode,
   });
 }
