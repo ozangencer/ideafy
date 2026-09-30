@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import Database from "better-sqlite3";
+import { openDatabase, type Db } from "../db.js";
 import {
   extractPlanFiles,
   foldText,
@@ -21,7 +21,7 @@ function interop<T extends object>(ns: T): T {
 const { PRIOR_DECISIONS_RULE, PRIOR_DECISIONS_EVALUATION_RULE } = interop(priorNs);
 
 function makeDb() {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`
     CREATE TABLE projects (id TEXT PRIMARY KEY, id_prefix TEXT, folder_path TEXT);
     CREATE TABLE cards (
@@ -61,7 +61,7 @@ type CardSeed = Partial<{
   branchStatus: string;
 }>;
 
-function addCard(db: Database.Database, id: string, c: CardSeed) {
+function addCard(db: Db, id: string, c: CardSeed) {
   db.prepare(
     `INSERT INTO cards (id, title, description, solution_summary, ai_opinion, status,
        project_id, task_number, git_worktree_path, git_worktree_status,

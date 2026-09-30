@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Db } from "./db.js";
 import { existsSync, realpathSync, statSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, relative, resolve, sep } from "path";
@@ -18,7 +18,7 @@ import { isAbsolute, relative, resolve, sep } from "path";
 
 export class OutputPathError extends Error {}
 
-const knownColumns = new WeakMap<Database.Database, Set<string>>();
+const knownColumns = new WeakMap<Db, Set<string>>();
 
 // Whether `table` has `column`, by PRAGMA. The plugin can run against a DB
 // the app has not migrated yet — the two update independently, in either
@@ -29,7 +29,7 @@ const knownColumns = new WeakMap<Database.Database, Set<string>>();
 // app updated while this server was already running is noticed on the next
 // attempt rather than at the next restart. table_info on one table costs
 // microseconds.
-export function hasColumn(db: Database.Database, table: string, column: string): boolean {
+export function hasColumn(db: Db, table: string, column: string): boolean {
   const key = `${table}.${column}`;
   let known = knownColumns.get(db);
   if (!known) {
@@ -133,7 +133,7 @@ export interface RecordOutputResult extends ResolvedOutputPath {
 // Validate `inputPath` against the card's project folder and append it to
 // the card's list, once. `cardId` must already be a resolved UUID.
 export function recordOutputPath(
-  db: Database.Database,
+  db: Db,
   cardId: string,
   inputPath: string
 ): RecordOutputResult {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
+import { openDatabase } from "../db.js";
 import { linkCardReferences, type CardResolver } from "../card-links.generated.js";
 import { linkCardsInHtml } from "../card-link-resolver.js";
 
@@ -45,7 +45,7 @@ test("only a card's first mention becomes a chip, a hand-typed repeat loses its 
 });
 
 test("the resolver prefers the card's own project when two share a prefix", () => {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`CREATE TABLE projects (id TEXT, id_prefix TEXT);
            CREATE TABLE cards (id TEXT, title TEXT, project_id TEXT, task_number INTEGER);
            INSERT INTO projects VALUES ('p1','IDE'),('p2','IDE'),('p3','INK');

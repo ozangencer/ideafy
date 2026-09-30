@@ -10,8 +10,8 @@ export interface McpInvocation {
 
 // How Claude Desktop / Gemini / Codex should spawn the Ideafy MCP server.
 // Dev runs the TypeScript source through tsx; packaged runs the compiled
-// JS under the bundled Electron Node so the better-sqlite3 binding (built
-// against the Electron ABI at pack time) matches at runtime.
+// JS under the bundled Electron Node, so the server needs no Node on PATH.
+// Both reach SQLite through the built-in node:sqlite (Node 22.5+).
 export function buildMcpInvocation(): McpInvocation {
   if (process.env.IDEAFY_PACKAGED === "1") {
     const electronExec = process.env.IDEAFY_ELECTRON_EXEC;

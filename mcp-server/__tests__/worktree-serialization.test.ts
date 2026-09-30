@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
+import { openDatabase, type Db } from "../db.js";
 import { normalizeUseWorktree } from "../serialize-card.js";
 
 // The SELECT list used by get_card in index.ts.
@@ -35,7 +35,7 @@ const LIST_COLUMNS = `
 `;
 
 function makeTestDb() {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`
     CREATE TABLE cards (
       id TEXT PRIMARY KEY,
@@ -60,7 +60,7 @@ function makeTestDb() {
 }
 
 function insertCard(
-  db: Database.Database,
+  db: Db,
   overrides: Partial<{
     id: string;
     title: string;
@@ -91,7 +91,7 @@ function insertCard(
   return row;
 }
 
-function selectOne(db: Database.Database, id: string) {
+function selectOne(db: Db, id: string) {
   const card = db
     .prepare(`SELECT ${CARD_COLUMNS} FROM cards WHERE id = ?`)
     .get(id) as Record<string, unknown>;
@@ -99,7 +99,7 @@ function selectOne(db: Database.Database, id: string) {
   return card;
 }
 
-function selectAll(db: Database.Database) {
+function selectAll(db: Db) {
   const rows = db.prepare(`SELECT ${LIST_COLUMNS} FROM cards ORDER BY id`)
     .all() as Array<Record<string, unknown>>;
   for (const row of rows) {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import Database from "better-sqlite3";
+import { openDatabase, type Db } from "../db.js";
 import {
   normalizeUseWorktree,
   serializeUseWorktreeForDb,
@@ -21,7 +21,7 @@ const FIELD_MAP: Record<string, string> = {
 };
 
 function makeDb() {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`
     CREATE TABLE cards (
       id TEXT PRIMARY KEY,
@@ -40,14 +40,14 @@ function makeDb() {
   return db;
 }
 
-function seedCard(db: Database.Database, useWorktree: number | null) {
+function seedCard(db: Db, useWorktree: number | null) {
   db.prepare(
     `INSERT INTO cards (id, title, status, use_worktree, created_at, updated_at)
      VALUES (?, ?, 'progress', ?, '2026-04-21T00:00:00Z', '2026-04-21T00:00:00Z')`
   ).run("c1", "Seed", useWorktree);
 }
 
-function readUseWorktree(db: Database.Database): number | null {
+function readUseWorktree(db: Db): number | null {
   const row = db
     .prepare(`SELECT use_worktree FROM cards WHERE id = ?`)
     .get("c1") as { use_worktree: number | null };
@@ -57,7 +57,7 @@ function readUseWorktree(db: Database.Database): number | null {
 // Replicates the update_card handler's SET builder (index.ts:560-596).
 // Keeping this in the test ensures any drift in the handler is caught.
 function applyUpdate(
-  db: Database.Database,
+  db: Db,
   updates: Record<string, unknown>
 ): void {
   const setClauses: string[] = ["updated_at = ?"];

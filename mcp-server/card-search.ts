@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { Db } from "./db.js";
 import { existsSync } from "fs";
 import {
   extractPlanFiles,
@@ -63,12 +63,12 @@ function snippetAround(text: string, at: number): string {
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`;
 }
 
-function hasColumn(db: Database.Database, table: string, column: string): boolean {
+function hasColumn(db: Db, table: string, column: string): boolean {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   return cols.some((c) => c.name === column);
 }
 
-function projectPrefix(db: Database.Database, projectId: string): string | null {
+function projectPrefix(db: Db, projectId: string): string | null {
   const row = db
     .prepare(`SELECT id_prefix as idPrefix FROM projects WHERE id = ?`)
     .get(projectId) as { idPrefix: string | null } | undefined;
@@ -106,7 +106,7 @@ export interface CardSearchResult {
 }
 
 export function searchCards(
-  db: Database.Database,
+  db: Db,
   opts: {
     query: string;
     projectId: string;
@@ -236,7 +236,7 @@ export type ChangedFilesFn = (
 ) => Promise<string[]>;
 
 export async function listOpenWork(
-  db: Database.Database,
+  db: Db,
   opts: { projectId: string; excludeCardId?: string | null; files?: string[] | null },
   deps: {
     isGitRepo: (cwd: string) => Promise<boolean>;

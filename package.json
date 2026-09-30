@@ -24,7 +24,7 @@
     "preelectron": "node ./scripts/prepare-dev-electron.mjs",
     "electron": "electron .",
     "rebuild:electron": "electron-builder install-app-deps",
-    "rebuild:system": "npm rebuild better-sqlite3 && cd mcp-server && npm rebuild better-sqlite3",
+    "rebuild:system": "npm rebuild better-sqlite3",
     "pack": "npm run rebuild:system && npm run build && npm run build:mcp && electron-builder --config ./scripts/electron-builder-config.mjs --dir && npm run rebuild:system",
     "dist": "npm run rebuild:system && npm run build && npm run build:mcp && electron-builder --config ./scripts/electron-builder-config.mjs --mac && npm run rebuild:system"
   },

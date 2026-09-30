@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
+import { openDatabase } from "../db.js";
 import {
   CardGroupError,
   assertGroupAssignable,
@@ -11,7 +11,7 @@ import {
 } from "../card-groups.js";
 
 function makeDb() {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`
     CREATE TABLE projects (id TEXT PRIMARY KEY);
     CREATE TABLE cards (id TEXT PRIMARY KEY, project_id TEXT, group_id TEXT);
@@ -41,7 +41,8 @@ test("createGroup writes a normalised row and defaults the name to the code", ()
   assert.equal(g.name, "MOB");
   assert.equal(g.memberCount, 0);
   const row = db.prepare(`SELECT code, name, project_id FROM card_groups WHERE id = ?`).get(g.id);
-  assert.deepEqual(row, { code: "MOB", name: "MOB", project_id: "p1" });
+  // node:sqlite rows have a null prototype; spread to compare as a plain object.
+  assert.deepEqual({ ...(row as object) }, { code: "MOB", name: "MOB", project_id: "p1" });
 });
 
 test("createGroup rejects an empty code and an unknown project", () => {
@@ -97,6 +98,6 @@ test("assertGroupAssignable blocks unknown ids and another project's group", () 
 });
 
 test("a database without card_groups gets an update-the-app error, not a SQL one", () => {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   assert.throws(() => listGroups(db), /Update the Ideafy app/);
 });

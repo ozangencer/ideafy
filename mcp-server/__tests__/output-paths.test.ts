@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { openDatabase } from "../db.js";
 import {
   OutputPathError,
   hasColumn,
@@ -109,7 +109,7 @@ test("parseOutputPaths tolerates null, garbage and mixed arrays", () => {
 });
 
 function makeDb(opts: { withColumn: boolean }) {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`
     CREATE TABLE projects (id TEXT PRIMARY KEY, folder_path TEXT);
     CREATE TABLE cards (

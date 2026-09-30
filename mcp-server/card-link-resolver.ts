@@ -1,10 +1,10 @@
-import type Database from "better-sqlite3";
+import type { Db } from "./db.js";
 import { linkCardReferences, type CardResolver, type LinkedCard } from "./card-links.generated.js";
 
 // Resolves "IDE-318" to a card. The card's own project wins when two projects
 // share a prefix; otherwise a prefix only resolves when exactly one project
 // uses it. Mirrors lib/card-link-resolver.ts on the app side.
-export function createCardResolver(db: Database.Database, projectId: string | null | undefined): CardResolver {
+export function createCardResolver(db: Db, projectId: string | null | undefined): CardResolver {
   let projects: Array<{ id: string; idPrefix: string }> | null = null;
   const cache = new Map<string, LinkedCard | null>();
 
@@ -35,14 +35,14 @@ export function createCardResolver(db: Database.Database, projectId: string | nu
 
 // Plans and opinions name other cards as "IDE-318"; store them as [[ chips.
 export function linkCardsInHtml(
-  db: Database.Database,
+  db: Db,
   html: string,
   projectId: string | null | undefined
 ): string {
   return linkCardReferences(html, createCardResolver(db, projectId));
 }
 
-export function projectIdOfCard(db: Database.Database, cardId: string): string | null {
+export function projectIdOfCard(db: Db, cardId: string): string | null {
   const row = db.prepare(`SELECT project_id FROM cards WHERE id = ?`).get(cardId) as
     | { project_id: string | null }
     | undefined;

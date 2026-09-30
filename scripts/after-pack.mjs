@@ -5,10 +5,11 @@
 // root/node_modules/better-sqlite3 against the target arch, and that
 // binary has been copied into <app>/Contents/Resources/app.asar.unpacked.
 //
-// The problem this hook fixes: Next's standalone + mcp-server ship
-// their own stripped copies of better-sqlite3 which electron-builder
-// does NOT rebuild. We overwrite those copies with the arch-correct
-// binary so arm64 and x64 DMGs both get a working SQLite.
+// The problem this hook fixes: Next's standalone ships its own stripped
+// copy of better-sqlite3 which electron-builder does NOT rebuild. We
+// overwrite that copy with the arch-correct binary so arm64 and x64 DMGs
+// both get a working SQLite. mcp-server has no copy to fix: it uses the
+// built-in node:sqlite.
 //
 // Fires once per target arch during `electron-builder --mac`.
 
@@ -46,7 +47,6 @@ export default async function afterPack(context) {
 
   const destinations = [
     path.join(appResources, "app-next", "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node"),
-    path.join(appResources, "mcp-server", "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node"),
   ];
 
   for (const dst of destinations) {

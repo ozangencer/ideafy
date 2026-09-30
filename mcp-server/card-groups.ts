@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import { transaction, type Db } from "./db.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   buildChainContext,
@@ -42,7 +42,7 @@ export function normalizeGroupCode(raw: string): string {
 // card_groups arrived with a migration. The plugin can run against an app that
 // has not taken it yet, and a raw "no such table" would read as a bug in the
 // tool rather than an app that needs updating.
-function assertGroupsTable(db: Database.Database): void {
+function assertGroupsTable(db: Db): void {
   const row = db
     .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'card_groups'`)
     .get();
@@ -53,7 +53,7 @@ function assertGroupsTable(db: Database.Database): void {
   }
 }
 
-function assertProjectExists(db: Database.Database, projectId: string): void {
+function assertProjectExists(db: Db, projectId: string): void {
   const row = db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId);
   if (!row) throw new CardGroupError(`Project not found: ${projectId}`);
 }
@@ -65,7 +65,7 @@ const SELECT_GROUPS = `
   FROM card_groups g
 `;
 
-export function getGroup(db: Database.Database, id: string): CardGroupRow | null {
+export function getGroup(db: Db, id: string): CardGroupRow | null {
   assertGroupsTable(db);
   const row = db.prepare(`${SELECT_GROUPS} WHERE g.id = ?`).get(id) as CardGroupRow | undefined;
   return row ?? null;
@@ -73,7 +73,7 @@ export function getGroup(db: Database.Database, id: string): CardGroupRow | null
 
 // With a projectId, returns what the card modal would offer for a card in that
 // project: the project's own groups plus the ones not tied to any project.
-export function listGroups(db: Database.Database, projectId?: string): CardGroupRow[] {
+export function listGroups(db: Db, projectId?: string): CardGroupRow[] {
   assertGroupsTable(db);
   if (projectId) {
     return db
@@ -87,7 +87,7 @@ export function listGroups(db: Database.Database, projectId?: string): CardGroup
 // together: a project's own groups plus the global ones. A global group is
 // offered in every project, so it has to be unique against all of them.
 function findCodeClash(
-  db: Database.Database,
+  db: Db,
   code: string,
   projectId: string | null,
   exceptId: string | null
@@ -97,7 +97,7 @@ function findCodeClash(
 }
 
 export function createGroup(
-  db: Database.Database,
+  db: Db,
   input: { code: string; name?: string; color?: string | null; projectId?: string | null },
   now: string = new Date().toISOString()
 ): CardGroupRow {
@@ -133,7 +133,7 @@ export function createGroup(
 }
 
 export function updateGroup(
-  db: Database.Database,
+  db: Db,
   id: string,
   updates: { code?: string; name?: string; color?: string | null }
 ): CardGroupRow {
@@ -161,7 +161,7 @@ export function updateGroup(
 // key. An unknown id would leave the card pointing at nothing, and the board
 // would silently render it outside any chain.
 export function assertGroupAssignable(
-  db: Database.Database,
+  db: Db,
   groupId: string | null | undefined,
   projectId: string | null
 ): void {
@@ -210,14 +210,14 @@ export interface GroupWithChain extends CardGroupRow {
 // (the plugin and the app update independently). Without it every member
 // reads as unplaced, so the order falls back to task numbers — the rule every
 // chain followed before manual ordering existed.
-function groupOrderSelect(db: Database.Database): string {
+function groupOrderSelect(db: Db): string {
   return hasColumn(db, "cards", "group_order") ? "c.group_order" : "NULL";
 }
 
 // Joined per card, not per group: without a projectId, list_groups returns
 // global groups whose members can come from different projects, and each
 // displayId has to carry its own project's prefix.
-function selectMembers(db: Database.Database, where: string): string {
+function selectMembers(db: Db, where: string): string {
   return `
     SELECT
       c.id, c.group_id AS groupId, c.title, c.status,
@@ -243,7 +243,7 @@ export function toChainRef(member: ChainMemberRow): ChainCardRef {
 // group id points at nothing, which the board does not render as a chain
 // either.
 export function getChainForCard(
-  db: Database.Database,
+  db: Db,
   card: { id: string; groupId: string | null }
 ): CardChain | null {
   if (!card.groupId) return null;
@@ -259,7 +259,7 @@ export function getChainForCard(
 
 // list_groups with each chain's order spelled out. One query for every
 // member of every listed group, sorted per group in memory.
-export function listGroupsWithChains(db: Database.Database, projectId?: string): GroupWithChain[] {
+export function listGroupsWithChains(db: Db, projectId?: string): GroupWithChain[] {
   const groups = listGroups(db, projectId);
   if (groups.length === 0) return [];
 
@@ -295,7 +295,7 @@ export function listGroupsWithChains(db: Database.Database, projectId?: string):
 // `updated_at` is left alone on purpose, as in the route: the Stale row
 // measures age from it, and reordering a chain is not work on any card.
 export function moveCardInChain(
-  db: Database.Database,
+  db: Db,
   cardId: string,
   afterCardId: string | null
 ): { position: number; total: number } {
@@ -308,7 +308,7 @@ export function moveCardInChain(
     throw new CardGroupError("afterCardId cannot be the card itself.");
   }
 
-  return db.transaction(() => {
+  return transaction(db, () => {
     const card = db.prepare(`SELECT group_id AS groupId FROM cards WHERE id = ?`).get(cardId) as
       | { groupId: string | null }
       | undefined;
@@ -330,5 +330,5 @@ export function moveCardInChain(
     const write = db.prepare(`UPDATE cards SET group_order = ? WHERE id = ?`);
     ids.forEach((id, index) => write.run(index + 1, id));
     return { position: ids.indexOf(cardId) + 1, total: ids.length };
-  })();
+  });
 }

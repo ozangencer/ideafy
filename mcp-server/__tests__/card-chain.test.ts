@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
+import { openDatabase, transaction, type Db } from "../db.js";
 import {
   CardGroupError,
   getChainForCard,
@@ -13,7 +13,7 @@ import { buildChainContext } from "../chain-order.generated.js";
 // members and next, and update_card's afterCardId.
 
 function makeDb({ groupOrder = true } = {}) {
-  const db = new Database(":memory:");
+  const db = openDatabase(":memory:");
   db.exec(`
     CREATE TABLE projects (id TEXT PRIMARY KEY, id_prefix TEXT NOT NULL);
     CREATE TABLE cards (
@@ -51,7 +51,7 @@ function makeDb({ groupOrder = true } = {}) {
 }
 
 function addCard(
-  db: Database.Database,
+  db: Db,
   id: string,
   opts: { group?: string | null; task?: number | null; status?: string; order?: number | null; project?: string } = {}
 ) {
@@ -169,7 +169,7 @@ test("listGroupsWithChains: a finished chain has no next, an empty group no memb
   assert.deepEqual(groups.find((g) => g.code === "SHARED")!.members, []);
 });
 
-const order = (db: Database.Database) =>
+const order = (db: Db) =>
   (db.prepare(`SELECT id FROM cards WHERE group_id = 'g1' ORDER BY group_order`).all() as Array<{ id: string }>).map(
     (r) => r.id
   );
@@ -187,7 +187,7 @@ test("moveCardInChain writes 1..N for the whole chain and leaves updated_at alon
   assert.deepEqual(order(db), ["b", "a", "c"]);
 
   const stamps = db.prepare(`SELECT DISTINCT updated_at AS u FROM cards`).all() as Array<{ u: string }>;
-  assert.deepEqual(stamps, [{ u: "then" }]);
+  assert.deepEqual(stamps.map((s) => s.u), ["then"]);
 });
 
 test("moveCardInChain rejects itself, another group's card, a groupless card and an old DB", () => {
@@ -219,19 +219,19 @@ test("joining a group and moving in the same transaction places the card in the 
 
   // update_card's order: the group write first (the trigger drops x's old
   // position), then the move computed in g1.
-  const placed = db.transaction(() => {
+  const placed = transaction(db, () => {
     db.prepare(`UPDATE cards SET group_id = 'g1' WHERE id = 'x'`).run();
     return moveCardInChain(db, "x", "a");
-  })();
+  });
   assert.deepEqual(placed, { position: 2, total: 4 });
   assert.deepEqual(order(db), ["a", "x", "b", "c"]);
 
   // A rejected move rolls the group write back with it.
   assert.throws(() =>
-    db.transaction(() => {
+    transaction(db, () => {
       db.prepare(`UPDATE cards SET group_id = 'g2' WHERE id = 'c'`).run();
       moveCardInChain(db, "c", "a");
-    })()
+    })
   );
   assert.equal((db.prepare(`SELECT group_id AS g FROM cards WHERE id = 'c'`).get() as { g: string }).g, "g1");
 });
