@@ -16,7 +16,7 @@ function interop<T extends object>(ns: T): T {
 }
 
 const { claudeProvider, AUTONOMOUS_DISALLOWED_TOOLS } = interop(claudeNs);
-const { createClaudeRunOutputCollector } = interop(claudeCollectNs);
+const { createClaudeRunOutputCollector, IDEAFY_MCP_FAILED_MESSAGE } = interop(claudeCollectNs);
 const { codexProvider } = interop(codexNs);
 const { geminiProvider } = interop(geminiNs);
 const { opencodeProvider } = interop(opencodeNs);
@@ -393,6 +393,58 @@ test("gemini collector keeps the first session id", () => {
   ].join("\n");
 
   assert.equal(collect(geminiProvider.createRunOutputCollector(), ndjson).sessionId, "first");
+});
+
+// ---------------------------------------------------------------------------
+// Ideafy MCP down — the run's prose must not reach the card (IDE-380)
+// ---------------------------------------------------------------------------
+
+function initWith(servers: Array<{ name: string; status: string }>): string {
+  return JSON.stringify({ type: "system", subtype: "init", session_id: "s", mcp_servers: servers });
+}
+
+const COULD_NOT_CONNECT = "Ideafy MCP sunucusu bu koşuda bağlanamadı, kartı okuyamadım.";
+
+test("claude collector fails the run when the Ideafy plugin server failed at init", () => {
+  const ndjson = [
+    initWith([{ name: "plugin:ideafy:ideafy", status: "failed" }, { name: "bear", status: "connected" }]),
+    claudeAssistant([{ type: "text", text: COULD_NOT_CONNECT }]),
+    JSON.stringify({ type: "result", result: COULD_NOT_CONNECT, is_error: false }),
+  ].join("\n");
+
+  const parsed = collect(createClaudeRunOutputCollector(), ndjson);
+  assert.equal(parsed.isError, true);
+  assert.equal(parsed.result, IDEAFY_MCP_FAILED_MESSAGE);
+});
+
+test("claude collector keeps the run when one Ideafy server connected and the other failed", () => {
+  const ndjson = [
+    initWith([{ name: "plugin:ideafy:ideafy", status: "failed" }, { name: "ideafy", status: "connected" }]),
+    claudeAssistant([{ type: "text", text: CHECKLIST }]),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  assert.equal(collect(createClaudeRunOutputCollector(), ndjson).isError, false);
+});
+
+test("claude collector does not treat a pending Ideafy server as failed", () => {
+  const ndjson = [
+    initWith([{ name: "plugin:ideafy:ideafy", status: "pending" }]),
+    claudeAssistant([{ type: "text", text: CHECKLIST }]),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  assert.equal(collect(createClaudeRunOutputCollector(), ndjson).isError, false);
+});
+
+test("claude collector ignores failed servers that are not Ideafy", () => {
+  const ndjson = [
+    initWith([{ name: "bear", status: "failed" }, { name: "plugin:ideafy:ideafy", status: "connected" }]),
+    claudeAssistant([{ type: "text", text: CHECKLIST }]),
+    CLAUDE_RESULT,
+  ].join("\n");
+
+  assert.equal(collect(createClaudeRunOutputCollector(), ndjson).isError, false);
 });
 
 // ---------------------------------------------------------------------------

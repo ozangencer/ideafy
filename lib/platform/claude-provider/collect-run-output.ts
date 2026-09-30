@@ -3,6 +3,7 @@ import type {
   RunOutputCandidate,
   RunOutputCollector,
 } from "../types";
+import { IDEAFY_MCP_SERVER } from "../mcp-tool-names";
 
 /**
  * A single pending line is held until its newline arrives. One `Read` of a big
@@ -28,6 +29,33 @@ function isBackgroundWait(block: TextBlock): boolean {
   if (block.name && WAIT_TOOLS.has(block.name)) return true;
   const input = block.input as { run_in_background?: unknown } | null | undefined;
   return input?.run_in_background === true;
+}
+
+/** The app registers the server as `ideafy`, the Claude plugin as `plugin:ideafy:ideafy`. */
+const IDEAFY_SERVER_NAMES = new Set([
+  IDEAFY_MCP_SERVER,
+  `plugin:${IDEAFY_MCP_SERVER}:${IDEAFY_MCP_SERVER}`,
+]);
+
+export const IDEAFY_MCP_FAILED_MESSAGE =
+  "Ideafy MCP server failed to connect, so the run could not read or write the card. Its output was discarded. Check the server with /mcp in Claude Code.";
+
+/**
+ * Whether an init line's `mcp_servers` says the run has no Ideafy tools: no
+ * Ideafy server connected and at least one of them failed. `pending` is not a
+ * failure — under `-p` a server can still be connecting when init is written.
+ * A run with no Ideafy server registered at all is left alone.
+ */
+function ideafyMcpFailed(servers: unknown): boolean {
+  if (!Array.isArray(servers)) return false;
+  const ideafy = servers.filter(
+    (s): s is { name: string; status?: unknown } =>
+      !!s && typeof s === "object" && IDEAFY_SERVER_NAMES.has((s as { name?: unknown }).name as string),
+  );
+  return (
+    !ideafy.some((s) => s.status === "connected") &&
+    ideafy.some((s) => s.status === "failed")
+  );
 }
 
 /**
@@ -65,6 +93,10 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
   // `parseClaudeStreamLine` skips `system/init`, so the id is read straight off
   // the raw lines: init carries it first, the result envelope repeats it.
   let sessionId: string | undefined;
+  // Set from the latest init line. A run whose Ideafy server never came up
+  // writes prose about not reaching the card, and that prose must not land on
+  // the card as its plan or tests.
+  let mcpFailed = false;
 
   function flushRun(followedByToolUse = false): void {
     if (openRun.trim()) {
@@ -172,10 +204,14 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
         handleResult(json);
         break;
       case "system":
+        // Only init's server list is read. Everything else is dropped:
+        // `system/hook_response` in particular embeds full hook stdout/stderr,
+        // which we must not retain.
+        if (json.subtype === "init") mcpFailed = ideafyMcpFailed(json.mcp_servers);
+        break;
       case "rate_limit_event":
       case "tool_result":
-        // Known and deliberately dropped. `system/hook_response` in particular
-        // embeds full hook stdout/stderr, which we must not retain.
+        // Known and deliberately dropped.
         break;
       default:
         // Unknown event type — ignore, but it still proves this is NDJSON.
@@ -253,10 +289,10 @@ export function createClaudeRunOutputCollector(): RunOutputCollector {
 
       return {
         candidates,
-        result,
+        result: mcpFailed ? IDEAFY_MCP_FAILED_MESSAGE : result,
         cost,
         duration,
-        isError,
+        isError: isError || mcpFailed,
         sawResultEnvelope,
         injectedUserMessages,
         ...(waitTailStart !== null ? { waitTailStart } : {}),
