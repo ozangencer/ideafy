@@ -18,7 +18,7 @@ import {
 } from "@/lib/board-focus";
 import type { PhaseAction } from "@/lib/card-phase";
 import { useKanbanStore } from "@/lib/store";
-import { BoardView, Card, getDisplayId } from "@/lib/types";
+import { BoardView, Card, getDisplayId, Project } from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CardPhaseActions } from "./card-phase-actions";
 
@@ -28,6 +28,34 @@ const STATE_ICONS = {
   FlaskConical,
   Lightbulb,
 } as const;
+
+/**
+ * The card's ID tinted with its project's color, the same pill the board card
+ * wears. In All Projects the rows otherwise read as one grey list, and the
+ * prefix alone is too small to sort them by at a glance.
+ */
+function ProjectIdPill({
+  displayId,
+  project,
+  className = "",
+}: {
+  displayId: string;
+  project: Project | undefined;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`shrink-0 rounded px-1 py-px font-mono ${className}`}
+      style={
+        project
+          ? { backgroundColor: `${project.color}20`, color: project.color }
+          : undefined
+      }
+    >
+      {displayId}
+    </span>
+  );
+}
 
 /**
  * Which question the board is answering, said out loud and always reachable.
@@ -178,9 +206,9 @@ function YourTurnRow({ row }: { row: FocusRow }) {
         <span className="w-full truncate text-[13px] font-medium text-card-foreground">
           {row.card.title}
         </span>
-        <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
-          {displayId ? `${displayId} · ` : ""}
-          {detail}
+        <span className="flex w-full min-w-0 items-center gap-1.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+          {displayId && <ProjectIdPill displayId={displayId} project={project} />}
+          <span className="truncate">{detail}</span>
         </span>
       </button>
       {row.state === "your-test" && <TestRowActions card={row.card} />}
@@ -277,9 +305,17 @@ export function FocusView({ cards }: { cards: Card[] }) {
                           selectCard(card);
                           openModal();
                         }}
-                        className="font-mono transition-colors hover:text-foreground"
+                        className={
+                          displayId
+                            ? "transition-opacity hover:opacity-80"
+                            : "transition-colors hover:text-foreground"
+                        }
                       >
-                        {displayId ?? card.title}
+                        {displayId ? (
+                          <ProjectIdPill displayId={displayId} project={project} />
+                        ) : (
+                          card.title
+                        )}
                       </button>{" "}
                       {card.processingType === "quick-fix"
                         ? "quick fix"
