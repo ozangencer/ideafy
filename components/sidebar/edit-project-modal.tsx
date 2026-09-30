@@ -59,7 +59,7 @@ const MODE_NOTES: Record<ProjectMode, string> = {
   development:
     "Listed under the Development workspace. Columns read Human Test, Bugs and Completed.",
   work:
-    "Listed under the Work workspace. Columns read Revisions, In Review and Done. Test button and worktrees are off.",
+    "Listed under the Work workspace. Columns read Revisions, In Review and Done. Test button and worktrees are off, and the AI writes in one plain Work tone.",
 };
 
 export function EditProjectModal({
@@ -406,49 +406,53 @@ export function EditProjectModal({
             </p>
           </div>
 
-          {/* Voice */}
-          <div className="grid gap-2">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              <label className="text-sm font-medium">Voice</label>
-              <span className="text-xs text-muted-foreground">— tone for AI plans, tests, opinions, chat</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Voice">
-              {VOICE_OPTIONS.map((opt) => {
-                const isSelected = voice === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    onClick={() => setVoice(opt.value)}
-                    className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
-                      isSelected
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-                          isSelected ? "border-primary" : "border-muted-foreground/40"
-                        }`}
-                      >
+          {/* Voice — a Work card has no code to show more or less of, so it
+              gets one fixed tone and the choice is hidden. The stored voice
+              stays and returns when the project goes back to Development. */}
+          {mode === "development" && (
+            <div className="grid gap-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                <label className="text-sm font-medium">Voice</label>
+                <span className="text-xs text-muted-foreground">— tone for AI plans, tests, opinions, chat</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Voice">
+                {VOICE_OPTIONS.map((opt) => {
+                  const isSelected = voice === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => setVoice(opt.value)}
+                      className={`flex flex-col items-start gap-1.5 p-2.5 rounded-lg border text-left transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
                         <span
-                          className={`h-1.5 w-1.5 rounded-full transition-all ${
-                            isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                          className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                            isSelected ? "border-primary" : "border-muted-foreground/40"
                           }`}
-                        />
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full transition-all ${
+                              isSelected ? "bg-primary scale-100" : "bg-transparent scale-0"
+                            }`}
+                          />
+                        </span>
+                        <span className="font-medium text-sm text-foreground">{opt.label}</span>
                       </span>
-                      <span className="font-medium text-sm text-foreground">{opt.label}</span>
-                    </span>
-                    <span className="block text-xs text-muted-foreground leading-snug">{opt.description}</span>
-                  </button>
-                );
-              })}
+                      <span className="block text-xs text-muted-foreground leading-snug">{opt.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {teamAssignmentSlot}
 
