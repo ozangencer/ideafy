@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { trashCard } from "@/lib/card-trash";
+import { QUEUE_CLEARING_STATUSES } from "@/lib/card-queue";
 import { parseOutputPaths } from "@/lib/output-paths";
 import {
   ensureHtml,
@@ -42,6 +43,7 @@ export async function GET(
     projectId: row.projectId,
     groupId: row.groupId,
     groupOrder: row.groupOrder ?? null,
+    queuePosition: row.queuePosition ?? null,
     taskNumber: row.taskNumber,
     gitBranchName: row.gitBranchName,
     gitBranchStatus: row.gitBranchStatus as Card["gitBranchStatus"],
@@ -219,6 +221,11 @@ export async function PUT(
     // group_id trigger just did — otherwise the store writes the cleared
     // position straight back onto a card that moved groups.
     groupOrder: updatedCard.groupId !== existing.groupId ? null : existing.groupOrder ?? null,
+    // Same for the status trigger: a queued card moved to Human Test by hand
+    // leaves the queue in the DB, and must leave it in the store too.
+    queuePosition: QUEUE_CLEARING_STATUSES.has(updatedCard.status as Card["status"])
+      ? null
+      : existing.queuePosition ?? null,
     taskNumber: updatedCard.taskNumber,
     gitBranchName: existing.gitBranchName,
     gitBranchStatus: existing.gitBranchStatus as Card["gitBranchStatus"],

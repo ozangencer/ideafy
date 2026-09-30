@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 
 import { createActivitySlice } from "./slices/activity";
 import { createBackgroundProcessesSlice } from "./slices/background-processes";
+import { createQueueSlice } from "./slices/queue";
 import { createCardsSlice } from "./slices/cards";
 import { createClaudeSlice } from "./slices/claude";
 import { createConversationSlice } from "./slices/conversation";
@@ -45,6 +46,7 @@ export const useKanbanStore = create<KanbanStore>()(
     (set, get) => ({
       ...createActivitySlice(set, get),
       ...createBackgroundProcessesSlice(set, get),
+      ...createQueueSlice(set, get),
       ...createCardsSlice(set, get),
       ...createHistorySlice(set, get),
       ...createProjectsSlice(set, get),

@@ -20,6 +20,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   projectId,
   groupId: null,
   groupOrder: null,
+  queuePosition: null,
   taskNumber: null,
   gitBranchName: null,
   gitBranchStatus: null,

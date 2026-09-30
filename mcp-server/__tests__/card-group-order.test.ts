@@ -39,6 +39,7 @@ function makeCard(id: string, overrides: Partial<Card> = {}): Card {
     projectId: "p1",
     groupId: "g1",
     groupOrder: null,
+    queuePosition: null,
     taskNumber: null,
     gitBranchName: null,
     gitBranchStatus: null,

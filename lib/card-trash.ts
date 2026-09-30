@@ -141,7 +141,9 @@ export function restoreCard(cardId: string): RestoreResult {
       if (!group) groupId = null;
     }
 
-    const restored: CardRecord = { ...card, groupId };
+    // Deleting a card took it out of the run queue; undoing the delete brings
+    // the card back, not its place in line.
+    const restored: CardRecord = { ...card, groupId, queuePosition: null };
     tx.insert(schema.cards).values(restored).run();
     for (const row of payload.conversations) {
       tx.insert(schema.conversations).values(row).onConflictDoNothing().run();

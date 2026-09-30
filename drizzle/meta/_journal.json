@@ -120,6 +120,13 @@
       "when": 1790621104757,
       "tag": "0016_card_group_order",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790629391853,
+      "tag": "0017_card_queue_position",
+      "breakpoints": true
     }
   ]
 }

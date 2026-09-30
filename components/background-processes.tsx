@@ -128,6 +128,7 @@ export function BackgroundProcesses() {
   const {
     backgroundProcesses,
     fetchBackgroundProcesses,
+    fetchQueue,
     killBackgroundProcess,
     clearCompletedProcesses,
     clearProcessing,
@@ -307,11 +308,14 @@ export function BackgroundProcesses() {
   // another session, or after a page reload mid-run). Cheap: one request / 10s.
   useEffect(() => {
     fetchBackgroundProcesses();
+    fetchQueue();
     const interval = setInterval(() => {
       fetchBackgroundProcesses();
+      // Same beat: the queue moves when a run ends, which is what this poll sees.
+      fetchQueue();
     }, 10000);
     return () => clearInterval(interval);
-  }, [fetchBackgroundProcesses]);
+  }, [fetchBackgroundProcesses, fetchQueue]);
 
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;

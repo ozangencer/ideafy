@@ -30,6 +30,7 @@ const COPIES = [
   { source: "lib/prompts/prior-decisions.ts", target: "mcp-server/prior-decisions.generated.ts" },
   { source: "lib/card-links.ts", target: "mcp-server/card-links.generated.ts" },
   { source: "lib/chain-order.ts", target: "mcp-server/chain-order.generated.ts" },
+  { source: "lib/plan-files.ts", target: "mcp-server/plan-files.generated.ts" },
 ];
 
 export function generatedHeader(sourceRelPath) {

@@ -56,6 +56,11 @@ export interface Card {
   // number order behind the placed ones. Cleared by the DB when the card
   // changes group.
   groupOrder: number | null;
+  // Place in the autonomous run queue; the lowest runs next. Positions may
+  // have gaps (a card that leaves the queue by status change is cleared by
+  // the DB without renumbering the rest), so read rank from the order, not
+  // the number. null = not queued.
+  queuePosition: number | null;
   taskNumber: number | null;
   gitBranchName: string | null;
   gitBranchStatus: GitBranchStatus;
@@ -576,6 +581,8 @@ export type ActivityType =
   | "implementation"
   | "autonomous"
   | "quickfix"
+  // Run queue: why it paused, or why a card was dropped from it.
+  | "queue"
   | "chat-detail"
   | "chat-opinion"
   | "chat-solution"

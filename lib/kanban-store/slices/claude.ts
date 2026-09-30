@@ -116,6 +116,7 @@ export const createClaudeSlice: StoreSlice<
         gitWorktreeStatus?: Card["gitWorktreeStatus"];
         error?: string;
         details?: string;
+        stopped?: boolean;
       }>(response);
 
       if (!response.ok) {
@@ -139,6 +140,7 @@ export const createClaudeSlice: StoreSlice<
             },
           });
         }
+        if (data.stopped) return { success: false, stopped: true };
         return { success: false, error: runFailureMessage(data) || "Failed to start task" };
       }
 

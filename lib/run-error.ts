@@ -32,3 +32,32 @@ export function firstLine(text: string | null | undefined, max = 160): string {
   const line = (text ?? "").split("\n").find((l) => l.trim())?.trim() ?? "";
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
+
+// Failures that say nothing about the card and everything about the machine:
+// the next card in the run queue would die the same way within minutes.
+const INFRASTRUCTURE_PATTERNS: [RegExp, string][] = [
+  [/usage limit|rate.?limit|hit your limit|limit reached|quota|overloaded|\b429\b/i, "usage limit reached"],
+  [/not logged in|\/login\b|log ?in again|invalid api key|authenticat|unauthori[sz]ed|\b401\b/i, "CLI is not logged in"],
+  [/\bENOENT\b|command not found|not installed/i, "CLI not found"],
+  [/Working directory not found/i, "project folder not found"],
+  [/timed out/i, "run timed out"],
+  [/Failed to create git worktree/i, "worktree could not be created"],
+];
+
+/**
+ * Why a failed run points at the environment rather than the card, or null
+ * when it does not. The run queue pauses on the former and moves on past the
+ * latter, so a usage limit costs one card instead of every card behind it.
+ * The label is short enough for a toast: "Queue paused — usage limit reached".
+ */
+export function infrastructureRunError(message: string | null | undefined): string | null {
+  const text = message ?? "";
+  for (const [pattern, label] of INFRASTRUCTURE_PATTERNS) {
+    if (pattern.test(text)) return label;
+  }
+  return null;
+}
+
+export function isInfrastructureRunError(message: string | null | undefined): boolean {
+  return infrastructureRunError(message) !== null;
+}

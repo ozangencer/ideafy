@@ -103,6 +103,7 @@ export const cards = sqliteTable("cards", {
   projectId: text("project_id"),
   groupId: text("group_id"),                  // card_groups.id or null
   groupOrder: integer("group_order"),         // manual position in the group's chain (1..N); null = by task number. Reset by trigger when group_id changes
+  queuePosition: integer("queue_position"),   // place in the autonomous run queue (lowest runs next); null = not queued. Cleared by trigger when the card leaves the implementation columns
   taskNumber: integer("task_number"),
   gitBranchName: text("git_branch_name"),     // "kanban/PRJ-1-add-auth" or null
   gitBranchStatus: text("git_branch_status"), // "active" | "merged" | "rolled_back" | null

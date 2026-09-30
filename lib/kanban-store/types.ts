@@ -1,4 +1,5 @@
 import { StateCreator } from "zustand";
+import type { QueueSnapshot } from "../card-queue";
 import {
   ActivityEvent,
   AgentListItem,
@@ -199,6 +200,9 @@ export interface KanbanStore {
   // Background processes state
   backgroundProcesses: BackgroundProcess[];
 
+  // Run queue, as the server last reported it (null until the first poll)
+  queueState: QueueSnapshot | null;
+
   // Activity inbox state (notification bell)
   activityEvents: ActivityEvent[];
   activityUnreadCount: number;
@@ -359,7 +363,7 @@ export interface KanbanStore {
   renameToolkitFolder: (from: string, to: string | null) => Promise<void>;
 
   // Claude integration actions
-  startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
+  startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null; stopped?: boolean }>;
   openTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openIdeationTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openTestTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
@@ -420,6 +424,14 @@ export interface KanbanStore {
   fetchBackgroundProcesses: () => Promise<void>;
   killBackgroundProcess: (processKey: string) => Promise<void>;
   clearCompletedProcesses: () => Promise<void>;
+
+  // Run queue actions. addToQueue appends in the order given;
+  // moveInQueue's null afterCardId moves the card to the front.
+  fetchQueue: () => Promise<void>;
+  addToQueue: (cardIds: string[]) => Promise<void>;
+  removeFromQueue: (cardId: string) => Promise<void>;
+  moveInQueue: (cardId: string, afterCardId: string | null) => Promise<void>;
+  setQueueRunning: (running: boolean) => Promise<void>;
 
   // Activity inbox actions
   fetchActivity: () => Promise<void>;

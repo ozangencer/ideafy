@@ -1,0 +1,450 @@
+import { eq, isNotNull } from "drizzle-orm";
+import { db, schema } from "@/lib/db";
+import { getAllProcesses } from "@/lib/process-registry";
+import { recordActivity } from "@/lib/activity-registry";
+import { detectPhase, stripHtml } from "@/lib/prompts";
+import { infrastructureRunError } from "@/lib/run-error";
+import { placeAfter } from "@/lib/card-group";
+import {
+  compareByQueuePosition,
+  queueIneligibleReason,
+  type QueueOverlap,
+  type QueueSnapshot,
+} from "@/lib/card-queue";
+import { extractPlanFiles, sharedPlanFiles } from "@/lib/plan-files";
+import { shouldUseWorktree } from "@/lib/workspace";
+
+/**
+ * The run queue: cards lined up for autonomous implementation, started one at
+ * a time as the previous run ends — whether it ended well or not.
+ *
+ * The order lives on the cards (`queue_position`), so it survives a restart.
+ * Whether the queue is *running* does not: `armed` sits in memory like the
+ * process registry, and a fresh process comes up paused. A queue that resumed
+ * itself on launch would start a card the moment Ideafy opened, possibly
+ * hours after you last looked at what it was about to do.
+ */
+
+export type RunOutcome = "completed" | "failed" | "stopped";
+
+interface RunQueueState {
+  armed: boolean;
+  /** Why the queue stopped. Adding a card does not re-arm a paused queue. */
+  pausedReason: string | null;
+  /** Unclassified failures in a row; the second one pauses. */
+  consecutiveFailures: number;
+  /** Held while advanceQueue picks and launches, so two calls cannot both start. */
+  advancing: boolean;
+  /**
+   * Cards with a Start run between its first line and its last, manual or
+   * queued. The process registry only learns about a run once its worktree
+   * exists, which can take seconds; this covers that gap.
+   */
+  inFlight: Set<string>;
+  /** The card the queue itself launched last, while it runs. */
+  queueStartedCardId: string | null;
+  initialized: boolean;
+}
+
+const g = globalThis as unknown as { __kanban_runQueue?: RunQueueState };
+
+function queueState(): RunQueueState {
+  if (!g.__kanban_runQueue) {
+    g.__kanban_runQueue = {
+      armed: false,
+      pausedReason: null,
+      consecutiveFailures: 0,
+      advancing: false,
+      inFlight: new Set(),
+      queueStartedCardId: null,
+      initialized: false,
+    };
+  }
+  const state = g.__kanban_runQueue;
+  if (!state.initialized) {
+    state.initialized = true;
+    // Cards still queued from a previous session: say so, and wait for Resume
+    // rather than letting the next Add to queue quietly start all of them.
+    if (listQueueRows().length > 0) state.pausedReason = "Ideafy restarted";
+  }
+  return state;
+}
+
+export class QueueError extends Error {
+  constructor(message: string, readonly status = 400) {
+    super(message);
+  }
+}
+
+// ============================================================================
+// Rows
+// ============================================================================
+
+interface QueueRow {
+  id: string;
+  title: string;
+  status: string;
+  description: string;
+  solutionSummary: string;
+  testScenarios: string;
+  processingType: string | null;
+  queuePosition: number | null;
+  taskNumber: number | null;
+  useWorktree: boolean | null;
+  projectId: string | null;
+  idPrefix: string | null;
+  projectMode: string | null;
+  projectUseWorktrees: boolean | null;
+}
+
+const rowColumns = {
+  id: schema.cards.id,
+  title: schema.cards.title,
+  status: schema.cards.status,
+  description: schema.cards.description,
+  solutionSummary: schema.cards.solutionSummary,
+  testScenarios: schema.cards.testScenarios,
+  processingType: schema.cards.processingType,
+  queuePosition: schema.cards.queuePosition,
+  taskNumber: schema.cards.taskNumber,
+  useWorktree: schema.cards.useWorktree,
+  projectId: schema.cards.projectId,
+  idPrefix: schema.projects.idPrefix,
+  projectMode: schema.projects.mode,
+  projectUseWorktrees: schema.projects.useWorktrees,
+};
+
+function listQueueRows(): QueueRow[] {
+  return db
+    .select(rowColumns)
+    .from(schema.cards)
+    .leftJoin(schema.projects, eq(schema.cards.projectId, schema.projects.id))
+    .where(isNotNull(schema.cards.queuePosition))
+    .all()
+    .sort(compareByQueuePosition);
+}
+
+function getRow(cardId: string): QueueRow | undefined {
+  return db
+    .select(rowColumns)
+    .from(schema.cards)
+    .leftJoin(schema.projects, eq(schema.cards.projectId, schema.projects.id))
+    .where(eq(schema.cards.id, cardId))
+    .get();
+}
+
+function displayIdOf(row: Pick<QueueRow, "idPrefix" | "taskNumber" | "title">): string {
+  return row.idPrefix && row.taskNumber != null ? `${row.idPrefix}-${row.taskNumber}` : row.title;
+}
+
+function ineligibleReason(row: QueueRow): string | null {
+  return queueIneligibleReason({
+    status: row.status,
+    hasDescription: stripHtml(row.description ?? "") !== "",
+    phase: detectPhase(row),
+    processingType: row.processingType,
+    projectMode: row.projectMode,
+  });
+}
+
+/**
+ * Rewrites the whole queue as 1..N in the given order and clears everyone
+ * else who still had a position. Inside one transaction, like the chain order
+ * route, so two tabs racing still leave one consistent order. `updatedAt` is
+ * left alone: queueing is not work on the card, and the Stale row reads it.
+ */
+function writeQueueOrder(ids: string[], removed: string[] = []): void {
+  db.transaction((tx) => {
+    ids.forEach((id, index) => {
+      tx.update(schema.cards).set({ queuePosition: index + 1 }).where(eq(schema.cards.id, id)).run();
+    });
+    for (const id of removed) {
+      tx.update(schema.cards).set({ queuePosition: null }).where(eq(schema.cards.id, id)).run();
+    }
+  });
+}
+
+// ============================================================================
+// Order
+// ============================================================================
+
+/**
+ * Puts `cardId` in the queue right behind `afterCardId`: `undefined` appends,
+ * `null` moves it to the front. A card already queued is moved, not doubled.
+ */
+export function enqueueCard(cardId: string, afterCardId?: string | null): void {
+  if (afterCardId === cardId) throw new QueueError("A card cannot be placed after itself");
+  const row = getRow(cardId);
+  if (!row) throw new QueueError("Card not found", 404);
+  const reason = ineligibleReason(row);
+  if (reason) throw new QueueError(`Cannot queue ${displayIdOf(row)}: ${reason}`);
+
+  const members = listQueueRows();
+  const others = members.filter((m) => m.id !== cardId);
+  if (afterCardId && !others.some((m) => m.id === afterCardId)) {
+    throw new QueueError("afterCardId is not in the queue");
+  }
+  const after = afterCardId === undefined ? others[others.length - 1]?.id ?? null : afterCardId;
+  const chainShaped = members.map((m) => ({ id: m.id, groupOrder: m.queuePosition, taskNumber: m.taskNumber }));
+  if (!members.some((m) => m.id === cardId)) {
+    chainShaped.push({ id: cardId, groupOrder: null, taskNumber: row.taskNumber });
+  }
+  writeQueueOrder(placeAfter(chainShaped, cardId, after));
+}
+
+/** Takes a card out of the queue and closes the gap. False if it was not queued. */
+export function dequeueCard(cardId: string): boolean {
+  const members = listQueueRows();
+  if (!members.some((m) => m.id === cardId)) return false;
+  writeQueueOrder(
+    members.filter((m) => m.id !== cardId).map((m) => m.id),
+    [cardId]
+  );
+  return true;
+}
+
+// ============================================================================
+// Shared-file warning
+// ============================================================================
+
+/** Card ids with an autonomous run going right now. */
+function runningCardIds(): Set<string> {
+  const ids = new Set(queueState().inFlight);
+  for (const p of getAllProcesses()) {
+    if (p.processType === "autonomous" && p.status === "running") ids.add(p.cardId);
+  }
+  return ids;
+}
+
+/**
+ * The cards ahead of `cardId` — in the queue, or running now — whose plans
+ * name a file this card's plan also names. Worktrees do not help here: every
+ * queued card branches from main before the one ahead of it is merged, so
+ * two cards on the same file meet again at merge time. The queue only makes
+ * sure you hear about it before you walk away.
+ */
+function overlapsFor(cardId: string, queue: QueueRow[], running: QueueRow[]): QueueOverlap[] {
+  const self = queue.find((r) => r.id === cardId) ?? getRow(cardId);
+  if (!self) return [];
+  const mine = extractPlanFiles(self.solutionSummary);
+  if (mine.length === 0) return [];
+
+  const index = queue.findIndex((r) => r.id === cardId);
+  const ahead = [...running, ...(index === -1 ? queue : queue.slice(0, index))];
+  const seen = new Set<string>();
+  const overlaps: QueueOverlap[] = [];
+  for (const other of ahead) {
+    if (other.id === cardId || seen.has(other.id)) continue;
+    seen.add(other.id);
+    const files = sharedPlanFiles(mine, extractPlanFiles(other.solutionSummary));
+    if (files.length > 0) overlaps.push({ cardId: other.id, displayId: displayIdOf(other), files });
+  }
+  return overlaps;
+}
+
+function runningRows(): QueueRow[] {
+  return Array.from(runningCardIds())
+    .map((id) => getRow(id))
+    .filter((row): row is QueueRow => !!row);
+}
+
+export function overlapsForCard(cardId: string): QueueOverlap[] {
+  return overlapsFor(cardId, listQueueRows(), runningRows());
+}
+
+/**
+ * Without a worktree the second run starts on top of the first one's
+ * uncommitted changes, and Human Test then shows both cards' work as one.
+ */
+export function worktreeWarningFor(cardId: string): string | null {
+  const row = getRow(cardId);
+  if (!row) return null;
+  const uses = shouldUseWorktree(
+    { useWorktree: row.useWorktree },
+    { useWorktrees: row.projectUseWorktrees, mode: row.projectMode }
+  );
+  return uses
+    ? null
+    : `${displayIdOf(row)} runs without a worktree: it will start on top of whatever the run before it left uncommitted.`;
+}
+
+// ============================================================================
+// Snapshot
+// ============================================================================
+
+export function getQueueSnapshot(): QueueSnapshot {
+  const state = queueState();
+  const queue = listQueueRows();
+  const running = runningRows();
+  const current = running.find((r) => r.id === state.queueStartedCardId) ?? running[0] ?? null;
+  return {
+    items: queue.map((row) => ({
+      cardId: row.id,
+      displayId: displayIdOf(row),
+      title: row.title,
+      overlaps: overlapsFor(row.id, queue, running),
+    })),
+    armed: state.armed,
+    pausedReason: state.pausedReason,
+    running: current
+      ? { cardId: current.id, displayId: displayIdOf(current), fromQueue: current.id === state.queueStartedCardId }
+      : null,
+  };
+}
+
+// ============================================================================
+// Running
+// ============================================================================
+
+function pause(reason: string, cardId: string | null): string {
+  const state = queueState();
+  state.armed = false;
+  state.pausedReason = reason;
+  const row = cardId ? getRow(cardId) : undefined;
+  recordActivity({
+    type: "queue",
+    cardId,
+    projectId: row?.projectId ?? null,
+    title: "Queue paused",
+    summary: `${reason} · ${listQueueRows().length} waiting`,
+    payload: { reason },
+  });
+  return reason;
+}
+
+/**
+ * Adding a card starts the queue — the whole point is Start one card, queue
+ * two more, walk away — unless it was paused for a reason. Then it stays
+ * paused until someone presses Resume, having seen why. A reason only counts
+ * while cards are still waiting behind it: once the queue ran dry, the next
+ * card added is a fresh start, not a continuation of whatever stopped.
+ */
+export function armIfIdle(): void {
+  const state = queueState();
+  if (state.pausedReason && listQueueRows().length > 1) return;
+  state.pausedReason = null;
+  state.consecutiveFailures = 0;
+  state.armed = true;
+  scheduleAdvance();
+}
+
+export function resumeQueue(): void {
+  const state = queueState();
+  state.armed = true;
+  state.pausedReason = null;
+  state.consecutiveFailures = 0;
+  scheduleAdvance();
+}
+
+export function pauseQueue(): void {
+  const state = queueState();
+  state.armed = false;
+  state.pausedReason = "Paused by you";
+}
+
+function scheduleAdvance(): void {
+  setImmediate(() => {
+    advanceQueue().catch((error) => console.error("[run-queue] advance failed:", error));
+  });
+}
+
+/**
+ * Called by every Start run on its way out — the queue's own and manual ones
+ * alike, since a manual run is what the queue was waiting behind. Returns the
+ * pause reason when this outcome stopped the queue, so the caller can put it
+ * in front of the run's error.
+ *
+ * A run that resolved moves the queue on even if its output carried a
+ * warning: the card failing at its own work is the card's problem. A run that
+ * rejected on a usage limit, a login or a missing CLI will take every card
+ * behind it down the same way, so that pauses. So does a Stop, and so does a
+ * second unexplained failure in a row.
+ */
+export function onRunFinished(args: { cardId: string; outcome: RunOutcome; error?: string | null }): string | null {
+  const state = queueState();
+  if (!state.armed) return null;
+  if (args.outcome === "completed") {
+    state.consecutiveFailures = 0;
+    return null;
+  }
+  const row = getRow(args.cardId);
+  const label = row ? displayIdOf(row) : "a run";
+  if (args.outcome === "stopped") return pause(`you stopped ${label}`, args.cardId);
+
+  const infra = infrastructureRunError(args.error);
+  if (infra) return pause(infra, args.cardId);
+
+  state.consecutiveFailures += 1;
+  if (state.consecutiveFailures >= 2) return pause("two runs failed in a row", args.cardId);
+  return null;
+}
+
+/**
+ * Marks a Start run as in flight until the returned release is called. The
+ * release schedules the next advance, which is how the queue moves on.
+ */
+export function beginTrackedStart(cardId: string): () => void {
+  const state = queueState();
+  state.inFlight.add(cardId);
+  return () => {
+    state.inFlight.delete(cardId);
+    if (state.queueStartedCardId === cardId) state.queueStartedCardId = null;
+    scheduleAdvance();
+  };
+}
+
+function hasLiveRun(): boolean {
+  return runningCardIds().size > 0;
+}
+
+/**
+ * Starts the next queued card if nothing else is running. One run at a time is
+ * the rule the queue exists to keep, so a manual run going on some other card
+ * holds the queue too; it moves on when that run ends.
+ *
+ * The next card is checked again right before it starts. It may have waited
+ * an hour: its plan deleted, moved to Completed by hand, or trashed. Those
+ * leave the queue with a line in the bell rather than silently.
+ */
+export async function advanceQueue(): Promise<void> {
+  const state = queueState();
+  if (!state.armed || state.advancing || hasLiveRun()) return;
+  state.advancing = true;
+  try {
+    // Imported lazily: start-card-run reports back to this module, and a
+    // static import both ways is a cycle.
+    const { startCardRun } = await import("./start-card-run");
+    if (!state.armed || hasLiveRun()) return;
+
+    for (;;) {
+      const next = listQueueRows()[0];
+      if (!next) return;
+
+      const reason = ineligibleReason(next);
+      if (reason) {
+        dequeueCard(next.id);
+        recordActivity({
+          type: "queue",
+          cardId: next.id,
+          projectId: next.projectId,
+          title: "Dropped from queue",
+          summary: `${displayIdOf(next)} was skipped: ${reason}`,
+          payload: { reason },
+        });
+        continue;
+      }
+
+      state.queueStartedCardId = next.id;
+      // Not awaited: the run takes minutes and reports back through
+      // onRunFinished / the release in beginTrackedStart. startCardRun marks
+      // itself in flight and dequeues the card before its first await, so
+      // the next advance already sees both.
+      startCardRun(next.id).catch((error) => {
+        console.error(`[run-queue] start of ${next.id} threw:`, error);
+      });
+      return;
+    }
+  } finally {
+    state.advancing = false;
+  }
+}

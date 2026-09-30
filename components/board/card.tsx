@@ -14,7 +14,7 @@ import {
 } from "@/lib/card-phase";
 import { CardPhaseActions, useCardChatRunning } from "./card-phase-actions";
 import { useKanbanStore } from "@/lib/store";
-import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal } from "lucide-react";
+import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, ListPlus, ListX } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
@@ -208,6 +208,13 @@ function TaskCardImpl({
   const selectCardRange = useKanbanStore((s) => s.selectCardRange);
   const moveCards = useKanbanStore((s) => s.moveCards);
   const setBulkDeleteConfirmOpen = useKanbanStore((s) => s.setBulkDeleteConfirmOpen);
+  // A number, not the snapshot: every 10s poll rebuilds the snapshot, and only
+  // the cards whose place actually changed should re-render. 0 = not queued.
+  const queueRank = useKanbanStore(
+    (s) => (s.queueState?.items.findIndex((item) => item.cardId === card.id) ?? -1) + 1
+  );
+  const addToQueue = useKanbanStore((s) => s.addToQueue);
+  const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isServerLoading, setIsServerLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isBeingDragged } = useDraggable({
@@ -252,6 +259,24 @@ function TaskCardImpl({
   const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
   // "Direct on main" only means something where branches exist at all.
   const showsMainBadge = !!project && !effectiveUseWorktree && phaseFlags.showDevControls;
+  // The queue only starts autonomous implementation runs; the server has the
+  // final say (it reads the phase the Start route would), this just keeps the
+  // menu from offering it where it can never work.
+  const canQueue = phaseFlags.canRunAutonomous && phaseFlags.phase === "implementation";
+
+  const handleAddToQueue = () => {
+    if (!isSelected) {
+      void addToQueue([card.id]);
+      return;
+    }
+    // Board order, the way you read it: left to right, then top to bottom.
+    // The server skips the ones that cannot be queued and says why.
+    const selected = new Set(useKanbanStore.getState().selectedCardIds);
+    const ordered = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
+      .map((el) => el.dataset.cardId!)
+      .filter((id) => selected.delete(id));
+    void addToQueue([...ordered, ...Array.from(selected)]);
+  };
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -532,6 +557,18 @@ function TaskCardImpl({
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top">{group.name}</TooltipContent>
+                </Tooltip>
+              )}
+              {queueRank > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px] font-mono tabular-nums px-1 py-0.5 rounded shrink-0 cursor-default bg-ink/[0.06] text-muted-foreground">
+                      #{queueRank}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {queueRank === 1 ? "Next in the run queue" : `#${queueRank} in the run queue`}
+                  </TooltipContent>
                 </Tooltip>
               )}
               {/* Three lines, because the description quote below used to be
@@ -830,6 +867,20 @@ function TaskCardImpl({
             <FileDown className="w-4 h-4 mr-2" />
             Export as Markdown
           </ContextMenuItem>
+          {queueRank > 0 ? (
+            <ContextMenuItem onClick={() => void removeFromQueue(card.id)}>
+              <ListX className="w-4 h-4 mr-2" />
+              Remove from queue
+            </ContextMenuItem>
+          ) : (
+            canQueue && (
+              <ContextMenuItem onClick={handleAddToQueue}>
+                <ListPlus className="w-4 h-4 mr-2" />
+                Add to queue
+                {isSelected && <SelectionCount />}
+              </ContextMenuItem>
+            )
+          )}
           {extraContextMenuItems}
           <ContextMenuSeparator />
           <ContextMenuItem

@@ -1,5 +1,13 @@
 import type Database from "better-sqlite3";
 import { existsSync } from "fs";
+import {
+  extractPlanFiles,
+  htmlToText,
+  normalizePath,
+  pathsOverlap,
+} from "./plan-files.generated.js";
+
+export { extractPlanFiles, htmlToText };
 
 // search_cards and list_open_work: the two lookups behind the "check prior
 // decisions" rule (lib/prompts/prior-decisions.ts). Both return short rows —
@@ -10,40 +18,6 @@ import { existsSync } from "fs";
 // ============================================================================
 // Text helpers
 // ============================================================================
-
-// Pasted screenshots are stored inline as base64; a three-letter term would
-// match inside them at random, so they go before anything else.
-const BASE64_IMG = /<img[^>]*src=["']data:[^"']*["'][^>]*>/gi;
-
-const ENTITIES: Record<string, string> = {
-  "&nbsp;": " ",
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-  "&apos;": "'",
-};
-
-function decodeEntities(text: string): string {
-  return text.replace(/&(nbsp|amp|lt|gt|quot|apos|#39);/g, (m) => ENTITIES[m] ?? m);
-}
-
-// Tiptap HTML → plain text. Block boundaries become newlines so a caller that
-// cares about lines (the plan's Files: line) still has them.
-export function htmlToText(html: string | null | undefined): string {
-  if (!html) return "";
-  return decodeEntities(
-    html
-      .replace(BASE64_IMG, " ")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(p|li|h[1-6]|div|tr|pre|blockquote)>/gi, "\n")
-      .replace(/<[^>]*>/g, "")
-  )
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*/g, "\n")
-    .trim();
-}
 
 // Case- and accent-insensitive, one output character per input code unit so
 // an index found in the folded text is also an index into the original — the
@@ -227,54 +201,7 @@ export function searchCards(
 // list_open_work
 // ============================================================================
 
-// A token counts as a path when it ends in an extension or a glob. Prose like
-// "and/or" has a slash but neither.
-const PATH_TOKEN = /^[\w@.\-[\]/*]+$/;
-const PATH_TAIL = /(\.[a-z0-9]{1,6}|\/\*+)$/i;
-
-function pathTokens(text: string): string[] {
-  const found: string[] = [];
-  for (const raw of text.replace(/\([^)]*\)/g, " ").split(/[\s,;|]+/)) {
-    const token = raw.replace(/^[`'"“”:.]+|[`'"“”:.]+$/g, "");
-    if (token && PATH_TOKEN.test(token) && PATH_TAIL.test(token)) found.push(token);
-  }
-  return Array.from(new Set(found));
-}
-
-// The files a written plan says it will change. Every voice ends the plan on
-// a `Files:` line or a "Files to Modify" section; the line wins because it is
-// the complete list. A plan that names its files in prose only ("the search
-// component") matches nothing — an accepted false negative.
-export function extractPlanFiles(solutionHtml: string | null | undefined): string[] {
-  const text = htmlToText(solutionHtml);
-  if (!text) return [];
-
-  const filesLines = text.match(/^\s*(?:Files|Dosyalar)\s*:(.*)$/gim);
-  if (filesLines?.length) {
-    const last = filesLines[filesLines.length - 1];
-    return pathTokens(last.slice(last.indexOf(":") + 1));
-  }
-
-  const section = text.match(/Files to Modify\s*\n([\s\S]*?)(?:\n(?:Implementation Steps|Edge Cases|Dependencies)\b|$)/i);
-  return section ? pathTokens(section[1]) : [];
-}
-
 export const MAX_OPEN_WORK_FILES = 40;
-
-function normalizePath(path: string): string {
-  return path.trim().replace(/^\.\//, "").replace(/\/+$/, "");
-}
-
-// `dir/*` or `dir/**` covers everything under dir; anything else is exact.
-function pathsOverlap(a: string, b: string): boolean {
-  const globRoot = (p: string) => (/\/\*+$/.test(p) ? p.replace(/\/\*+$/, "/") : null);
-  const ga = globRoot(a);
-  const gb = globRoot(b);
-  if (ga && gb) return ga.startsWith(gb) || gb.startsWith(ga);
-  if (ga) return b.startsWith(ga);
-  if (gb) return a.startsWith(gb);
-  return a === b;
-}
 
 // The caller's files that a card also touches, matched against the card's full
 // file list — not the capped one it gets back. A 52-file branch otherwise hides

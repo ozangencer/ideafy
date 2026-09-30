@@ -24,6 +24,7 @@ import { useKanbanStore } from "@/lib/store";
 import { TaskCard } from "./card";
 import { CardGroupChip } from "./card-group-chip";
 import { CardGroupChain } from "./card-group-chain";
+import { RunQueueChip } from "./run-queue-popover";
 import { ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 import {
   Tooltip,
@@ -591,6 +592,9 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
                 (isOverWip ? ` · ${cards.length - wipLimit} over the limit of ${wipLimit}` : ` · limit ${wipLimit}`)}
             </TooltipContent>
           </Tooltip>
+          {/* The queue is global, but In Progress is where its runs land and
+              where you look for what is running next. */}
+          {id === "progress" && <RunQueueChip />}
           {id === "completed" && (
             <Select
               value={completedFilter}

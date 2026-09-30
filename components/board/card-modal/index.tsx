@@ -381,7 +381,7 @@ export function CardModal({
           description: "You'll get a notice when it finishes.",
         });
         void run.then((result) => {
-          if (!result.success) reportFailure(result.error);
+          if (!result.success && !result.stopped) reportFailure(result.error);
         });
         return;
       }

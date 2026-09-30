@@ -152,7 +152,8 @@ interface CardPhaseActionsProps {
   softLock?: boolean;
 }
 
-export type RunResult = { success: boolean; error?: string };
+// `stopped` marks a run you killed: not a success, but nothing to report either.
+export type RunResult = { success: boolean; error?: string; stopped?: boolean };
 
 export interface PhaseHandOff {
   action: PhaseAction;
@@ -294,7 +295,7 @@ export function CardPhaseActions({
       onHandOff({ action, label, run });
     } else {
       void run.then((result) => {
-        if (!result.success) reportRunFailure(card.id, label, result.error);
+        if (!result.success && !result.stopped) reportRunFailure(card.id, label, result.error);
       });
     }
     return run;

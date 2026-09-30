@@ -120,6 +120,9 @@ export async function POST(request: NextRequest) {
           groupId: card.groupId ?? null,
           // Backups written before manual chain order existed simply omit it.
           groupOrder: card.groupOrder ?? null,
+          // Never restored: a backup brought back later must not rebuild a
+          // run queue that would start cards the moment it is armed.
+          queuePosition: null,
           taskNumber: card.taskNumber,
           gitBranchName: card.gitBranchName ?? null,
           gitBranchStatus: card.gitBranchStatus ?? null,

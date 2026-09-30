@@ -43,6 +43,7 @@ function sectionForEvent(event: ActivityEvent): SectionType | null {
     implementation: "solution",
     autonomous: "solution",
     quickfix: "solution",
+    queue: "solution",
     "chat-detail": "detail",
     "chat-opinion": "opinion",
     "chat-solution": "solution",
