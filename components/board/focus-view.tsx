@@ -18,9 +18,10 @@ import {
 } from "@/lib/board-focus";
 import type { PhaseAction } from "@/lib/card-phase";
 import { useKanbanStore } from "@/lib/store";
-import { BoardView, Card, getDisplayId, Project } from "@/lib/types";
+import { BoardView, Card, getDisplayId, Project, TodaySource } from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CardPhaseActions } from "./card-phase-actions";
+import { TodayPanel } from "./today-panel";
 
 const STATE_ICONS = {
   AlertTriangle,
@@ -34,7 +35,7 @@ const STATE_ICONS = {
  * wears. In All Projects the rows otherwise read as one grey list, and the
  * prefix alone is too small to sort them by at a glance.
  */
-function ProjectIdPill({
+export function ProjectIdPill({
   displayId,
   project,
   className = "",
@@ -94,13 +95,13 @@ export function BoardViewToggle() {
   );
 }
 
-function FocusBlockHeading({
+export function FocusBlockHeading({
   title,
   count,
   note,
 }: {
   title: string;
-  count: number;
+  count?: number;
   note?: string;
 }) {
   return (
@@ -108,9 +109,11 @@ function FocusBlockHeading({
       <h4 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
         {title}
       </h4>
-      <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground/70">
-        {count}
-      </span>
+      {count !== undefined && (
+        <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground/70">
+          {count}
+        </span>
+      )}
       {note && <span className="ml-auto text-[10.5px] text-muted-foreground/70">{note}</span>}
     </div>
   );
@@ -223,7 +226,7 @@ function YourTurnRow({ row }: { row: FocusRow }) {
   );
 }
 
-function QuietRow({ children }: { children: React.ReactNode }) {
+export function QuietRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-2.5 py-2 text-[11.5px] text-muted-foreground">
       {children}
@@ -238,8 +241,17 @@ function QuietRow({ children }: { children: React.ReactNode }) {
  * can be short honestly: without them, a Focus view showing five rows out of
  * fifty-four looks like it lost your work. Naming what it left out — and how
  * much — is what makes a short list trustworthy enough to act on.
+ *
+ * On a wide window the Today panel takes the space to the right; below `xl`
+ * it is hidden and the list stands alone, as it did before.
  */
-export function FocusView({ cards }: { cards: Card[] }) {
+export function FocusView({
+  cards,
+  todaySources,
+}: {
+  cards: Card[];
+  todaySources?: TodaySource[];
+}) {
   const staleThresholds = useKanbanStore((s) => s.staleThresholds);
   const setBoardView = useKanbanStore((s) => s.setBoardView);
   const projects = useKanbanStore((s) => s.projects);
@@ -260,17 +272,17 @@ export function FocusView({ cards }: { cards: Card[] }) {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="flex w-full max-w-[560px] flex-col gap-4">
-        {isQuiet && (
-          <QuietRow>
-            <span>Nothing on the board yet.</span>
-          </QuietRow>
-        )}
-
-        {(focus.yourTurn.length > 0 || !isQuiet) && (
+      <div className="grid w-full grid-cols-1 gap-7 xl:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
+        <div className="flex w-full max-w-[560px] flex-col gap-4">
+          {/* The heading stays even on an empty board, so this column starts on
+              the same line as the Today panel's heading beside it. */}
           <div className="flex flex-col gap-1.5">
             <FocusBlockHeading title="Your turn" count={focus.yourTurn.length} />
-            {focus.yourTurn.length === 0 ? (
+            {isQuiet ? (
+              <QuietRow>
+                <span>Nothing on the board yet.</span>
+              </QuietRow>
+            ) : focus.yourTurn.length === 0 ? (
               <QuietRow>
                 <Check className="w-3.5 h-3.5 shrink-0 text-green-500" />
                 <span>Nothing is waiting on you.</span>
@@ -279,93 +291,97 @@ export function FocusView({ cards }: { cards: Card[] }) {
               focus.yourTurn.map((row) => <YourTurnRow key={row.card.id} row={row} />)
             )}
           </div>
-        )}
 
-        {focus.agentRunning.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <FocusBlockHeading
-              title="Agent running"
-              count={focus.agentRunning.length}
-              note="nothing for you"
-            />
-            {/* One line, not one row per card: these are not decisions, and a
-                list of them would compete with the block above that is. */}
-            <QuietRow>
-              <Cpu className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-              <span className="min-w-0 truncate">
-                {focus.agentRunning.map((card, index) => {
-                  const project = projects.find((p) => p.id === card.projectId);
-                  const displayId = getDisplayId(card, project);
-                  return (
-                    <span key={card.id}>
-                      {index > 0 && " · "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          selectCard(card);
-                          openModal();
-                        }}
-                        className={
-                          displayId
-                            ? "transition-opacity hover:opacity-80"
-                            : "transition-colors hover:text-foreground"
-                        }
-                      >
-                        {displayId ? (
-                          <ProjectIdPill displayId={displayId} project={project} />
-                        ) : (
-                          card.title
-                        )}
-                      </button>{" "}
-                      {card.processingType === "quick-fix"
-                        ? "quick fix"
-                        : card.processingType === "evaluate"
-                          ? "evaluating"
-                          : "running"}
-                    </span>
-                  );
-                })}
-              </span>
-            </QuietRow>
-          </div>
-        )}
+          {focus.agentRunning.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <FocusBlockHeading
+                title="Agent running"
+                count={focus.agentRunning.length}
+                note="nothing for you"
+              />
+              {/* One line, not one row per card: these are not decisions, and a
+                  list of them would compete with the block above that is. */}
+              <QuietRow>
+                <Cpu className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+                <span className="min-w-0 truncate">
+                  {focus.agentRunning.map((card, index) => {
+                    const project = projects.find((p) => p.id === card.projectId);
+                    const displayId = getDisplayId(card, project);
+                    return (
+                      <span key={card.id}>
+                        {index > 0 && " · "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectCard(card);
+                            openModal();
+                          }}
+                          className={
+                            displayId
+                              ? "transition-opacity hover:opacity-80"
+                              : "transition-colors hover:text-foreground"
+                          }
+                        >
+                          {displayId ? (
+                            <ProjectIdPill displayId={displayId} project={project} />
+                          ) : (
+                            card.title
+                          )}
+                        </button>{" "}
+                        {card.processingType === "quick-fix"
+                          ? "quick fix"
+                          : card.processingType === "evaluate"
+                            ? "evaluating"
+                            : "running"}
+                      </span>
+                    );
+                  })}
+                </span>
+              </QuietRow>
+            </div>
+          )}
 
-        {(focus.waiting.total > 0 || focus.waiting.stale > 0) && (
-          <div className="flex flex-col gap-1.5">
-            <FocusBlockHeading title="Waiting" count={focus.waiting.total} />
-            <QuietRow>
-              <Columns3 className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-              <span className="min-w-0 truncate font-mono text-[10.5px] tabular-nums">
-                {focus.waiting.buckets
-                  .map((bucket) => `${bucket.title} ${bucket.count}`)
-                  .join(" · ")}
-                {focus.waiting.stale > 0 && (
-                  <>
-                    {focus.waiting.buckets.length > 0 && " · "}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-default underline decoration-dotted underline-offset-2">
-                          Stale {focus.waiting.stale}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        Untouched past their column&apos;s threshold. Held out of Your turn —
-                        find them at the foot of each column.
-                      </TooltipContent>
-                    </Tooltip>
-                  </>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={() => setBoardView("all")}
-                className="ml-auto shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground transition-colors hover:border-ink/40 hover:text-foreground"
-              >
-                Go to board
-              </button>
-            </QuietRow>
-          </div>
-        )}
+          {(focus.waiting.total > 0 || focus.waiting.stale > 0) && (
+            <div className="flex flex-col gap-1.5">
+              <FocusBlockHeading title="Waiting" count={focus.waiting.total} />
+              <QuietRow>
+                <Columns3 className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+                <span className="min-w-0 truncate font-mono text-[10.5px] tabular-nums">
+                  {focus.waiting.buckets
+                    .map((bucket) => `${bucket.title} ${bucket.count}`)
+                    .join(" · ")}
+                  {focus.waiting.stale > 0 && (
+                    <>
+                      {focus.waiting.buckets.length > 0 && " · "}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-default underline decoration-dotted underline-offset-2">
+                            Stale {focus.waiting.stale}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          Untouched past their column&apos;s threshold. Held out of Your turn —
+                          find them at the foot of each column.
+                        </TooltipContent>
+                      </Tooltip>
+                    </>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBoardView("all")}
+                  className="ml-auto shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground transition-colors hover:border-ink/40 hover:text-foreground"
+                >
+                  Go to board
+                </button>
+              </QuietRow>
+            </div>
+          )}
+        </div>
+
+        <aside className="hidden min-w-0 max-w-[560px] self-start border-l border-border pl-7 xl:sticky xl:top-0 xl:block xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
+          <TodayPanel cards={cards} sources={todaySources} />
+        </aside>
       </div>
     </div>
   );

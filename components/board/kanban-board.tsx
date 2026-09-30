@@ -14,7 +14,7 @@ import {
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { useUndoShortcut } from "@/hooks/use-undo-shortcut";
-import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter, getColumns } from "@/lib/types";
+import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter, getColumns, TodaySource } from "@/lib/types";
 import { isCardInWorkspace } from "@/lib/workspace";
 import { summarizeCardGroups } from "@/lib/card-group";
 import { partitionStaleCards } from "@/lib/card-age";
@@ -111,7 +111,13 @@ function sortByRecentUpdate(cards: Card[]): Card[] {
 import { Column } from "./column";
 import { TaskCard } from "./card";
 
-export function KanbanBoard() {
+interface KanbanBoardProps {
+  // Cloud wrapper passes team pool activity here for Focus view's Today
+  // panel, the same slot the bell's `extraSources` uses. Base never fills it.
+  todaySources?: TodaySource[];
+}
+
+export function KanbanBoard({ todaySources }: KanbanBoardProps = {}) {
   const { cards, cardGroups, projects, activeProjectId, activeWorkspace, searchQuery, moveCard, completedFilter, boardView, staleThresholds, clearCardSelection } = useKanbanStore();
   useUndoShortcut();
 
@@ -185,7 +191,7 @@ export function KanbanBoard() {
   });
 
   if (boardView === "focus") {
-    return <FocusView cards={filteredCards} />;
+    return <FocusView cards={filteredCards} todaySources={todaySources} />;
   }
 
   const handleDragStart = (event: DragStartEvent) => {

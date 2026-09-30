@@ -27,7 +27,7 @@ const isMac = () =>
 
 // Same stand-down rule as the Cmd+Z hook: a text field keeps its own Esc and
 // Backspace, and an open dialog, menu or card panel owns the keyboard.
-function keyboardBelongsElsewhere(target: EventTarget | null, isModalOpen: boolean) {
+export function keyboardBelongsElsewhere(target: EventTarget | null, isModalOpen: boolean) {
   const el = target as HTMLElement | null;
   if (
     el &&

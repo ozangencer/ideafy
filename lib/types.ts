@@ -630,6 +630,51 @@ export interface ActivitySource {
   onMarkAllRead?: () => void | Promise<void>;
 }
 
+// Focus view's "Today" panel: the cards touched since the start of the day,
+// derived from conversations, one-shot runs, bound terminal sessions and
+// completions. Not a log — one entry per card, the day folded into chips.
+export type TodayChipKind = "completed" | "run" | "chat" | "terminal";
+
+export interface TodayChip {
+  kind: TodayChipKind;
+  label: string;
+}
+
+export interface TodayStep {
+  at: string; // ISO date
+  label: string;
+}
+
+export interface TodayCard {
+  cardId: string;
+  projectId: string | null;
+  lastTouchedAt: string; // ISO date
+  // The tab the latest touch happened on, so "Open card" lands there.
+  lastSection: SectionType | null;
+  chips: TodayChip[];
+  steps: TodayStep[]; // oldest first
+}
+
+// Cloud wrapper feeds extra groups (pool activity by teammates) through the
+// board's `todaySources` prop, the same slot pattern as ActivitySource. The
+// entries may point at pool cards that have no local row, so they carry their
+// own title and open handler instead of a card id.
+export interface TodaySourceEntry {
+  id: string;
+  title: string;
+  at: string; // ISO date
+  actor?: string | null;
+  chips: string[];
+  onOpen?: () => void;
+}
+
+export interface TodaySource {
+  key: string;
+  title: string;
+  entries: TodaySourceEntry[];
+  note?: string;
+}
+
 // Completed column filter - Updated in main for conflict test
 export type CompletedFilter = 'today' | 'yesterday' | 'this_week' | 'all';
 
