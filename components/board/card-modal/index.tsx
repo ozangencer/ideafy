@@ -36,8 +36,8 @@ import {
   Terminal,
   Check,
   X,
-  ChevronRight,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 
@@ -216,7 +216,6 @@ export function CardModal({
   const [devServerPort, setDevServerPort] = useState<number | null>(null);
   const [devServerPid, setDevServerPid] = useState<number | null>(null);
   const [isServerLoading, setIsServerLoading] = useState(false);
-  const [showGitDetails, setShowGitDetails] = useState(false);
 
   const overlayMouseDownRef = useRef(false);
 
@@ -1060,158 +1059,74 @@ export function CardModal({
           />
         )}
 
-        {/* Git Branch Actions for Human Test cards */}
+        {/* Git Branch Actions for Human Test cards. One row in the normal
+            case: the question, where the work lives, whether it is running,
+            and the two answers. What "Didn't work" costs is said in the
+            rollback dialog, so it is not repeated here. */}
         {status === "test" && gitBranchName && gitBranchStatus === "active" && (
-          <div className="mx-6 my-3 border border-ink rounded-lg p-4 bg-paper-cream">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                {/* The decision this panel actually asks for, in the tester's
-                    words. The branch name and worktree path underneath are the
-                    same fact in git's words — useful, but not the question. */}
-                <div className="text-sm text-ink">
-                  <span className="font-medium">Did this change work?</span>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  {mergeReality && mergeReality.state !== "ready" ? (
-                    <Button
-                      onClick={handleCompleteWithoutMerge}
-                      disabled={isCompleting || isRollingBack || isRunLocked}
-                      size="sm"
-                      variant="outline"
-                      className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
-                    >
-                      {isCompleting ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="mr-2 h-4 w-4" />
-                      )}
-                      Complete
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => setShowMergeConfirmDialog(true)}
-                      disabled={isMerging || isCheckingMergeReality || isRunLocked}
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      {isMerging || isCheckingMergeReality ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <GitMerge className="mr-2 h-4 w-4" />
-                      )}
-                      {mergeReality?.needsCommit ? "Commit & Merge" : "Merge & Complete"}
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowRollbackDialog(true)}
-                    disabled={isMerging || isRollingBack || isCompleting || isRunLocked}
-                    className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
-                  >
-                    <Undo2 className="mr-2 h-4 w-4" />
-                    Didn&apos;t work
-                  </Button>
-                </div>
-              </div>
-
-              {/* Say what the destructive button costs before it is pressed.
-                  The two states need genuinely different sentences: normally the
-                  work is thrown away, but once it is already on the default
-                  branch nothing can take it back out, and saying "deletes this
-                  attempt" there reads as a contradiction. */}
-              <p className="text-xs text-muted-foreground">
-                {mergeReality && mergeReality.state !== "ready" ? (
-                  <>
-                    This change is already on {mergeReality.defaultBranch}, so &ldquo;Didn&apos;t
-                    work&rdquo; cannot take it back out — it only sends the card to Bugs to be
-                    worked on again.
-                  </>
-                ) : (
-                  <>
-                    &ldquo;Didn&apos;t work&rdquo; sends the card back to Bugs and nothing from
-                    this attempt reaches {mergeReality?.defaultBranch ?? "the main branch"}.
-                    You choose whether to keep the code.
-                  </>
-                )}
-              </p>
-
-              {/* Why the merge button is gone: git has nothing left to take. */}
-              {mergeReality && mergeReality.state !== "ready" && (
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <GitMerge className="h-3.5 w-3.5 mt-0.5 shrink-0 text-ink" />
-                  <span>
-                    {mergeReality.state === "missing"
-                      ? "This work is no longer on its own branch — it looks like it was already merged or removed elsewhere. Complete moves the card to Completed."
-                      : `Everything here is already on ${mergeReality.defaultBranch}, so there is nothing left to merge. Complete moves the card to Completed.`}
-                  </span>
-                </div>
-              )}
-
-              {/* Git's own words for the same thing — real, but not the question
-                  being asked, so they stay out of the way until wanted. */}
-              <div className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={() => setShowGitDetails((v) => !v)}
-                  aria-expanded={showGitDetails}
-                  className="self-start inline-flex items-center gap-1.5 rounded-md border border-ink/20 px-2 py-1 text-xs font-medium text-ink hover:bg-ink/[0.06] hover:border-ink/40 transition-colors"
-                >
-                  <ChevronRight
-                    className={`h-3.5 w-3.5 transition-transform ${showGitDetails ? "rotate-90" : ""}`}
-                  />
-                  <GitBranch className="h-3.5 w-3.5" />
-                  {showGitDetails ? "Hide branch details" : "Branch details"}
-                </button>
-                {showGitDetails && (
-                  <div className="flex flex-col gap-1 pl-3 border-l-2 border-border">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <GitBranch className="h-3.5 w-3.5 shrink-0 text-ink" />
-                      <span className="font-mono truncate" title={gitBranchName ?? undefined}>
-                        {gitBranchName}
-                      </span>
-                    </div>
-                    {gitWorktreeStatus === "active" && gitWorktreePath && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-ink" />
-                        <span className="font-mono truncate" title={gitWorktreePath}>
-                          {gitWorktreePath.split("/").slice(-3).join("/")}
-                        </span>
+          <div className="mx-6 my-2 border border-ink rounded-lg px-4 py-2.5 bg-paper-cream">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-sm font-medium text-ink shrink-0">
+                  Did this change work?
+                </span>
+                {/* Git's words for the same thing — real, but not the question
+                    being asked, so the details wait in the tooltip. */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex min-w-0 items-center gap-1 rounded-md border border-ink/20 px-1.5 py-0.5 text-xs text-muted-foreground">
+                      <GitBranch className="h-3 w-3 shrink-0 text-ink" />
+                      <span className="font-mono truncate max-w-[14rem]">{gitBranchName}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-md">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-mono break-all">{gitBranchName}</span>
                       </div>
-                    )}
-                  </div>
-                )}
+                      {gitWorktreeStatus === "active" && gitWorktreePath && (
+                        <div className="flex items-center gap-2">
+                          <FolderGit2 className="h-3.5 w-3.5 shrink-0" />
+                          <span className="font-mono break-all">{gitWorktreePath}</span>
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              {gitWorktreeStatus === "active" && runMode !== "none" && (
-                <div className="flex items-center gap-2 pt-2 border-t border-border/50 mt-2">
-                  {runIsActive ? (
-                    <>
+              <div className="flex items-center gap-2 shrink-0 ml-auto">
+                {gitWorktreeStatus === "active" && runMode !== "none" && (
+                  runIsActive ? (
+                    <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {devServerPort ? (
-                          <>
-                            Running on port{" "}
-                            <span className="font-mono text-foreground">{devServerPort}</span>
-                          </>
+                          <span className="font-mono text-foreground">:{devServerPort}</span>
                         ) : (
                           "Running"
                         )}
                       </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleStopDevServer}
-                        disabled={isServerLoading}
-                        className="ml-auto border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
-                      >
-                        {isServerLoading ? (
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        ) : (
-                          <MonitorStop className="mr-2 h-3 w-3" />
-                        )}
-                        Stop
-                      </Button>
-                    </>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={handleStopDevServer}
+                            disabled={isServerLoading}
+                            aria-label="Stop"
+                            className="h-7 w-7 text-red-500 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+                          >
+                            {isServerLoading ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <MonitorStop className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">Stop</TooltipContent>
+                      </Tooltip>
+                    </div>
                   ) : (
                     <Button
                       size="sm"
@@ -1229,10 +1144,64 @@ export function CardModal({
                       )}
                       {runLabels.start}
                     </Button>
-                  )}
-                </div>
-              )}
+                  )
+                )}
+                {mergeReality && mergeReality.state !== "ready" ? (
+                  <Button
+                    onClick={handleCompleteWithoutMerge}
+                    disabled={isCompleting || isRollingBack || isRunLocked}
+                    size="sm"
+                    variant="outline"
+                    className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
+                  >
+                    {isCompleting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="mr-2 h-4 w-4" />
+                    )}
+                    Complete
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setShowMergeConfirmDialog(true)}
+                    disabled={isMerging || isCheckingMergeReality || isRunLocked}
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {isMerging || isCheckingMergeReality ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <GitMerge className="mr-2 h-4 w-4" />
+                    )}
+                    {mergeReality?.needsCommit ? "Commit & Merge" : "Merge & Complete"}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowRollbackDialog(true)}
+                  disabled={isMerging || isRollingBack || isCompleting || isRunLocked}
+                  className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
+                >
+                  <Undo2 className="mr-2 h-4 w-4" />
+                  Didn&apos;t work
+                </Button>
+              </div>
             </div>
+
+            {/* The one case that must be read before pressing anything: the
+                work is already on the default branch, so the merge button is
+                gone and "Didn't work" can no longer take anything back out. */}
+            {mergeReality && mergeReality.state !== "ready" && (
+              <div className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+                <GitMerge className="h-3.5 w-3.5 mt-0.5 shrink-0 text-ink" />
+                <span>
+                  {mergeReality.state === "missing"
+                    ? `This work is no longer on its own branch — it was likely merged or removed elsewhere. Complete moves the card to Completed; “Didn’t work” only sends it back to Bugs.`
+                    : `Everything here is already on ${mergeReality.defaultBranch}, so there is nothing left to merge. Complete moves the card to Completed; “Didn’t work” cannot take it back out — it only sends the card to Bugs.`}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1248,46 +1217,50 @@ export function CardModal({
         )}
 
         {status === "test" && !gitBranchName && !isLinkingBranch && (
-          <div className="mx-6 my-3 border border-ink rounded-lg p-4 bg-paper-cream">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm text-ink">
-                  <span className="font-medium">
-                    {isWorkProject ? "Is this ready?" : "Did this change work?"}
-                  </span>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    onClick={() => handleFinishWithoutBranch("completed")}
-                    disabled={isCompleting}
-                    size="sm"
-                    variant="outline"
-                    className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
-                  >
-                    {isCompleting ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Check className="mr-2 h-4 w-4" />
-                    )}
-                    {isWorkProject ? "Done" : "Complete"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleFinishWithoutBranch("bugs")}
-                    disabled={isCompleting}
-                    className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
-                  >
-                    <Undo2 className="mr-2 h-4 w-4" />
-                    {isWorkProject ? "Needs revisions" : <>Didn&apos;t work</>}
-                  </Button>
-                </div>
+          <div className="mx-6 my-2 border border-ink rounded-lg px-4 py-2.5 bg-paper-cream">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-sm font-medium text-ink min-w-0 flex-1">
+                {isWorkProject ? "Is this ready?" : "Did this change work?"}
+              </span>
+              <div className="flex items-center gap-2 shrink-0 ml-auto">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={() => handleFinishWithoutBranch("completed")}
+                      disabled={isCompleting}
+                      size="sm"
+                      variant="outline"
+                      className="border-ink/40 text-ink hover:bg-ink/10 hover:text-ink hover:border-ink/60"
+                    >
+                      {isCompleting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="mr-2 h-4 w-4" />
+                      )}
+                      {isWorkProject ? "Done" : "Complete"}
+                    </Button>
+                  </TooltipTrigger>
+                  {/* Work projects have no branches at all, so the button label
+                      already says everything; only a dev card needs the reason
+                      nothing is merged. */}
+                  {!isWorkProject && (
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      This card has no branch of its own, so nothing is merged or deleted — only
+                      the card moves.
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleFinishWithoutBranch("bugs")}
+                  disabled={isCompleting}
+                  className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-600 hover:border-red-500 dark:hover:text-red-400"
+                >
+                  <Undo2 className="mr-2 h-4 w-4" />
+                  {isWorkProject ? "Needs revisions" : <>Didn&apos;t work</>}
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {isWorkProject
-                  ? "Only the card moves; nothing in the project folder changes."
-                  : "This card has no branch of its own, so nothing is merged or deleted — only the card moves."}
-              </p>
             </div>
           </div>
         )}
@@ -1404,6 +1377,17 @@ export function CardModal({
             {/* The old copy claimed this checks out main, which it never did,
                 and never mentioned where the card lands. Both matter. */}
             <AlertDialogDescription>
+              {mergeReality && mergeReality.state !== "ready" ? (
+                <>
+                  This change is already on {mergeReality.defaultBranch}, so nothing is taken
+                  back out of it.{" "}
+                </>
+              ) : (
+                <>
+                  Nothing from this attempt reaches{" "}
+                  {mergeReality?.defaultBranch ?? "the main branch"}.{" "}
+                </>
+              )}
               The card goes back to Bugs and its test scenarios are cleared, so the work can
               be attempted again from scratch. Should the code written for this attempt be
               kept?
