@@ -129,6 +129,7 @@ export function BackgroundProcesses() {
     backgroundProcesses,
     fetchBackgroundProcesses,
     fetchQueue,
+    fetchActivity,
     killBackgroundProcess,
     clearCompletedProcesses,
     clearProcessing,
@@ -293,6 +294,12 @@ export function BackgroundProcesses() {
     const finished = completedProcesses.filter((_, i) => !seen.has(keys[i]));
     if (finished.length === 0) return;
 
+    // The bell polls on its own 30s cadence, so without this nudge the toast
+    // lands and the bell stays empty until the next tick. The server writes
+    // the activity row in the same step that marks the process completed, so
+    // it is already there. Independent of the OS-banner setting below.
+    void fetchActivity();
+
     // Deliberately no duration threshold (unlike the bell's 60s): a 20s chat
     // reply is worth knowing about when the window is in the background, and
     // main skips the banner entirely while the window is focused.
@@ -301,7 +308,7 @@ export function BackgroundProcesses() {
       return;
     }
     notifyFinishedRuns(finished);
-  }, [backgroundProcesses, completedProcesses, settings?.systemNotifications]);
+  }, [backgroundProcesses, completedProcesses, settings?.systemNotifications, fetchActivity]);
 
   // Always-on heartbeat poll: avoids a chicken-and-egg where local state says
   // "nothing running" but the server actually has a process (spawned via MCP,

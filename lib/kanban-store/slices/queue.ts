@@ -54,7 +54,20 @@ export const createQueueSlice: StoreSlice<
 
     fetchQueue: async () => {
       try {
-        apply(await request<QueueSnapshot>("GET"));
+        const previous = get().queueState;
+        const snapshot = await request<QueueSnapshot>("GET");
+        apply(snapshot);
+        // "Queue paused" and "Dropped from queue" land in the bell straight
+        // from the server, not through a finished process, so the bell would
+        // otherwise wait for its own 30s poll. A card leaving because its run
+        // started refreshes too; that costs one extra read, nothing more.
+        if (previous) {
+          const remaining = new Set(snapshot.items.map((item) => item.cardId));
+          const pauseChanged =
+            !!snapshot.pausedReason && snapshot.pausedReason !== previous.pausedReason;
+          const lostItem = previous.items.some((item) => !remaining.has(item.cardId));
+          if (pauseChanged || lostItem) void get().fetchActivity();
+        }
       } catch (error) {
         console.error("Failed to fetch run queue:", error);
       }
