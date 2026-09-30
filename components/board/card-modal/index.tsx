@@ -101,8 +101,8 @@ export function CardModal({
     stopDevServer,
     // Conversation state and actions
     conversations,
-    streamingMessage,
-    isConversationLoading,
+    streamingMessages,
+    conversationAbortControllers,
     fetchConversation,
     sendMessage,
     cancelConversation,
@@ -424,6 +424,8 @@ export function CardModal({
   // Get current conversation messages
   const conversationKey = selectedCard ? `${selectedCard.id}-${activeTab}` : "";
   const currentMessages = conversations[conversationKey] || [];
+  const currentStreamingMessage = streamingMessages[conversationKey] ?? null;
+  const isStreamAttached = currentStreamingMessage !== null;
 
   // Check if there's a background process running for this card+section
   const isBackgroundProcessing = useMemo(() => {
@@ -441,12 +443,9 @@ export function CardModal({
   useEffect(() => {
     if (!selectedCard || isDraftMode) return;
     if (!isBackgroundProcessing) return;
-    const isAlreadyAttached =
-      streamingMessage?.cardId === selectedCard.id &&
-      streamingMessage?.sectionType === activeTab;
-    if (isAlreadyAttached) return;
+    if (isStreamAttached) return;
     void attachLiveStream(selectedCard.id, activeTab);
-  }, [selectedCard, activeTab, isDraftMode, isBackgroundProcessing, streamingMessage, attachLiveStream]);
+  }, [selectedCard, activeTab, isDraftMode, isBackgroundProcessing, isStreamAttached, attachLiveStream]);
 
   // Handle card mention click
   const handleCardClick = useCallback((cardId: string) => {
@@ -1326,16 +1325,16 @@ export function CardModal({
                   cardId={selectedCard.id}
                   sectionType={activeTab}
                   messages={currentMessages}
-                  isLoading={isConversationLoading && streamingMessage?.cardId === selectedCard.id && streamingMessage?.sectionType === activeTab}
+                  isLoading={!!conversationAbortControllers[conversationKey]}
                   isBackgroundProcessing={isBackgroundProcessing}
-                  streamingMessage={streamingMessage?.cardId === selectedCard.id && streamingMessage?.sectionType === activeTab ? streamingMessage : null}
+                  streamingMessage={currentStreamingMessage}
                   projectPath={project.folderPath}
                   projectId={projectId}
                   testScenarios={testScenarios}
                   sectionContent={sectionValues[activeTab]}
                   onSendMessage={handleSendMessage}
                   onClearHistory={handleClearConversation}
-                  onCancel={cancelConversation}
+                  onCancel={() => cancelConversation(selectedCard.id, activeTab)}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

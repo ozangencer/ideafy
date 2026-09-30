@@ -178,9 +178,10 @@ export interface KanbanStore {
 
   // Conversation state
   conversations: Record<string, ConversationMessage[]>; // key: `${cardId}-${sectionType}`
-  streamingMessage: ConversationMessage | null;
-  isConversationLoading: boolean;
-  conversationAbortController: AbortController | null;
+  // In-flight assistant bubbles and the POSTs feeding them, keyed like
+  // `conversations`. Keyed so two chats streaming at once never share a bubble.
+  streamingMessages: Record<string, ConversationMessage>;
+  conversationAbortControllers: Record<string, AbortController>;
   conversationError: string | null;
   // Bumped after a chat-stream that ran MCP tools finishes and fetchCards has
   // returned. Modals watch this to force-resync form fields with the freshly
@@ -412,12 +413,12 @@ export interface KanbanStore {
     projectPath: string,
     currentSectionContent: string
   ) => Promise<void>;
-  cancelConversation: () => void;
+  cancelConversation: (cardId: string, sectionType: SectionType) => void;
   detachConversation: () => void;
   attachLiveStream: (cardId: string, sectionType: SectionType) => Promise<void>;
   clearConversation: (cardId: string, sectionType: SectionType) => Promise<void>;
-  setStreamingMessage: (message: ConversationMessage | null) => void;
-  appendToStreamingMessage: (text: string) => void;
+  setStreamingMessage: (key: string, message: ConversationMessage | null) => void;
+  appendToStreamingMessage: (key: string, text: string) => void;
   setConversationError: (error: string | null) => void;
 
   // Background processes actions

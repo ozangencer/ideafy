@@ -550,6 +550,8 @@ export interface ConversationMessage {
   statusSteps?: SessionStatusStep[];
   createdAt: string;
   isStreaming?: boolean;
+  // Client-only: which stream loop owns this streaming bubble.
+  runId?: string;
 }
 
 // Background process tracking

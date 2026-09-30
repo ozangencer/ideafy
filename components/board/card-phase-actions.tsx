@@ -122,7 +122,9 @@ const CHAT_RUNNING_TOOLTIP = "Chat is running on this card";
  * another tab or over MCP, a poll later.
  */
 export function useCardChatRunning(cardId: string) {
-  const streamingHere = useKanbanStore((s) => s.streamingMessage?.cardId === cardId);
+  const streamingHere = useKanbanStore((s) =>
+    Object.values(s.streamingMessages).some((m) => m.cardId === cardId)
+  );
   const chatInBg = useKanbanStore((s) =>
     s.backgroundProcesses.some(
       (p) => p.cardId === cardId && p.processType === "chat" && p.status === "running"
