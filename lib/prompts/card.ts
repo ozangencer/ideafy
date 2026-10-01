@@ -1,10 +1,11 @@
-import type { AiPlatform, ProjectMode, Voice } from "@/lib/types";
+import type { AiPlatform, ProjectMode, Voice, WorkTemplate } from "@/lib/types";
 import { DEFAULT_VOICE } from "@/lib/types";
 import { stripHtml } from "./utils";
 import { detectCardLanguage } from "./test-style";
 import { buildVoicePrompt } from "./voice-style";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { markUntrusted, markUntrustedInline } from "@/lib/untrusted-content";
+import { artifactHtmlToMarkdownLinks } from "@/lib/artifact-url";
 import { PRIOR_DECISIONS_EVALUATION_RULE } from "./prior-decisions";
 import type { ChainCardRef, ChainContext } from "@/lib/chain-order";
 
@@ -192,6 +193,86 @@ ${summaryVoice}
 ${styleContract}
 
 Focus on fixing the bug efficiently. Do NOT write extensive documentation or plans.`;
+}
+
+/**
+ * A Work card's Generate run: one autonomous pass that turns the card into a
+ * file in the project folder, through the card's template.
+ *
+ * Quick Fix's sibling for work that is not code, so it keeps Quick Fix's
+ * output shape — a summary, then a checklist opening with the core heading —
+ * and drops everything about the repo: no worktree, no commit, no tests to
+ * run. Whether the run worked is decided by the file it recorded with
+ * save_output, not by this text, so the prompt is explicit that the file is
+ * the deliverable and the summary only describes it.
+ *
+ * Files dropped onto the card sit in its description as chips. Those are
+ * turned into markdown links before stripping, or the run would see their
+ * names without their locations.
+ */
+export function buildGeneratePrompt(
+  card: {
+    id: string;
+    title: string;
+    description: string;
+    solutionSummary?: string | null;
+    externallyAuthored?: boolean;
+  },
+  template: WorkTemplate,
+  voice: Voice = DEFAULT_VOICE,
+): string {
+  const external = card.externallyAuthored === true;
+  const title = markUntrustedInline(stripHtml(card.title), external);
+  const description = markUntrusted(
+    stripHtml(artifactHtmlToMarkdownLinks(card.description)),
+    external
+  );
+  const plan = stripHtml(artifactHtmlToMarkdownLinks(card.solutionSummary || ""));
+  const language = detectCardLanguage({ title: card.title, description: card.description });
+  const styleContract = buildVoicePrompt(voice, "tests", { language, mode: "work" });
+  const summaryVoice = buildVoicePrompt(voice, "quick_fix", { mode: "work" });
+
+  const skillStep = template.skill
+    ? `Use the \`${template.skill}\` skill to produce it — invoke it by name before writing anything yourself. If the skill is not available in this session, say so in the summary and produce the file without it.`
+    : "No skill is assigned; produce it yourself with the tools you have.";
+  const preset = template.promptPreset.trim()
+    ? `\n## Template Instructions (${template.name})\n${template.promptPreset.trim()}\n`
+    : "";
+  const planSection = plan ? `\n## Plan\n${markUntrusted(plan, external)}\n` : "";
+
+  return `You are producing a deliverable for a Work card — a document, a deck, a mail draft or a research note, not code. Produce it in one pass.
+
+## Card
+${title}
+
+## Description
+${description}
+${planSection}${preset}
+Card ID: ${card.id}
+
+## Instructions
+1. Produce one \`${template.outputExt}\` file for this card (template: ${template.name}). ${skillStep}
+2. Save it inside the current working directory — the card's project folder. Pick a short descriptive file name. Never write it to ~/Desktop, /tmp or another project: save_output rejects files outside the project folder.
+3. Deliver the file with \`mcp__ideafy__save_output\` (card id ${card.id}, the file's path). This is the run's real result: a file that was not recorded with save_output counts as not produced, whatever the summary says. Call it once per file if there is more than one.
+4. If a script you run (python3, a converter, a skill's helper) fails, fix the cause and run it again. Do not report a file you have not seen on disk.
+5. If save_output answers that the Ideafy app must be updated, stop there and say exactly that in the summary.
+6. Mail is drafted, never sent: write the mail as a draft file (.eml or .md) and do not send it through any mail tool, connector or client.
+
+This is a one-shot run: no one is at the keyboard and nothing resumes it. Do not ask questions, do not wait in the background; decide, and note anything you would have asked in the summary.
+
+## Output Requirements
+When the file is saved, hand back a short summary in this format, with the \`## Output Summary\` heading kept in English whatever language the rest is in:
+
+## Output Summary
+- **File:** the file's name, as recorded with save_output
+- **Contents:** what it contains, in two or three sentences
+- **Open points:** anything you assumed or could not settle (omit when there is none)
+
+Then a review checklist for the file, opening with its core group: \`## Core flow\` on an English card, \`## Temel akış\` on a Turkish one. Each step names the file to open and what to check in it. That heading is also what separates the checklist from the summary above, so it must be present and at \`##\` level.
+
+${summaryVoice}
+
+${styleContract}`;
 }
 
 /**

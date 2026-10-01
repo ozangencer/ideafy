@@ -53,6 +53,7 @@ function makeCard(id: string, overrides: Partial<Card> = {}): Card {
     aiPlatform: null,
     useWorktree: null,
     outputPaths: null,
+    workTemplateId: null,
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
     completedAt: null,

@@ -48,6 +48,7 @@ const RUN_LABEL: Record<string, string> = {
   retest: "Retest",
   verify: "Verify",
   "quick-fix": "Quick Fix",
+  generate: "Generate",
   autonomous: "Autonomous",
 };
 
@@ -59,6 +60,7 @@ const RUN_SECTION: Record<string, SectionType> = {
   retest: "tests",
   verify: "tests",
   "quick-fix": "solution",
+  generate: "solution",
   autonomous: "solution",
 };
 

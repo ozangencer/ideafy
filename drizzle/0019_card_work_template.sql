@@ -1,0 +1,1 @@
+ALTER TABLE `cards` ADD `work_template_id` text;

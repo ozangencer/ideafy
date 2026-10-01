@@ -11,7 +11,7 @@ export type Complexity = "low" | "medium" | "high";
 export type Priority = "low" | "medium" | "high";
 export type GitBranchStatus = "active" | "merged" | "rolled_back" | null;
 export type GitWorktreeStatus = "active" | "removed" | null;
-export type ProcessingType = "autonomous" | "quick-fix" | "evaluate" | null;
+export type ProcessingType = "autonomous" | "quick-fix" | "evaluate" | "generate" | null;
 
 // What git itself says about a card's branch, as opposed to what the DB
 // remembers. `gitBranchStatus` only ever leaves "active" when the merge or
@@ -78,6 +78,10 @@ export interface Card {
   // file-delivery contract a Work card's Generate run reports through. Local
   // by nature: never sent to the team pool. null = nothing recorded yet.
   outputPaths: string[] | null;
+  // Which Work template (settings `work_templates`) Generate runs this card
+  // with. null, or an id whose template was since deleted, falls back to the
+  // first template on the list.
+  workTemplateId: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -421,7 +425,29 @@ export interface AppSettings {
   // Library lists plugin-provided skills and agents only when this is on.
   // Settings table, not localStorage, for the same Electron/dev-port reason.
   showPluginItems: boolean;
+  // What a Work card's Generate run can produce. Never empty: a list cleared
+  // down to nothing comes back as the generic Output template.
+  workTemplates: WorkTemplate[];
 }
+
+/**
+ * A recipe for a Work card's Generate run: which skill to call, what to tell
+ * it beyond the card itself, and what kind of file to leave behind.
+ */
+export interface WorkTemplate {
+  id: string;
+  name: string;
+  /** Skill name from the skills catalog; null runs without one. */
+  skill: string | null;
+  /** Extra instructions appended to the card for every run of this template. */
+  promptPreset: string;
+  /** Extension of the file the run should save, dot included (".md", ".docx"). */
+  outputExt: string;
+}
+
+export const DEFAULT_WORK_TEMPLATES: WorkTemplate[] = [
+  { id: "output", name: "Output", skill: null, promptPreset: "", outputExt: ".md" },
+];
 
 export const DEFAULT_SETTINGS: AppSettings = {
   aiPlatform: "claude",
@@ -432,6 +458,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   systemNotifications: true,
   activeWorkspace: "development",
   showPluginItems: false,
+  workTemplates: DEFAULT_WORK_TEMPLATES,
 };
 
 export const AI_PLATFORM_OPTIONS: { value: AiPlatform; label: string; description: string }[] = [
@@ -555,7 +582,7 @@ export interface ConversationMessage {
 }
 
 // Background process tracking
-export type ProcessType = "chat" | "autonomous" | "quick-fix" | "evaluate";
+export type ProcessType = "chat" | "autonomous" | "quick-fix" | "evaluate" | "generate";
 
 export type ProcessEndReason = "completed" | "aborted" | "failed";
 

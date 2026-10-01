@@ -4,9 +4,10 @@ import { settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { homedir } from "os";
 import { join } from "path";
-import { PROJECT_MODES, type AppSettings, type AiPlatform, type TerminalApp } from "@/lib/types";
+import { DEFAULT_WORK_TEMPLATES, PROJECT_MODES, type AppSettings, type AiPlatform, type TerminalApp } from "@/lib/types";
 import { normalizeProjectMode } from "@/lib/project-serialize";
 import { getPlatformProvider } from "@/lib/platform";
+import { normalizeWorkTemplates, WORK_TEMPLATES_SETTING_KEY } from "@/lib/work-templates";
 
 // Reads the settings rows at request time; the catch below would otherwise
 // swallow the build-phase DB bailout and freeze DEFAULT_SETTINGS into the
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   systemNotifications: true,
   activeWorkspace: "development",
   showPluginItems: false,
+  workTemplates: DEFAULT_WORK_TEMPLATES,
 };
 
 // Detect terminal from TERM_PROGRAM env variable
@@ -74,6 +76,7 @@ export async function GET() {
       if (row.key === "system_notifications") result.systemNotifications = row.value !== "false";
       if (row.key === "active_workspace") result.activeWorkspace = normalizeProjectMode(row.value);
       if (row.key === "show_plugin_items") result.showPluginItems = row.value === "true";
+      if (row.key === WORK_TEMPLATES_SETTING_KEY) result.workTemplates = normalizeWorkTemplates(row.value);
     }
 
     // Add detected terminal from environment
@@ -103,12 +106,20 @@ export async function PUT(request: Request) {
       systemNotifications: "system_notifications",
       activeWorkspace: "active_workspace",
       showPluginItems: "show_plugin_items",
+      workTemplates: WORK_TEMPLATES_SETTING_KEY,
     };
 
     for (const [field, rawValue] of Object.entries(body)) {
       const dbKey = keyMap[field];
       // Booleans ride in the same key/value table as strings.
-      const value = typeof rawValue === "boolean" ? String(rawValue) : rawValue;
+      // Templates are a list, stored as one JSON value — normalised on the way
+      // in, so a half-filled row from the editor never reaches Generate.
+      const value =
+        dbKey === WORK_TEMPLATES_SETTING_KEY
+          ? JSON.stringify(normalizeWorkTemplates(rawValue))
+          : typeof rawValue === "boolean"
+            ? String(rawValue)
+            : rawValue;
       // Anything but a known mode would leave both windows on a workspace
       // that lists no projects.
       if (

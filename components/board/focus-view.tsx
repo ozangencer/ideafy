@@ -332,7 +332,9 @@ export function FocusView({
                           ? "quick fix"
                           : card.processingType === "evaluate"
                             ? "evaluating"
-                            : "running"}
+                            : card.processingType === "generate"
+                              ? "generating"
+                              : "running"}
                       </span>
                     );
                   })}

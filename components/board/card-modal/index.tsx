@@ -45,6 +45,7 @@ import { downloadCardAsMarkdown } from "@/lib/card-export";
 import { CardModalHeader } from "./card-modal-header";
 import { CardSessionsPopover } from "./sections/card-sessions-popover";
 import { CardModalTabs } from "./card-modal-tabs";
+import { WorkCardBar } from "./work-card-bar";
 import { CardModalFooter } from "./card-modal-footer";
 import { SplitPanel } from "./split-panel";
 import { SectionEditor } from "./sections/section-editor";
@@ -1303,6 +1304,14 @@ export function CardModal({
           sectionValues={sectionValues}
           mode={project?.mode}
         />
+
+        {isWorkProject && !isDraftMode && liveCard && (
+          <WorkCardBar
+            card={liveCard}
+            showTemplate={activeTab === "detail"}
+            readOnly={effectiveReadOnly}
+          />
+        )}
 
         {/* Main Content - Split Panel */}
         <div className="flex-1 overflow-hidden relative">

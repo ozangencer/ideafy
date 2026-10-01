@@ -21,6 +21,7 @@ const PROCESS_TYPE_CONFIG: Record<ProcessType, { label: string; color: string; b
   autonomous: { label: "Autonomous", color: "text-ink", bgColor: "bg-ink" },
   "quick-fix": { label: "Quick Fix", color: "text-amber-500", bgColor: "bg-amber-500" },
   evaluate: { label: "Evaluate", color: "text-cyan-500", bgColor: "bg-cyan-500" },
+  generate: { label: "Generate", color: "text-violet-500", bgColor: "bg-violet-500" },
 };
 
 /** Short popover suffix for a run that finished with a warning. */

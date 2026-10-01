@@ -177,6 +177,7 @@ function TaskCardImpl({
   const deleteCard = useKanbanStore((s) => s.deleteCard);
   const quickFixingLocal = useKanbanStore((s) => s.quickFixingCardIds.includes(card.id));
   const evaluatingLocal = useKanbanStore((s) => s.evaluatingCardIds.includes(card.id));
+  const generatingLocal = useKanbanStore((s) => s.generatingCardIds.includes(card.id));
   const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
   // Third signal: the server-side backgroundProcesses list. Covers the edge
   // case where neither local trigger state nor persisted processingType
@@ -194,6 +195,11 @@ function TaskCardImpl({
   const evaluateInBg = useKanbanStore((s) =>
     s.backgroundProcesses.some(
       (p) => p.cardId === card.id && p.processType === "evaluate" && p.status === "running"
+    )
+  );
+  const generateInBg = useKanbanStore((s) =>
+    s.backgroundProcesses.some(
+      (p) => p.cardId === card.id && p.processType === "generate" && p.status === "running"
     )
   );
   const unlockCard = useKanbanStore((s) => s.unlockCard);
@@ -234,9 +240,10 @@ function TaskCardImpl({
   const isStarting = startingLocal || card.processingType === "autonomous" || autonomousInBg;
   const isQuickFixing = quickFixingLocal || card.processingType === "quick-fix" || quickFixInBg;
   const isEvaluating = evaluatingLocal || card.processingType === "evaluate" || evaluateInBg;
+  const isGenerating = generatingLocal || card.processingType === "generate" || generateInBg;
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
-  const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
+  const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating || isGenerating;
 
   // The run buttons themselves live in CardPhaseActions; the card only needs
   // to know which of them will be drawn, for the footer width budget below.

@@ -157,6 +157,7 @@ export interface KanbanStore {
   // Claude integration state
   startingCardIds: string[];
   quickFixingCardIds: string[];
+  generatingCardIds: string[];
   /**
    * Set when a run was refused because the card's text was written by someone
    * else and the user has not confirmed it yet. Holds the text to review so
@@ -165,7 +166,7 @@ export interface KanbanStore {
    */
   pendingRunConfirmation: {
     cardId: string;
-    action: "startTask" | "quickFixTask" | "evaluateIdea";
+    action: "startTask" | "quickFixTask" | "evaluateIdea" | "generateTask";
     title: string;
     description: string;
   } | null;
@@ -374,6 +375,7 @@ export interface KanbanStore {
   ) => Promise<{ success: boolean; error?: string }>;
   quickFixTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
   evaluateIdea: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
+  generateTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null }>;
   lockCard: (cardId: string) => void;
   unlockCard: (cardId: string) => void;
   clearProcessing: (cardId: string) => Promise<{ success: boolean; error?: string }>;

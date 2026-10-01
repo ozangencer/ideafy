@@ -16,7 +16,7 @@ function interop<T extends object>(ns: T): T {
 }
 
 const { createClaudeRunOutputCollector } = interop(collectNs);
-const { selectRunOutput, RUN_OUTPUT_CONTRACTS, splitQuickFixResponse } =
+const { selectRunOutput, RUN_OUTPUT_CONTRACTS, splitQuickFixResponse, splitGenerateResponse } =
   interop(selectNs);
 
 // IDE-280: a headless run's output used to be whatever the CLI put in its
@@ -292,6 +292,25 @@ test("splitQuickFixResponse keeps the whole summary, not just its heading", () =
   assert.match(checklist ?? "", /Hatayı tekrar üretmeyi dene/);
 });
 
+test("splitGenerateResponse separates the output summary from the review checklist", () => {
+  const response = [
+    "Dosyayı kaydettim.",
+    "",
+    "## Output Summary",
+    "- **File:** kickoff-notlari.md",
+    "- **Contents:** toplantı kararları",
+    "",
+    "## Temel akış",
+    "- [ ] kickoff-notlari.md dosyasını aç",
+  ].join("\n");
+
+  const { summary, checklist } = splitGenerateResponse(response);
+  assert.match(summary ?? "", /^## Output Summary/);
+  assert.match(summary ?? "", /kickoff-notlari\.md/);
+  assert.ok(!/Temel akış/.test(summary ?? ""), "summary must stop at the checklist");
+  assert.match(checklist ?? "", /^## Temel akış/);
+});
+
 test("splitQuickFixResponse handles English cards and a missing checklist", () => {
   const english = "## Quick Fix Summary\n- **Root Cause:** x\n\n## Core flow\n- [ ] Step";
   assert.match(splitQuickFixResponse(english).checklist ?? "", /^## Core flow/);
@@ -325,6 +344,7 @@ test("every contract is still demanded by its prompt", () => {
     verify: ["## Core flow", "## Temel akış"],
     evaluate: ["## Summary Verdict", "## Final Score"],
     quickFix: ["## Quick Fix Summary", "## Core flow", "## Temel akış"],
+    generate: ["## Output Summary", "## Core flow", "## Temel akış"],
   };
 
   for (const [name, needles] of Object.entries(EXPECTED)) {
@@ -387,7 +407,14 @@ test("every checklist-authoring prompt names both core headings", () => {
   const blocks: [string, string][] = [
     ["implementation", sliceCase(prompts, 'case "implementation"')],
     ["retest", sliceCase(prompts, 'case "retest"')],
-    ["quickFix", cardPrompts.slice(cardPrompts.indexOf("export function buildQuickFixPrompt"))],
+    [
+      "quickFix",
+      cardPrompts.slice(
+        cardPrompts.indexOf("export function buildQuickFixPrompt"),
+        cardPrompts.indexOf("export function buildGeneratePrompt")
+      ),
+    ],
+    ["generate", cardPrompts.slice(cardPrompts.indexOf("export function buildGeneratePrompt"))],
   ];
 
   for (const [name, block] of blocks) {

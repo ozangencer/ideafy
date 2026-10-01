@@ -46,6 +46,7 @@ export async function POST(
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: row.useWorktree ?? null,
     outputPaths: parseOutputPaths(row.outputPaths),
+    workTemplateId: row.workTemplateId ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,

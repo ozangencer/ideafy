@@ -34,6 +34,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   aiPlatform: null,
   useWorktree: null,
   outputPaths: null,
+  workTemplateId: null,
   createdAt: nowIso(),
   updatedAt: nowIso(),
   completedAt: null,
@@ -130,7 +131,7 @@ export const createCardsSlice: StoreSlice<
       // (id is in startingCardIds/quickFixingCardIds/evaluatingCardIds) but
       // the server hasn't yet persisted processingType, keep the local value
       // so the spinner doesn't flicker off mid-run.
-      const { startingCardIds, quickFixingCardIds, evaluatingCardIds, cards: prevCards } = get();
+      const { startingCardIds, quickFixingCardIds, generatingCardIds, evaluatingCardIds, cards: prevCards } = get();
       const prevById = new Map(prevCards.map((c) => [c.id, c]));
       const mergedCards = cards.map((serverCard) => {
         if (serverCard.processingType) return serverCard;
@@ -139,7 +140,8 @@ export const createCardsSlice: StoreSlice<
         const stillStarting = startingCardIds.includes(serverCard.id) && prev.processingType === "autonomous";
         const stillQuickFixing = quickFixingCardIds.includes(serverCard.id) && prev.processingType === "quick-fix";
         const stillEvaluating = evaluatingCardIds.includes(serverCard.id) && prev.processingType === "evaluate";
-        if (stillStarting || stillQuickFixing || stillEvaluating) {
+        const stillGenerating = generatingCardIds.includes(serverCard.id) && prev.processingType === "generate";
+        if (stillStarting || stillQuickFixing || stillEvaluating || stillGenerating) {
           return { ...serverCard, processingType: prev.processingType };
         }
         return serverCard;

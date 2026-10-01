@@ -109,6 +109,7 @@ const PROCESSING_LABELS: Record<string, string> = {
   autonomous: "running autonomously",
   "quick-fix": "quick fix",
   evaluate: "evaluating",
+  generate: "generating",
 };
 
 /**

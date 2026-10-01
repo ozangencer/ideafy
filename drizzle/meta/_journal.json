@@ -134,6 +134,13 @@
       "when": 1790884978169,
       "tag": "0018_queue_reset_on_status_change",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790887155028,
+      "tag": "0019_card_work_template",
+      "breakpoints": true
     }
   ]
 }

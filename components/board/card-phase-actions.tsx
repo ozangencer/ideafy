@@ -14,7 +14,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { Card, getDisplayId } from "@/lib/types";
+import { Card, DEFAULT_WORK_TEMPLATES, getDisplayId } from "@/lib/types";
 import { openPredecessors } from "@/lib/card-group";
 import { worktreeOverrideFor } from "@/lib/workspace";
 import { toast } from "@/hooks/use-toast";
@@ -28,6 +28,7 @@ import {
   PhaseAction,
   VERIFY_RUN_BLURB,
 } from "@/lib/card-phase";
+import { resolveWorkTemplate } from "@/lib/work-templates";
 import { useKanbanStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,7 +86,7 @@ const ICON_TINT: Record<PhaseAction, string> = {
   play: "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink",
   "test-together":
     "bg-emerald-500/10 text-emerald-500/70 hover:bg-emerald-500/20 hover:text-emerald-500",
-  generate: "bg-ink/10 text-ink/70 hover:bg-ink/20 hover:text-ink",
+  generate: "bg-violet-500/10 text-violet-500/70 hover:bg-violet-500/20 hover:text-violet-500",
 };
 
 // Labeled buttons keep the colour of the icon they stand in for. The icon and
@@ -97,7 +98,7 @@ const PRIMARY_CLASS: Record<PhaseAction, string> = {
   terminal: "bg-orange-500 text-white hover:bg-orange-600",
   play: "",
   "test-together": "bg-emerald-500 text-white hover:bg-emerald-600",
-  generate: "",
+  generate: "bg-violet-500 text-white hover:bg-violet-600",
 };
 
 // Only emptiness matters here, and an editor-cleared field can be a lone
@@ -200,11 +201,14 @@ export function CardPhaseActions({
   const openTestTerminal = useKanbanStore((s) => s.openTestTerminal);
   const quickFixTask = useKanbanStore((s) => s.quickFixTask);
   const evaluateIdea = useKanbanStore((s) => s.evaluateIdea);
+  const generateTask = useKanbanStore((s) => s.generateTask);
+  const settingsTemplates = useKanbanStore((s) => s.settings?.workTemplates);
   const updateCard = useKanbanStore((s) => s.updateCard);
   const unlockCard = useKanbanStore((s) => s.unlockCard);
   const startingLocal = useKanbanStore((s) => s.startingCardIds.includes(card.id));
   const quickFixingLocal = useKanbanStore((s) => s.quickFixingCardIds.includes(card.id));
   const evaluatingLocal = useKanbanStore((s) => s.evaluatingCardIds.includes(card.id));
+  const generatingLocal = useKanbanStore((s) => s.generatingCardIds.includes(card.id));
   const lockedLocal = useKanbanStore((s) => s.lockedCardIds.includes(card.id));
   // Third signal: the server-side backgroundProcesses list. Covers the edge
   // case where neither local trigger state nor persisted processingType
@@ -224,6 +228,11 @@ export function CardPhaseActions({
       (p) => p.cardId === card.id && p.processType === "evaluate" && p.status === "running"
     )
   );
+  const generateInBg = useKanbanStore((s) =>
+    s.backgroundProcesses.some(
+      (p) => p.cardId === card.id && p.processType === "generate" && p.status === "running"
+    )
+  );
 
   const isChatting = useCardChatRunning(card.id);
 
@@ -232,6 +241,7 @@ export function CardPhaseActions({
   const [showIdeationConfirm, setShowIdeationConfirm] = useState(false);
   const [showAutonomousConfirm, setShowAutonomousConfirm] = useState(false);
   const [showTestTogetherConfirm, setShowTestTogetherConfirm] = useState(false);
+  const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [dialogUseWorktree, setDialogUseWorktree] = useState(true);
   // Covers the flush in beforeRun, so a double click cannot start two runs.
   const [isPreparing, setIsPreparing] = useState(false);
@@ -252,9 +262,14 @@ export function CardPhaseActions({
   const isStarting = startingLocal || card.processingType === "autonomous" || autonomousInBg;
   const isQuickFixing = quickFixingLocal || card.processingType === "quick-fix" || quickFixInBg;
   const isEvaluating = evaluatingLocal || card.processingType === "evaluate" || evaluateInBg;
+  const isGenerating = generatingLocal || card.processingType === "generate" || generateInBg;
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
-  const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating;
+  const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating || isGenerating;
+  const workTemplate = resolveWorkTemplate(
+    settingsTemplates ?? DEFAULT_WORK_TEMPLATES,
+    card.workTemplateId
+  );
   // A running chat blocks the same buttons a lock does, without offering Unlock.
   const isBlocked = isLocked || isChatting;
 
@@ -444,6 +459,22 @@ export function CardPhaseActions({
     }
   };
 
+  const handleGenerateClick = async (e?: React.MouseEvent) => {
+    stop(e);
+    if (isBlocked || isGenerating || isPreparing || !flags.canGenerate) return;
+    if (!(await prepare())) return;
+    setShowGenerateConfirm(true);
+  };
+
+  const handleGenerate = async () => {
+    setShowGenerateConfirm(false);
+    if (isGenerating || !flags.canGenerate) return;
+    const result = await handOff("generate", generateTask(card.id));
+    if (!result.success) {
+      console.error("Failed to generate:", result.error);
+    }
+  };
+
   // Interactive sessions flush right before the terminal opens — after the
   // paste tip, so a tip left open for a minute cannot outlive a later edit.
   const handleOpenTerminal = async () => {
@@ -497,8 +528,7 @@ export function CardPhaseActions({
     terminal: handleOpenTerminalClick,
     play: handleStartClick,
     "test-together": handleTestTogetherClick,
-    // No route yet; canGenerate keeps the button from being drawn.
-    generate: () => {},
+    generate: handleGenerateClick,
   };
 
   const tooltipFor = (action: PhaseAction): string => {
@@ -516,7 +546,7 @@ export function CardPhaseActions({
       case "test-together":
         return "Test Together (Interactive)";
       case "generate":
-        return "Generate";
+        return isGenerating ? "Generating..." : `Generate (${workTemplate.name})`;
     }
   };
 
@@ -548,7 +578,8 @@ export function CardPhaseActions({
     const running =
       (action === "play" && isStarting) ||
       (action === "quick-fix" && isQuickFixing) ||
-      (action === "evaluate" && isEvaluating);
+      (action === "evaluate" && isEvaluating) ||
+      (action === "generate" && isGenerating);
     // Autonomous buttons stay drawn while locked, as a spinner or a dimmed
     // icon; interactive ones are not shown at all then.
     const autonomous = isAutonomousAction(action);
@@ -612,7 +643,13 @@ export function CardPhaseActions({
       return (
         <Button size="sm" disabled className="disabled:opacity-100 cursor-wait">
           <Loader2 className="animate-spin" />
-          {isEvaluating ? "Evaluating..." : isQuickFixing ? "Quick fixing..." : "Running..."}
+          {isEvaluating
+            ? "Evaluating..."
+            : isQuickFixing
+              ? "Quick fixing..."
+              : isGenerating
+                ? "Generating..."
+                : "Running..."}
         </Button>
       );
     }
@@ -769,6 +806,35 @@ export function CardPhaseActions({
               className="bg-yellow-500 hover:bg-yellow-600 text-black"
             >
               Start Quick Fix
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Generate with &ldquo;{workTemplate.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Runs autonomously with full file access and saves one {workTemplate.outputExt} file
+                  in the project folder{workTemplate.skill ? <> using the <span className="font-mono">{workTemplate.skill}</span> skill</> : null}.
+                </p>
+                <p className="text-muted-foreground">
+                  Once the file is saved the card moves to In Review with a review checklist. If no file is
+                  saved, the card stays where it is and says why. Mail is only drafted, never sent.
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Change the template on the card&apos;s Detail tab; edit templates in Settings.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGenerate} className="bg-violet-500 hover:bg-violet-600 text-white">
+              Generate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

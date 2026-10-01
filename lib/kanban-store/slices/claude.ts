@@ -55,6 +55,7 @@ export const createClaudeSlice: StoreSlice<
     KanbanStore,
     | "startingCardIds"
     | "quickFixingCardIds"
+    | "generatingCardIds"
     | "evaluatingCardIds"
     | "lockedCardIds"
     | "startTask"
@@ -63,6 +64,7 @@ export const createClaudeSlice: StoreSlice<
     | "openTestTerminal"
     | "resolveConflictWithAI"
     | "quickFixTask"
+    | "generateTask"
     | "evaluateIdea"
     | "lockCard"
     | "unlockCard"
@@ -75,6 +77,7 @@ export const createClaudeSlice: StoreSlice<
 > = (set, get) => ({
   startingCardIds: [],
   quickFixingCardIds: [],
+  generatingCardIds: [],
   pendingRunConfirmation: null,
   evaluatingCardIds: [],
   lockedCardIds: [],
@@ -408,6 +411,8 @@ export const createClaudeSlice: StoreSlice<
         return get().quickFixTask(pending.cardId, true);
       case "evaluateIdea":
         return get().evaluateIdea(pending.cardId, true);
+      case "generateTask":
+        return get().generateTask(pending.cardId, true);
     }
   },
 
@@ -510,6 +515,105 @@ export const createClaudeSlice: StoreSlice<
         ),
       }));
       // Refresh background processes on error too
+      get().fetchBackgroundProcesses();
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+
+  // Quick Fix's shape, for a Work card's document run. One difference: a run
+  // that saved no file answers 422 after writing why onto the card, so the
+  // failure path refreshes the card before it reports.
+  generateTask: async (cardId, acknowledged = false) => {
+    flushSpinnerOn(() =>
+      set((state) => ({
+        generatingCardIds: addUniqueId(state.generatingCardIds, cardId),
+        lockedCardIds: addUniqueId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType == null
+            ? { ...card, processingType: "generate" }
+            : card
+        ),
+      }))
+    );
+
+    setTimeout(() => get().fetchBackgroundProcesses(), 500);
+
+    const release = () =>
+      set((state) => ({
+        generatingCardIds: removeId(state.generatingCardIds, cardId),
+        lockedCardIds: removeId(state.lockedCardIds, cardId),
+        cards: state.cards.map((card) =>
+          card.id === cardId && card.processingType === "generate"
+            ? { ...card, processingType: null }
+            : card
+        ),
+      }));
+
+    try {
+      const response = await fetch(`/api/cards/${cardId}/generate`, runBody(acknowledged));
+      const data = await parseJson<{
+        newStatus: Card["status"];
+        solutionSummary: string;
+        testScenarios: string;
+        outputWarning?: string | null;
+        noOutput?: boolean;
+        error?: string;
+        details?: string;
+      }>(response);
+
+      if (!response.ok) {
+        release();
+        if (response.status === 409 && (data as UntrustedRefusal).code === UNTRUSTED_CONFIRMATION_CODE) {
+          const refusal = data as UntrustedRefusal;
+          set({
+            pendingRunConfirmation: {
+              cardId,
+              action: "generateTask",
+              title: refusal.untrustedContent?.title || "",
+              description: refusal.untrustedContent?.description || "",
+            },
+          });
+        }
+        if (data.noOutput) {
+          await get().fetchCards();
+          set((state) => ({
+            mcpWriteVersion: state.mcpWriteVersion + 1,
+            mcpWriteCardId: cardId,
+          }));
+        }
+        get().fetchBackgroundProcesses();
+        return { success: false, error: runFailureMessage(data) || "Failed to generate" };
+      }
+
+      // See startTask: refresh the open modal's card before the lock lifts.
+      await get().fetchCards();
+
+      set((state) => ({
+        cards: updateCardById(state.cards, cardId, {
+          status: data.newStatus,
+          solutionSummary: data.solutionSummary,
+          testScenarios: data.testScenarios,
+          processingType: null,
+          updatedAt: nowIso(),
+        }),
+        generatingCardIds: removeId(state.generatingCardIds, cardId),
+        lockedCardIds: removeId(state.lockedCardIds, cardId),
+        mcpWriteVersion: state.mcpWriteVersion + 1,
+        mcpWriteCardId: cardId,
+      }));
+
+      get().fetchBackgroundProcesses();
+
+      if (data.outputWarning) {
+        console.warn(`[generateTask] ${cardId}: ${data.outputWarning}`);
+      }
+      return { success: true, warning: data.outputWarning ?? null };
+    } catch (error) {
+      console.error("Failed to generate:", error);
+      release();
       get().fetchBackgroundProcesses();
       return {
         success: false,
@@ -676,6 +780,7 @@ export const createClaudeSlice: StoreSlice<
       set((state) => ({
         startingCardIds: removeId(state.startingCardIds, cardId),
         quickFixingCardIds: removeId(state.quickFixingCardIds, cardId),
+        generatingCardIds: removeId(state.generatingCardIds, cardId),
         evaluatingCardIds: removeId(state.evaluatingCardIds, cardId),
         lockedCardIds: removeId(state.lockedCardIds, cardId),
         cards: state.cards.map((card) =>

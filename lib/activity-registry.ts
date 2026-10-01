@@ -185,6 +185,9 @@ function chatTypeFor(section: SectionType | null): ActivityType {
 function nonChatTypeFor(processType: ProcessType): ActivityType | null {
   if (processType === "autonomous") return "autonomous";
   if (processType === "quick-fix") return "quickfix";
+  // Generate has no activity type of its own yet; it is an autonomous run that
+  // wrote the card's summary and checklist, which is what this one opens.
+  if (processType === "generate") return "autonomous";
   // evaluate has its own dedicated call site (recordOpinionCompleted) with
   // richer payload (verdict + score). Don't double-record.
   return null;

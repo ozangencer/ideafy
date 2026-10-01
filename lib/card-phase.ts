@@ -147,6 +147,20 @@ export function canQuickFixFor(card: Card): boolean {
   return card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
 }
 
+/**
+ * A Work card's one-shot document run. Open columns only — Human Test is
+ * where its output gets reviewed, and a second Generate there would overwrite
+ * the checklist someone is ticking. No plan needed: like Quick Fix, the card's
+ * description is enough to go on.
+ */
+export function canGenerateFor(card: Card, mode: ProjectMode): boolean {
+  return (
+    mode === "work" &&
+    canStartCard(card) &&
+    (card.status === "backlog" || card.status === "bugs" || card.status === "progress")
+  );
+}
+
 export function canEvaluateFor(card: Card): boolean {
   return card.status === "ideation" && !!(card.description && (card.projectId || card.projectFolder));
 }
@@ -165,8 +179,7 @@ export type PhaseAction =
   | "terminal"
   | "play"
   | "test-together"
-  // Work cards' one-shot document run. Declared ahead of its route so every
-  // surface already knows the name; `canGenerate` keeps it hidden until then.
+  // Work cards' one-shot document run; `canGenerate` keeps it off everywhere else.
   | "generate";
 
 /**
@@ -174,7 +187,9 @@ export type PhaseAction =
  * terminal. Both hand the card off, but only these keep a spinner going.
  */
 export function isAutonomousAction(action: PhaseAction): boolean {
-  return action === "play" || action === "quick-fix" || action === "evaluate";
+  return (
+    action === "play" || action === "quick-fix" || action === "evaluate" || action === "generate"
+  );
 }
 
 /** The board footer's order — the one every other surface started from. */
@@ -184,6 +199,7 @@ export const BOARD_PHASE_ACTIONS: PhaseAction[] = [
   "quick-fix",
   "terminal",
   "play",
+  "generate",
   "test-together",
 ];
 
@@ -229,7 +245,7 @@ export function getPhaseActionFlags(
     canQuickFix: !isWork && canQuickFixFor(card),
     canEvaluate: canEvaluateFor(card),
     canTestTogether: !isWork && canTestTogetherFor(card, testText),
-    canGenerate: false,
+    canGenerate: canGenerateFor(card, mode),
     showDevControls: !isWork || card.gitWorktreeStatus === "active",
   };
 }

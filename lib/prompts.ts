@@ -18,7 +18,12 @@ export {
   generateImageReferences,
   getCardImageDir,
 } from "./prompts/images";
-export { buildEvaluatePrompt, buildQuickFixPrompt, buildIdeationPrompt } from "./prompts/card";
+export {
+  buildEvaluatePrompt,
+  buildQuickFixPrompt,
+  buildGeneratePrompt,
+  buildIdeationPrompt,
+} from "./prompts/card";
 export { buildTestTogetherPrompt, buildTestGenerationPrompt } from "./prompts/testing";
 export {
   type NarrativeData,

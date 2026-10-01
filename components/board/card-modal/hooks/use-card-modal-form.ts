@@ -176,6 +176,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         processingType: null,
         useWorktree: null,
         outputPaths: null,
+        workTemplateId: null,
       });
     } else {
       const cardId = selectedCard.id;

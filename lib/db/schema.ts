@@ -113,10 +113,11 @@ export const cards = sqliteTable("cards", {
   devServerPid: integer("dev_server_pid"),    // Process ID or null
   rebaseConflict: integer("rebase_conflict", { mode: "boolean" }), // true if conflict detected during merge
   conflictFiles: text("conflict_files"),      // JSON array of conflicting file paths
-  processingType: text("processing_type"),    // "autonomous" | "quick-fix" | "evaluate" | null (active Claude process indicator)
+  processingType: text("processing_type"),    // "autonomous" | "quick-fix" | "evaluate" | "generate" | null (active Claude process indicator)
   aiPlatform: text("ai_platform"),           // "claude" | "gemini" | "codex" | null (null = use global setting)
   useWorktree: integer("use_worktree", { mode: "boolean" }), // null = follow project default, true/false = per-card override
   outputPaths: text("output_paths"),          // JSON array of project-relative file paths the card's work produced (MCP save_output); null = none yet
+  workTemplateId: text("work_template_id"),   // id from the work_templates setting that Generate runs with; null = first template
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),  // ISO date string, null if not completed

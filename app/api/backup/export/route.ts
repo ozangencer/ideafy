@@ -28,6 +28,7 @@ export interface ExportData {
     aiPlatform: string | null;
     useWorktree: boolean | null;
     outputPaths?: string | null; // raw JSON text, as stored
+    workTemplateId?: string | null;
     createdAt: string;
     updatedAt: string;
     completedAt: string | null;
@@ -123,6 +124,7 @@ export async function GET() {
         aiPlatform: card.aiPlatform,
         useWorktree: card.useWorktree,
         outputPaths: card.outputPaths,
+        workTemplateId: card.workTemplateId,
         createdAt: card.createdAt,
         updatedAt: card.updatedAt,
         completedAt: card.completedAt,

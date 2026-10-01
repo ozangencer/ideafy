@@ -70,11 +70,26 @@ export function splitQuickFixResponse(responseText: string): {
   summary: string | null;
   checklist: string | null;
 } {
+  return splitAtChecklist(responseText, /## Quick Fix Summary[\s\S]*/i);
+}
+
+/** Generate's twin of `splitQuickFixResponse`: same split, its own summary heading. */
+export function splitGenerateResponse(responseText: string): {
+  summary: string | null;
+  checklist: string | null;
+} {
+  return splitAtChecklist(responseText, /## Output Summary[\s\S]*/i);
+}
+
+function splitAtChecklist(
+  responseText: string,
+  summaryPattern: RegExp
+): { summary: string | null; checklist: string | null } {
   const checklistMatch = responseText.match(CORE_FLOW_SECTION);
   const beforeChecklist = checklistMatch
     ? responseText.slice(0, checklistMatch.index)
     : responseText;
-  const summaryMatch = beforeChecklist.match(/## Quick Fix Summary[\s\S]*/i);
+  const summaryMatch = beforeChecklist.match(summaryPattern);
 
   return {
     summary: summaryMatch ? summaryMatch[0] : null,
@@ -112,6 +127,13 @@ export const RUN_OUTPUT_CONTRACTS = {
   quickFix: {
     label: "quick fix",
     requires: [/^##\s*Quick\s*Fix\s*Summary/im, CORE_FLOW_HEADING],
+  },
+  // A Work card's Generate run. The file itself is checked separately — by
+  // what save_output recorded, not by anything the text claims — so this only
+  // has to recognise the summary and review checklist that go on the card.
+  generate: {
+    label: "çıktı özeti",
+    requires: [/^##\s*Output\s*Summary/im, CORE_FLOW_HEADING],
   },
 } as const satisfies Record<string, RunOutputContract>;
 

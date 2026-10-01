@@ -57,6 +57,7 @@ export async function GET(
     aiPlatform: (row.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: row.useWorktree ?? null,
     outputPaths: parseOutputPaths(row.outputPaths),
+    workTemplateId: row.workTemplateId ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
@@ -189,6 +190,9 @@ export async function PUT(
     useWorktree: body.useWorktree !== undefined
       ? (typeof body.useWorktree === "boolean" ? body.useWorktree : null)
       : existing.useWorktree,
+    workTemplateId: body.workTemplateId !== undefined
+      ? (typeof body.workTemplateId === "string" && body.workTemplateId ? body.workTemplateId : null)
+      : existing.workTemplateId,
     updatedAt: now,
     completedAt,
   };
@@ -243,6 +247,7 @@ export async function PUT(
     aiPlatform: (updatedCard.aiPlatform as Card["aiPlatform"]) ?? null,
     useWorktree: updatedCard.useWorktree ?? null,
     outputPaths: parseOutputPaths(existing.outputPaths),
+    workTemplateId: updatedCard.workTemplateId ?? null,
     createdAt: existing.createdAt,
     updatedAt: updatedCard.updatedAt,
     completedAt: updatedCard.completedAt,

@@ -17,7 +17,7 @@ import {
 } from "./select-run-output";
 
 /** Process-registry label; must match the values the UI filters on. */
-export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix";
+export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix" | "generate";
 
 /**
  * Card context needed to surface the run in the process registry. Omit it

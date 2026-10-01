@@ -14,5 +14,6 @@ export const PROCESS_LABEL: Record<ProcessType, string> = {
   autonomous: "Autonomous task",
   "quick-fix": "Quick Fix",
   evaluate: "AI Opinion",
+  generate: "Generate",
   chat: "Chat",
 };

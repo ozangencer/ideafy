@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
           useWorktree: card.useWorktree ?? null,
           // Backups written before output paths existed simply omit them.
           outputPaths: card.outputPaths ?? null,
+          workTemplateId: card.workTemplateId ?? null,
           createdAt: card.createdAt,
           updatedAt: card.updatedAt,
           completedAt: card.completedAt,

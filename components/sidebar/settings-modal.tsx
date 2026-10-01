@@ -10,7 +10,7 @@ import {
   BOARD_VIEW_PREFERENCE_OPTIONS,
   COLUMNS,
 } from "@/lib/types";
-import type { TerminalApp, AiPlatform, AppSettings, BoardViewPreference, Status } from "@/lib/types";
+import type { TerminalApp, AiPlatform, AppSettings, BoardViewPreference, Status, WorkTemplate } from "@/lib/types";
 import { DEFAULT_STALE_AFTER_DAYS } from "@/lib/card-age";
 import type { PlatformCapabilities } from "@/lib/platform/types";
 import {
@@ -44,6 +44,7 @@ import {
   setPureWhiteEnabled,
 } from "@/components/theme-provider";
 import { UpdateCenter } from "@/components/updates/update-center";
+import { WorkTemplatesEditor } from "./work-templates-editor";
 import { useUpdates } from "@/components/updates/update-provider";
 import {
   canTestSystemNotifications,
@@ -91,6 +92,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
   const [mcpConfigPath, setMcpConfigPath] = useState(DEFAULT_SETTINGS.mcpConfigPath);
   const [terminalApp, setTerminalApp] = useState<TerminalApp>(DEFAULT_SETTINGS.terminalApp);
   const [systemNotifications, setSystemNotifications] = useState(DEFAULT_SETTINGS.systemNotifications);
+  const [workTemplates, setWorkTemplates] = useState<WorkTemplate[]>(DEFAULT_SETTINGS.workTemplates);
   // Only the desktop app can raise OS banners; the row is hidden in a browser.
   const [canNotify, setCanNotify] = useState(false);
   const [canTestNotify, setCanTestNotify] = useState(false);
@@ -155,6 +157,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
       setMcpConfigPath(settings.mcpConfigPath ?? DEFAULT_SETTINGS.mcpConfigPath);
       setTerminalApp(settings.terminalApp ?? DEFAULT_SETTINGS.terminalApp);
       setSystemNotifications(settings.systemNotifications ?? DEFAULT_SETTINGS.systemNotifications);
+      setWorkTemplates(settings.workTemplates ?? DEFAULT_SETTINGS.workTemplates);
       // Sync the ref so the platform-change effect doesn't fire on initial load
       prevPlatformRef.current = safePlatform;
 
@@ -321,6 +324,7 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
         mcpConfigPath,
         terminalApp,
         systemNotifications,
+        workTemplates,
       });
       onClose();
     } catch (error) {
@@ -491,6 +495,10 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
               </CollapsibleContent>
             </Collapsible>
           </div>
+
+          {/* Work templates — what Generate produces on a Work card. Saved with
+              Save Changes like the server settings around it. */}
+          <WorkTemplatesEditor value={workTemplates} onChange={setWorkTemplates} />
 
           {/* AI Platform */}
           <div className="grid gap-1.5">
