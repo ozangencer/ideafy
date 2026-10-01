@@ -119,6 +119,34 @@ export function sharedWorkingCopyWith<T extends WorkingCopyRun>(self: WorkingCop
   return null;
 }
 
+/** What a live or about-to-start run does in its folder. */
+export type LiveRunKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix";
+
+/** A running or about-to-start run, as far as sharing a folder at once goes. */
+export interface FolderRun {
+  id: string;
+  projectId: string | null;
+  runsInWorktree: boolean;
+  kind: LiveRunKind;
+}
+
+/**
+ * The live run that would work in the same folder as `self` at the same time,
+ * or null when there is none. Unlike sharedWorkingCopyWith this is about two
+ * processes side by side, not one diff left for the next: a pre-verify on main
+ * breaks just as surely when another run is writing next to it. A run in its
+ * own worktree has a folder to itself, and planning writes no code, so neither
+ * counts on either side.
+ */
+export function conflictingLiveRun<T extends FolderRun>(self: FolderRun, live: T[]): T | null {
+  if (self.runsInWorktree || self.kind === "planning") return null;
+  for (const other of live) {
+    if (other.id === self.id || other.runsInWorktree || other.kind === "planning") continue;
+    if (other.projectId === self.projectId) return other;
+  }
+  return null;
+}
+
 /** GET /api/queue. */
 export interface QueueSnapshot {
   /** In run order; the first one starts next. */

@@ -13,7 +13,7 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { queueIneligibleReason, queueRanks, QUEUE_CLEARING_STATUSES, sharedWorkingCopyWith } =
+const { queueIneligibleReason, queueRanks, QUEUE_CLEARING_STATUSES, sharedWorkingCopyWith, conflictingLiveRun } =
   interop(cardQueueNs);
 const { infrastructureRunError, isInfrastructureRunError } = interop(runErrorNs);
 const { sharedPlanFiles } = interop(planFilesNs);
@@ -137,6 +137,35 @@ test("run queue: a pre-verify ahead leaves no diff to share", () => {
   assert.equal(sharedWorkingCopyWith(run("self", false), ahead)?.id, "a");
   // A pre-verify without a worktree is warned about the implementation ahead of it.
   assert.equal(sharedWorkingCopyWith(run("self", false, "p1", "verify"), [run("a", false)])?.id, "a");
+});
+
+type LiveKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix";
+const live = (id: string, runsInWorktree: boolean, kind: LiveKind = "implementation", projectId: string | null = "p1") => ({
+  id,
+  projectId,
+  runsInWorktree,
+  kind,
+});
+
+test("run conflict: two runs on main in one project collide", () => {
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", false)])?.id, "a");
+  // A pre-verify on main breaks just as surely with a run writing next to it.
+  assert.equal(conflictingLiveRun(live("self", false, "verify"), [live("a", false)])?.id, "a");
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", false, "quick-fix")])?.id, "a");
+  assert.equal(conflictingLiveRun(live("self", false, "quick-fix"), [live("a", false, "retest")])?.id, "a");
+});
+
+test("run conflict: a worktree on either side keeps them apart", () => {
+  assert.equal(conflictingLiveRun(live("self", true), [live("a", false)]), null);
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", true)]), null);
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", true), live("b", false)])?.id, "b");
+});
+
+test("run conflict: other projects, planning and the card itself do not count", () => {
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", false, "implementation", "p2")]), null);
+  assert.equal(conflictingLiveRun(live("self", false, "planning"), [live("a", false)]), null);
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", false, "planning")]), null);
+  assert.equal(conflictingLiveRun(live("self", false), [live("self", false)]), null);
 });
 
 test("run queue: a card's branch follows card override, then project, then worktree", () => {

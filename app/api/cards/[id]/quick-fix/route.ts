@@ -32,6 +32,7 @@ import {
   git,
 } from "@/lib/git";
 import { shouldUseWorktree } from "@/lib/workspace";
+import { beginTrackedStart, dequeueCard, runConflictFor } from "@/lib/autonomous-run/run-queue";
 
 export async function POST(
   request: NextRequest,
@@ -85,6 +86,34 @@ export async function POST(
   console.log(`[Quick Fix] Starting quick fix for card ${id}`);
   console.log(`[Quick Fix] Working dir: ${workingDir}`);
 
+  // Refused before the processing flag is written, so a refused press leaves
+  // the card as it was, and in the same tick as beginTrackedStart below.
+  const conflict = runConflictFor(id, "quick-fix");
+  if (conflict) {
+    return NextResponse.json({ ...conflict, code: "RUN_CONFLICT" }, { status: 409 });
+  }
+
+  // In flight until the fix ends, so the queue waits behind it and moves on
+  // after. It does not report to onRunFinished: a bug fix pressed by hand
+  // failing is no part of the queue's failure streak.
+  const release = beginTrackedStart(id);
+  // As with Start: a card fixed by hand has no business running again later.
+  dequeueCard(id);
+  try {
+    return await runQuickFix(id, card, project ?? null, workingDir, displayId, processKey);
+  } finally {
+    release();
+  }
+}
+
+async function runQuickFix(
+  id: string,
+  card: typeof schema.cards.$inferSelect,
+  project: typeof schema.projects.$inferSelect | null,
+  workingDir: string,
+  displayId: string | null,
+  processKey: string
+): Promise<NextResponse> {
   // Kill any existing process for this card
   const existing = getProcess(processKey);
   if (existing) {

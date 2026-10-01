@@ -8,8 +8,10 @@ import { infrastructureRunError } from "@/lib/run-error";
 import { placeAfter } from "@/lib/card-group";
 import {
   compareByQueuePosition,
+  conflictingLiveRun,
   queueIneligibleReason,
   sharedWorkingCopyWith,
+  type LiveRunKind,
   type QueueOverlap,
   type QueueRunKind,
   type QueueSnapshot,
@@ -40,9 +42,9 @@ interface RunQueueState {
   /** Held while advanceQueue picks and launches, so two calls cannot both start. */
   advancing: boolean;
   /**
-   * Cards with a Start run between its first line and its last, manual or
-   * queued. The process registry only learns about a run once its worktree
-   * exists, which can take seconds; this covers that gap.
+   * Cards with a Start or Quick fix run between its first line and its last,
+   * manual or queued. The process registry only learns about a run once its
+   * worktree exists, which can take seconds; this covers that gap.
    */
   inFlight: Set<string>;
   /** The card the queue itself launched last, while it runs. */
@@ -223,11 +225,16 @@ export function dequeueCard(cardId: string): boolean {
 // Shared-file warning
 // ============================================================================
 
-/** Card ids with an autonomous run going right now. */
+/**
+ * Card ids with a code-writing run going right now: autonomous or quick fix.
+ * Evaluate and chat write no code, so the queue does not wait for them.
+ */
 function runningCardIds(): Set<string> {
   const ids = new Set(queueState().inFlight);
   for (const p of getAllProcesses()) {
-    if (p.processType === "autonomous" && p.status === "running") ids.add(p.cardId);
+    if ((p.processType === "autonomous" || p.processType === "quick-fix") && p.status === "running") {
+      ids.add(p.cardId);
+    }
   }
   return ids;
 }
@@ -268,17 +275,63 @@ export function overlapsForCard(cardId: string): QueueOverlap[] {
   return overlapsFor(cardId, listQueueRows(), runningRows());
 }
 
+/** What the card's run does, or is doing: a quick fix, else the Start phase. */
+function liveKindOf(row: QueueRow): LiveRunKind {
+  return row.processingType === "quick-fix" ? "quick-fix" : detectPhase(row);
+}
+
 /**
  * The same call the run's start makes, so the popover shows what will happen.
  * A pre-verify goes to the card's active worktree whatever its branch choice
- * says; whether that folder is still on disk is setupWorktree's to check.
+ * says; whether that folder is still on disk is setupWorktree's to check, and
+ * so is whether the project is a git repo at all — this stays optimistic there.
+ * Planning always runs in the project folder.
  */
-function runsInWorktree(row: QueueRow): boolean {
-  if (kindOf(row) === "verify") return !!row.gitWorktreePath && row.gitWorktreeStatus === "active";
-  return shouldUseWorktree(
+function runsInWorktree(row: QueueRow, kind: LiveRunKind = liveKindOf(row)): boolean {
+  const activeWorktree = !!row.gitWorktreePath && row.gitWorktreeStatus === "active";
+  if (kind === "verify") return activeWorktree;
+  if (kind === "planning") return false;
+  const useWorktree = shouldUseWorktree(
     { useWorktree: row.useWorktree },
     { useWorktrees: row.projectUseWorktrees, mode: row.projectMode }
   );
+  if (kind === "retest") return !!row.gitWorktreePath && (useWorktree || activeWorktree);
+  // Implementation and quick fix both open one only for a numbered project card.
+  return (useWorktree && !!row.projectId && row.taskNumber != null) || (kind === "implementation" && activeWorktree);
+}
+
+export interface RunConflict {
+  conflictCardId: string;
+  error: string;
+}
+
+/**
+ * The live run that a manual Start, Pre-verify or Quick fix on `cardId` would
+ * share a folder with, or null when it may go ahead. The queue keeps one run
+ * at a time only for what it starts itself; this is the other half, so a
+ * button pressed while the queue runs on main does not write next to it. A
+ * run in its own worktree is left alone either way: parallel runs there were
+ * fine before the queue and still are.
+ *
+ * Synchronous on purpose: the caller checks and marks itself in flight in the
+ * same tick, so a second request cannot slip in between.
+ */
+export function runConflictFor(cardId: string, kind?: "quick-fix"): RunConflict | null {
+  const self = getRow(cardId);
+  if (!self) return null;
+  const toRun = (row: QueueRow, runKind: LiveRunKind = liveKindOf(row)) => ({
+    ...row,
+    kind: runKind,
+    runsInWorktree: runsInWorktree(row, runKind),
+  });
+  const other = conflictingLiveRun(
+    toRun(self, kind ?? detectPhase(self)),
+    runningRows().map((row) => toRun(row))
+  );
+  if (!other) return null;
+  const where = other.id === queueState().queueStartedCardId ? "from the queue in the same folder" : "in the same folder";
+  const then = kind === "quick-fix" ? "Wait for it to finish." : "Wait for it, or use Add to queue.";
+  return { conflictCardId: other.id, error: `${displayIdOf(other)} is running ${where}. ${then}` };
 }
 
 /**
@@ -292,7 +345,9 @@ export function worktreeWarningFor(cardId: string): string | null {
   const self = queue.find((r) => r.id === cardId) ?? getRow(cardId);
   if (!self) return null;
   const index = queue.findIndex((r) => r.id === cardId);
-  const ahead = [...runningRows(), ...(index === -1 ? queue : queue.slice(0, index))];
+  // A plan run leaves no diff behind to start on top of.
+  const running = runningRows().filter((row) => liveKindOf(row) !== "planning");
+  const ahead = [...running, ...(index === -1 ? queue : queue.slice(0, index))];
   const toRun = (row: QueueRow) => ({ ...row, runsInWorktree: runsInWorktree(row), kind: kindOf(row) });
   const other = sharedWorkingCopyWith(toRun(self), ahead.map(toRun));
   if (!other) return null;
@@ -415,8 +470,9 @@ export function onRunFinished(args: { cardId: string; outcome: RunOutcome; error
 }
 
 /**
- * Marks a Start run as in flight until the returned release is called. The
- * release schedules the next advance, which is how the queue moves on.
+ * Marks a Start or Quick fix run as in flight until the returned release is
+ * called. The release schedules the next advance, which is how the queue
+ * moves on.
  */
 export function beginTrackedStart(cardId: string): () => void {
   const state = queueState();

@@ -23,7 +23,7 @@ import {
 } from "@/lib/autonomous-run/select-run-output";
 import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
 import { autonomousRunTimeoutMs } from "@/lib/autonomous-run/run-timeout";
-import { beginTrackedStart, dequeueCard, onRunFinished } from "@/lib/autonomous-run/run-queue";
+import { beginTrackedStart, dequeueCard, onRunFinished, runConflictFor } from "@/lib/autonomous-run/run-queue";
 import { assessTestRewrite } from "@/lib/markdown";
 
 export interface StartCardRunResult {
@@ -54,6 +54,13 @@ function getNewStatus(phase: Phase, currentStatus: Status): Status {
  * queue ignores it and hears the outcome through onRunFinished.
  */
 export async function startCardRun(cardId: string): Promise<StartCardRunResult> {
+  // Refused before anything is touched — the card keeps its queue spot — and
+  // in the same tick as beginTrackedStart, so two presses cannot both pass.
+  // The queue's own start never trips this: it only advances with nothing live.
+  const conflict = runConflictFor(cardId);
+  if (conflict) {
+    return { ok: false, status: 409, body: { ...conflict, code: "RUN_CONFLICT" } };
+  }
   const release = beginTrackedStart(cardId);
   try {
     return await runCardStart(cardId);
