@@ -69,6 +69,31 @@ export interface QueueOverlap {
   files: string[];
 }
 
+/** A queued or running card, as far as sharing a working copy goes. */
+export interface WorkingCopyRun {
+  id: string;
+  projectId: string | null;
+  runsInWorktree: boolean;
+}
+
+/**
+ * The run ahead of a worktree-less card that will leave its uncommitted
+ * changes in the same checkout, or null when there is none. `ahead` is in run
+ * order — running first, then the queue up to this card — and the closest one
+ * wins, since its diff is the one this card starts on top of. A run in its own
+ * worktree leaves the checkout alone, and a card in another project has a
+ * checkout of its own, so neither counts.
+ */
+export function sharedWorkingCopyWith<T extends WorkingCopyRun>(self: WorkingCopyRun, ahead: T[]): T | null {
+  if (self.runsInWorktree) return null;
+  for (let i = ahead.length - 1; i >= 0; i--) {
+    const other = ahead[i];
+    if (other.id === self.id || other.runsInWorktree) continue;
+    if (other.projectId === self.projectId) return other;
+  }
+  return null;
+}
+
 /** GET /api/queue. */
 export interface QueueSnapshot {
   /** In run order; the first one starts next. */
@@ -77,6 +102,8 @@ export interface QueueSnapshot {
     displayId: string;
     title: string;
     overlaps: QueueOverlap[];
+    /** Whether its run will get its own branch, decided as the run's start would decide it. */
+    runsInWorktree: boolean;
   }[];
   armed: boolean;
   pausedReason: string | null;

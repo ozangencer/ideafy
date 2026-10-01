@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Card, getDisplayId } from "@/lib/types";
 import { openPredecessors } from "@/lib/card-group";
+import { worktreeOverrideFor } from "@/lib/workspace";
 import { toast } from "@/hooks/use-toast";
 import { stripHtml } from "@/lib/prompts/utils";
 import { parseTestProgress } from "@/lib/test-progress";
@@ -396,8 +397,7 @@ export function CardPhaseActions({
     // Persist per-card override only when it diverges from project default.
     // Matching the project default clears the override (back to "follow project").
     if (phase === "implementation") {
-      const desiredOverride =
-        dialogUseWorktree === projectDefaultWorktree ? null : dialogUseWorktree;
+      const desiredOverride = worktreeOverrideFor(dialogUseWorktree, projectDefaultWorktree);
       if (desiredOverride !== (card.useWorktree ?? null)) {
         await updateCard(card.id, { useWorktree: desiredOverride });
       }
@@ -422,8 +422,7 @@ export function CardPhaseActions({
     if (isQuickFixing || !flags.canQuickFix) return;
 
     // Persist per-card override only when it diverges from project default.
-    const desiredOverride =
-      dialogUseWorktree === projectDefaultWorktree ? null : dialogUseWorktree;
+    const desiredOverride = worktreeOverrideFor(dialogUseWorktree, projectDefaultWorktree);
     if (desiredOverride !== (card.useWorktree ?? null)) {
       await updateCard(card.id, { useWorktree: desiredOverride });
     }

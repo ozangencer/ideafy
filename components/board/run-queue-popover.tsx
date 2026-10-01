@@ -47,6 +47,7 @@ export function RunQueueChip() {
   const openModal = useKanbanStore((s) => s.openModal);
   const moveInQueue = useKanbanStore((s) => s.moveInQueue);
   const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
+  const setQueuedCardWorktree = useKanbanStore((s) => s.setQueuedCardWorktree);
   const setQueueRunning = useKanbanStore((s) => s.setQueueRunning);
   const [open, setOpen] = useState(false);
 
@@ -108,6 +109,16 @@ export function RunQueueChip() {
                     {item.displayId}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                  {/* Isolated branch is the usual case; only the exception
+                      gets a mark, so a plain row stays plain. */}
+                  {!item.runsInWorktree && (
+                    <span
+                      title="Runs on the current branch, without a worktree"
+                      className="shrink-0 rounded bg-ink/[0.06] px-1 font-mono text-[10px] text-current"
+                    >
+                      main
+                    </span>
+                  )}
                   {item.overlaps.length > 0 && (
                     <span
                       title={`Shares files with work ahead of it:\n${overlapText}`}
@@ -122,6 +133,7 @@ export function RunQueueChip() {
                   anchors={anchors}
                   onPlace={(afterCardId) => moveInQueue(item.cardId, afterCardId)}
                   onRemove={() => removeFromQueue(item.cardId)}
+                  onToggleWorktree={() => setQueuedCardWorktree(item.cardId, !item.runsInWorktree)}
                 />
               </li>
             );
@@ -156,12 +168,14 @@ function QueueRowMenu({
   anchors,
   onPlace,
   onRemove,
+  onToggleWorktree,
 }: {
   item: QueueItem;
   canMoveToStart: boolean;
   anchors: QueueItem[];
   onPlace: (afterCardId: string | null) => void;
   onRemove: () => void;
+  onToggleWorktree: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -203,6 +217,10 @@ function QueueRowMenu({
           </DropdownMenuSub>
         )}
         {(canMoveToStart || anchors.length > 0) && <DropdownMenuSeparator />}
+        <DropdownMenuItem className="text-xs" onSelect={onToggleWorktree}>
+          {item.runsInWorktree ? "Run on current branch" : "Run on isolated branch"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem className="text-xs" onSelect={onRemove}>
           Remove
         </DropdownMenuItem>

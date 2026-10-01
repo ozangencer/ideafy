@@ -4,15 +4,18 @@ import assert from "node:assert/strict";
 import * as cardQueueNs from "../../lib/card-queue";
 import * as runErrorNs from "../../lib/run-error";
 import * as planFilesNs from "../../lib/plan-files";
+import * as workspaceNs from "../../lib/workspace";
 
 // See run-output.test.ts: lib/ modules come back through the CJS interop.
 function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { queueIneligibleReason, queueRanks, QUEUE_CLEARING_STATUSES } = interop(cardQueueNs);
+const { queueIneligibleReason, queueRanks, QUEUE_CLEARING_STATUSES, sharedWorkingCopyWith } =
+  interop(cardQueueNs);
 const { infrastructureRunError, isInfrastructureRunError } = interop(runErrorNs);
 const { sharedPlanFiles } = interop(planFilesNs);
+const { shouldUseWorktree, worktreeOverrideFor } = interop(workspaceNs);
 
 const eligible = {
   status: "backlog",
@@ -70,4 +73,40 @@ test("plan files: shared files match exactly or under a glob", () => {
     ["lib/types.ts", "lib/db/schema.ts"]
   );
   assert.deepEqual(sharedPlanFiles(["a.ts"], ["b.ts"]), []);
+});
+
+const run = (id: string, runsInWorktree: boolean, projectId: string | null = "p1") => ({
+  id,
+  projectId,
+  runsInWorktree,
+});
+
+test("run queue: a worktree-less card is warned about the worktree-less run ahead of it", () => {
+  const ahead = [run("a", false), run("b", true), run("c", false)];
+  // The closest one: its uncommitted diff is the one this card starts on.
+  assert.equal(sharedWorkingCopyWith(run("self", false), ahead)?.id, "c");
+});
+
+test("run queue: no warning when nothing ahead shares the working copy", () => {
+  assert.equal(sharedWorkingCopyWith(run("self", false), [run("a", true), run("b", true)]), null);
+  assert.equal(sharedWorkingCopyWith(run("self", false), [run("a", false, "p2")]), null);
+  assert.equal(sharedWorkingCopyWith(run("self", true), [run("a", false)]), null);
+  assert.equal(sharedWorkingCopyWith(run("self", false), [run("self", false)]), null);
+});
+
+test("run queue: a card's branch follows card override, then project, then worktree", () => {
+  const dev = { useWorktrees: true, mode: "development" };
+  assert.equal(shouldUseWorktree({ useWorktree: null }, dev), true);
+  assert.equal(shouldUseWorktree({ useWorktree: false }, dev), false);
+  assert.equal(shouldUseWorktree({ useWorktree: null }, { ...dev, useWorktrees: false }), false);
+  assert.equal(shouldUseWorktree({ useWorktree: true }, { ...dev, useWorktrees: false }), true);
+  assert.equal(shouldUseWorktree({ useWorktree: null }, null), true);
+  assert.equal(shouldUseWorktree({ useWorktree: true }, { ...dev, mode: "work" }), false);
+});
+
+test("run queue: picking the project default stores no override", () => {
+  assert.equal(worktreeOverrideFor(true, true), null);
+  assert.equal(worktreeOverrideFor(false, false), null);
+  assert.equal(worktreeOverrideFor(false, true), false);
+  assert.equal(worktreeOverrideFor(true, false), true);
 });

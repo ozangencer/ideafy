@@ -8,6 +8,7 @@ import { placeAfter } from "@/lib/card-group";
 import {
   compareByQueuePosition,
   queueIneligibleReason,
+  sharedWorkingCopyWith,
   type QueueOverlap,
   type QueueSnapshot,
 } from "@/lib/card-queue";
@@ -252,20 +253,31 @@ export function overlapsForCard(cardId: string): QueueOverlap[] {
   return overlapsFor(cardId, listQueueRows(), runningRows());
 }
 
-/**
- * Without a worktree the second run starts on top of the first one's
- * uncommitted changes, and Human Test then shows both cards' work as one.
- */
-export function worktreeWarningFor(cardId: string): string | null {
-  const row = getRow(cardId);
-  if (!row) return null;
-  const uses = shouldUseWorktree(
+/** The same call the run's start makes, so the popover shows what will happen. */
+function runsInWorktree(row: QueueRow): boolean {
+  return shouldUseWorktree(
     { useWorktree: row.useWorktree },
     { useWorktrees: row.projectUseWorktrees, mode: row.projectMode }
   );
-  return uses
-    ? null
-    : `${displayIdOf(row)} runs without a worktree: it will start on top of whatever the run before it left uncommitted.`;
+}
+
+/**
+ * Without a worktree a run starts on top of whatever the run before it left
+ * uncommitted, and Human Test then shows both cards' work as one. That only
+ * bites when the run ahead also skipped its worktree, so the warning names
+ * that card and stays quiet otherwise.
+ */
+export function worktreeWarningFor(cardId: string): string | null {
+  const queue = listQueueRows();
+  const self = queue.find((r) => r.id === cardId) ?? getRow(cardId);
+  if (!self) return null;
+  const index = queue.findIndex((r) => r.id === cardId);
+  const ahead = [...runningRows(), ...(index === -1 ? queue : queue.slice(0, index))];
+  const toRun = (row: QueueRow) => ({ ...row, runsInWorktree: runsInWorktree(row) });
+  const other = sharedWorkingCopyWith(toRun(self), ahead.map(toRun));
+  return other
+    ? `${displayIdOf(self)} runs in the same working copy as ${displayIdOf(other)}: uncommitted changes will mix in Human Test.`
+    : null;
 }
 
 // ============================================================================
@@ -283,6 +295,7 @@ export function getQueueSnapshot(): QueueSnapshot {
       displayId: displayIdOf(row),
       title: row.title,
       overlaps: overlapsFor(row.id, queue, running),
+      runsInWorktree: runsInWorktree(row),
     })),
     armed: state.armed,
     pausedReason: state.pausedReason,

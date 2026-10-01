@@ -264,9 +264,11 @@ function TaskCardImpl({
   // menu from offering it where it can never work.
   const canQueue = phaseFlags.canRunAutonomous && phaseFlags.phase === "implementation";
 
-  const handleAddToQueue = () => {
+  // The choice applies to every card in a selection; the tick follows the
+  // card you right-clicked, the way Change Status does.
+  const handleAddToQueue = (useWorktree: boolean) => {
     if (!isSelected) {
-      void addToQueue([card.id]);
+      void addToQueue([card.id], { useWorktree });
       return;
     }
     // Board order, the way you read it: left to right, then top to bottom.
@@ -275,8 +277,14 @@ function TaskCardImpl({
     const ordered = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
       .map((el) => el.dataset.cardId!)
       .filter((id) => selected.delete(id));
-    void addToQueue([...ordered, ...Array.from(selected)]);
+    void addToQueue([...ordered, ...Array.from(selected)], { useWorktree });
   };
+  // The card's current setting comes first, so a hover and one click still
+  // queue it the way it was going to run.
+  const queueBranchChoices = [
+    { useWorktree: true, label: "Isolated branch (worktree)" },
+    { useWorktree: false, label: "Direct on current branch" },
+  ].sort((a, b) => Number(b.useWorktree === effectiveUseWorktree) - Number(a.useWorktree === effectiveUseWorktree));
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -874,11 +882,28 @@ function TaskCardImpl({
             </ContextMenuItem>
           ) : (
             canQueue && (
-              <ContextMenuItem onClick={handleAddToQueue}>
-                <ListPlus className="w-4 h-4 mr-2" />
-                Add to queue
-                {isSelected && <SelectionCount />}
-              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  <ListPlus className="w-4 h-4 mr-2" />
+                  Add to queue
+                  {isSelected && <SelectionCount inline />}
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-56">
+                  {queueBranchChoices.map((choice) => (
+                    <ContextMenuItem
+                      key={choice.label}
+                      onClick={() => handleAddToQueue(choice.useWorktree)}
+                    >
+                      <Check
+                        className={`w-4 h-4 mr-2 ${
+                          choice.useWorktree === effectiveUseWorktree ? "" : "invisible"
+                        }`}
+                      />
+                      {choice.label}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             )
           )}
           {extraContextMenuItems}

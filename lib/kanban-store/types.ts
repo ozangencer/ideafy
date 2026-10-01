@@ -429,7 +429,11 @@ export interface KanbanStore {
   // Run queue actions. addToQueue appends in the order given;
   // moveInQueue's null afterCardId moves the card to the front.
   fetchQueue: () => Promise<void>;
-  addToQueue: (cardIds: string[]) => Promise<void>;
+  // `useWorktree` is the branch choice from the Add to queue submenu, written
+  // onto each card (as an override only where it differs from its project)
+  // before the card is queued. Omitted, cards keep whatever they had.
+  addToQueue: (cardIds: string[], options?: { useWorktree?: boolean }) => Promise<void>;
+  setQueuedCardWorktree: (cardId: string, useWorktree: boolean) => Promise<void>;
   removeFromQueue: (cardId: string) => Promise<void>;
   moveInQueue: (cardId: string, afterCardId: string | null) => Promise<void>;
   setQueueRunning: (running: boolean) => Promise<void>;

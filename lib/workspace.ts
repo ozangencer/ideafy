@@ -51,3 +51,14 @@ export function shouldUseWorktree(
   if (project?.mode === "work") return false;
   return card.useWorktree ?? project?.useWorktrees ?? true;
 }
+
+/**
+ * What to store in a card's `useWorktree` once you pick isolated branch or
+ * current branch for it. A choice that matches the project default stores
+ * null, so the card keeps following the project instead of collecting an
+ * override that only restates it. Start, Quick Fix and Add to queue all write
+ * through here, so the three never disagree on the rule.
+ */
+export function worktreeOverrideFor(choice: boolean, projectDefault: boolean): boolean | null {
+  return choice === projectDefault ? null : choice;
+}

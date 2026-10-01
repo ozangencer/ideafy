@@ -1,4 +1,5 @@
 import type { QueueAddResult, QueueSnapshot } from "../../card-queue";
+import { worktreeOverrideFor } from "../../workspace";
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 import { toast } from "@/hooks/use-toast";
@@ -16,6 +17,7 @@ export const createQueueSlice: StoreSlice<
     | "queueState"
     | "fetchQueue"
     | "addToQueue"
+    | "setQueuedCardWorktree"
     | "removeFromQueue"
     | "moveInQueue"
     | "setQueueRunning"
@@ -49,6 +51,19 @@ export const createQueueSlice: StoreSlice<
     return parseJson<T>(response);
   };
 
+  // The queue reads the card's own useWorktree when the run starts, so the
+  // branch choice is just that field. Each card is normalized against its own
+  // project's default: a selection can span projects.
+  const writeWorktreeChoice = async (cardId: string, choice: boolean): Promise<boolean> => {
+    const { cards, projects } = get();
+    const card = cards.find((c) => c.id === cardId);
+    if (!card) return false;
+    const project = projects.find((p) => p.id === card.projectId);
+    const override = worktreeOverrideFor(choice, project?.useWorktrees ?? true);
+    if (override === (card.useWorktree ?? null)) return true;
+    return get().updateCard(cardId, { useWorktree: override });
+  };
+
   return {
     queueState: null,
 
@@ -73,7 +88,7 @@ export const createQueueSlice: StoreSlice<
       }
     },
 
-    addToQueue: async (cardIds) => {
+    addToQueue: async (cardIds, options) => {
       // One POST per card, in the order given, so a board selection lands in
       // board order behind whatever was already waiting.
       const overlapLines: string[] = [];
@@ -82,6 +97,12 @@ export const createQueueSlice: StoreSlice<
       let added = 0;
       for (const cardId of cardIds) {
         try {
+          // Written first: the POST's warning reads the card's branch choice.
+          // If the POST then refuses the card, the choice stays on it, as it
+          // would after a Start dialog you closed.
+          if (options?.useWorktree !== undefined) {
+            await writeWorktreeChoice(cardId, options.useWorktree);
+          }
           const result = await request<QueueAddResult>("POST", { cardId });
           apply(result);
           added += 1;
@@ -121,6 +142,16 @@ export const createQueueSlice: StoreSlice<
             : undefined,
         });
       }
+    },
+
+    // Not a POST: re-adding a queued card without afterCardId moves it to the
+    // back. A fresh snapshot brings the row's badge and the warnings along.
+    setQueuedCardWorktree: async (cardId, useWorktree) => {
+      if (!(await writeWorktreeChoice(cardId, useWorktree))) {
+        toast({ title: "Couldn't change the branch", variant: "destructive" });
+        return;
+      }
+      await get().fetchQueue();
     },
 
     removeFromQueue: async (cardId) => {
