@@ -39,11 +39,18 @@ export function queueRanks(cards: Pick<Card, "id" | "queuePosition" | "taskNumbe
   return ranks;
 }
 
+/** What a queued card's run will do: build it, or walk its core flow. */
+export type QueueRunKind = "implementation" | "verify";
+
 /**
- * Why a card cannot wait in the run queue, or null when it can. The queue only
- * ever starts autonomous implementation runs: a plan run, a re-test or a
- * pre-verify needs a person to read what it wrote before anything else
- * happens, and an interactive terminal session never reports that it ended.
+ * Why a card cannot wait in the run queue, or null when it can. The queue
+ * starts two kinds of autonomous run. Implementation, from Backlog or In
+ * Progress, for a card with a plan and no checklist yet. And pre-verify, for a
+ * Human Test card whose checklist names its core flow: it changes no status,
+ * nothing starts behind it, and its result is read by the person who was
+ * going to walk that checklist anyway. A plan run or a re-test still needs a
+ * person to read what it wrote before anything else happens, and an
+ * interactive terminal session never reports that it ended.
  *
  * `phase` is the server's `detectPhase`, not the board's: the queue starts the
  * run the Start route would, so it has to agree with that route.
@@ -54,7 +61,21 @@ export function queueIneligibleReason(input: {
   phase: string;
   processingType: string | null;
   projectMode: string | null;
+  /** Whether the checklist opens with a `Core flow` / `Temel akış` group. */
+  hasCoreFlow: boolean;
+  gitBranchStatus: string | null;
 }): string | null {
+  if (input.status === "test") {
+    if (input.phase !== "verify") return "it is in test";
+    if (input.projectMode === "work") return "Work projects have no queued pre-verify";
+    if (!input.hasDescription) return "it has no description";
+    // Same rule as the board's Pre-verify button: without the heading the
+    // agent cannot tell which items are essential and would tick nothing.
+    if (!input.hasCoreFlow) return "its checklist has no core-flow group";
+    if (input.gitBranchStatus === "rolled_back") return "its branch was rolled back";
+    if (input.processingType) return "a run is already going on it";
+    return null;
+  }
   if (QUEUE_CLEARING_STATUSES.has(input.status as Status)) return `it is in ${input.status}`;
   if (input.projectMode === "work") return "Work projects have no implementation run";
   if (!input.hasDescription) return "it has no description";
@@ -76,6 +97,7 @@ export interface WorkingCopyRun {
   id: string;
   projectId: string | null;
   runsInWorktree: boolean;
+  kind: QueueRunKind;
 }
 
 /**
@@ -83,14 +105,15 @@ export interface WorkingCopyRun {
  * changes in the same checkout, or null when there is none. `ahead` is in run
  * order — running first, then the queue up to this card — and the closest one
  * wins, since its diff is the one this card starts on top of. A run in its own
- * worktree leaves the checkout alone, and a card in another project has a
- * checkout of its own, so neither counts.
+ * worktree leaves the checkout alone, a pre-verify only ticks boxes and leaves
+ * no diff behind, and a card in another project has a checkout of its own, so
+ * none of those count.
  */
 export function sharedWorkingCopyWith<T extends WorkingCopyRun>(self: WorkingCopyRun, ahead: T[]): T | null {
   if (self.runsInWorktree) return null;
   for (let i = ahead.length - 1; i >= 0; i--) {
     const other = ahead[i];
-    if (other.id === self.id || other.runsInWorktree) continue;
+    if (other.id === self.id || other.runsInWorktree || other.kind === "verify") continue;
     if (other.projectId === self.projectId) return other;
   }
   return null;
@@ -104,8 +127,13 @@ export interface QueueSnapshot {
     displayId: string;
     title: string;
     overlaps: QueueOverlap[];
-    /** Whether its run will get its own branch, decided as the run's start would decide it. */
+    /**
+     * Whether its run lands in a worktree, decided as the run's start would
+     * decide it. For a pre-verify that is the card's own active worktree,
+     * not its branch choice: the checklist is walked where the code was written.
+     */
     runsInWorktree: boolean;
+    kind: QueueRunKind;
   }[];
   armed: boolean;
   pausedReason: string | null;

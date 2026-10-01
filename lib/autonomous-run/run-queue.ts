@@ -3,6 +3,7 @@ import { db, schema } from "@/lib/db";
 import { getAllProcesses } from "@/lib/process-registry";
 import { recordActivity } from "@/lib/activity-registry";
 import { detectPhase, stripHtml } from "@/lib/prompts";
+import { parseTestProgress } from "@/lib/test-progress";
 import { infrastructureRunError } from "@/lib/run-error";
 import { placeAfter } from "@/lib/card-group";
 import {
@@ -10,14 +11,16 @@ import {
   queueIneligibleReason,
   sharedWorkingCopyWith,
   type QueueOverlap,
+  type QueueRunKind,
   type QueueSnapshot,
 } from "@/lib/card-queue";
 import { extractPlanFiles, sharedPlanFiles } from "@/lib/plan-files";
 import { shouldUseWorktree } from "@/lib/workspace";
 
 /**
- * The run queue: cards lined up for autonomous implementation, started one at
- * a time as the previous run ends — whether it ended well or not.
+ * The run queue: cards lined up for an autonomous implementation or pre-verify
+ * run, started one at a time as the previous run ends — whether it ended well
+ * or not.
  *
  * The order lives on the cards (`queue_position`), so it survives a restart.
  * Whether the queue is *running* does not: `armed` sits in memory like the
@@ -92,6 +95,9 @@ interface QueueRow {
   queuePosition: number | null;
   taskNumber: number | null;
   useWorktree: boolean | null;
+  gitBranchStatus: string | null;
+  gitWorktreePath: string | null;
+  gitWorktreeStatus: string | null;
   projectId: string | null;
   idPrefix: string | null;
   projectMode: string | null;
@@ -109,6 +115,9 @@ const rowColumns = {
   queuePosition: schema.cards.queuePosition,
   taskNumber: schema.cards.taskNumber,
   useWorktree: schema.cards.useWorktree,
+  gitBranchStatus: schema.cards.gitBranchStatus,
+  gitWorktreePath: schema.cards.gitWorktreePath,
+  gitWorktreeStatus: schema.cards.gitWorktreeStatus,
   projectId: schema.cards.projectId,
   idPrefix: schema.projects.idPrefix,
   projectMode: schema.projects.mode,
@@ -145,7 +154,13 @@ function ineligibleReason(row: QueueRow): string | null {
     phase: detectPhase(row),
     processingType: row.processingType,
     projectMode: row.projectMode,
+    hasCoreFlow: !!parseTestProgress(row.testScenarios ?? "")?.core,
+    gitBranchStatus: row.gitBranchStatus,
   });
+}
+
+function kindOf(row: QueueRow): QueueRunKind {
+  return detectPhase(row) === "verify" ? "verify" : "implementation";
 }
 
 /**
@@ -253,8 +268,13 @@ export function overlapsForCard(cardId: string): QueueOverlap[] {
   return overlapsFor(cardId, listQueueRows(), runningRows());
 }
 
-/** The same call the run's start makes, so the popover shows what will happen. */
+/**
+ * The same call the run's start makes, so the popover shows what will happen.
+ * A pre-verify goes to the card's active worktree whatever its branch choice
+ * says; whether that folder is still on disk is setupWorktree's to check.
+ */
 function runsInWorktree(row: QueueRow): boolean {
+  if (kindOf(row) === "verify") return !!row.gitWorktreePath && row.gitWorktreeStatus === "active";
   return shouldUseWorktree(
     { useWorktree: row.useWorktree },
     { useWorktrees: row.projectUseWorktrees, mode: row.projectMode }
@@ -273,11 +293,12 @@ export function worktreeWarningFor(cardId: string): string | null {
   if (!self) return null;
   const index = queue.findIndex((r) => r.id === cardId);
   const ahead = [...runningRows(), ...(index === -1 ? queue : queue.slice(0, index))];
-  const toRun = (row: QueueRow) => ({ ...row, runsInWorktree: runsInWorktree(row) });
+  const toRun = (row: QueueRow) => ({ ...row, runsInWorktree: runsInWorktree(row), kind: kindOf(row) });
   const other = sharedWorkingCopyWith(toRun(self), ahead.map(toRun));
-  return other
-    ? `${displayIdOf(self)} runs in the same working copy as ${displayIdOf(other)}: uncommitted changes will mix in Human Test.`
-    : null;
+  if (!other) return null;
+  return kindOf(self) === "verify"
+    ? `${displayIdOf(self)} will be tested on top of ${displayIdOf(other)}'s uncommitted changes.`
+    : `${displayIdOf(self)} runs in the same working copy as ${displayIdOf(other)}: uncommitted changes will mix in Human Test.`;
 }
 
 // ============================================================================
@@ -296,6 +317,7 @@ export function getQueueSnapshot(): QueueSnapshot {
       title: row.title,
       overlaps: overlapsFor(row.id, queue, running),
       runsInWorktree: runsInWorktree(row),
+      kind: kindOf(row),
     })),
     armed: state.armed,
     pausedReason: state.pausedReason,
@@ -416,8 +438,9 @@ function hasLiveRun(): boolean {
  * holds the queue too; it moves on when that run ends.
  *
  * The next card is checked again right before it starts. It may have waited
- * an hour: its plan deleted, moved to Completed by hand, or trashed. Those
- * leave the queue with a line in the bell rather than silently.
+ * an hour: its plan deleted, moved to Completed by hand, its branch rolled
+ * back, or trashed. Those leave the queue with a line in the bell rather than
+ * silently.
  */
 export async function advanceQueue(): Promise<void> {
   const state = queueState();

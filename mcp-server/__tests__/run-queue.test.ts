@@ -25,6 +25,8 @@ const eligible = {
   phase: "implementation",
   processingType: null,
   projectMode: "development",
+  hasCoreFlow: false,
+  gitBranchStatus: null,
 };
 
 test("run queue: a planned card with no checklist can be queued", () => {
@@ -41,9 +43,35 @@ test("run queue: only implementation runs are queued", () => {
 });
 
 test("run queue: statuses the DB trigger clears are refused up front", () => {
+  // Human Test is the one way back in, for pre-verify; its rules are below.
   for (const status of QUEUE_CLEARING_STATUSES) {
+    if (status === "test") continue;
     assert.ok(queueIneligibleReason({ ...eligible, status }), status);
   }
+});
+
+const verifiable = {
+  ...eligible,
+  status: "test",
+  phase: "verify",
+  hasCoreFlow: true,
+  gitBranchStatus: "active",
+};
+
+test("run queue: a Human Test card with a core flow can be queued for pre-verify", () => {
+  assert.equal(queueIneligibleReason(verifiable), null);
+  // Merged: the code is on main now, and that is where the run goes.
+  assert.equal(queueIneligibleReason({ ...verifiable, gitBranchStatus: "merged" }), null);
+  assert.equal(queueIneligibleReason({ ...verifiable, gitBranchStatus: null }), null);
+});
+
+test("run queue: pre-verify is refused where the board's button would not run", () => {
+  assert.match(queueIneligibleReason({ ...verifiable, hasCoreFlow: false })!, /core-flow/);
+  assert.match(queueIneligibleReason({ ...verifiable, projectMode: "work" })!, /Work/);
+  assert.match(queueIneligibleReason({ ...verifiable, gitBranchStatus: "rolled_back" })!, /rolled back/);
+  assert.match(queueIneligibleReason({ ...verifiable, processingType: "autonomous" })!, /already/);
+  assert.match(queueIneligibleReason({ ...verifiable, hasDescription: false })!, /description/);
+  assert.ok(queueIneligibleReason({ ...verifiable, phase: "implementation" }));
 });
 
 test("run queue: ranks follow position and skip the gaps the trigger leaves", () => {
@@ -77,10 +105,16 @@ test("plan files: shared files match exactly or under a glob", () => {
   assert.deepEqual(sharedPlanFiles(["a.ts"], ["b.ts"]), []);
 });
 
-const run = (id: string, runsInWorktree: boolean, projectId: string | null = "p1") => ({
+const run = (
+  id: string,
+  runsInWorktree: boolean,
+  projectId: string | null = "p1",
+  kind: "implementation" | "verify" = "implementation"
+) => ({
   id,
   projectId,
   runsInWorktree,
+  kind,
 });
 
 test("run queue: a worktree-less card is warned about the worktree-less run ahead of it", () => {
@@ -94,6 +128,15 @@ test("run queue: no warning when nothing ahead shares the working copy", () => {
   assert.equal(sharedWorkingCopyWith(run("self", false), [run("a", false, "p2")]), null);
   assert.equal(sharedWorkingCopyWith(run("self", true), [run("a", false)]), null);
   assert.equal(sharedWorkingCopyWith(run("self", false), [run("self", false)]), null);
+});
+
+test("run queue: a pre-verify ahead leaves no diff to share", () => {
+  assert.equal(sharedWorkingCopyWith(run("self", false), [run("a", false, "p1", "verify")]), null);
+  // It does not hide the implementation run behind it either.
+  const ahead = [run("a", false), run("b", false, "p1", "verify")];
+  assert.equal(sharedWorkingCopyWith(run("self", false), ahead)?.id, "a");
+  // A pre-verify without a worktree is warned about the implementation ahead of it.
+  assert.equal(sharedWorkingCopyWith(run("self", false, "p1", "verify"), [run("a", false)])?.id, "a");
 });
 
 test("run queue: a card's branch follows card override, then project, then worktree", () => {
