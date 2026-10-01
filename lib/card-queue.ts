@@ -1,10 +1,12 @@
 import type { Card, Status } from "./types";
 
 /**
- * Statuses that take a card out of the run queue. Mirrors the
- * `cards_queue_position_reset` trigger in drizzle/0017: a card pulled into
- * Human Test by hand, withdrawn or sent back to Ideation has nothing left for
- * an implementation run to do, and a stale "#2" on its face would say it does.
+ * Statuses that take a card out of the run queue when it moves into them.
+ * Mirrors the `cards_queue_position_reset` trigger (drizzle/0018): a card
+ * pulled into Human Test by hand, withdrawn or sent back to Ideation has
+ * nothing left for an implementation run to do, and a stale "#2" on its face
+ * would say it does. The trigger fires on the move only — a card already in
+ * Human Test can be queued for pre-verify, and re-saving its status keeps it.
  */
 export const QUEUE_CLEARING_STATUSES: ReadonlySet<Status> = new Set<Status>([
   "test",

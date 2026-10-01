@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 
 import * as cardQueueNs from "../../lib/card-queue";
 import * as runErrorNs from "../../lib/run-error";
@@ -109,4 +111,33 @@ test("run queue: picking the project default stores no override", () => {
   assert.equal(worktreeOverrideFor(false, false), null);
   assert.equal(worktreeOverrideFor(false, true), false);
   assert.equal(worktreeOverrideFor(true, false), true);
+});
+
+// The trigger lives only in SQL, so it is checked against the migrations
+// themselves, applied in order to a bare cards table.
+function queueTriggerDb() {
+  const db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE cards (id TEXT PRIMARY KEY, status TEXT NOT NULL)");
+  for (const tag of ["0017_card_queue_position", "0018_queue_reset_on_status_change"]) {
+    const sql = readFileSync(new URL(`../../drizzle/${tag}.sql`, import.meta.url), "utf-8");
+    for (const statement of sql.split("--> statement-breakpoint")) db.exec(statement);
+  }
+  return db;
+}
+
+function queuePositionAfter(db: DatabaseSync, from: string, to: string): unknown {
+  db.prepare("INSERT INTO cards (id, status, queue_position) VALUES ('c', ?, 1)").run(from);
+  db.prepare("UPDATE cards SET status = ? WHERE id = 'c'").run(to);
+  return (db.prepare("SELECT queue_position FROM cards WHERE id = 'c'").get() as { queue_position: unknown })
+    .queue_position;
+}
+
+test("queue trigger: moving into Human Test still clears the position", () => {
+  assert.equal(queuePositionAfter(queueTriggerDb(), "backlog", "test"), null);
+  assert.equal(queuePositionAfter(queueTriggerDb(), "progress", "completed"), null);
+});
+
+test("queue trigger: re-saving a Human Test card's status keeps it queued", () => {
+  assert.equal(queuePositionAfter(queueTriggerDb(), "test", "test"), 1);
+  assert.equal(queuePositionAfter(queueTriggerDb(), "test", "bugs"), 1);
 });

@@ -222,10 +222,14 @@ export async function PUT(
     // position straight back onto a card that moved groups.
     groupOrder: updatedCard.groupId !== existing.groupId ? null : existing.groupOrder ?? null,
     // Same for the status trigger: a queued card moved to Human Test by hand
-    // leaves the queue in the DB, and must leave it in the store too.
-    queuePosition: QUEUE_CLEARING_STATUSES.has(updatedCard.status as Card["status"])
-      ? null
-      : existing.queuePosition ?? null,
+    // leaves the queue in the DB, and must leave it in the store too. Only on
+    // a real move — a save that writes "test" back onto a Human Test card
+    // keeps it queued for pre-verify, in the DB and here alike.
+    queuePosition:
+      updatedCard.status !== existing.status &&
+      QUEUE_CLEARING_STATUSES.has(updatedCard.status as Card["status"])
+        ? null
+        : existing.queuePosition ?? null,
     taskNumber: updatedCard.taskNumber,
     gitBranchName: existing.gitBranchName,
     gitBranchStatus: existing.gitBranchStatus as Card["gitBranchStatus"],
