@@ -39,6 +39,9 @@ export interface WorktreeSetupResult {
  * - `implementation` + worktrees enabled → create (or reuse) a feature-branch
  *   worktree under `.worktrees/kanban/`.
  * - `implementation`/`retest` + existing worktree path on the card → reuse it.
+ * - `verify` + an active worktree on disk → run there, whatever the card's
+ *   branch choice says today: the checklist tests the code where it was
+ *   written, and that choice can have been flipped since (IDE-386).
  * - Worktrees disabled or non-implementation phase → fall back to `workingDir`.
  *
  * Returns the working directory + updated git metadata for the card row.
@@ -93,6 +96,18 @@ export async function setupWorktree(args: SetupWorktreeArgs): Promise<WorktreeSe
       gitWorktreePath: result.worktreePath,
       gitWorktreeStatus: "active",
     };
+  }
+
+  // Pre-verify follows the code, not the setting. A card switched to "current
+  // branch" after its implementation still has its changes on the feature
+  // branch, and a merged card's worktree is "removed" — its code is on main,
+  // which is where the fall-through below runs it.
+  if (phase === "verify" && card.gitWorktreePath && card.gitWorktreeStatus === "active") {
+    if (await worktreeExists(workingDir, card.gitWorktreePath)) {
+      console.log(`[Git Worktree] Verifying in the card's worktree: ${card.gitWorktreePath}`);
+      return { ...base, actualWorkingDir: card.gitWorktreePath };
+    }
+    return base;
   }
 
   // A worktree opened before its project moved to Work is still where that

@@ -247,7 +247,7 @@ ${ONE_SHOT_RUN_RULE}`;
 Read card via MCP (mcp__ideafy__get_card). The card is in ${isWork ? "In Review" : "Human Test"}: its checklist is waiting for a person to walk it.
 
 Task: pre-verify the core flow of "${title}".
-
+${inWorktree && !isWork ? "\nThis folder is the card's own branch worktree, where its changes were written. Run everything here and do not switch branches.\n" : ""}
 ## What to run
 
 Run ONLY the items under the checklist's first group — \`## Core flow\` (English) or \`## Temel akış\` (Turkish). Those are the steps that decide whether the feature works at all; everything after them exists to catch what they cannot, and stays for the human.
