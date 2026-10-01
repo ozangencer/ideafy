@@ -109,11 +109,23 @@ export function RunQueueChip() {
                     {item.displayId}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                  {item.kind === "verify" && (
+                    <span
+                      title="Pre-verify: walks the core flow of its Human Test checklist"
+                      className="shrink-0 rounded bg-ink/[0.06] px-1 font-mono text-[10px] text-current"
+                    >
+                      verify
+                    </span>
+                  )}
                   {/* Isolated branch is the usual case; only the exception
                       gets a mark, so a plain row stays plain. */}
                   {!item.runsInWorktree && (
                     <span
-                      title="Runs on the current branch, without a worktree"
+                      title={
+                        item.kind === "verify"
+                          ? "Tested in the project folder: the card has no active worktree"
+                          : "Runs on the current branch, without a worktree"
+                      }
                       className="shrink-0 rounded bg-ink/[0.06] px-1 font-mono text-[10px] text-current"
                     >
                       main
@@ -217,10 +229,16 @@ function QueueRowMenu({
           </DropdownMenuSub>
         )}
         {(canMoveToStart || anchors.length > 0) && <DropdownMenuSeparator />}
-        <DropdownMenuItem className="text-xs" onSelect={onToggleWorktree}>
-          {item.runsInWorktree ? "Run on current branch" : "Run on isolated branch"}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {/* A pre-verify has no branch to pick: it runs where the card was
+            implemented. */}
+        {item.kind !== "verify" && (
+          <>
+            <DropdownMenuItem className="text-xs" onSelect={onToggleWorktree}>
+              {item.runsInWorktree ? "Run on current branch" : "Run on isolated branch"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem className="text-xs" onSelect={onRemove}>
           Remove
         </DropdownMenuItem>

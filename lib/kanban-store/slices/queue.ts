@@ -58,6 +58,11 @@ export const createQueueSlice: StoreSlice<
     const { cards, projects } = get();
     const card = cards.find((c) => c.id === cardId);
     if (!card) return false;
+    // A Human Test card queues for pre-verify, which runs where its code was
+    // written. The branch picked for the implementation cards in a mixed
+    // selection is not this card's to take: it would only change its next
+    // implementation run, if it ever goes back to one.
+    if (card.status === "test") return true;
     const project = projects.find((p) => p.id === card.projectId);
     const override = worktreeOverrideFor(choice, project?.useWorktrees ?? true);
     if (override === (card.useWorktree ?? null)) return true;

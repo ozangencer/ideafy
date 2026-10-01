@@ -259,16 +259,21 @@ function TaskCardImpl({
   const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
   // "Direct on main" only means something where branches exist at all.
   const showsMainBadge = !!project && !effectiveUseWorktree && phaseFlags.showDevControls;
-  // The queue only starts autonomous implementation runs; the server has the
-  // final say (it reads the phase the Start route would), this just keeps the
-  // menu from offering it where it can never work.
-  const canQueue = phaseFlags.canRunAutonomous && phaseFlags.phase === "implementation";
+  // The queue starts autonomous implementation runs and, on Development
+  // cards in Human Test, pre-verify runs. The server has the final say (it
+  // reads the phase the Start route would), this just keeps the menu from
+  // offering it where it can never work.
+  const canQueueImplementation = phaseFlags.canRunAutonomous && phaseFlags.phase === "implementation";
+  // No branch to pick: a pre-verify runs where the card was implemented.
+  const canQueueVerify =
+    phaseFlags.canRunAutonomous && phaseFlags.phase === "verify" && projectMode !== "work";
 
   // The choice applies to every card in a selection; the tick follows the
   // card you right-clicked, the way Change Status does.
-  const handleAddToQueue = (useWorktree: boolean) => {
+  const handleAddToQueue = (useWorktree?: boolean) => {
+    const options = useWorktree === undefined ? undefined : { useWorktree };
     if (!isSelected) {
-      void addToQueue([card.id], { useWorktree });
+      void addToQueue([card.id], options);
       return;
     }
     // Board order, the way you read it: left to right, then top to bottom.
@@ -277,7 +282,7 @@ function TaskCardImpl({
     const ordered = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
       .map((el) => el.dataset.cardId!)
       .filter((id) => selected.delete(id));
-    void addToQueue([...ordered, ...Array.from(selected)], { useWorktree });
+    void addToQueue([...ordered, ...Array.from(selected)], options);
   };
   // The card's current setting comes first, so a hover and one click still
   // queue it the way it was going to run.
@@ -880,8 +885,14 @@ function TaskCardImpl({
               <ListX className="w-4 h-4 mr-2" />
               Remove from queue
             </ContextMenuItem>
+          ) : canQueueVerify ? (
+            <ContextMenuItem onClick={() => handleAddToQueue()}>
+              <ListPlus className="w-4 h-4 mr-2" />
+              Add to queue (pre-verify)
+              {isSelected && <SelectionCount />}
+            </ContextMenuItem>
           ) : (
-            canQueue && (
+            canQueueImplementation && (
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
                   <ListPlus className="w-4 h-4 mr-2" />
