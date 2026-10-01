@@ -20,7 +20,7 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
 [One sentence: Strong Yes / Yes / Maybe / No / Strong No]
 
 ## Related Cards
-[Optional — only when an earlier card contradicts this idea, set a precedent for it, already describes the same idea, or open work overlaps it, or when the card is in a chain. One line per card: displayId, the kind (contradiction, precedent, duplicate, overlap, predecessor or successor), what it decided or touches, and why it matters here. Chain predecessors and successors are listed in chain order with their status. Leave the whole section out otherwise.]
+[Optional — only when an earlier card contradicts this idea, set a precedent for it, already describes the same idea, open work overlaps it or brings in something it relies on, or when the card is in a chain, and only when it would change the verdict or a recommendation. One line per card: displayId, the kind (contradiction, precedent, duplicate, overlap, dependency, predecessor or successor), what it decided or touches, and why it matters here. Chain predecessors and successors are listed in chain order with their status. Leave the whole section out otherwise.]
 
 ## Strengths
 - Key strengths of the idea

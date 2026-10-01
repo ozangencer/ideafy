@@ -274,6 +274,23 @@ test("the rule names both tools and stays silent when nothing is found", () => {
   assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /leave `## Related Cards` out/);
 });
 
+test("the rule only lets in cards that change the outcome and keeps the kinds apart", () => {
+  for (const rule of [PRIOR_DECISIONS_RULE, PRIOR_DECISIONS_EVALUATION_RULE]) {
+    // A card that would not change anything stays out (IDE-383).
+    assert.match(rule, /would be different/);
+    assert.match(rule, /never a precedent/);
+    // An overlap needs a shared file; without one it is a dependency.
+    assert.match(rule, /concrete shared file/);
+    assert.match(rule, /dependency/);
+  }
+  assert.match(PRIOR_DECISIONS_RULE, /dependencies go under Dependencies/);
+  // Turkish once collapsed contradiction and overlap into "çakışma".
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /contradiction and overlap never share one/);
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /çelişki, emsal, kopya, dosya çakışması, bağımlılık/);
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /At most 3 lines, chain lines excluded/);
+  assert.doesNotMatch(PRIOR_DECISIONS_RULE, /At most 3 lines/);
+});
+
 test("the chain rule reaches Dependencies in a plan and Related Cards in an evaluation", () => {
   for (const rule of [PRIOR_DECISIONS_RULE, PRIOR_DECISIONS_EVALUATION_RULE]) {
     assert.match(rule, /`chain` field/);
