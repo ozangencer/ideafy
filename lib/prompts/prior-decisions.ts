@@ -17,11 +17,11 @@
  */
 
 const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards before you commit to an approach. Use this card's \`id\` and \`projectId\` (get_card returns both):
-- Past decisions: call \`search_cards\` with the \`projectId\`, 2-3 keywords from the task, and this card's \`id\` as \`excludeCardId\`. Read each hit by its status:
+- Past decisions: call \`search_cards\` with the \`projectId\`, 2-3 keywords from the task, and this card's \`id\` as \`excludeCardId\`. The search matches words literally, so when the cards are not written in English, search in their language as well as in English. Read each hit by its status:
   - completed, test or progress: a decision. If this work contradicts it, that is a contradiction. A newer decision overrides an older one, but say why it should.
   - withdrawn: tried and abandoned, not a decision. Never call it a contradiction. Mention it as a precedent only when the reason it was dropped applies here too.
   Open a card with get_card only when its snippet is not enough.
-- Open work: call \`list_open_work\` with the same \`projectId\` and \`excludeCardId\`, plus the files this card will change as \`files\` once you know them. Rows that share a file list it under \`overlap\`; otherwise compare against each card's files yourself. Call it an overlap only when you can name a concrete shared file; then name the card, the shared file and which of the two should land first. When this card relies on something an open card brings in but no file is shared, that is a dependency, not an overlap.
+- Open work: always call \`list_open_work\` with the same \`projectId\` and \`excludeCardId\`, even when you do not know the files yet: without \`files\` it still lists every open card, and that is how dependencies show up. Add the files this card will change as \`files\` when you know them. Rows that share a file list it under \`overlap\`; otherwise compare against each card's files yourself. Call it an overlap only when you can name a concrete shared file; then name the card, the shared file and which of the two should land first. When this card relies on something an open card brings in but no file is shared, that is a dependency, not an overlap.
 - Mention a card only if, without it, your verdict, a recommendation or a plan step would be different. A card that holds no decision (a recently closed bug, a loosely related feature) is never a precedent. If it is still useful, cite it inline where it matters, not as a related card.
 - Name a card by its bare displayId (IDE-318), never in backticks: it becomes a clickable link when saved.
 - If \`search_cards\` or \`list_open_work\` is not available, or returns an error, skip this whole check and go straight on to the evaluation or the plan. Do not make up for the missing tool: never open the database (\`kanban.db\`, \`sqlite3\`), never query the card tables or the app's local API, never walk the codebase looking for other cards.`;
@@ -42,7 +42,7 @@ const CHAIN_CONTEXT = `Chain: when get_card returns a \`chain\` field for this c
  */
 export const PRIOR_DECISIONS_RULE = `${PRIOR_DECISIONS_CHECK}
 - If an open card brings in something this card needs to work correctly, or breaks it, that is extra work. When it is a precondition for this card, add it as its own step under Implementation Steps labelled "(because of <displayId>)"; otherwise suggest it as a note for the other card. Never widen the scope silently.
-- Contradictions, precedents and overlaps go under Edge Cases; dependencies go under Dependencies. Do not add a heading for them.
+- Contradictions, precedents and overlaps go under Edge Cases; dependencies go under Dependencies. Do not add a heading for them. A card sits under one heading only: a dependency is not repeated in Edge Cases, and an overlap you checked and ruled out is not written down.
 If there is no contradiction, precedent, overlap or dependency, write nothing about it.
 
 ${CHAIN_CONTEXT}

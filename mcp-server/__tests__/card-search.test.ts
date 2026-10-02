@@ -282,8 +282,18 @@ test("the rule only lets in cards that change the outcome and keeps the kinds ap
     // An overlap needs a shared file; without one it is a dependency.
     assert.match(rule, /concrete shared file/);
     assert.match(rule, /dependency/);
+    // An ideation card has no files yet; it must still list open work, or a
+    // dependency never shows up.
+    assert.match(rule, /always call `list_open_work`/);
+    assert.match(rule, /even when you do not know the files yet/);
+    // Literal matching misses Turkish cards searched only in English.
+    assert.match(rule, /search in their language as well as in English/);
   }
   assert.match(PRIOR_DECISIONS_RULE, /dependencies go under Dependencies/);
+  // A plan once listed a dependency under Dependencies and again under Edge
+  // Cases as "no file conflict".
+  assert.match(PRIOR_DECISIONS_RULE, /A card sits under one heading only/);
+  assert.match(PRIOR_DECISIONS_RULE, /an overlap you checked and ruled out is not written down/);
   // Turkish once collapsed contradiction and overlap into "çakışma".
   assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /contradiction and overlap never share one/);
   assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /çelişki, emsal, kopya, dosya çakışması, bağımlılık/);
