@@ -26,12 +26,24 @@ export function BackupScheduler() {
       }
     };
 
+    // Same cadence, unrelated job: clear expired card scratch/ folders.
+    const triggerSweep = async () => {
+      try {
+        const response = await fetch("/api/maintenance/sweep-scratch", { method: "POST" });
+        if (!response.ok) console.error("[Sweep] Failed to sweep scratch folders");
+      } catch (error) {
+        console.error("[Sweep] Error:", error);
+      }
+    };
+
     // Create initial backup on mount
     triggerBackup();
+    triggerSweep();
 
     // Set up hourly interval
     const intervalId = setInterval(() => {
       triggerBackup();
+      triggerSweep();
     }, BACKUP_INTERVAL_MS);
 
     // Cleanup on unmount

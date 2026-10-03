@@ -10,7 +10,7 @@ import type {
 
 // A week is long enough to cover "I deleted these yesterday" and short enough
 // that the table never becomes a second copy of the board.
-const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+export const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface TrashPayload {
   card: CardRecord;
