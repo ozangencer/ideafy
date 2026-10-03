@@ -95,6 +95,29 @@ test("replies sort right after blocked", () => {
   );
 });
 
+test("a reply on a decision row lifts it to the reply rank but keeps its action", () => {
+  const cards = [
+    card("review", "progress"),
+    card("decision", "ideation", { aiVerdict: "positive" } as Partial<Card>),
+    card("blocked", "progress", {
+      rebaseConflict: true,
+      updatedAt: "2026-10-03T09:00:00.000Z",
+    } as Partial<Card>),
+  ];
+  const result = board(cards, [
+    event("decision", "chat-opinion", RECENT),
+    event("blocked", "chat-tests", RECENT),
+  ]);
+  assert.deepEqual(
+    result.yourTurn.map((row) => [row.card.id, row.state]),
+    [
+      ["blocked", "blocked"],
+      ["decision", "your-decision"],
+      ["review", "your-review"],
+    ]
+  );
+});
+
 test("the newest unread event picks the tab", () => {
   const replies = unreadRepliesByCard([
     event("a", "chat-solution", "2026-10-03T10:00:00.000Z"),

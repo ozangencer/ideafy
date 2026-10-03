@@ -318,6 +318,16 @@ export interface FocusBoard {
 const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 /**
+ * A row with an unread reply ranks as a reply even when it keeps its own
+ * action: the answer goes stale on the same clock whether it landed on a
+ * waiting card or on one already waiting for your verdict.
+ */
+function attentionRank(row: FocusRow): number {
+  const own = YOUR_TURN_ORDER.indexOf(row.state);
+  return row.reply ? Math.min(own, YOUR_TURN_ORDER.indexOf("your-reply")) : own;
+}
+
+/**
  * The three blocks, from the same filtered card list the board renders.
  *
  * Stale cards are held out of Your turn on purpose. A card nobody has touched
@@ -370,7 +380,7 @@ export function buildFocusBoard(
   }
 
   yourTurn.sort((a, b) => {
-    const stateDiff = YOUR_TURN_ORDER.indexOf(a.state) - YOUR_TURN_ORDER.indexOf(b.state);
+    const stateDiff = attentionRank(a) - attentionRank(b);
     if (stateDiff !== 0) return stateDiff;
 
     const priorityDiff =
