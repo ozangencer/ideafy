@@ -21,6 +21,7 @@ import * as cardLinksNs from "../lib/card-links";
 import * as chainOrderNs from "../lib/chain-order";
 import * as planFilesNs from "../lib/plan-files";
 import * as cardOpsNs from "../lib/card-ops";
+import * as opinionMarkersNs from "../lib/opinion-markers";
 
 function unwrap<T extends object>(ns: T): T {
   return (Reflect.get(ns, "default") as T | undefined) ?? ns;
@@ -34,6 +35,7 @@ export const { linkCardReferences } = unwrap(cardLinksNs);
 export const { buildChainContext, compareByChainOrder, isFinished, placeAfter } = unwrap(chainOrderNs);
 export const { extractPlanFiles, htmlToText, normalizePath, pathsOverlap } = unwrap(planFilesNs);
 export const { transaction, moveCard, completedAtFor, isStatus, saveOpinion } = unwrap(cardOpsNs);
+export const { normalizeComplexity, describeOpinionMarkers } = unwrap(opinionMarkersNs);
 
 export type { CardResolver, LinkedCard } from "../lib/card-links";
 export type { ChainCardRef, ChainContext } from "../lib/chain-order";

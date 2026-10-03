@@ -18,7 +18,7 @@ export type PromptChain = ChainContext & { groupCode: string; groupName: string 
  * identical aiOpinion payload.
  */
 const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
-[One sentence: Strong Yes / Yes / Maybe / No / Strong No]
+[VERDICT: strong_yes/yes/maybe/no/strong_no] — one sentence: Strong Yes / Yes / Maybe / No / Strong No, and why.
 
 ## Related Cards
 [Optional — only when an earlier card contradicts this idea, set a precedent for it, already describes the same idea, open work overlaps it or brings in something it relies on, or when the card is in a chain, and only when it would change the verdict or a recommendation. One line per card: displayId, the kind (contradiction, precedent, duplicate, overlap, dependency, predecessor or successor), what it decided or touches, and why it matters here. Chain predecessors and successors are listed in chain order with their status. Leave the whole section out otherwise.]
@@ -40,7 +40,9 @@ const EVALUATION_OUTPUT_SCHEMA = `## Summary Verdict
 (trivial = few lines, low = simple, medium = moderate, high = significant, very_high = major)
 
 ## Final Score
-[X/10] — brief justification`;
+[SCORE: X/10] — brief justification
+
+The four bracketed markers — [VERDICT: …], [PRIORITY: …], [COMPLEXITY: …], [SCORE: X/10] — each hold exactly one value and stay in English whatever language the rest is written in. The card's verdict, score, priority and complexity are read from them.`;
 
 /**
  * The "check earlier cards" step for both evaluation prompts. The one-shot
@@ -317,15 +319,11 @@ ${buildChainSection(chain)}${buildPriorDecisionsSection(card)}
 - mcp__ideafy__get_card · mcp__ideafy__update_card · mcp__ideafy__save_opinion · mcp__ideafy__search_cards · mcp__ideafy__list_open_work
 
 ## When the Discussion Ends
-Before finishing, do all three:
-
-1. \`mcp__ideafy__update_card\` with \`priority: "low" | "medium" | "high"\` (be honest — not everything is high).
-2. \`mcp__ideafy__update_card\` with \`complexity: "trivial" | "low" | "medium" | "high" | "very_high"\`.
-3. \`mcp__ideafy__save_opinion\` with \`aiOpinion\` as markdown matching this schema exactly:
+Before finishing, call \`mcp__ideafy__save_opinion\` with \`aiOpinion\` as markdown matching this schema exactly:
 
 ${EVALUATION_OUTPUT_SCHEMA}
 
-Do NOT end the session without all three.
+save_opinion writes the card's verdict, score, priority and complexity from those markers, the same way the app's Evaluate does — do not set priority or complexity with update_card. Do NOT end the session without save_opinion.
 
 Let's start — what would you like to explore about this idea?`;
 }

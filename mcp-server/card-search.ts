@@ -96,6 +96,7 @@ export interface CardSearchResult {
   title: string;
   status: string;
   aiVerdict: string | null;
+  aiScore: number | null;
   completedAt: string | null;
   updatedAt: string;
   snippet: string;
@@ -118,11 +119,12 @@ export function searchCards(
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? DEFAULT_SEARCH_LIMIT)), MAX_SEARCH_LIMIT);
   // completed_at came with a migration; the plugin can be newer than the app.
   const completedAt = hasCapability(db, "completedAt") ? "completed_at" : "NULL";
+  const aiScore = hasCapability(db, "aiScore") ? "ai_score" : "NULL";
 
   const rows = db
     .prepare(
       `SELECT id, title, status, task_number as taskNumber,
-              ai_verdict as aiVerdict, ${completedAt} as completedAt,
+              ai_verdict as aiVerdict, ${aiScore} as aiScore, ${completedAt} as completedAt,
               updated_at as updatedAt, description,
               solution_summary as solutionSummary, ai_opinion as aiOpinion
          FROM cards
@@ -136,6 +138,7 @@ export function searchCards(
     status: string;
     taskNumber: number | null;
     aiVerdict: string | null;
+    aiScore: number | null;
     completedAt: string | null;
     updatedAt: string;
     description: string | null;
@@ -180,6 +183,7 @@ export function searchCards(
         title,
         status: row.status,
         aiVerdict: row.aiVerdict,
+        aiScore: row.aiScore === null ? null : Number(row.aiScore),
         completedAt: row.completedAt,
         updatedAt: row.updatedAt,
         snippet,

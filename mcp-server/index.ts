@@ -31,7 +31,9 @@ import {
   buildPhasePolicyBody,
   buildTestStyleContract,
   completedAtFor,
+  describeOpinionMarkers,
   moveCard,
+  normalizeComplexity,
   saveOpinion,
 } from "./shared.js";
 import {
@@ -471,6 +473,8 @@ interface Card {
   // to build on, so every phase reads it alongside the description.
   aiOpinion?: string;
   aiVerdict?: string | null;
+  // get_card and list_cards select it: the opinion's Final Score, 0–10.
+  aiScore?: number | null;
   status: string;
   complexity: string;
   priority: string;
@@ -504,6 +508,12 @@ function readStatus(id: string): string {
     .prepare(`SELECT status FROM cards WHERE id = ?`)
     .get(id) as { status: string } | undefined;
   return row?.status ?? "unknown";
+}
+
+// ai_score arrived with 0021, which an app older than this plugin has not run
+// yet: read cards still list, with no score.
+function aiScoreColumn(conn: typeof db): string {
+  return hasCapability(conn, "aiScore") ? "ai_score as aiScore," : "NULL as aiScore,";
 }
 
 // Create MCP server
@@ -633,7 +643,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "search_cards",
-        description: `Search one project's cards for earlier decisions before you evaluate an idea or write a plan. Matches the query's words (case- and accent-insensitive) against each card's title, description, plan and AI opinion; a title match ranks higher. Returns short rows — displayId, title, status, aiVerdict, completedAt, updatedAt and a ~240-character snippet — never the full card. Open a row with get_card when the snippet is not enough.
+        description: `Search one project's cards for earlier decisions before you evaluate an idea or write a plan. Matches the query's words (case- and accent-insensitive) against each card's title, description, plan and AI opinion; a title match ranks higher. Returns short rows — displayId, title, status, aiVerdict, aiScore, completedAt, updatedAt and a ~240-character snippet — never the full card. Open a row with get_card when the snippet is not enough.
 
 Reading the results: a newer decision overrides an older one (compare completedAt/updatedAt); \`withdrawn\` means the approach was tried and abandoned; \`progress\` / \`test\` are decisions still in flight.`,
         inputSchema: {
@@ -715,7 +725,7 @@ Reading the results: a newer decision overrides an older one (compare completedA
             },
             complexity: {
               type: "string",
-              enum: ["simple", "medium", "complex"],
+              enum: ["low", "medium", "high"],
               description: "Task complexity (default: medium)",
             },
             priority: {
@@ -818,7 +828,7 @@ Before drafting, call get_card to read the project's voice. The required section
 - builder (default) — Balance product and technical lenses. Name key risks (race conditions, schema drift) as 1-line callouts; mention rough complexity in plain words. File names appear inline only when they meaningfully shape the verdict.
 - engineer — Lead with technical risk: race conditions, n+1, schema drift, API contract breaks, perf cliffs, refactor opportunities, testability and dependency cost. File:line references welcome. Product framing is secondary.
 
-All three voices still produce the same Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections — voice changes the prose inside, not the schema.`,
+All three voices still produce the same Summary Verdict / Strengths / Concerns / Recommendations / Priority / Complexity / Final Score sections and the same four markers — voice changes the prose inside, not the schema.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -828,12 +838,12 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             },
             aiOpinion: {
               type: "string",
-              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low/medium/high] - reasoning), ## Final Score ([X/10] - justification). Adapt the prose inside each section to the project's voice (see tool description). Start the Summary Verdict body with one of Strong Yes / Yes / Maybe / No / Strong No.",
+              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict ([VERDICT: strong_yes|yes|maybe|no|strong_no] — one sentence), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low|medium|high] — reasoning), ## Complexity ([COMPLEXITY: low|medium|high] — assessment), ## Final Score ([SCORE: X/10] — justification). The server reads the card's verdict, score, priority and complexity from these four markers and writes them itself — do not call update_card for priority or complexity. Marker values stay English in every card language. Adapt the prose inside each section to the project's voice (see tool description).",
             },
             aiVerdict: {
               type: "string",
               enum: ["positive", "negative", "maybe"],
-              description: "Optional fallback. The server reads the verdict from your Summary Verdict line; this is used only when it cannot. Strong Yes/Yes → positive, Maybe → maybe, No/Strong No → negative. Maybe stays maybe whatever the score.",
+              description: "Optional fallback, used only when the opinion names no verdict ([VERDICT:] marker or Summary Verdict word). strong_yes/yes → positive, maybe → maybe, no/strong_no → negative. Maybe stays maybe whatever the score.",
             },
           },
           required: ["id", "aiOpinion"],
@@ -1003,6 +1013,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             test_scenarios as testScenarios,
             ai_opinion as aiOpinion,
             ai_verdict as aiVerdict,
+            ${aiScoreColumn(db)}
             status, complexity, priority,
             project_folder as projectFolder,
             project_id as projectId,
@@ -1175,6 +1186,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           assertValidCardTitle(updates.title);
         }
 
+        if (updates.complexity !== undefined) {
+          const stored = normalizeComplexity(updates.complexity);
+          if (!stored) {
+            return {
+              content: [{ type: "text", text: `update_card: complexity must be low, medium or high (got "${updates.complexity}").` }],
+              isError: true,
+            };
+          }
+          updates.complexity = stored;
+        }
+
         if (updates.groupId !== undefined) {
           const owner = db
             .prepare(`SELECT project_id FROM cards WHERE id = ?`)
@@ -1343,6 +1365,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let query = `
           SELECT
             id, title, ${contentColumns}
+            ${aiScoreColumn(db)}
             status, complexity, priority,
             project_folder as projectFolder,
             project_id as projectId,
@@ -1523,6 +1546,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         assertValidCardTitle(title);
         assertGroupAssignable(db, groupId, projectId);
+        // Callers that learned the old simple/complex enum still land on the
+        // card's three levels; anything unreadable is an error, not a guess.
+        const storedComplexity = normalizeComplexity(complexity);
+        if (!storedComplexity) {
+          return {
+            content: [{ type: "text", text: `create_card: complexity must be low, medium or high (got "${complexity}").` }],
+            isError: true,
+          };
+        }
 
         const now = new Date().toISOString();
         let taskNumber: number | null = null;
@@ -1559,7 +1591,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           linkCardsInHtml(db, markdownToTiptapHtml(solutionSummary), projectId),
           "", // Test scenarios added after implementation via save_tests
           status,
-          complexity,
+          storedComplexity,
           priority,
           projectFolder,
           projectId,
@@ -1738,12 +1770,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // saveOpinion writes ai_score; an app that has not run 0021 yet cannot
+        // take it, and half-writing the opinion without its score would leave
+        // the card different from one evaluated in the app.
+        if (!hasCapability(db, "aiScore")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("save_opinion", "aiScore") }],
+            isError: true,
+          };
+        }
+
         // Convert markdown to Tiptap-compatible HTML; "IDE-318" under Related
         // Cards becomes a clickable [[ chip.
         const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(aiOpinion), projectIdOfCard(db, id));
 
-        // The verdict is read from the Summary Verdict text, as Evaluate and
-        // Apply do; the aiVerdict argument only fills in when the text names none.
+        // Verdict, score, priority and complexity are read from the opinion's
+        // markers, as Evaluate and Apply do; the aiVerdict argument only fills
+        // in when the text names no verdict.
         const result = saveOpinion(db, {
           id,
           html: htmlContent,
@@ -1762,7 +1805,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{
             type: "text",
-            text: `AI opinion saved to card ${id}${result.verdict ? ` (verdict: ${result.verdict})` : ''}. ` +
+            text: `AI opinion saved to card ${id} (${describeOpinionMarkers(result) || "no verdict or score read"}). ` +
               `Card is still in "${readStatus(id)}" — this tool does not move cards. ` +
               `Ask the user before calling move_card.`,
           }],

@@ -32,6 +32,7 @@ function makeCard(id: string, overrides: Partial<Card> = {}): Card {
     testScenarios: "",
     aiOpinion: "",
     aiVerdict: null,
+    aiScore: null,
     status: "backlog",
     complexity: "medium",
     priority: "medium",

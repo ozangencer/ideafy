@@ -577,7 +577,9 @@ export function CardPhaseActions({
       case "evaluate":
         if (isEvaluating) return "Evaluating...";
         if (!hasAiOpinion) return "Evaluate Idea";
-        return verdictBadge ? `Re-evaluate Idea · Verdict: ${verdictBadge.label}` : "Re-evaluate Idea";
+        if (!verdictBadge) return "Re-evaluate Idea";
+        // The score only labels the verdict; the badge colour stays the word's.
+        return `Re-evaluate Idea · Verdict: ${verdictBadge.label}${card.aiScore !== null && card.aiScore !== undefined ? ` · ${card.aiScore}/10` : ""}`;
       case "quick-fix":
         return isQuickFixing ? "Quick fixing..." : "Quick Fix (No Plan)";
       case "terminal":

@@ -96,6 +96,7 @@ export const cards = sqliteTable("cards", {
   testScenarios: text("test_scenarios").notNull().default(""),
   aiOpinion: text("ai_opinion").notNull().default(""),
   aiVerdict: text("ai_verdict"), // "positive" | "negative" | "maybe" | null
+  aiScore: integer("ai_score"),               // the opinion's Final Score, 0-10; null = none read
   status: text("status").notNull().default("backlog"),
   complexity: text("complexity").notNull().default("medium"),
   priority: text("priority").notNull().default("medium"),

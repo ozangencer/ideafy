@@ -342,7 +342,7 @@ test("every contract is still demanded by its prompt", () => {
     implementation: ["## Core flow", "## Temel akış"],
     retest: ["## Core flow", "## Temel akış"],
     verify: ["## Core flow", "## Temel akış"],
-    evaluate: ["## Summary Verdict", "## Final Score"],
+    evaluate: ["## Summary Verdict", "[VERDICT:", "## Final Score"],
     quickFix: ["## Quick Fix Summary", "## Core flow", "## Temel akış"],
     generate: ["## Output Summary", "## Core flow", "## Temel akış"],
   };

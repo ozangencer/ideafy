@@ -23,7 +23,7 @@ function buildDecorations(doc: PMNode): DecorationSet {
         }),
         Decoration.inline(pos + match.valueFrom, pos + match.valueTo, {
           class: `${base} estimate-marker__value`,
-          "data-level": match.value,
+          ...(match.level ? { "data-level": match.level } : {}),
         }),
         Decoration.inline(pos + match.valueTo, pos + match.to, {
           class: `${base} estimate-marker__end`,
@@ -35,9 +35,10 @@ function buildDecorations(doc: PMNode): DecorationSet {
 }
 
 /**
- * Paints `[COMPLEXITY: …]` / `[PRIORITY: …]` as chips. Decorations only: the
- * stored HTML stays plain text, so old cards light up without a migration and
- * the server-side regexes keep reading the same string.
+ * Paints `[COMPLEXITY: …]` / `[PRIORITY: …]` / `[VERDICT: …]` / `[SCORE: …]`
+ * as chips. Decorations only: the stored HTML stays plain text, so old cards
+ * light up without a migration and lib/opinion-markers.ts keeps reading the
+ * same string.
  */
 export const EstimateMarkers = Extension.create({
   name: "estimateMarkers",

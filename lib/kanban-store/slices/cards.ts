@@ -13,6 +13,7 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
   testScenarios: "",
   aiOpinion: "",
   aiVerdict: null,
+  aiScore: null,
   status,
   complexity: "medium" as const,
   priority: "medium" as const,

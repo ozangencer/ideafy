@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
+import { db, schema, sqlite } from "@/lib/db";
 import { normalizeProjectMode } from "@/lib/project-serialize";
 import { loadCardChain } from "@/lib/card-chain";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
@@ -20,7 +20,8 @@ import {
 import { isMissingDependencyError } from "@/lib/platform/base-provider";
 import { getProviderForCard } from "@/lib/platform/active";
 import { recordOpinionCompleted } from "@/lib/activity-registry";
-import { parseVerdictWord, verdictWordToAiVerdict } from "@/lib/opinion-markers";
+import { describeOpinionMarkers, parseOpinionMarkers } from "@/lib/opinion-markers";
+import { saveOpinion } from "@/lib/card-ops";
 
 export async function POST(
   request: NextRequest,
@@ -127,54 +128,24 @@ export async function POST(
       aiOpinion = prependWarningHtml(aiOpinion, warning);
     }
 
-    // The Summary Verdict's word decides, never the score: a Maybe stays maybe.
-    const verdictWord = parseVerdictWord(responseText);
-    const aiVerdict = verdictWordToAiVerdict(verdictWord);
+    // Verdict, score, priority and complexity come from the opinion's markers
+    // through lib/card-ops' saveOpinion — the same write Apply and the MCP
+    // save_opinion make, so a terminal evaluation lands the same as this one.
+    const saved = saveOpinion(sqlite(), {
+      id,
+      html: aiOpinion,
+      source: responseText,
+      now: new Date().toISOString(),
+    });
+    if (!saved.ok) throw new Error("Card disappeared while it was being evaluated");
+    const markers = parseOpinionMarkers(responseText);
+    console.log(`[Evaluate] Saved ${describeOpinionMarkers(saved) || "opinion with no markers"}`);
     // activity-registry's labels key on the unspaced form ("strongyes").
-    const verdictText = verdictWord?.replace("_", "") ?? "";
-
-    const scoreMatch = responseText.match(/##\s*Final\s*Score[\s\S]*?(\d+)\/10/i);
-    const score = scoreMatch ? parseInt(scoreMatch[1], 10) : null;
-
-    // Extract priority from response
-    let priority: "low" | "medium" | "high" | null = null;
-    const priorityMatch = responseText.match(/\[PRIORITY:\s*(low|medium|high)\]/i);
-    if (priorityMatch) {
-      priority = priorityMatch[1].toLowerCase() as "low" | "medium" | "high";
-    }
-
-    // Extract complexity from response
-    let complexity: "trivial" | "low" | "medium" | "high" | "very_high" | null = null;
-    const complexityMatch = responseText.match(/\[COMPLEXITY:\s*(trivial|low|medium|high|very_high)\]/i);
-    if (complexityMatch) {
-      complexity = complexityMatch[1].toLowerCase() as "trivial" | "low" | "medium" | "high" | "very_high";
-    }
-
-    // Update database - update aiOpinion, aiVerdict, priority, and complexity (if found)
-    const updatedAt = new Date().toISOString();
-    const updates: { aiOpinion: string; aiVerdict: string | null; updatedAt: string; priority?: string; complexity?: string } = {
-      aiOpinion,
-      aiVerdict,
-      updatedAt,
-    };
-
-    if (priority) {
-      updates.priority = priority;
-      console.log(`[Evaluate] Updating priority to: ${priority}`);
-    }
-
-    if (complexity) {
-      updates.complexity = complexity;
-      console.log(`[Evaluate] Updating complexity to: ${complexity}`);
-    }
-
-    if (aiVerdict) {
-      console.log(`[Evaluate] Updating verdict to: ${aiVerdict}`);
-    }
+    const verdictText = markers.verdictWord?.replace("_", "") ?? "";
 
     // Clear processing flag on success
     db.update(schema.cards)
-      .set({ ...updates, processingType: null })
+      .set({ processingType: null })
       .where(eq(schema.cards.id, id))
       .run();
 
@@ -185,19 +156,20 @@ export async function POST(
     // (e.g. "AI Opinion completed — Verdict: Strong Yes (8/10)") even after
     // the user dismisses the toast or refreshes.
     recordOpinionCompleted(id, card.projectId ?? null, {
-      verdict: aiVerdict,
+      verdict: saved.verdict,
       verdictRaw: verdictText,
-      score,
+      score: saved.score,
     });
 
     return NextResponse.json({
       success: true,
       cardId: id,
       aiOpinion,
-      aiVerdict,
+      aiVerdict: saved.verdict,
+      aiScore: saved.score,
       outputWarning: warning,
-      priority,
-      complexity,
+      priority: markers.priority,
+      complexity: markers.complexity,
       cost,
       duration,
     });

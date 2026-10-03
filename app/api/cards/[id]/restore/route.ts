@@ -25,6 +25,7 @@ export async function POST(
     testScenarios: row.testScenarios,
     aiOpinion: row.aiOpinion,
     aiVerdict: (row.aiVerdict as Card["aiVerdict"]) ?? null,
+    aiScore: row.aiScore ?? null,
     status: row.status as Card["status"],
     complexity: row.complexity as Card["complexity"],
     priority: row.priority as Card["priority"],

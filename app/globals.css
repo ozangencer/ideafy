@@ -597,8 +597,11 @@ button:disabled {
   @apply bg-transparent text-muted-foreground line-through opacity-60 cursor-default;
 }
 
-/* Estimate markers — [COMPLEXITY: …] / [PRIORITY: …] written by the model.
-   Three adjacent decoration spans (start · value · end) drawn as one chip. */
+/* Estimate markers — [COMPLEXITY: …] / [PRIORITY: …] / [VERDICT: …] / [SCORE: …]
+   written by the model. Three adjacent decoration spans (start · value · end)
+   drawn as one chip. Verdict follows complexity's emerald → red ladder (green
+   = for it, amber = talk, red = against; amber is the brain badge's Maybe).
+   Score has no data-level and stays neutral: the verdict word decides. */
 .estimate-marker {
   @apply py-0.5 text-xs font-mono border-y border-border bg-foreground/[0.06] text-muted-foreground;
 }
@@ -622,6 +625,11 @@ button:disabled {
 .estimate-marker--priority[data-level="low"] { @apply text-gray-400; }
 .estimate-marker--priority[data-level="medium"] { @apply text-blue-400; }
 .estimate-marker--priority[data-level="high"] { @apply text-red-400; }
+.estimate-marker--verdict[data-level="strong_yes"] { @apply text-emerald-400; }
+.estimate-marker--verdict[data-level="yes"] { @apply text-green-400; }
+.estimate-marker--verdict[data-level="maybe"] { @apply text-amber-400; }
+.estimate-marker--verdict[data-level="no"] { @apply text-orange-400; }
+.estimate-marker--verdict[data-level="strong_no"] { @apply text-red-400; }
 .light .estimate-marker--complexity[data-level="trivial"] { @apply text-emerald-700; }
 .light .estimate-marker--complexity[data-level="low"] { @apply text-green-700; }
 .light .estimate-marker--complexity[data-level="medium"] { @apply text-amber-700; }
@@ -630,6 +638,11 @@ button:disabled {
 .light .estimate-marker--priority[data-level="low"] { @apply text-gray-600; }
 .light .estimate-marker--priority[data-level="medium"] { @apply text-blue-700; }
 .light .estimate-marker--priority[data-level="high"] { @apply text-red-700; }
+.light .estimate-marker--verdict[data-level="strong_yes"] { @apply text-emerald-700; }
+.light .estimate-marker--verdict[data-level="yes"] { @apply text-green-700; }
+.light .estimate-marker--verdict[data-level="maybe"] { @apply text-amber-700; }
+.light .estimate-marker--verdict[data-level="no"] { @apply text-orange-700; }
+.light .estimate-marker--verdict[data-level="strong_no"] { @apply text-red-700; }
 
 /* Image attachment marker (paste chip ↔ inline pill link) */
 .image-attachment {

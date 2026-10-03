@@ -118,7 +118,7 @@ export const RUN_OUTPUT_CONTRACTS = {
   },
   evaluate: {
     label: "değerlendirme",
-    requires: [/^##\s*Summary\s*Verdict/im, /^##\s*Final\s*Score/im],
+    requires: [/^##\s*Summary\s*Verdict/im, /\[VERDICT:/i, /^##\s*Final\s*Score/im],
   },
   // Both headings are required on purpose: accepting a run that has the summary
   // but no tests lets it pass the contract and then fall through to the

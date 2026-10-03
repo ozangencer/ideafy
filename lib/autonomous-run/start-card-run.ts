@@ -25,6 +25,7 @@ import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
 import { autonomousRunLimits } from "@/lib/autonomous-run/run-timeout";
 import { beginTrackedStart, dequeueCard, onRunFinished, runConflictFor } from "@/lib/autonomous-run/run-queue";
 import { assessTestRewrite } from "@/lib/markdown";
+import { parseOpinionMarkers } from "@/lib/opinion-markers";
 
 export interface StartCardRunResult {
   ok: boolean;
@@ -215,21 +216,17 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
       htmlResponse = prependWarningHtml(htmlResponse, result.warning);
     }
 
-    // Planning phase can embed [COMPLEXITY:] / [PRIORITY:] — hoist them onto the card row.
+    // Planning phase can embed [COMPLEXITY:] / [PRIORITY:] — hoist them onto the
+    // card row through the reader opinions use, so trivial/very_high fold onto
+    // the card's three levels instead of landing raw. A plan names no verdict.
     let complexity: string | null = null;
     let priority: string | null = null;
     if (phase === "planning") {
-      const complexityMatch = result.response.match(/\[COMPLEXITY:\s*(trivial|low|medium|high|very_high)\]/i);
-      if (complexityMatch) {
-        complexity = complexityMatch[1].toLowerCase();
-        console.log(`[Claude CLI] Extracted complexity: ${complexity}`);
-      }
-
-      const priorityMatch = result.response.match(/\[PRIORITY:\s*(low|medium|high)\]/i);
-      if (priorityMatch) {
-        priority = priorityMatch[1].toLowerCase();
-        console.log(`[Claude CLI] Extracted priority: ${priority}`);
-      }
+      const markers = parseOpinionMarkers(result.response);
+      complexity = markers.complexity;
+      priority = markers.priority;
+      if (complexity) console.log(`[Claude CLI] Extracted complexity: ${complexity}`);
+      if (priority) console.log(`[Claude CLI] Extracted priority: ${priority}`);
     }
 
     const updates: Record<string, string | null> = {

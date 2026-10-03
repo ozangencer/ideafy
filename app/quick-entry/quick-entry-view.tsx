@@ -63,6 +63,7 @@ function buildCardPayload(args: {
     testScenarios: "",
     aiOpinion: "",
     aiVerdict: null,
+    aiScore: null,
     status,
     complexity,
     priority,

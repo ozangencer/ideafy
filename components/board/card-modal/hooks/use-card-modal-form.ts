@@ -156,6 +156,7 @@ export function useCardModalForm(options: UseCardModalFormOptions) {
         testScenarios,
         aiOpinion,
         aiVerdict: null,
+        aiScore: null,
         status,
         complexity,
         priority,

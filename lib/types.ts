@@ -45,6 +45,8 @@ export interface Card {
   testScenarios: string;
   aiOpinion: string;
   aiVerdict: AiVerdict;
+  /** The opinion's Final Score, 0–10, as lib/opinion-markers.ts read it; null when none. */
+  aiScore: number | null;
   status: Status;
   complexity: Complexity;
   priority: Priority;

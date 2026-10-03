@@ -61,3 +61,24 @@ test("skips unrelated markers and out-of-range priorities", () => {
   assert.deepEqual(findEstimateMarkers("[PRIORITY: very_high]"), []);
   assert.deepEqual(findEstimateMarkers("no markers here"), []);
 });
+
+// IDE-403: an opinion's [VERDICT: …] and [SCORE: X/10] render as chips too.
+// The verdict is coloured by its word; the score stays neutral (no level).
+test("matches verdict words and scores", () => {
+  for (const value of ["strong_yes", "yes", "maybe", "no", "strong_no"]) {
+    const [m] = findEstimateMarkers(`[VERDICT: ${value}]`);
+    assert.equal(m?.kind, "verdict");
+    assert.equal(m?.level, value);
+  }
+  const [score] = findEstimateMarkers("[SCORE: 7/10] — solid");
+  assert.equal(score.kind, "score");
+  assert.equal(score.value, "7/10");
+  assert.equal(score.level, null);
+});
+
+test("does not match the verdict and score template literals or out-of-range scores", () => {
+  assert.deepEqual(findEstimateMarkers("[VERDICT: strong_yes/yes/maybe/no/strong_no]"), []);
+  assert.deepEqual(findEstimateMarkers("[SCORE: X/10]"), []);
+  assert.deepEqual(findEstimateMarkers("[SCORE: 11/10]"), []);
+  assert.deepEqual(findEstimateMarkers("[VERDICT: perhaps]"), []);
+});

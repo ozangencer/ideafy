@@ -148,6 +148,20 @@
       "when": 1791040953547,
       "tag": "0020_completed_at_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791065776393,
+      "tag": "0021_card_ai_score",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791066204674,
+      "tag": "0022_complexity_three_levels",
+      "breakpoints": true
     }
   ]
 }

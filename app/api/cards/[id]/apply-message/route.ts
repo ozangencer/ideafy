@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import os from "os";
 import { eq } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
+import { db, schema, sqlite } from "@/lib/db";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import {
   ensureHtml,
@@ -13,7 +13,7 @@ import {
   testScenariosToMarkdown,
 } from "@/lib/markdown";
 import { recordApplyMessage } from "@/lib/activity-registry";
-import { parseAiVerdict } from "@/lib/opinion-markers";
+import { saveOpinion, type SavedOpinionFields } from "@/lib/card-ops";
 import { persistArtifacts as persistArtifactFiles } from "@/lib/artifact-links";
 import { getCardImageDir } from "@/lib/prompts";
 import { codePathsToFileLinks } from "@/lib/artifact-url";
@@ -138,16 +138,26 @@ export async function POST(
     updates.status = "progress";
   }
 
-  // Verdict parsing: applying an Opinion populates aiVerdict from its Summary
-  // Verdict section, through the same reader Evaluate and save_opinion use.
-  // Leaves verdict untouched when the content names no verdict (an appended
-  // fragment without that section, for one).
+  // An Opinion goes through lib/card-ops' saveOpinion — the write Evaluate and
+  // the MCP save_opinion make — so its verdict, score, priority and complexity
+  // land the same whichever path wrote it. In append mode only the added part
+  // is read: a fragment that names no verdict or score keeps the card's own.
+  let opinion: SavedOpinionFields | null = null;
   if (field === "aiOpinion") {
-    const verdict = parseAiVerdict(content);
-    if (verdict) updates.aiVerdict = verdict;
+    const saved = saveOpinion(sqlite(), {
+      id,
+      html: nextHtml,
+      source: content,
+      mode,
+      now,
+    });
+    if (!saved.ok) {
+      return NextResponse.json({ error: "Card not found" }, { status: 404 });
+    }
+    opinion = saved;
+  } else {
+    db.update(schema.cards).set(updates).where(eq(schema.cards.id, id)).run();
   }
-
-  db.update(schema.cards).set(updates).where(eq(schema.cards.id, id)).run();
 
   recordApplyMessage(id, existing.projectId ?? null, field, mode);
 
@@ -157,7 +167,8 @@ export async function POST(
     mode,
     label: FIELD_LABEL[field],
     statusChangedTo: updates.status,
-    verdictSet: updates.aiVerdict,
+    verdictSet: opinion?.verdict ?? undefined,
+    scoreSet: opinion?.score ?? undefined,
     added,
   });
 }

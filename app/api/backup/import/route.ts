@@ -5,6 +5,7 @@ import { ExportData } from "../export/route";
 import { SECRET_SETTING_KEYS, isSecretSettingKey } from "@/lib/db/secret-settings";
 import { notInArray } from "drizzle-orm";
 import { normalizeProjectMode } from "@/lib/project-serialize";
+import { normalizeComplexity } from "@/lib/opinion-markers";
 
 // POST /api/backup/import - Import data from JSON
 export async function POST(request: NextRequest) {
@@ -111,8 +112,12 @@ export async function POST(request: NextRequest) {
           testScenarios: card.testScenarios,
           aiOpinion: card.aiOpinion,
           aiVerdict: card.aiVerdict ?? null,
+          // Backups written before the stored score existed simply omit it.
+          aiScore: card.aiScore ?? null,
           status: card.status,
-          complexity: card.complexity,
+          // Old backups carry simple/complex/trivial/very_high; 0021 folded
+          // those onto the card's three levels, so a restore does too.
+          complexity: normalizeComplexity(card.complexity) ?? "medium",
           priority: card.priority,
           projectFolder: card.projectFolder,
           projectId: card.projectId,

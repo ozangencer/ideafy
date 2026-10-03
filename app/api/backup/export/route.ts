@@ -13,6 +13,7 @@ export interface ExportData {
     testScenarios: string;
     aiOpinion: string;
     aiVerdict: string | null;
+    aiScore?: number | null;
     status: string;
     complexity: string;
     priority: string;
@@ -109,6 +110,7 @@ export async function GET() {
         testScenarios: card.testScenarios,
         aiOpinion: card.aiOpinion,
         aiVerdict: card.aiVerdict,
+        aiScore: card.aiScore,
         status: card.status,
         complexity: card.complexity,
         priority: card.priority,
