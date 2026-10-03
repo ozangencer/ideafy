@@ -1,4 +1,5 @@
-import { Card, CardGroup, Status } from "./types";
+import { Card, CardGroup, Project, ProjectMode, Status } from "./types";
+import { isCardInWorkspace, projectModeOf } from "./workspace";
 import { compareByChainOrder, isFinished } from "./chain-order";
 
 /**
@@ -37,6 +38,16 @@ export interface CardGroupSummary {
   members: Card[];
   total: number;
   done: number;
+  /**
+   * Withdrawn members. Progress reads `done / (total - withdrawn)`: a chain
+   * that dropped one of four cards and finished the rest is finished, not
+   * stuck at 75%.
+   */
+  withdrawn: number;
+  /** Members in Human Test — not done, but the closest thing to it. */
+  inTest: number;
+  /** The newest `updatedAt` among the members: when the chain last moved. */
+  lastMovedAt: string;
   /**
    * The chain's next actionable card: the first member that is neither
    * completed nor withdrawn, in chain order. Null once the chain is done.
@@ -98,12 +109,24 @@ export function summarizeCardGroups(
   for (const group of groups) {
     const members = (byGroup.get(group.id) ?? []).sort(compareByChainOrder);
     if (members.length === 0) continue;
-    const done = members.filter((card) => card.status === "completed").length;
+    let done = 0;
+    let withdrawn = 0;
+    let inTest = 0;
+    let lastMovedAt = members[0].updatedAt;
+    for (const card of members) {
+      if (card.status === "completed") done++;
+      else if (card.status === "withdrawn") withdrawn++;
+      else if (card.status === "test") inTest++;
+      if (card.updatedAt > lastMovedAt) lastMovedAt = card.updatedAt;
+    }
     summaries.set(group.id, {
       group,
       members,
       total: members.length,
       done,
+      withdrawn,
+      inTest,
+      lastMovedAt,
       nextCard: members.find((card) => !isFinished(card)) ?? null,
       // `done` stays completed-only — it is a progress figure a human reads,
       // and counting withdrawals as progress would flatter the chain.
@@ -111,6 +134,118 @@ export function summarizeCardGroups(
     });
   }
   return summaries;
+}
+
+/**
+ * What the Chains view lists, split the way it draws them: chains that still
+ * have a next card on top, the finished ones folded underneath.
+ *
+ * Scope follows the board. A group tied to a project shows where that project
+ * shows; a group with no project shows in whichever workspace — or project —
+ * holds at least one of its members, so a cross-project chain appears in both
+ * workspaces without ever appearing empty.
+ *
+ * The query hides chains but never trims one: it matches the code, the name
+ * or any member's title, and a match keeps the whole chain, the same rule the
+ * board's rollup follows.
+ */
+export function summarizeChainsForView(
+  summaries: Iterable<CardGroupSummary>,
+  {
+    query = "",
+    projectId = null,
+    workspace,
+    projects,
+  }: {
+    query?: string;
+    projectId?: string | null;
+    workspace: ProjectMode;
+    projects: Pick<Project, "id" | "mode">[];
+  }
+): { open: CardGroupSummary[]; finished: CardGroupSummary[] } {
+  const needle = query.trim().toLowerCase();
+
+  const inScope = ({ group, members }: CardGroupSummary): boolean => {
+    if (group.projectId) {
+      return projectId
+        ? group.projectId === projectId
+        : projectModeOf(group.projectId, projects) === workspace;
+    }
+    return members.some((card) =>
+      projectId
+        ? card.projectId === projectId
+        : isCardInWorkspace(card, projects, workspace)
+    );
+  };
+
+  const matches = ({ group, members }: CardGroupSummary): boolean =>
+    !needle ||
+    group.code.toLowerCase().includes(needle) ||
+    group.name.toLowerCase().includes(needle) ||
+    members.some((card) => card.title.toLowerCase().includes(needle));
+
+  // Alphabetical stops helping at ten chains; the one that moved last is the
+  // one you were just in.
+  const byLastMoved = (a: CardGroupSummary, b: CardGroupSummary) =>
+    b.lastMovedAt.localeCompare(a.lastMovedAt);
+
+  const visible = [...summaries].filter((s) => inScope(s) && matches(s));
+  return {
+    open: visible.filter((s) => !s.isComplete).sort(byLastMoved),
+    finished: visible.filter((s) => s.isComplete).sort(byLastMoved),
+  };
+}
+
+/**
+ * The open cards a Chains row names: next and up to `size - 1` open members
+ * behind it, taken in chain order — never by status, or a chain with three
+ * cards in progress would hide which of them is actually next. `more` counts
+ * the open members left after the window.
+ */
+export function chainPillWindow(
+  summary: Pick<CardGroupSummary, "members" | "nextCard">,
+  size = 4
+): { pills: Card[]; more: number } {
+  const { members, nextCard } = summary;
+  if (!nextCard) return { pills: [], more: 0 };
+  const start = members.findIndex((card) => card.id === nextCard.id);
+  const open = members.slice(start).filter((card) => !isFinished(card));
+  return { pills: open.slice(0, size), more: Math.max(0, open.length - size) };
+}
+
+// How far along the board a status sits, for the out-of-order check. Bugs is
+// a detour back to planned work, not a step past it.
+const STATUS_STAGE: Partial<Record<Status, number>> = {
+  ideation: 0,
+  backlog: 1,
+  bugs: 1,
+  progress: 2,
+  test: 3,
+};
+
+/**
+ * The first member behind next in the chain that is already being worked on
+ * (In Progress or Human Test) further along than next itself. That is the
+ * order and the board disagreeing — either the order is stale or the card
+ * jumped the queue — and the row says so in one line. Several cards in
+ * progress together is not an anomaly; only a later one being ahead is.
+ */
+export function chainOrderAnomaly(
+  summary: Pick<CardGroupSummary, "members" | "nextCard">
+): Card | null {
+  const { members, nextCard } = summary;
+  if (!nextCard) return null;
+  const nextStage = STATUS_STAGE[nextCard.status] ?? 0;
+  const start = members.findIndex((card) => card.id === nextCard.id);
+  return (
+    members
+      .slice(start + 1)
+      .find(
+        (card) =>
+          (card.status === "progress" || card.status === "test") &&
+          (STATUS_STAGE[card.status] ?? 0) > nextStage
+      ) ?? null
+  );
 }
 
 export type ColumnRow =

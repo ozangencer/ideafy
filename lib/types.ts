@@ -364,8 +364,10 @@ export const STATUS_COLORS: Record<Status, string> = {
 /**
  * Which question the board is answering. "all" is the seven columns — what is
  * there. "focus" is the short list of cards whose next move is yours.
+ * "chains" is every card group at once — how far along each is, and where its
+ * cards sit.
  */
-export type BoardView = "focus" | "all";
+export type BoardView = "focus" | "all" | "chains";
 
 /**
  * What the board opens with. "last" reopens whichever view was left open, so
@@ -381,6 +383,7 @@ export const BOARD_VIEW_PREFERENCE_OPTIONS: {
 }[] = [
   { value: "focus", label: "Focus" },
   { value: "all", label: "All columns" },
+  { value: "chains", label: "Chains" },
   { value: "last", label: "Last used" },
 ];
 

@@ -19,8 +19,8 @@ import { KanbanStore } from "./types";
 import { BoardView, BoardViewPreference, CompletedFilter, StaleThresholds, Status } from "../types";
 
 const VALID_COMPLETED_FILTERS: CompletedFilter[] = ['today', 'yesterday', 'this_week', 'all'];
-const VALID_BOARD_VIEWS: BoardView[] = ['focus', 'all'];
-const VALID_BOARD_VIEW_PREFERENCES: BoardViewPreference[] = ['focus', 'all', 'last'];
+const VALID_BOARD_VIEWS: BoardView[] = ['focus', 'all', 'chains'];
+const VALID_BOARD_VIEW_PREFERENCES: BoardViewPreference[] = ['focus', 'all', 'chains', 'last'];
 const STALE_THRESHOLD_STATUSES: Status[] = ['ideation', 'backlog', 'bugs', 'progress', 'test'];
 
 /**

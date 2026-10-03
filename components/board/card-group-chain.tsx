@@ -123,7 +123,12 @@ export function CardGroupChain({ summary }: { summary: CardGroupSummary }) {
   );
 }
 
-function ChainRowMenu({
+/**
+ * The "⋯" reorder menu for one chain member. Shared with the Chains view's
+ * matrix so the order has a single write path, `placeCardInChain`. Its row
+ * has to carry `group/row` — the trigger only shows on that row's hover.
+ */
+export function ChainRowMenu({
   card,
   project,
   canMoveToStart,
@@ -151,7 +156,8 @@ function ChainRowMenu({
         </button>
       </DropdownMenuTrigger>
       {/* The chain popover sits at z-[70]; the default z-50 would open this
-          menu underneath it, where a click on "⋯" looks like it did nothing. */}
+          menu underneath it, where a click on "⋯" looks like it did nothing.
+          Harmless in the Chains matrix, which sits in page flow. */}
       <DropdownMenuContent align="end" className="z-[80] w-44">
         {canMoveToStart && (
           <DropdownMenuItem className="text-xs" onSelect={() => onPlace(null)}>

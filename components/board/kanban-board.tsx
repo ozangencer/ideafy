@@ -19,6 +19,7 @@ import { isCardInWorkspace } from "@/lib/workspace";
 import { summarizeCardGroups } from "@/lib/card-group";
 import { partitionStaleCards } from "@/lib/card-age";
 import { FocusView } from "./focus-view";
+import { ChainsView } from "./chains-view";
 import { SelectionBar } from "./selection-bar";
 
 // Priority order: high > medium > low (descending)
@@ -192,6 +193,12 @@ export function KanbanBoard({ todaySources }: KanbanBoardProps = {}) {
 
   if (boardView === "focus") {
     return <FocusView cards={filteredCards} todaySources={todaySources} />;
+  }
+
+  // Chains scopes and searches the summaries itself: it filters whole chains,
+  // so it starts from the unfiltered board like the rollup does.
+  if (boardView === "chains") {
+    return <ChainsView summaries={groupSummaries} />;
   }
 
   const handleDragStart = (event: DragStartEvent) => {

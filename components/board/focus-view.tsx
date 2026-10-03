@@ -93,6 +93,7 @@ export function BoardViewToggle() {
   const options: { value: BoardView; label: string }[] = [
     { value: "focus", label: "Focus" },
     { value: "all", label: "All" },
+    { value: "chains", label: "Chains" },
   ];
 
   return (
