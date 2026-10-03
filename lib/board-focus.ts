@@ -231,17 +231,26 @@ export function focusDetail(
 }
 
 /**
- * A chat answer on a card that you have not opened since it landed.
+ * What landed on a card that you have not opened since: a chat answer, a
+ * finished or failed opinion, a run that ended, a card the queue gave up on.
  *
  * It lives in `activity_events`, not on the card, which is why it reaches
  * `buildFocusBoard` as a parameter instead of through `getFocusState`.
  */
 export interface UnreadReply {
-  /** The tab the conversation happened on, so the row can open it there. */
-  section: SectionType;
+  kind: "chat" | "opinion" | "run" | "queue";
+  /**
+   * The tab to open it on. Absent when the row's own action already lands in
+   * the right place — a run's result is wherever that card's next move is.
+   */
+  section?: SectionType;
   at: string;
-  /** The turn died. Still your move — read why and ask again. */
+  /** The work died. Still your move — read why and ask again. */
   failed: boolean;
+  /** It finished, but not cleanly enough to trust without a look. */
+  warning: boolean;
+  /** "new opinion · Yes (7/10)", built once from the event. */
+  label: string;
 }
 
 const CHAT_SECTIONS: Partial<Record<ActivityType, SectionType>> = {
@@ -251,44 +260,107 @@ const CHAT_SECTIONS: Partial<Record<ActivityType, SectionType>> = {
   "chat-tests": "tests",
 };
 
-/**
- * Unread chat replies, one per card, the newest winning.
- *
- * Only `chat-*`: a finished opinion or plan already puts the card in front of
- * you as a decision or a review, and a second signal for the same event would
- * only teach you to ignore one of them.
- */
-export function unreadRepliesByCard(events: ActivityEvent[]): Map<string, UnreadReply> {
-  const replies = new Map<string, UnreadReply>();
-  for (const event of events) {
-    if (event.isRead || !event.cardId) continue;
-    const section = CHAT_SECTIONS[event.type];
-    if (!section) continue;
+// Mirrors activity-registry's labels; that module imports the database, so
+// the client cannot reach it.
+const VERDICT_LABEL: Record<string, string> = {
+  strongyes: "Strong Yes",
+  yes: "Yes",
+  maybe: "Maybe",
+  no: "No",
+  strongno: "Strong No",
+};
 
-    const previous = replies.get(event.cardId);
-    if (previous && previous.at >= event.updatedAt) continue;
-    replies.set(event.cardId, {
-      section,
-      at: event.updatedAt,
-      failed: event.payload?.failed === true,
-    });
-  }
-  return replies;
+function opinionLabel(payload: ActivityEvent["payload"]): string {
+  const raw = typeof payload.verdictRaw === "string" ? payload.verdictRaw : "";
+  const verdict = VERDICT_LABEL[raw.toLowerCase().replace(/\s+/g, "")];
+  if (!verdict) return "new opinion";
+  return typeof payload.score === "number"
+    ? `new opinion · ${verdict} (${payload.score}/10)`
+    : `new opinion · ${verdict}`;
 }
 
-/** "new reply · Solution · 12m ago" — the line a reply adds under its row. */
+/** One unread event as a Focus signal, or nothing when it is not yours to act on. */
+function toSignal(event: ActivityEvent): UnreadReply | null {
+  const failed = event.payload?.failed === true;
+  const warning = typeof event.payload?.warning === "string" && event.payload.warning !== "";
+  const at = event.updatedAt;
+
+  const chatSection = CHAT_SECTIONS[event.type];
+  if (chatSection) {
+    return {
+      kind: "chat",
+      section: chatSection,
+      at,
+      failed,
+      warning,
+      label: `${failed ? "reply failed" : "new reply"} · ${SECTION_LABEL[chatSection]}`,
+    };
+  }
+
+  switch (event.type) {
+    case "opinion":
+      return {
+        kind: "opinion",
+        section: "opinion",
+        at,
+        failed,
+        warning,
+        label: failed ? "opinion failed" : opinionLabel(event.payload ?? {}),
+      };
+
+    case "autonomous":
+    case "quickfix": {
+      const name = event.type === "quickfix" ? "quick fix" : "run";
+      const outcome = failed ? "failed" : warning ? "done with a warning" : "done";
+      return { kind: "run", at, failed, warning, label: `${name} ${outcome}` };
+    }
+
+    case "queue": {
+      // "Dropped from queue" / "Queue paused": the title already says which.
+      const title = event.title.trim();
+      const label = title ? title[0].toLowerCase() + title.slice(1) : "queue stopped";
+      return { kind: "queue", section: "detail", at, failed, warning: true, label };
+    }
+
+    // `apply` and `plan` are things you just did in chat yourself; `sync` and
+    // `team` are the pool's business and say nothing about whose turn it is.
+    default:
+      return null;
+  }
+}
+
+/**
+ * Unread signals, one per card, the newest winning whatever its kind.
+ *
+ * A finished opinion already puts the card in front of you as a decision, but
+ * that row reads the same for a verdict from last month and one from four
+ * minutes ago, and a failed opinion, a dropped queue card or a failed run put
+ * the card nowhere at all. The signal is a dot on the row it already has, not
+ * a second row, so it adds the "new" without adding noise.
+ */
+export function unreadSignalsByCard(events: ActivityEvent[]): Map<string, UnreadReply> {
+  const signals = new Map<string, UnreadReply>();
+  for (const event of events) {
+    if (event.isRead || !event.cardId) continue;
+    const previous = signals.get(event.cardId);
+    if (previous && previous.at >= event.updatedAt) continue;
+    const signal = toSignal(event);
+    if (signal) signals.set(event.cardId, signal);
+  }
+  return signals;
+}
+
+/** "new reply · Solution · 12m ago" — the line a signal adds under its row. */
 export function replyLine(reply: UnreadReply, now = Date.now()): string {
-  return `${reply.failed ? "reply failed" : "new reply"} · ${
-    SECTION_LABEL[reply.section]
-  } · ${formatSince(reply.at, now)}`;
+  return `${reply.label} · ${formatSince(reply.at, now)}`;
 }
 
 export interface FocusRow {
   card: Card;
   state: Exclude<FocusState, "agent-running" | "waiting">;
   /**
-   * An unread chat reply on a card that is in Your turn for its own reason.
-   * The row keeps its action; the reply rides along beneath it.
+   * An unread signal on a card that is in Your turn for its own reason.
+   * The row keeps its action; the signal rides along beneath it.
    */
   reply?: UnreadReply;
 }
@@ -335,8 +407,9 @@ function attentionRank(row: FocusRow): number {
  * the same list would make the list unreliable, and an unreliable "your turn"
  * gets ignored wholesale. It is counted once, at the end, next to the columns.
  *
- * An unread chat reply lifts an otherwise waiting card into Your turn: someone
- * answered you, so the next move is yours whatever column the card sits in.
+ * An unread signal lifts an otherwise waiting card into Your turn: someone
+ * answered you, or something you started stopped, so the next move is yours
+ * whatever column the card sits in.
  */
 export function buildFocusBoard(
   cards: Card[],

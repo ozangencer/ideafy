@@ -17,7 +17,7 @@ import {
   FOCUS_STATE_STYLES,
   FocusRow,
   replyLine,
-  unreadRepliesByCard,
+  unreadSignalsByCard,
 } from "@/lib/board-focus";
 import type { PhaseAction } from "@/lib/card-phase";
 import { useKanbanStore } from "@/lib/store";
@@ -207,19 +207,27 @@ function YourTurnRow({ row }: { row: FocusRow }) {
     openModal();
   };
   const open = () =>
-    openAt(row.state === "your-reply" && row.reply ? row.reply.section : style.section);
+    openAt(row.state === "your-reply" ? row.reply?.section ?? style.section : style.section);
 
-  // A reply on a row that is here for its own reason gets its own line rather
+  // A signal on a row that is here for its own reason gets its own line rather
   // than taking over the detail: "new reply" in front of "4/5 core ✓" would
   // truncate the counter the row exists to show.
   const sideReply = row.state !== "your-reply" ? row.reply : undefined;
+  // Only a chat answer is something to reply to; a verdict, a run or a
+  // dropped queue card is something to open and read.
+  const action =
+    row.state === "your-reply" && row.reply && row.reply.kind !== "chat" ? "Open" : style.action;
 
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2">
       <span className={`relative grid w-4 shrink-0 place-items-center ${style.color}`}>
         <Icon className="w-3.5 h-3.5" />
         {sideReply && (
-          <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+          <span
+            className={`absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full ${
+              sideReply.failed ? "bg-red-500" : "bg-amber-500"
+            }`}
+          />
         )}
       </span>
       <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
@@ -239,7 +247,7 @@ function YourTurnRow({ row }: { row: FocusRow }) {
         {sideReply && (
           <button
             type="button"
-            onClick={() => openAt(sideReply.section)}
+            onClick={() => openAt(sideReply.section ?? style.section)}
             className={`max-w-full truncate text-left font-mono text-[10.5px] tabular-nums transition-colors hover:text-foreground ${
               sideReply.failed ? "text-red-500" : "text-amber-600 dark:text-amber-500"
             }`}
@@ -254,7 +262,7 @@ function YourTurnRow({ row }: { row: FocusRow }) {
         onClick={open}
         className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground transition-colors hover:border-ink/40 hover:text-foreground"
       >
-        {style.action}
+        {action}
       </button>
     </div>
   );
@@ -296,7 +304,7 @@ export function FocusView({
   // instead of fetching its own and drifting from the bell's dots.
   const activityEvents = useKanbanStore((s) => s.activityEvents);
 
-  const unreadReplies = useMemo(() => unreadRepliesByCard(activityEvents), [activityEvents]);
+  const unreadReplies = useMemo(() => unreadSignalsByCard(activityEvents), [activityEvents]);
 
   const focus = useMemo(
     () => buildFocusBoard(cards, staleThresholds, Date.now(), activeWorkspace, unreadReplies),
