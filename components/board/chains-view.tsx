@@ -165,7 +165,7 @@ function ChainRow({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="grid w-full grid-cols-[14px_minmax(0,64px)_minmax(0,200px)_minmax(80px,1fr)_auto_minmax(0,128px)] items-center gap-3 rounded-t-md px-3 pt-2.5 pb-1.5 text-left transition-colors hover:bg-ink/[0.04]"
+        className="grid w-full grid-cols-[14px_64px_220px_minmax(80px,1fr)_132px_120px] items-center gap-3 rounded-t-md px-3 pt-2.5 pb-1.5 text-left transition-colors hover:bg-ink/[0.04]"
       >
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -177,7 +177,7 @@ function ChainRow({
         </span>
         <span className="truncate text-[13px] font-medium text-card-foreground">{group.name}</span>
         <ChainBar summary={summary} projects={projects} />
-        <span className="font-mono text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
+        <span className="truncate text-right font-mono text-[11px] tabular-nums text-muted-foreground">
           <span className={done > 0 ? "font-semibold text-green-500" : undefined}>{done}</span>/
           {denominator}
           {withdrawn > 0 && <span className="opacity-70"> · {withdrawn} withdrawn</span>}
@@ -192,7 +192,7 @@ function ChainRow({
       </button>
 
       {!finished && (
-        <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap px-3 pb-2.5 pl-[38px]">
+        <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap px-3 pb-2.5 pl-[115px]">
           {done > 0 && (
             <SummaryPill status="completed" label={`${done} done`} />
           )}
@@ -226,7 +226,7 @@ function ChainRow({
       )}
 
       {!finished && anomaly && nextCard && (
-        <div className="flex items-center gap-1.5 px-3 pb-2.5 pl-[38px] text-[11.5px] text-amber-600 dark:text-amber-500">
+        <div className="flex items-center gap-1.5 px-3 pb-2.5 pl-[115px] text-[11.5px] text-amber-600 dark:text-amber-500">
           <AlertTriangle className="h-3 w-3 shrink-0" />
           <span className="truncate">
             {displayIdOf(anomaly, projects)} comes after {displayIdOf(nextCard, projects)} in the

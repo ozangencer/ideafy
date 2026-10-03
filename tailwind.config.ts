@@ -6,6 +6,9 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    // Class maps such as STATUS_COLORS live in lib/; without this their
+    // classes are never generated and every status dot renders blank.
+    "./lib/**/*.{ts,tsx}",
   ],
   theme: {
   	extend: {
