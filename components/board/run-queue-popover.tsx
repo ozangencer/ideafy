@@ -22,6 +22,41 @@ import {
 
 type QueueItem = QueueSnapshot["items"][number];
 
+/** The word a card's queue chip carries next to its place: "1 · impl". */
+export const QUEUE_KIND_SHORT: Record<QueueItem["kind"], string> = {
+  implementation: "impl",
+  verify: "verify",
+};
+
+/**
+ * Where a card stands in the queue, spelled out for its chip's tooltip:
+ * "Queued #1 · pre-verify on main · starts after IDE-393".
+ */
+export function describeQueuePlace(queue: QueueSnapshot, cardId: string): string | null {
+  const index = queue.items.findIndex((item) => item.cardId === cardId);
+  if (index < 0) return null;
+  const item = queue.items[index];
+  const parts = [
+    `Queued #${index + 1}`,
+    `${item.kind === "verify" ? "pre-verify" : "implementation"} ${
+      item.runsInWorktree ? "on its own branch" : "on main"
+    }`,
+  ];
+  const ahead = index > 0 ? queue.items[index - 1].displayId : queue.running?.displayId;
+  parts.push(ahead ? `starts after ${ahead}` : "starts next");
+  if (!queue.armed) parts.push("queue paused");
+  return parts.join(" · ");
+}
+
+/**
+ * The same line, live. Mount it only where it is seen (a tooltip's content):
+ * it reads the whole snapshot, which the cards themselves must not.
+ */
+export function QueuePlaceText({ cardId }: { cardId: string }) {
+  const queue = useKanbanStore((s) => s.queueState);
+  return <>{queue ? describeQueuePlace(queue, cardId) : null}</>;
+}
+
 function statusLine(queue: QueueSnapshot): string {
   if (queue.running) {
     return queue.running.fromQueue
@@ -98,11 +133,13 @@ export function RunQueueChip() {
                     selectCard(card);
                     openModal();
                   }}
-                  className={`flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground ${
+                  className={`group/item flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground ${
                     index === 0 ? "bg-ink/[0.06]" : ""
                   }`}
                 >
-                  <span className="w-4 shrink-0 text-right font-mono text-[10px] tabular-nums text-current opacity-70">
+                  {/* Violet ties the row to the queued card's chip and dashed
+                      border on the board; on hover it hands over to the accent. */}
+                  <span className="w-4 shrink-0 text-right font-mono text-[10px] tabular-nums text-violet-600 dark:text-violet-400 group-hover/item:text-current">
                     {index + 1}
                   </span>
                   <span className="shrink-0 font-mono text-[10px] text-current">
@@ -112,7 +149,7 @@ export function RunQueueChip() {
                   {item.kind === "verify" && (
                     <span
                       title="Pre-verify: walks the core flow of its Human Test checklist"
-                      className="shrink-0 rounded bg-ink/[0.06] px-1 font-mono text-[10px] text-current"
+                      className="shrink-0 rounded bg-violet-500/10 px-1 font-mono text-[10px] text-violet-600 dark:text-violet-400 group-hover/item:bg-accent-foreground/15 group-hover/item:text-current"
                     >
                       verify
                     </span>
@@ -126,7 +163,7 @@ export function RunQueueChip() {
                           ? "Tested in the project folder: the card has no active worktree"
                           : "Runs on the current branch, without a worktree"
                       }
-                      className="shrink-0 rounded bg-ink/[0.06] px-1 font-mono text-[10px] text-current"
+                      className="shrink-0 rounded bg-violet-500/10 px-1 font-mono text-[10px] text-violet-600 dark:text-violet-400 group-hover/item:bg-accent-foreground/15 group-hover/item:text-current"
                     >
                       main
                     </span>

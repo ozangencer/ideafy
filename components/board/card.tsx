@@ -13,8 +13,9 @@ import {
   isPhaseActionShown,
 } from "@/lib/card-phase";
 import { CardPhaseActions, useCardChatRunning } from "./card-phase-actions";
+import { QUEUE_KIND_SHORT, QueuePlaceText } from "./run-queue-popover";
 import { useKanbanStore } from "@/lib/store";
-import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, ListPlus, ListX } from "lucide-react";
+import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, ListPlus, ListVideo, ListX } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
 import {
   ContextMenu,
@@ -219,6 +220,10 @@ function TaskCardImpl({
   const queueRank = useKanbanStore(
     (s) => (s.queueState?.items.findIndex((item) => item.cardId === card.id) ?? -1) + 1
   );
+  // A string for the same reason; null when not queued.
+  const queueKind = useKanbanStore(
+    (s) => s.queueState?.items.find((item) => item.cardId === card.id)?.kind ?? null
+  );
   const addToQueue = useKanbanStore((s) => s.addToQueue);
   const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -244,6 +249,9 @@ function TaskCardImpl({
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating || isGenerating;
+  // Waiting for the queue to start it. The moment the run is live the spinner
+  // owns the card, even while the queue poll still lists it.
+  const isQueued = queueRank > 0 && !isBackgroundProcessing;
 
   // The run buttons themselves live in CardPhaseActions; the card only needs
   // to know which of them will be drawn, for the footer width budget below.
@@ -494,8 +502,10 @@ function TaskCardImpl({
             onContextMenu={handleContextMenu}
             // Selected is a solid ink border, not a ring: ring-2 ring-ink/40 is
             // what the drag overlay looks like, and the two must not be mixed up.
+            // Queued is a dashed violet one: the shape reads "waiting, not
+            // started" while scanning a column, colour or not. Selection wins.
             className={`bg-card border rounded-md p-3 transition-colors group touch-none select-none relative ${
-              isSelected ? "border-ink" : "border-border"
+              isSelected ? "border-ink" : isQueued ? "border-dashed border-violet-500/50" : "border-border"
             } ${
               isDragging ? "shadow-2xl ring-2 ring-ink/40" : ""
             } ${isBeingDragged ? "z-50" : ""} ${
@@ -505,6 +515,8 @@ function TaskCardImpl({
                 ? ""
                 : extraWrapperClassName
                 ? extraWrapperClassName
+                : isQueued
+                ? "hover:border-violet-500/80"
                 : "hover:border-ink/40"
             }`}
           >
@@ -579,15 +591,19 @@ function TaskCardImpl({
                   <TooltipContent side="top">{group.name}</TooltipContent>
                 </Tooltip>
               )}
-              {queueRank > 0 && (
+              {/* Same icon as the column's queue chip, so the card and the
+                  popover read as one thing. The tooltip reads the snapshot
+                  only while it is open. */}
+              {isQueued && queueKind && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-[10px] font-mono tabular-nums px-1 py-0.5 rounded shrink-0 cursor-default bg-ink/[0.06] text-muted-foreground">
-                      #{queueRank}
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums px-1 py-0.5 rounded shrink-0 cursor-default bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                      <ListVideo className="h-3 w-3" />
+                      {queueRank} · {QUEUE_KIND_SHORT[queueKind]}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    {queueRank === 1 ? "Next in the run queue" : `#${queueRank} in the run queue`}
+                    <QueuePlaceText cardId={card.id} />
                   </TooltipContent>
                 </Tooltip>
               )}

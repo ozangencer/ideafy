@@ -6,6 +6,7 @@ import {
   Check,
   FileOutput,
   FlaskConical,
+  ListVideo,
   Loader2,
   MessagesSquare,
   Play,
@@ -116,6 +117,7 @@ const ACTION_ICON: Record<PhaseAction, typeof Play> = {
 };
 
 const CHAT_RUNNING_TOOLTIP = "Chat is running on this card";
+const QUEUED_TOOLTIP = "Queued, will run automatically";
 
 /**
  * Whether an in-app chat is streaming on this card. Kept apart from the lock:
@@ -235,6 +237,11 @@ export function CardPhaseActions({
   );
 
   const isChatting = useCardChatRunning(card.id);
+  // A boolean, not the snapshot, for the same reason as the flags above: the
+  // queue poll rebuilds the snapshot every 10s.
+  const isQueuedHere = useKanbanStore(
+    (s) => !!s.queueState?.items.some((item) => item.cardId === card.id)
+  );
 
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -272,6 +279,10 @@ export function CardPhaseActions({
   );
   // A running chat blocks the same buttons a lock does, without offering Unlock.
   const isBlocked = isLocked || isChatting;
+  // The queue starts this card's run itself; a manual Play (Pre-verify on a
+  // Human Test card) would only be refused with a 409. Once the run is live
+  // the spinner takes over, even if the poll still lists the card.
+  const isQueued = isQueuedHere && !isStarting;
 
   const projectPath = project?.folderPath || card.projectFolder;
   const projectDefaultWorktree = project?.useWorktrees ?? true;
@@ -398,7 +409,7 @@ export function CardPhaseActions({
 
   const handleStartClick = async (e?: React.MouseEvent) => {
     stop(e);
-    if (isBlocked || isStarting || isPreparing || !flags.canRunAutonomous) return;
+    if (isBlocked || isStarting || isQueued || isPreparing || !flags.canRunAutonomous) return;
     if (!(await prepare())) return;
     setDialogUseWorktree(effectiveUseWorktree);
     setChainWarning(computeChainWarning());
@@ -583,7 +594,8 @@ export function CardPhaseActions({
     // Autonomous buttons stay drawn while locked, as a spinner or a dimmed
     // icon; interactive ones are not shown at all then.
     const autonomous = isAutonomousAction(action);
-    const dimmed = autonomous && isBlocked && !running;
+    const queued = action === "play" && isQueued;
+    const dimmed = (autonomous && isBlocked && !running) || queued;
 
     let className = ICON_TINT[action];
     if (running) {
@@ -603,7 +615,7 @@ export function CardPhaseActions({
           <button
             type="button"
             onClick={onAction[action]}
-            disabled={autonomous ? running || isBlocked : undefined}
+            disabled={autonomous ? running || isBlocked || queued : undefined}
             className={`p-1 rounded transition-colors ${className}`}
           >
             {running ? (
@@ -631,7 +643,11 @@ export function CardPhaseActions({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {dimmed && isChatting ? CHAT_RUNNING_TOOLTIP : tooltipFor(action)}
+          {dimmed && isChatting
+            ? CHAT_RUNNING_TOOLTIP
+            : queued
+              ? QUEUED_TOOLTIP
+              : tooltipFor(action)}
         </TooltipContent>
       </Tooltip>
     );
@@ -709,32 +725,51 @@ export function CardPhaseActions({
       <div className="flex items-center gap-1.5">
         {secondary.map((action) => {
           const Icon = ACTION_ICON[action];
+          const queued = action === "play" && isQueued;
+          const tooltip = queued ? QUEUED_TOOLTIP : tooltipFor(action);
           return (
             <Tooltip key={action}>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={onAction[action]}
-                  disabled={isPreparing}
-                  aria-label={tooltipFor(action)}
-                  className={`h-8 w-8 grid place-items-center rounded-md transition-colors disabled:opacity-50 ${ICON_TINT[action]}`}
-                >
-                  <Icon className="w-4 h-4" />
-                </button>
+                {/* A disabled button swallows hover, so the span carries the tooltip. */}
+                <span tabIndex={queued ? 0 : undefined} className={queued ? "cursor-not-allowed" : undefined}>
+                  <button
+                    type="button"
+                    onClick={onAction[action]}
+                    disabled={isPreparing || queued}
+                    aria-label={tooltip}
+                    className={`h-8 w-8 grid place-items-center rounded-md transition-colors disabled:opacity-50 ${ICON_TINT[action]} ${queued ? "pointer-events-none" : ""}`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                </span>
               </TooltipTrigger>
-              <TooltipContent side="top">{tooltipFor(action)}</TooltipContent>
+              <TooltipContent side="top">{tooltip}</TooltipContent>
             </Tooltip>
           );
         })}
-        <Button
-          size="sm"
-          onClick={onAction[primary]}
-          disabled={isPreparing}
-          className={PRIMARY_CLASS[primary]}
-        >
-          {isPreparing ? <Loader2 className="animate-spin" /> : <PrimaryIcon />}
-          {labelFor(primary)}
-        </Button>
+        {primary === "play" && isQueued ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} className="cursor-not-allowed">
+                <Button size="sm" disabled className="pointer-events-none">
+                  <ListVideo />
+                  Queued
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">{QUEUED_TOOLTIP}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            size="sm"
+            onClick={onAction[primary]}
+            disabled={isPreparing}
+            className={PRIMARY_CLASS[primary]}
+          >
+            {isPreparing ? <Loader2 className="animate-spin" /> : <PrimaryIcon />}
+            {labelFor(primary)}
+          </Button>
+        )}
       </div>
     );
   };
