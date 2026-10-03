@@ -6,13 +6,40 @@ import { useKanbanStore } from "@/lib/store";
 import { OPEN_ADD_PROJECT_EVENT } from "@/lib/workspace";
 import type { Project, ProjectMode } from "@/lib/types";
 
-const COPY: Record<ProjectMode, { title: string; body: string; label: string }> = {
+type WorkspaceCopy = {
+  title: string;
+  body: string;
+  label: string;
+  // How a card moves through this workspace, drawn as numbered boxes. Only
+  // Work has them: it is the unfamiliar one, Development reads like any board.
+  steps?: { title: string; body: string }[];
+};
+
+const COPY: Record<ProjectMode, WorkspaceCopy> = {
   work: {
     title: "This workspace is for work that is not code",
     body:
-      "Meeting minutes, proposals, mail, research, planning. Cards here skip branches and tests; " +
-      "the output is saved in the project folder and the card waits in In Review for you.",
+      "Meeting minutes, proposals, mail, research, planning. No branches, no tests; the output " +
+      "lands in the project folder.",
     label: "Work",
+    // Brain only opens on Ideation cards and Generate only on Backlog,
+    // Revisions and In Progress (lib/card-phase.ts), so step 02 names the column.
+    steps: [
+      {
+        title: "Write the card",
+        body: "Title and a few lines of what you want. That text is the prompt.",
+      },
+      {
+        title: "Press Generate",
+        body:
+          "It writes the document into your project folder. Want an opinion first? Start the " +
+          "card in Ideation and press Brain.",
+      },
+      {
+        title: "Review and mark done",
+        body: "The card waits in In Review with a checklist. Read the output, then move it to Done.",
+      },
+    ],
   },
   development: {
     title: "This workspace is for code",
@@ -53,12 +80,26 @@ export function WorkspaceEmptyState({ otherProjects }: { otherProjects: Project[
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-xl px-6 py-24">
+      <div className="mx-auto max-w-2xl px-6 py-24">
         <h2 className="text-xl font-semibold text-foreground">{copy.title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.body}</p>
 
+        {copy.steps && (
+          <ol className="mt-6 grid gap-3 sm:grid-cols-3">
+            {copy.steps.map((step, i) => (
+              <li key={step.title} className="rounded-md border border-border p-4">
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  {String(i + 1).padStart(2, "0")}
+                </p>
+                <p className="mt-1.5 text-sm font-medium text-foreground">{step.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+
         <Button
-          className="mt-5"
+          className="mt-6"
           onClick={() => window.dispatchEvent(new CustomEvent(OPEN_ADD_PROJECT_EVENT))}
         >
           <Plus className="mr-2 h-4 w-4" />
