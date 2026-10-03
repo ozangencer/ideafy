@@ -33,7 +33,9 @@ const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards
  * section, so this part stands outside the check above and its "skip it when
  * the tools are missing" clause.
  */
-const CHAIN_CONTEXT = `Chain: when get_card returns a \`chain\` field for this card, or this prompt has a \`## Chain\` section, the card is one step of a chain of cards. Its predecessors and successors are related work even when \`search_cards\` does not find them, and this part applies even when the check above was skipped. Name each by its bare displayId; a member without one (a draft) by its title.`;
+const CHAIN_CONTEXT = `Chain: when get_card returns a \`chain\` field for this card, or this prompt has a \`## Chain\` section, the card is one step of a chain of cards. Its predecessors and successors are related work even when \`search_cards\` does not find them, and this part applies even when the check above was skipped. Name each by its bare displayId; a member without one (a draft) by its title.
+- Listing them is not enough: open at most 3 of them with get_card — the direct successor (the first member after this card) if there is one, then the predecessors that are neither completed nor withdrawn, nearest first, up to that cap. A draft has no displayId and cannot be opened; name it and move on.
+- Read only their \`aiOpinion\` and \`solutionSummary\`, and ask one question: does this card's direction contradict what they decided, or break an assumption the successor is built on? That content contradiction is the only conflict meant here — a shared file is already \`list_open_work\`'s job.`;
 
 /**
  * For every surface that writes a plan. The plan keeps its four headings:
@@ -47,7 +49,8 @@ If there is no contradiction, precedent, overlap or dependency, write nothing ab
 
 ${CHAIN_CONTEXT}
 - Under Dependencies, list the chain's predecessors and successors in chain order, each with its status.
-- If a predecessor is neither completed nor withdrawn, add one sentence in the same section naming it as a sequencing risk: this card may land before work it builds on. It is a warning, not a blocker — do not stop, and do not reshape the plan around it.`;
+- If a predecessor is neither completed nor withdrawn, add one sentence in the same section naming it as a sequencing risk: this card may land before work it builds on. It is a warning, not a blocker — do not stop, and do not reshape the plan around it.
+- A finding from the chain read goes onto that member's line under Dependencies as half a sentence. A contradiction also gets one sentence under Edge Cases — the one place a card may sit under two headings. With no finding, the chain lines stay exactly as they would have been.`;
 
 /**
  * For the idea evaluation (one-shot Evaluate and the interactive ideation
@@ -61,6 +64,20 @@ export const PRIOR_DECISIONS_EVALUATION_RULE = `${PRIOR_DECISIONS_CHECK}
 
 ${CHAIN_CONTEXT}
 - List the chain's predecessors and successors under \`## Related Cards\` too, in chain order, with the kind predecessor or successor (written in the output language) and each one's status. A chain member that is also a contradiction or an overlap gets one line, not two.
+- A finding from the chain read goes onto that member's predecessor or successor line, after its status, as half a sentence. It never opens a line of its own; with no finding the line stays as it is.
 
 If there is no contradiction, precedent, duplicate, overlap or dependency and the card is in no chain, leave \`## Related Cards\` out entirely.
 If the check was skipped because the tools were missing, \`## Related Cards\` holds only the chain lines — leave it out when there is no chain — and do not explain why.`;
+
+/**
+ * For the runs that write code (implementation and retest) and a session
+ * opened by hand on a planned card. The chain's earlier cards may already have
+ * built the helper this card is about to write, and their core flow is the
+ * behaviour this change is most likely to break. Capped at three reads so a
+ * long chain does not cost more than a short one.
+ */
+export const CHAIN_IMPLEMENTATION_RULE = `Chain: when get_card returns a \`chain\` field for this card, the card is one step of a chain, and the cards before it may already have built what you need. With no \`chain\` field, ignore this part.
+- Before you write code, open with get_card the nearest predecessors whose status is completed or test — at most 3, nearest first — and read only their \`solutionSummary\` and \`testScenarios\`. A draft has no displayId and cannot be opened; skip it.
+- Build on what they brought in: reuse their helpers, routes and types instead of writing new ones that do the same job. Their plan is not the code — find what it names in the code before you rely on it, and when the two disagree, the code wins.
+- In the final checklist, add at most one item from a predecessor's core group (\`## Core flow\` / \`## Temel akış\`) that this change could break, as a step under \`## Regression\` (\`## Regresyon\` on a Turkish card) naming that predecessor's displayId. Never put it in the core group.
+- If no predecessor is completed or in test, or none of their core items is at risk, add nothing.`;

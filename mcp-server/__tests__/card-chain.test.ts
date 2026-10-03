@@ -8,6 +8,8 @@ import {
   moveCardInChain,
 } from "../card-groups.js";
 import { buildChainContext } from "../chain-order.generated.js";
+import { buildChainImplementationNote } from "../serialize-card.js";
+import { CHAIN_IMPLEMENTATION_RULE } from "../prior-decisions.generated.js";
 
 // A card's place in its chain over MCP: get_card's `chain`, list_groups'
 // members and next, and update_card's afterCardId.
@@ -234,4 +236,26 @@ test("joining a group and moving in the same transaction places the card in the 
     })
   );
   assert.equal((db.prepare(`SELECT group_id AS g FROM cards WHERE id = 'c'`).get() as { g: string }).g, "g1");
+});
+
+test("get_card adds the chain implementation note only to a planned chain card in progress", () => {
+  const db = makeDb();
+  addCard(db, "a", { task: 1, status: "completed" });
+  addCard(db, "b", { task: 2, status: "progress" });
+  addCard(db, "solo", { group: null, task: 3, status: "progress" });
+  const chain = getChainForCard(db, { id: "b", groupId: "g1" });
+  const plan = "<p>Plan</p>";
+
+  const note = buildChainImplementationNote({ status: "progress", solutionSummary: plan }, chain);
+  assert.ok(note?.startsWith("If you are implementing this card:"));
+  assert.ok(note?.includes(CHAIN_IMPLEMENTATION_RULE));
+
+  // No chain, no plan or not being built: the response reads as before.
+  const soloChain = getChainForCard(db, { id: "solo", groupId: null });
+  assert.equal(buildChainImplementationNote({ status: "progress", solutionSummary: plan }, soloChain), null);
+  assert.equal(buildChainImplementationNote({ status: "progress", solutionSummary: "<p></p>" }, chain), null);
+  assert.equal(buildChainImplementationNote({ status: "progress", solutionSummary: null }, chain), null);
+  for (const status of ["backlog", "bugs", "test", "completed"]) {
+    assert.equal(buildChainImplementationNote({ status, solutionSummary: plan }, chain), null);
+  }
 });

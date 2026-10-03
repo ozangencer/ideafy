@@ -313,6 +313,23 @@ test("the chain rule reaches Dependencies in a plan and Related Cards in an eval
   assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /and the card is in no chain, leave `## Related Cards` out entirely/);
 });
 
+test("the chain read is capped, asks one question, and adds no lines of its own", () => {
+  for (const rule of [PRIOR_DECISIONS_RULE, PRIOR_DECISIONS_EVALUATION_RULE]) {
+    // Listing names only made the chain lines a ritual (IDE-396).
+    assert.match(rule, /open at most 3 of them with get_card/);
+    assert.match(rule, /the direct successor/);
+    assert.match(rule, /neither completed nor withdrawn, nearest first/);
+    assert.match(rule, /Read only their `aiOpinion` and `solutionSummary`/);
+    // A shared file is list_open_work's, or the same warning arrives twice.
+    assert.match(rule, /only conflict meant here/);
+  }
+  assert.match(PRIOR_DECISIONS_RULE, /half a sentence/);
+  assert.match(PRIOR_DECISIONS_RULE, /A contradiction also gets one sentence under Edge Cases/);
+  assert.match(PRIOR_DECISIONS_RULE, /With no finding, the chain lines stay exactly/);
+  // Related Cards stays as short as IDE-383 left it.
+  assert.match(PRIOR_DECISIONS_EVALUATION_RULE, /It never opens a line of its own/);
+});
+
 test("get_card carries the rule on planning columns only", () => {
   for (const status of ["backlog", "bugs", "progress"]) {
     assert.ok(buildPriorDecisionsNote({ status })?.includes(PRIOR_DECISIONS_RULE));

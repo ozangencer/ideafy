@@ -39,7 +39,7 @@ import { stripHtml } from "./prompts/utils";
 import { detectCardLanguage } from "./prompts/test-style";
 import { buildVoicePrompt } from "./prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "./prompts/opinion";
-import { PRIOR_DECISIONS_RULE } from "./prompts/prior-decisions";
+import { CHAIN_IMPLEMENTATION_RULE, PRIOR_DECISIONS_RULE } from "./prompts/prior-decisions";
 import { DEFAULT_VOICE, type ProjectMode, type Voice } from "./types";
 
 const NO_SAVE_TOOLS_RULE =
@@ -194,6 +194,8 @@ ${ONE_SHOT_RUN_RULE}`;
 
 Read card via MCP (mcp__ideafy__get_card). Follow the approved plan in solutionSummary.
 
+${CHAIN_IMPLEMENTATION_RULE}
+
 Task: Implement "${title}".
 
 ## After implementing — commit before outputting tests
@@ -223,6 +225,8 @@ ${ONE_SHOT_RUN_RULE}`;
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). Review previous implementation and test scenarios.
+
+${CHAIN_IMPLEMENTATION_RULE}
 
 Task: "${title}" failed during testing.
 

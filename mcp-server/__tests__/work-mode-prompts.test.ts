@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import * as phasePolicyNs from "../../lib/prompts/phase-policy";
 import * as voiceStyleNs from "../../lib/prompts/voice-style";
+import * as priorDecisionsNs from "../../lib/prompts/prior-decisions";
 
 // See run-output.test.ts: lib/ modules come back through the CJS interop.
 function interop<T extends object>(ns: T): T {
@@ -12,6 +13,7 @@ function interop<T extends object>(ns: T): T {
 
 const { buildPhasePolicyBody } = interop(phasePolicyNs);
 const { buildVoicePrompt } = interop(voiceStyleNs);
+const { CHAIN_IMPLEMENTATION_RULE } = interop(priorDecisionsNs);
 
 // IDE-335 made the phase policy and the voice prompt mode-aware. Development
 // is the flow every existing board runs on, so its text must not move by a
@@ -106,4 +108,31 @@ test("Work collapses the three voices into one tone and keeps the core heading",
   // a test checklist, so the style contract still leads the tests section.
   assert.match(buildVoicePrompt("builder", "tests", { mode: "work", language: "tr" }), /## Temel akış/);
   assert.match(buildVoicePrompt("builder", "tests", { mode: "work", language: "en" }), /## Core flow/);
+});
+
+// lib/prompts.ts re-exports modules that import through the `@/` alias, which
+// this package cannot resolve, so the phase prompt is read as source: each
+// case's body is the text between its label and the next one.
+function phaseCase(phase: string): string {
+  const source = readFileSync(new URL("../../lib/prompts.ts", import.meta.url), "utf8");
+  const start = source.indexOf(`case "${phase}":`);
+  assert.ok(start >= 0, `no ${phase} case`);
+  const next = source.indexOf("case \"", start + 1);
+  return source.slice(start, next < 0 ? undefined : next);
+}
+
+test("the chain implementation rule rides on the runs that write code, not the plan", () => {
+  // Implementation builds on what the chain's earlier cards brought in, and
+  // retest rewrites the checklist, so its regression step has to survive too.
+  assert.match(phaseCase("implementation"), /\$\{CHAIN_IMPLEMENTATION_RULE\}/);
+  assert.match(phaseCase("retest"), /\$\{CHAIN_IMPLEMENTATION_RULE\}/);
+  assert.doesNotMatch(phaseCase("planning"), /CHAIN_IMPLEMENTATION_RULE/);
+  assert.doesNotMatch(phaseCase("verify"), /CHAIN_IMPLEMENTATION_RULE/);
+
+  assert.match(CHAIN_IMPLEMENTATION_RULE, /at most 3, nearest first/);
+  assert.match(CHAIN_IMPLEMENTATION_RULE, /completed or test/);
+  assert.match(CHAIN_IMPLEMENTATION_RULE, /the code wins/);
+  assert.match(CHAIN_IMPLEMENTATION_RULE, /## Regresyon/);
+  assert.match(CHAIN_IMPLEMENTATION_RULE, /Never put it in the core group/);
+  assert.match(CHAIN_IMPLEMENTATION_RULE, /With no `chain` field, ignore this part/);
 });

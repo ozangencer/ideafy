@@ -1,5 +1,8 @@
 import { AI_OPINION_PLANNING_RULE } from "./opinion.generated.js";
-import { PRIOR_DECISIONS_RULE } from "./prior-decisions.generated.js";
+import {
+  CHAIN_IMPLEMENTATION_RULE,
+  PRIOR_DECISIONS_RULE,
+} from "./prior-decisions.generated.js";
 
 // Normalize SQLite INTEGER boolean columns (stored as 0/1 or NULL) to JS
 // values. Null/undefined stays null so callers can distinguish "no override"
@@ -94,9 +97,9 @@ export function extractCardImages<T extends Partial<Record<ImageField, string | 
 // an evaluation waiting for the user's yes, not something to build on.
 const PLANNING_STATUSES = new Set(["backlog", "bugs", "progress"]);
 
-// Tiptap can store a cleared field as <p></p>, so an opinion only counts once
-// its tags and whitespace are gone and something is left.
-function hasOpinionText(html: string | null | undefined): boolean {
+// Tiptap can store a cleared field as <p></p>, so a field only counts once its
+// tags and whitespace are gone and something is left.
+function hasHtmlText(html: string | null | undefined): boolean {
   if (!html) return false;
   return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
 }
@@ -110,7 +113,7 @@ export function buildOpinionPlanningNote(card: {
   aiOpinion?: string | null;
 }): string | null {
   if (!PLANNING_STATUSES.has(card.status)) return null;
-  if (!hasOpinionText(card.aiOpinion)) return null;
+  if (!hasHtmlText(card.aiOpinion)) return null;
   return `If you are writing a plan for this card:\n${AI_OPINION_PLANNING_RULE}`;
 }
 
@@ -125,4 +128,23 @@ export function buildOpinionPlanningNote(card: {
 export function buildPriorDecisionsNote(card: { status: string }): string | null {
   if (!PLANNING_STATUSES.has(card.status)) return null;
   return `Before you write a plan for this card:\n${PRIOR_DECISIONS_RULE}`;
+}
+
+// ============================================================================
+// Chain implementation note
+// ============================================================================
+
+// A planned card in progress is one being built. When it sits in a chain, a
+// session opened by hand gets the same "build on the predecessors, keep one
+// of their core items as a regression step" rule the implementation prompt
+// carries. Takes the chain get_card just computed, so a card in no group —
+// or one with no plan yet — reads exactly as before.
+export function buildChainImplementationNote(
+  card: { status: string; solutionSummary?: string | null },
+  chain: object | null
+): string | null {
+  if (!chain) return null;
+  if (card.status !== "progress") return null;
+  if (!hasHtmlText(card.solutionSummary)) return null;
+  return `If you are implementing this card:\n${CHAIN_IMPLEMENTATION_RULE}`;
 }

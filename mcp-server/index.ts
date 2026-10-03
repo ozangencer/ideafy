@@ -19,6 +19,7 @@ import {
   extractCardImages,
   buildOpinionPlanningNote,
   buildPriorDecisionsNote,
+  buildChainImplementationNote,
   type ExtractedImage,
 } from "./serialize-card.js";
 import { hasColumn, parseOutputPaths, recordOutputPath } from "./output-paths.js";
@@ -1068,6 +1069,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const priorDecisionsNote = buildPriorDecisionsNote(card);
         if (priorDecisionsNote) {
           content.push({ type: "text", text: priorDecisionsNote });
+        }
+        const chainImplementationNote = buildChainImplementationNote(card, chain);
+        if (chainImplementationNote) {
+          content.push({ type: "text", text: chainImplementationNote });
         }
 
         // Add images as separate content blocks
