@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import {
   Brain,
   Check,
+  ChevronDown,
   FileOutput,
   FlaskConical,
+  ListPlus,
   ListVideo,
   Loader2,
   MessagesSquare,
@@ -44,6 +46,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useCardQueueActions } from "./use-card-queue-actions";
 import {
   getPasteTipTerminalLabel,
   getEffectiveTerminal,
@@ -237,11 +249,6 @@ export function CardPhaseActions({
   );
 
   const isChatting = useCardChatRunning(card.id);
-  // A boolean, not the snapshot, for the same reason as the flags above: the
-  // queue poll rebuilds the snapshot every 10s.
-  const isQueuedHere = useKanbanStore(
-    (s) => !!s.queueState?.items.some((item) => item.cardId === card.id)
-  );
 
   const [showQuickFixConfirm, setShowQuickFixConfirm] = useState(false);
   const [showTerminalConfirm, setShowTerminalConfirm] = useState(false);
@@ -262,6 +269,8 @@ export function CardPhaseActions({
   const projectMode = project?.mode ?? "development";
   const flags = getPhaseActionFlags(card, solutionText, testText, testProgress, projectMode);
   const { phase, labels: phaseLabels } = flags;
+  // Same rules as the board card's context menu, from the same hook.
+  const queue = useCardQueueActions({ card, flags, project });
 
   // Three independent signals converge so the spinner is robust: local
   // trigger state (instant), persisted processingType (DB), and the
@@ -282,11 +291,11 @@ export function CardPhaseActions({
   // The queue starts this card's run itself; a manual Play (Pre-verify on a
   // Human Test card) would only be refused with a 409. Once the run is live
   // the spinner takes over, even if the poll still lists the card.
-  const isQueued = isQueuedHere && !isStarting;
+  const isQueued = queue.rank > 0 && !isStarting;
 
   const projectPath = project?.folderPath || card.projectFolder;
   const projectDefaultWorktree = project?.useWorktrees ?? true;
-  const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
+  const { effectiveUseWorktree } = queue;
 
   // Calculate expected worktree path for implementation phase
   const getExpectedWorktreePath = () => {
@@ -314,6 +323,14 @@ export function CardPhaseActions({
     } finally {
       setIsPreparing(false);
     }
+  };
+
+  // Queueing starts no run, so nothing is handed off and the modal stays
+  // open. The flush still comes first: the server reads the saved card to
+  // decide the phase, and a plan pasted a moment ago must already count.
+  const handleAddToQueue = async (useWorktree?: boolean) => {
+    if (isPreparing || !(await prepare())) return;
+    await queue.add(useWorktree);
   };
 
   // Every handler reaches here only after prepare() and its dialog agreed, so
@@ -759,6 +776,62 @@ export function CardPhaseActions({
             </TooltipTrigger>
             <TooltipContent side="top">{QUEUED_TOOLTIP}</TooltipContent>
           </Tooltip>
+        ) : primary === "play" && (queue.canQueueImplementation || queue.canQueueVerify) ? (
+          // A chevron on the primary, not another button: the footer already
+          // holds Delete, Withdraw and the icons. The main half still runs now.
+          <div className="flex items-center">
+            <Button
+              size="sm"
+              onClick={onAction[primary]}
+              disabled={isPreparing}
+              className={`rounded-r-none ${PRIMARY_CLASS[primary]}`}
+            >
+              {isPreparing ? <Loader2 className="animate-spin" /> : <PrimaryIcon />}
+              {labelFor(primary)}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  disabled={isPreparing}
+                  aria-label="More ways to run"
+                  className={`rounded-l-none border-l border-primary-foreground/20 px-1.5 ${PRIMARY_CLASS[primary]}`}
+                >
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="top" className="w-56">
+                {queue.canQueueVerify ? (
+                  <DropdownMenuItem onSelect={() => void handleAddToQueue()}>
+                    <ListPlus />
+                    Add to queue (pre-verify)
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <ListPlus />
+                      Add to queue
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      {queue.branchChoices.map((choice) => (
+                        <DropdownMenuItem
+                          key={choice.label}
+                          onSelect={() => void handleAddToQueue(choice.useWorktree)}
+                        >
+                          <Check
+                            className={`text-current ${
+                              choice.useWorktree === effectiveUseWorktree ? "" : "invisible"
+                            }`}
+                          />
+                          {choice.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ) : (
           <Button
             size="sm"

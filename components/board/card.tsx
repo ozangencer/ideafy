@@ -14,6 +14,7 @@ import {
 } from "@/lib/card-phase";
 import { CardPhaseActions, useCardChatRunning } from "./card-phase-actions";
 import { QUEUE_KIND_SHORT, QueuePlaceText } from "./run-queue-popover";
+import { useCardQueueActions } from "./use-card-queue-actions";
 import { useKanbanStore } from "@/lib/store";
 import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, ListPlus, ListVideo, ListX } from "lucide-react";
 import { downloadCardAsMarkdown } from "@/lib/card-export";
@@ -215,17 +216,6 @@ function TaskCardImpl({
   const selectCardRange = useKanbanStore((s) => s.selectCardRange);
   const moveCards = useKanbanStore((s) => s.moveCards);
   const setBulkDeleteConfirmOpen = useKanbanStore((s) => s.setBulkDeleteConfirmOpen);
-  // A number, not the snapshot: every 10s poll rebuilds the snapshot, and only
-  // the cards whose place actually changed should re-render. 0 = not queued.
-  const queueRank = useKanbanStore(
-    (s) => (s.queueState?.items.findIndex((item) => item.cardId === card.id) ?? -1) + 1
-  );
-  // A string for the same reason; null when not queued.
-  const queueKind = useKanbanStore(
-    (s) => s.queueState?.items.find((item) => item.cardId === card.id)?.kind ?? null
-  );
-  const addToQueue = useKanbanStore((s) => s.addToQueue);
-  const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isServerLoading, setIsServerLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isBeingDragged } = useDraggable({
@@ -249,9 +239,6 @@ function TaskCardImpl({
   const isLocked = lockedLocal || !!card.processingType || !!softLock;
   // Background processing = auto unlock when done, no manual unlock needed
   const isBackgroundProcessing = isStarting || isQuickFixing || isEvaluating || isGenerating;
-  // Waiting for the queue to start it. The moment the run is live the spinner
-  // owns the card, even while the queue poll still lists it.
-  const isQueued = queueRank > 0 && !isBackgroundProcessing;
 
   // The run buttons themselves live in CardPhaseActions; the card only needs
   // to know which of them will be drawn, for the footer width budget below.
@@ -265,30 +252,32 @@ function TaskCardImpl({
     testProgress,
     projectMode
   );
+  const {
+    rank: queueRank,
+    kind: queueKind,
+    canQueueImplementation,
+    canQueueVerify,
+    effectiveUseWorktree,
+    branchChoices: queueBranchChoices,
+    add: addToQueue,
+    remove: removeFromQueue,
+  } = useCardQueueActions({ card, flags: phaseFlags, project });
+  // Waiting for the queue to start it. The moment the run is live the spinner
+  // owns the card, even while the queue poll still lists it.
+  const isQueued = queueRank > 0 && !isBackgroundProcessing;
   // A running chat hides the interactive icons too, so it counts as a lock here.
   const isChatting = useCardChatRunning(card.id);
   const shownPhaseActions = BOARD_PHASE_ACTIONS.filter((action) =>
     isPhaseActionShown(action, phaseFlags, isLocked || isChatting)
   ).length;
-  const projectDefaultWorktree = project?.useWorktrees ?? true;
-  const effectiveUseWorktree = card.useWorktree ?? projectDefaultWorktree;
   // "Direct on main" only means something where branches exist at all.
   const showsMainBadge = !!project && !effectiveUseWorktree && phaseFlags.showDevControls;
-  // The queue starts autonomous implementation runs and, on Development
-  // cards in Human Test, pre-verify runs. The server has the final say (it
-  // reads the phase the Start route would), this just keeps the menu from
-  // offering it where it can never work.
-  const canQueueImplementation = phaseFlags.canRunAutonomous && phaseFlags.phase === "implementation";
-  // No branch to pick: a pre-verify runs where the card was implemented.
-  const canQueueVerify =
-    phaseFlags.canRunAutonomous && phaseFlags.phase === "verify" && projectMode !== "work";
 
   // The choice applies to every card in a selection; the tick follows the
   // card you right-clicked, the way Change Status does.
   const handleAddToQueue = (useWorktree?: boolean) => {
-    const options = useWorktree === undefined ? undefined : { useWorktree };
     if (!isSelected) {
-      void addToQueue([card.id], options);
+      void addToQueue(useWorktree);
       return;
     }
     // Board order, the way you read it: left to right, then top to bottom.
@@ -297,14 +286,8 @@ function TaskCardImpl({
     const ordered = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
       .map((el) => el.dataset.cardId!)
       .filter((id) => selected.delete(id));
-    void addToQueue([...ordered, ...Array.from(selected)], options);
+    void addToQueue(useWorktree, [...ordered, ...Array.from(selected)]);
   };
-  // The card's current setting comes first, so a hover and one click still
-  // queue it the way it was going to run.
-  const queueBranchChoices = [
-    { useWorktree: true, label: "Isolated branch (worktree)" },
-    { useWorktree: false, label: "Direct on current branch" },
-  ].sort((a, b) => Number(b.useWorktree === effectiveUseWorktree) - Number(a.useWorktree === effectiveUseWorktree));
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -904,7 +887,7 @@ function TaskCardImpl({
             Export as Markdown
           </ContextMenuItem>
           {queueRank > 0 ? (
-            <ContextMenuItem onClick={() => void removeFromQueue(card.id)}>
+            <ContextMenuItem onClick={() => void removeFromQueue()}>
               <ListX className="w-4 h-4 mr-2" />
               Remove from queue
             </ContextMenuItem>
