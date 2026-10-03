@@ -58,8 +58,9 @@ function removeUnder(target: string, realRoot: string): boolean {
  *   folder; the card root, where applied artifacts live, is never touched;
  * - a UUID folder with no row in cards or card_trash is removed whole — the
  *   card is gone for good.
- * Status is checked as well as completedAt: MCP's move_card does not write
- * completedAt, so a card moved back out of Completed can still carry an old one.
+ * Status is checked as well as completedAt: before IDE-406, MCP's move_card
+ * did not clear completedAt, so a card moved back out of Completed from a
+ * terminal can still carry an old one.
  */
 export function sweepScratch(input: SweepInput): SweepResult {
   const now = input.now ?? Date.now();

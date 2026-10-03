@@ -141,6 +141,13 @@
       "when": 1790887155028,
       "tag": "0019_card_work_template",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791040953547,
+      "tag": "0020_completed_at_backfill",
+      "breakpoints": true
     }
   ]
 }

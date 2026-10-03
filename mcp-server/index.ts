@@ -23,6 +23,7 @@ import {
   type ExtractedImage,
 } from "./serialize-card.js";
 import { hasColumn, parseOutputPaths, recordOutputPath } from "./output-paths.js";
+import { completedAtAssignment } from "./completed-at.js";
 import { buildTestStyleContract } from "./test-style.generated.js";
 import { AI_OPINION_PLANNING_RULE } from "./opinion.generated.js";
 import { PRIOR_DECISIONS_RULE } from "./prior-decisions.generated.js";
@@ -1175,8 +1176,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           assertGroupAssignable(db, updates.groupId, owner?.project_id ?? null);
         }
 
+        const now = new Date().toISOString();
         const setClauses: string[] = ["updated_at = ?"];
-        const values: unknown[] = [new Date().toISOString()];
+        const values: unknown[] = [now];
 
         for (const [key, value] of Object.entries(updates)) {
           if (fieldMap[key] && value !== undefined) {
@@ -1195,6 +1197,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             } else {
               values.push(value);
             }
+          }
+        }
+
+        if (typeof updates.status === "string") {
+          const completedAt = completedAtAssignment(db, updates.status, now);
+          if (completedAt) {
+            setClauses.push(completedAt.sql);
+            values.push(...completedAt.params);
           }
         }
 
@@ -1276,9 +1286,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        const now = new Date().toISOString();
+        const completedAt = completedAtAssignment(db, status, now);
         const result = db.prepare(`
-          UPDATE cards SET status = ?, updated_at = ? WHERE id = ?
-        `).run(status, new Date().toISOString(), id);
+          UPDATE cards SET status = ?, updated_at = ?${completedAt ? `, ${completedAt.sql}` : ""} WHERE id = ?
+        `).run(status, now, ...(completedAt?.params ?? []), id);
 
         if (result.changes === 0) {
           return {
