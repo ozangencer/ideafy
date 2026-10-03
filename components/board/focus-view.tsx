@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/board-focus";
 import type { PhaseAction } from "@/lib/card-phase";
 import { useKanbanStore } from "@/lib/store";
+import { prefetchToday } from "@/lib/today-cache";
 import {
   BoardView,
   Card,
@@ -80,6 +81,14 @@ export function ProjectIdPill({
 export function BoardViewToggle() {
   const boardView = useKanbanStore((s) => s.boardView);
   const setBoardView = useKanbanStore((s) => s.setBoardView);
+  const activeProjectId = useKanbanStore((s) => s.activeProjectId);
+
+  // The header mounts this in both views, so it is the place to warm Today's
+  // list: Focus opened from All finds it already loaded instead of painting
+  // Your turn first and Today seconds later.
+  useEffect(() => {
+    prefetchToday(activeProjectId);
+  }, [activeProjectId]);
 
   const options: { value: BoardView; label: string }[] = [
     { value: "focus", label: "Focus" },
@@ -93,6 +102,11 @@ export function BoardViewToggle() {
           key={option.value}
           type="button"
           onClick={() => setBoardView(option.value)}
+          onPointerEnter={
+            option.value === "focus" && boardView !== "focus"
+              ? () => prefetchToday(activeProjectId)
+              : undefined
+          }
           className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
             boardView === option.value
               ? "bg-ink text-background font-semibold"

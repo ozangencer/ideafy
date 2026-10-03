@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, ChevronUp } from "lucide-react";
 import { focusDetail, getFocusState, isYourTurn } from "@/lib/board-focus";
 import { openCardById } from "@/lib/open-card";
 import { useKanbanStore } from "@/lib/store";
 import { parseTestProgress } from "@/lib/test-progress";
+import { loadToday, readToday } from "@/lib/today-cache";
 import {
   Card,
   getColumnTitle,
@@ -19,10 +20,10 @@ import { keyboardBelongsElsewhere } from "./selection-bar";
 
 const REFRESH_MS = 30_000;
 const PLAN_PREVIEW_CHARS = 280;
-
-function startOfLocalDay(now = new Date()): Date {
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
+// Newest first, so the cap keeps the latest work in view and folds the
+// morning away — the same idea as the board columns' row cap.
+const TODAY_ROW_CAP = 8;
+const SKELETON_ROWS = 4;
 
 function formatClock(iso: string): string {
   const date = new Date(iso);
@@ -79,22 +80,14 @@ function Chip({ kind, children }: { kind: TodayChip["kind"]; children: React.Rea
  */
 function useTodayActivity(cards: Card[]) {
   const activeProjectId = useKanbanStore((s) => s.activeProjectId);
-  const [today, setToday] = useState<TodayCard[] | null>(null);
-  const requestId = useRef(0);
+  // The list itself lives in the cache, keyed by project, so a second visit
+  // to Focus paints the last answer at once and a project switch can never
+  // show the other project's list. This only re-renders when an answer lands.
+  const [, setVersion] = useState(0);
 
   const load = useCallback(async () => {
-    const id = ++requestId.current;
-    const params = new URLSearchParams({ since: startOfLocalDay().toISOString() });
-    if (activeProjectId) params.set("projectId", activeProjectId);
-    try {
-      const res = await fetch(`/api/today?${params}`);
-      if (!res.ok) return;
-      const json = (await res.json()) as { cards: TodayCard[] };
-      // A project switch mid-flight must not let the older answer win.
-      if (id === requestId.current) setToday(json.cards);
-    } catch {
-      // Observability, not a critical path: keep the last good list.
-    }
+    // A failed fetch resolves to null and keeps the last good list.
+    if (await loadToday(activeProjectId)) setVersion((v) => v + 1);
   }, [activeProjectId]);
 
   useEffect(() => {
@@ -129,7 +122,39 @@ function useTodayActivity(cards: Card[]) {
     load();
   }, [boardVersion, load]);
 
-  return today;
+  // Null until this project has an answer for today — past midnight
+  // yesterday's list stops counting until the next tick replaces it.
+  return readToday(activeProjectId);
+}
+
+/**
+ * Stand-in rows for the first load, when the cache has nothing yet. Still on
+ * purpose, like the rest of the panel: a shimmer would pull the eye away from
+ * Your turn, which is already on screen.
+ */
+function TodaySkeleton() {
+  return (
+    <div aria-hidden>
+      {Array.from({ length: SKELETON_ROWS }, (_, index) => (
+        <div
+          key={index}
+          className="grid grid-cols-[48px_minmax(0,1fr)] gap-2.5 border-b border-border py-2 last:border-b-0"
+        >
+          <span className="mt-1 h-2.5 w-8 rounded-sm bg-ink/[0.04]" />
+          <span className="flex flex-col gap-1.5">
+            <span
+              className="h-3.5 rounded-sm bg-ink/[0.04]"
+              style={{ width: `${70 - index * 10}%` }}
+            />
+            <span className="flex gap-1">
+              <span className="h-3 w-14 rounded bg-ink/[0.04]" />
+              <span className="h-3 w-16 rounded bg-ink/[0.04]" />
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function TodayRow({
@@ -349,6 +374,9 @@ export function TodayPanel({
   const isModalOpen = useKanbanStore((s) => s.isModalOpen);
   const hasCardSelection = useKanbanStore((s) => s.selectedCardIds.length > 0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Local on purpose: leaving Focus folds the list again, and a refresh tick
+  // that brings a new row leaves it as the user set it.
+  const [showAll, setShowAll] = useState(false);
 
   const cardById = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
   const rows = useMemo(
@@ -388,30 +416,60 @@ export function TodayPanel({
     );
   }
 
+  const visibleRows = showAll ? rows : rows.slice(0, TODAY_ROW_CAP);
+  const hiddenCount = rows.length - visibleRows.length;
   const dateLabel = new Date().toLocaleDateString([], { day: "numeric", month: "short" });
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5">
-        <FocusBlockHeading title="Today" count={rows.length} note={dateLabel} />
-        {today === null ? null : rows.length === 0 ? (
+        {/* No count while loading: "Today 0" reads as an empty day. */}
+        <FocusBlockHeading
+          title="Today"
+          count={today === null ? undefined : rows.length}
+          note={dateLabel}
+        />
+        {today === null ? (
+          <TodaySkeleton />
+        ) : rows.length === 0 ? (
           <QuietRow>
             <span>Nothing touched today yet.</span>
           </QuietRow>
         ) : (
-          <div>
-            {rows.map((entry) => {
-              const card = cardById.get(entry.cardId);
-              if (!card) return null;
-              return (
-                <TodayRow
-                  key={entry.cardId}
-                  entry={entry}
-                  card={card}
-                  onSelect={() => setSelectedId(entry.cardId)}
-                />
-              );
-            })}
+          <div className="flex flex-col gap-1.5">
+            <div>
+              {visibleRows.map((entry) => {
+                const card = cardById.get(entry.cardId);
+                if (!card) return null;
+                return (
+                  <TodayRow
+                    key={entry.cardId}
+                    entry={entry}
+                    card={card}
+                    onSelect={() => setSelectedId(entry.cardId)}
+                  />
+                );
+              })}
+            </div>
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="w-full rounded-md border border-dashed border-border py-1.5 text-center font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground hover:border-ink/40"
+              >
+                +{hiddenCount} more
+              </button>
+            )}
+            {showAll && rows.length > TODAY_ROW_CAP && (
+              <button
+                type="button"
+                onClick={() => setShowAll(false)}
+                className="flex w-full items-center justify-center gap-1 rounded py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronUp className="w-3 h-3" />
+                show fewer
+              </button>
+            )}
           </div>
         )}
       </div>
