@@ -22,7 +22,7 @@ import {
   prependWarningHtml,
 } from "@/lib/autonomous-run/select-run-output";
 import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
-import { autonomousRunTimeoutMs } from "@/lib/autonomous-run/run-timeout";
+import { autonomousRunLimits } from "@/lib/autonomous-run/run-timeout";
 import { beginTrackedStart, dequeueCard, onRunFinished, runConflictFor } from "@/lib/autonomous-run/run-queue";
 import { assessTestRewrite } from "@/lib/markdown";
 
@@ -182,12 +182,15 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
     prompt = `${prompt}\n\n${imageReferences}`;
   }
 
+  const limits = autonomousRunLimits(phase, card.complexity);
+
   try {
     const result = await runAutonomousCli({
       prompt,
       cwd: actualWorkingDir,
       aiPlatform: card.aiPlatform,
-      timeoutMs: autonomousRunTimeoutMs(phase, card.complexity),
+      timeoutMs: limits.hardMs,
+      idleTimeoutMs: limits.idleMs,
       contract: RUN_OUTPUT_CONTRACTS[phase],
       tracking: {
         processKey,

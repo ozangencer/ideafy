@@ -15,6 +15,7 @@ import {
   selectRunOutput,
   type RunOutputContract,
 } from "./select-run-output";
+import { formatRunDuration, shouldKillForIdle } from "./run-timeout";
 
 /** Process-registry label; must match the values the UI filters on. */
 export type AutonomousProcessType = "autonomous" | "evaluate" | "quick-fix" | "generate";
@@ -39,8 +40,14 @@ export interface RunAutonomousOptions {
   prompt: string;
   cwd: string;
   aiPlatform?: string | null;
-  /** Timeout in ms; defaults to 10 minutes. */
+  /** Wall-clock timeout in ms; defaults to 10 minutes. */
   timeoutMs?: number;
+  /**
+   * Kill the run once its stdout has been silent this long. Omit — or pass a
+   * value not below `timeoutMs` — to keep only the wall clock, which is what
+   * short runs like evaluate and enrich want.
+   */
+  idleTimeoutMs?: number;
   /** Prefix for log lines and the timeout message. Defaults to the provider name. */
   label?: string;
   /** Omit to skip process-registry tracking. */
@@ -75,8 +82,8 @@ export interface AutonomousRunResult {
 }
 
 /**
- * Spawn the active platform provider's CLI in autonomous mode, enforcing a
- * timeout and parsing the response.
+ * Spawn the active platform provider's CLI in autonomous mode, enforcing its
+ * wall-clock and (optional) idle timeouts and parsing the response.
  *
  * When `tracking` is supplied the child is registered with the process registry
  * so the UI can surface it and a second request for the same card pre-emptively
@@ -94,6 +101,7 @@ export async function runAutonomousCli(
     cwd,
     aiPlatform,
     timeoutMs = 10 * 60 * 1000,
+    idleTimeoutMs,
     tracking,
     requireExitZero = false,
     contract,
@@ -146,8 +154,14 @@ export async function runAutonomousCli(
     // A collector keeps no raw stdout, so hold on to its tail for the error
     // message of a run that died without saying why on stderr.
     let stdoutTail = "";
+    // Every stream-json line — tool call, tool result, assistant turn, a
+    // sub-agent's turns, thinking ticks — is proof the run is still working,
+    // so stdout is the idle clock. Claude also heartbeats a long Bash call
+    // every 30s, so a hung foreground command is left to BASH_DEFAULT_TIMEOUT_MS.
+    let lastActivityAt = Date.now();
 
     cliProcess.stdout?.on("data", (data: Buffer) => {
+      lastActivityAt = Date.now();
       const text = data.toString();
       stdoutLength += text.length;
       stdoutTail = (stdoutTail + text).slice(-2000);
@@ -162,13 +176,38 @@ export async function runAutonomousCli(
       stderr += data.toString();
     });
 
+    // Only the collector-backed providers are known to stream events as they
+    // work; one without could print nothing until the end and look idle the
+    // whole run.
+    const idleMs =
+      collector && idleTimeoutMs !== undefined && idleTimeoutMs < timeoutMs ? idleTimeoutMs : null;
+
+    // Both messages keep "timed out" — run-error.ts keys the queue's
+    // "run timed out" pause on it.
     const timeout = setTimeout(() => {
+      clearTimers();
       cliProcess.kill();
-      reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
+      const suffix = idleMs !== null ? " (hard limit)" : "";
+      reject(new Error(`${label} timed out after ${formatRunDuration(timeoutMs)}${suffix}`));
     }, timeoutMs);
 
-    cliProcess.on("close", (code) => {
+    const idleCheck =
+      idleMs !== null
+        ? setInterval(() => {
+            if (!shouldKillForIdle(Date.now(), lastActivityAt, idleMs)) return;
+            clearTimers();
+            cliProcess.kill();
+            reject(new Error(`${label} timed out: no output for ${formatRunDuration(idleMs)}`));
+          }, Math.min(30_000, idleMs))
+        : null;
+
+    const clearTimers = () => {
       clearTimeout(timeout);
+      if (idleCheck) clearInterval(idleCheck);
+    };
+
+    cliProcess.on("close", (code) => {
+      clearTimers();
 
       if (stderr) {
         console.log(`[${label}] stderr: ${stderr}`);
@@ -255,7 +294,7 @@ export async function runAutonomousCli(
     });
 
     cliProcess.on("error", (error: NodeJS.ErrnoException) => {
-      clearTimeout(timeout);
+      clearTimers();
       // spawn reports a missing cwd as ENOENT on the binary, which reads as
       // "CLI not installed" when the project folder is what moved.
       if (error.code === "ENOENT" && !existsSync(cwd)) {

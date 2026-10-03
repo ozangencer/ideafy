@@ -15,6 +15,7 @@ import {
   generateImageReferences,
 } from "@/lib/prompts";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import { runIdleTimeoutMs } from "@/lib/autonomous-run/run-timeout";
 import { describeRunError } from "@/lib/run-error";
 import {
   RUN_OUTPUT_CONTRACTS,
@@ -118,7 +119,8 @@ export async function POST(
       aiPlatform: card.aiPlatform,
       label: "Generate",
       // Documents built through a skill's scripts take longer than a fix.
-      timeoutMs: 15 * 60 * 1000,
+      timeoutMs: 30 * 60 * 1000,
+      idleTimeoutMs: runIdleTimeoutMs(),
       contract: RUN_OUTPUT_CONTRACTS.generate,
       tracking: {
         processKey,

@@ -14,6 +14,7 @@ import {
 } from "@/lib/prompts";
 import { getProcess, killProcess } from "@/lib/process-registry";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
+import { runIdleTimeoutMs } from "@/lib/autonomous-run/run-timeout";
 import { describeRunError } from "@/lib/run-error";
 import {
   RUN_OUTPUT_CONTRACTS,
@@ -222,7 +223,8 @@ async function runQuickFix(
       cwd: actualWorkingDir,
       aiPlatform: card.aiPlatform,
       label: "Quick fix",
-      timeoutMs: 10 * 60 * 1000,
+      timeoutMs: 20 * 60 * 1000,
+      idleTimeoutMs: runIdleTimeoutMs(),
       runKind: "quick-fix",
       contract: RUN_OUTPUT_CONTRACTS.quickFix,
       tracking: {
