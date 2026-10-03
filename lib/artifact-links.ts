@@ -1,5 +1,6 @@
-import { copyFileSync, existsSync, readFileSync, realpathSync, statSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
 import path from "path";
+import { ARTIFACT_FENCE_MAX_BYTES, extractArtifactFences } from "./artifact-fence";
 import { artifactBasename, fileLinksToArtifactChips, fileUrlToPath, pathToFileUrl } from "./artifact-url";
 
 // Big enough for any mockup, deck or screenshot; a stray link to a disk image
@@ -22,19 +23,61 @@ function sameContents(a: string, b: string): boolean {
 }
 
 /**
- * Pick a destination inside `cardDir` for `source`. An identical file already
- * there is reused so applying the same message twice does not pile up copies;
- * a different file with the same name gets `-2`, `-3`, … before the extension.
+ * Pick a destination named `base` inside `dir`. An existing file `isSame`
+ * accepts is reused so applying the same message twice does not pile up
+ * copies; a different file with the same name gets `-2`, `-3`, … before the
+ * extension.
  */
-function destinationFor(source: string, cardDir: string): string {
-  const base = artifactBasename(source);
+export function destinationFor(base: string, dir: string, isSame: (candidate: string) => boolean): string {
   const ext = path.extname(base);
   const stem = ext ? base.slice(0, -ext.length) : base;
   for (let n = 1; ; n++) {
-    const candidate = path.join(cardDir, n === 1 ? base : `${stem}-${n}${ext}`);
+    const candidate = path.join(dir, n === 1 ? base : `${stem}-${n}${ext}`);
     if (!existsSync(candidate)) return candidate;
-    if (sameContents(source, candidate)) return candidate;
+    if (isSame(candidate)) return candidate;
   }
+}
+
+function sameBytes(candidate: string, contents: Buffer): boolean {
+  return statSync(candidate).size === contents.length && readFileSync(candidate).equals(contents);
+}
+
+/**
+ * Chat-stream pass (IDE-397): save every closed ```html artifact="…" block in
+ * a finished reply under the card's scratch/ folder and put a markdown link to
+ * the file in its place. A revised mockup with the same name becomes `-2`, so
+ * the link in an older message keeps opening the older version. Blocks still
+ * open (an aborted turn), over the size cap or with an unusable name stay as
+ * they are.
+ */
+export function materializeArtifactFences(text: string, cardDir: string): string {
+  const fences = extractArtifactFences(text).filter((fence) => fence.closed);
+  if (fences.length === 0) return text;
+
+  const scratchDir = path.join(cardDir, SCRATCH_DIR);
+  let out = "";
+  let cursor = 0;
+  for (const fence of fences) {
+    out += text.slice(cursor, fence.start);
+    cursor = fence.end;
+    const original = text.slice(fence.start, fence.end);
+    const contents = Buffer.from(fence.body.endsWith("\n") ? fence.body : `${fence.body}\n`, "utf8");
+    if (!fence.filename || contents.length > ARTIFACT_FENCE_MAX_BYTES) {
+      console.warn(`[artifact-fence] left a block in place: ${fence.filename ?? "bad name"}, ${contents.length} bytes`);
+      out += original;
+      continue;
+    }
+    try {
+      mkdirSync(scratchDir, { recursive: true });
+      const target = destinationFor(fence.filename, scratchDir, (candidate) => sameBytes(candidate, contents));
+      if (!existsSync(target)) writeFileSync(target, contents);
+      out += `[${path.basename(target)}](${pathToFileUrl(target)})`;
+    } catch (error) {
+      console.error("Failed to save artifact block:", fence.filename, error);
+      out += original;
+    }
+  }
+  return out + text.slice(cursor);
 }
 
 function escapeAttr(value: string): string {
@@ -87,7 +130,9 @@ export function persistArtifactLinks(html: string, cardDir: string): string {
     }
 
     try {
-      const target = destinationFor(realSource, realCardDir);
+      const target = destinationFor(artifactBasename(realSource), realCardDir, (candidate) =>
+        sameContents(realSource, candidate),
+      );
       if (!existsSync(target)) copyFileSync(realSource, target);
       return `href=${quote}${escapeAttr(pathToFileUrl(target))}${quote}`;
     } catch (error) {

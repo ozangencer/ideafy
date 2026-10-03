@@ -46,6 +46,7 @@ const markdownSanitizeSchema = {
 import { MentionData } from "@/lib/types";
 import { extractApplicableContent, hasApplyBlock } from "@/lib/apply-content";
 import { artifactBasename, artifactKind, fileUrlToPath, localPathFromText } from "@/lib/artifact-url";
+import { collapseArtifactFences } from "@/lib/artifact-fence";
 import { openArtifactChip } from "@/lib/open-path";
 import { useToast } from "@/hooks/use-toast";
 import { useArtifactAvailable } from "@/hooks/use-artifact-available";
@@ -360,8 +361,11 @@ export function ConversationMessage({
       );
     }
 
-    // For other messages, use ReactMarkdown with inline-highlighted mentions
-    const highlighted = highlightMentions(message.content, message.mentions);
+    // For other messages, use ReactMarkdown with inline-highlighted mentions.
+    // A mockup block streams as one status line instead of pages of HTML;
+    // once the turn ends chat-stream has swapped it for a link.
+    const content = isStreaming ? collapseArtifactFences(message.content) : message.content;
+    const highlighted = highlightMentions(content, message.mentions);
     return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}

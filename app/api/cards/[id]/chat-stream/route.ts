@@ -35,6 +35,7 @@ import {
   buildConversationContext,
 } from "@/lib/ai/prompt-builder";
 import { testScenariosToMarkdown } from "@/lib/markdown";
+import { materializeArtifactFences } from "@/lib/artifact-links";
 import { mcpServerKey } from "@/lib/platform/mcp-tool-names";
 import type { StoppedBackgroundTask } from "@/lib/platform/types";
 
@@ -602,6 +603,14 @@ function isTestActionFor(sectionType: string, status: string): boolean {
               ? describeRunError(`${provider.displayName} exited with code ${code}${signal ? ` (${signal})` : ""}: ${failureOutput}`)
               : null,
           });
+
+          // Mockup blocks become files in the card folder and a link in the
+          // reply, so the chat and the stored message carry the link only.
+          const withArtifacts = materializeArtifactFences(fullResponse, artifactDir);
+          if (withArtifacts !== fullResponse) {
+            fullResponse = withArtifacts;
+            sendEvent("text_replace", withArtifacts);
+          }
 
           if (fullResponse.trim()) {
             try {

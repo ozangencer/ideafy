@@ -213,12 +213,36 @@ Write every file you link in this chat under \`${ctx.artifactDir}/\`. Scratch ou
 
 // Approved artifacts must land on the card as a link the user can click;
 // otherwise the file only lives in chat history and a temp folder.
-export function buildArtifactLinkRule(ctx: CardContext): string {
+export function buildArtifactLinkRule(ctx: CardContext, section: SectionType): string {
   if (!ctx.artifactDir) return "";
   return `${buildFileLinkRule(ctx)}
 
 ## Artifacts (mockups, images, documents)
-When the user approves an artifact you produced for this card — an HTML mockup, an image, a document — save the file under \`${ctx.artifactDir}/\` and make the FIRST line inside your apply block a markdown link to it with its absolute path: \`[mockup name](file://${ctx.artifactDir}/file-name.html)\`. Encode spaces as %20. The card shows that link as a clickable chip that opens the file; without it the artifact is lost to the card. A claude.ai artifact is linked with its normal https:// URL instead.`;
+When the user approves an artifact you produced for this card — an image, a document — save the file under \`${ctx.artifactDir}/\` and make the FIRST line inside your apply block a markdown link to it with its absolute path: \`[mockup name](file://${ctx.artifactDir}/file-name.html)\`. Encode spaces as %20. The card shows that link as a clickable chip that opens the file; without it the artifact is lost to the card. A claude.ai artifact is linked with its normal https:// URL instead. HTML mockups follow the next section instead.${buildMockupRule(ctx, section)}`;
+}
+
+// Mockups travel as a fenced block that chat-stream saves and swaps for a
+// link (lib/artifact-fence.ts), so no provider needs write access for them
+// (IDE-397). The tab follows the phase: options on Opinion while the idea is
+// still being weighed, the reference on Solution once it is planned.
+function buildMockupRule(ctx: CardContext, section: SectionType): string {
+  const target: SectionType = ctx.status === "ideation" ? "opinion" : "solution";
+  const tab = target === "opinion" ? "AI Opinion" : "Solution";
+  const placement = section === target
+    ? `This chat is that tab: make the block the first item inside your apply block, followed by a \`## Mockup\` heading and 3-6 sentences — which surfaces it shows, what the controls do, and what to watch for when it is turned into code.`
+    : `This chat is not that tab: still produce the block, but outside your apply block, and tell the user to have the ${tab} chat link the saved file, which lands it on the card without drawing it again.`;
+  return `
+
+## Mockups
+Produce a mockup only when the user asks for one — a mockup, prototype or artifact — in this chat or in the card description. Never add one on your own.
+Do not write the mockup file yourself. Put the whole file in your reply as one fenced block whose info string names the file:
+\`\`\`html artifact="short-name.html"
+<!doctype html>…
+\`\`\`
+Ideafy saves the block into the card folder and replaces it with a link, so the code never shows in the chat. Use \`svg\` and a \`.svg\` name for a lone SVG; no other formats.
+On this card a mockup belongs on the ${tab} tab. ${placement}
+Keep it economical: one self-contained file, no CDN, no framework, colours and tokens taken from the project's real code. Draw only the surfaces that change the decision, and add interaction only when asked. If it would grow past about 30 KB, ask first.
+A mockup is a tool for the decision, not the spec: once the code exists, the code wins.`;
 }
 
 // Each chat turn is its own `claude -p`: background work it starts is stopped
@@ -277,7 +301,7 @@ Current description: ${ctx.sectionContent || "(empty)"}
 
 Provide helpful suggestions, clarifications, or improvements. Be concise and practical.
 
-${voice}${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail", ctx.mode)}${buildArtifactLinkRule(ctx)}`;
+${voice}${buildSectionBehaviorContext(ctx, "detail")}${buildToolUsageContext("detail", ctx.mode)}${buildArtifactLinkRule(ctx, "detail")}`;
   },
 
   opinion: (ctx) => {
@@ -304,7 +328,7 @@ ${isWork
   ? "Assess what the work needs, where it could go wrong, suggest approaches, and gauge its size."
   : "Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity."} Be direct and constructive.
 
-${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion", ctx.mode)}${buildArtifactLinkRule(ctx)}`;
+${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion", ctx.mode)}${buildArtifactLinkRule(ctx, "opinion")}`;
     return prompt;
   },
 
@@ -321,7 +345,7 @@ ${isWork
   ? "Help shape the approach, name the inputs and sources it needs, and structure the work."
   : "Help refine the implementation approach, suggest patterns, identify dependencies, and structure the work."} Be specific and actionable.
 
-${voice}${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution", ctx.mode)}${buildArtifactLinkRule(ctx)}`;
+${voice}${buildSectionBehaviorContext(ctx, "solution")}${buildToolUsageContext("solution", ctx.mode)}${buildArtifactLinkRule(ctx, "solution")}`;
   },
 
   tests: (ctx) => {

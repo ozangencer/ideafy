@@ -12,7 +12,7 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { persistArtifactLinks, persistArtifacts } = interop(linksNs);
+const { persistArtifactLinks, persistArtifacts, destinationFor } = interop(linksNs);
 const { fileUrlToPath, pathToFileUrl, artifactHtmlToMarkdownLinks, codePathsToFileLinks, codePathsToArtifactChips } =
   interop(urlNs);
 
@@ -194,6 +194,19 @@ test("a scratch file whose name is taken at the root by a different file gets -2
     assert.equal(out, link(join(t.cardDir, "mock-2.html")));
     assert.equal(readFileSync(join(t.cardDir, "mock.html"), "utf8"), "approved earlier");
     assert.equal(readFileSync(join(t.cardDir, "mock-2.html"), "utf8"), "new draft");
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("destinationFor reuses a matching file and numbers a different one", () => {
+  const t = makeTree();
+  try {
+    writeFileSync(join(t.cardDir, "mock.html"), "a");
+
+    assert.equal(destinationFor("mock.html", t.cardDir, () => true), join(t.cardDir, "mock.html"));
+    assert.equal(destinationFor("mock.html", t.cardDir, () => false), join(t.cardDir, "mock-2.html"));
+    assert.equal(destinationFor("new.html", t.cardDir, () => false), join(t.cardDir, "new.html"));
   } finally {
     t.cleanup();
   }
