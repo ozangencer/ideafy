@@ -200,11 +200,22 @@ ${APPLY_CLOSE_MARKER}
 Explanations, reasoning, status narration ("reading the opinion…") and pointers like "apply this with Replace" go outside the block — the Apply buttons take only what is inside it. Use one block per reply. Skip the block when you are only asking a question or chatting.`;
 }
 
+// Every file linked in chat must sit where open-artifact will open it — the
+// card folder. Scratch output goes to `scratch/`, which the daily sweep
+// clears once the card has been completed for a week (IDE-394).
+export function buildFileLinkRule(ctx: CardContext): string {
+  if (!ctx.artifactDir) return "";
+  return `
+
+## Files you link
+Write every file you link in this chat under \`${ctx.artifactDir}/\`. Scratch output — intermediate results, comparisons, logs — goes under \`${ctx.artifactDir}/scratch/\`. Link a file with its absolute path as a markdown link: \`[name](file://${ctx.artifactDir}/scratch/file-name.txt)\`. Encode spaces as %20. Never link a file you wrote outside this folder (\`/tmp\` included) — the card refuses to open it. If you must mention such a path, write it as plain text, without backticks.`;
+}
+
 // Approved artifacts must land on the card as a link the user can click;
 // otherwise the file only lives in chat history and a temp folder.
 export function buildArtifactLinkRule(ctx: CardContext): string {
   if (!ctx.artifactDir) return "";
-  return `
+  return `${buildFileLinkRule(ctx)}
 
 ## Artifacts (mockups, images, documents)
 When the user approves an artifact you produced for this card — an HTML mockup, an image, a document — save the file under \`${ctx.artifactDir}/\` and make the FIRST line inside your apply block a markdown link to it with its absolute path: \`[mockup name](file://${ctx.artifactDir}/file-name.html)\`. Encode spaces as %20. The card shows that link as a clickable chip that opens the file; without it the artifact is lost to the card. A claude.ai artifact is linked with its normal https:// URL instead.`;
@@ -334,7 +345,7 @@ Lead with the core flow — the handful of ${isWork ? "checks that prove the out
 
 Scope what you write to what the user actually asked about. If they asked about one flow, cover that flow — do not regenerate or expand the whole checklist. A question deserves an answer, not a fresh batch of scenarios.
 
-${voice}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests", ctx.mode)}`;
+${voice}${buildSectionBehaviorContext(ctx, "tests")}${buildToolUsageContext("tests", ctx.mode)}${buildFileLinkRule(ctx)}`;
   },
 };
 

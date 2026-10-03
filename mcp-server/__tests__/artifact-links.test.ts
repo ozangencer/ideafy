@@ -156,3 +156,45 @@ test("~/ paths expand to the home folder at apply, and stay as written in the re
   );
   assert.ok(codePathsToArtifactChips(html).includes('data-path="~/notes/a b.md"'));
 });
+
+// IDE-394: chat writes throwaway files to <cardDir>/scratch, which the sweep
+// clears a week after the card completes. Applying one approves it, so it
+// moves to the card root and the link follows.
+
+test("a scratch file is copied to the card root on apply; applying it twice keeps one copy", () => {
+  const t = makeTree();
+  try {
+    mkdirSync(join(t.cardDir, "scratch"));
+    const source = join(t.cardDir, "scratch", "voices.out");
+    writeFileSync(source, "three voices");
+
+    const out = persistArtifactLinks(link(source), t.cardDir);
+    const again = persistArtifactLinks(link(source), t.cardDir);
+
+    const copy = join(t.cardDir, "voices.out");
+    assert.equal(out, link(copy));
+    assert.equal(again, link(copy));
+    assert.equal(readFileSync(copy, "utf8"), "three voices");
+    assert.deepEqual(readdirSync(t.cardDir).sort(), ["scratch", "voices.out"]);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test("a scratch file whose name is taken at the root by a different file gets -2", () => {
+  const t = makeTree();
+  try {
+    mkdirSync(join(t.cardDir, "scratch"));
+    writeFileSync(join(t.cardDir, "mock.html"), "approved earlier");
+    const source = join(t.cardDir, "scratch", "mock.html");
+    writeFileSync(source, "new draft");
+
+    const out = persistArtifactLinks(link(source), t.cardDir);
+
+    assert.equal(out, link(join(t.cardDir, "mock-2.html")));
+    assert.equal(readFileSync(join(t.cardDir, "mock.html"), "utf8"), "approved earlier");
+    assert.equal(readFileSync(join(t.cardDir, "mock-2.html"), "utf8"), "new draft");
+  } finally {
+    t.cleanup();
+  }
+});

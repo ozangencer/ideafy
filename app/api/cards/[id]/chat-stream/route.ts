@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { conversations, cards, projects, chatSessions } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { SectionType, ConversationMessage, ProjectMode, Voice } from "@/lib/types";
@@ -210,6 +210,11 @@ function isTestActionFor(sectionType: string, status: string): boolean {
 
   const canResume = !!(existingSession && provider.capabilities.supportsSessionResume);
 
+  // The prompt sends every linked file here; scratch/ is made up front so
+  // the model never has to create it.
+  const artifactDir = getCardImageDir(cardId);
+  mkdirSync(join(artifactDir, "scratch"), { recursive: true });
+
   // Always precompute the full prompt. When canResume is true we send only
   // the new user message to the resumed CLI; if that resume turns out to be
   // stale the close handler falls back to a fresh spawn using this prompt,
@@ -230,7 +235,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
     voice: projectVoice,
     mode: projectMode,
     provider: provider.id,
-    artifactDir: getCardImageDir(cardId),
+    artifactDir,
   };
   const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
   const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {
