@@ -8,9 +8,8 @@
  * Ideafy, plus get_card and save_plan in the MCP server for a session the user
  * opened by hand, where none of the in-app prompts ever run.
  *
- * Zero imports on purpose: scripts/sync-mcp-shared.mjs copies this file
- * verbatim into mcp-server/opinion.generated.ts, which has to compile inside
- * mcp-server without the `@/` alias or the repo's lib/.
+ * A leaf module on purpose: the MCP server bundles it (via
+ * mcp-server/shared.ts), and whatever it imports goes into the plugin too.
  */
 export const AI_OPINION_PLANNING_RULE = `Base the plan on the card's AI Opinion (\`aiOpinion\`, with \`aiVerdict\`). It is the evaluation the user accepted, so its recommendations and cautions are the default approach:
 - Build the plan on the solution it recommends and carry its concerns into Edge Cases.

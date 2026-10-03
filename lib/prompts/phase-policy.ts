@@ -3,12 +3,10 @@
  * every user turn, and the same text the MCP server hands back the moment a
  * session binds to a card.
  *
- * IMPORTANT: this module must stay import-free. mcp-server is a separate npm
- * package whose tsconfig pins `rootDir: "."`, and its dist/ is copied verbatim
- * into the Claude plugin where the repo's lib/ does not exist. So
- * scripts/sync-mcp-shared.mjs copies this file into
- * mcp-server/phase-policy.generated.ts on every mcp-server build. A single
- * import here breaks that copy's compile.
+ * Keep it a leaf module: the MCP server bundles it (via mcp-server/shared.ts),
+ * and anything it imports goes into the plugin too.
+ * mcp-server/__tests__/bundle-deps.test.ts fails the build if that drags in
+ * lib/db, drizzle or Next.
  *
  * The impure half of the old lib/hook-policy.ts — resolveEffectiveWorktree and
  * resolveProjectByFolderAncestor — stayed behind; hook-policy.ts re-exports

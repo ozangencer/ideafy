@@ -3,8 +3,8 @@
 // that collide; the run queue reads it to warn when a card lined up behind
 // another edits the same files.
 //
-// ZERO imports: scripts/sync-mcp-shared.mjs copies this file verbatim into
-// mcp-server/, which cannot reach lib/.
+// A leaf module: the MCP server bundles it (via mcp-server/shared.ts), and
+// whatever it imports goes into the plugin too.
 
 // Pasted screenshots are stored inline as base64; a three-letter term would
 // match inside them at random, so they go before anything else.

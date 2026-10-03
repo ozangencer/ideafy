@@ -1,8 +1,8 @@
-import { AI_OPINION_PLANNING_RULE } from "./opinion.generated.js";
 import {
+  AI_OPINION_PLANNING_RULE,
   CHAIN_IMPLEMENTATION_RULE,
   PRIOR_DECISIONS_RULE,
-} from "./prior-decisions.generated.js";
+} from "./shared.js";
 
 // Normalize SQLite INTEGER boolean columns (stored as 0/1 or NULL) to JS
 // values. Null/undefined stays null so callers can distinguish "no override"

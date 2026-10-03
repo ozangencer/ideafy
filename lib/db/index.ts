@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as schema from "./schema";
 import { appResourcesRoot, resolveUserDataDir } from "../paths";
+import type { SqlDb } from "../card-ops/db";
 
 const DB_FILENAME = "kanban.db";
 
@@ -123,12 +124,14 @@ function stampExistingMigrations(
 type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
 
 let cachedDb: DrizzleDb | null = null;
+let cachedSqlite: Database.Database | null = null;
 
 function initDb(): DrizzleDb {
   if (cachedDb) return cachedDb;
 
   const dbPath = resolveDbPath();
   const sqlite = new Database(dbPath);
+  cachedSqlite = sqlite;
 
   // WAL lets the Next server and the MCP server read/write the same file
   // concurrently without blocking each other. Without it the MCP process
@@ -159,18 +162,32 @@ function initDb(): DrizzleDb {
 // rendering instead of failing.
 const isNextBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
 
+function assertNotBuildPhase(): void {
+  if (isNextBuildPhase) {
+    const err: Error & { digest?: string } = new Error(
+      "Dynamic server usage: route reads SQLite at request time"
+    );
+    err.digest = "DYNAMIC_SERVER_USAGE";
+    throw err;
+  }
+}
+
 export const db = new Proxy({} as DrizzleDb, {
   get(_target, prop, receiver) {
-    if (isNextBuildPhase) {
-      const err: Error & { digest?: string } = new Error(
-        "Dynamic server usage: route reads SQLite at request time"
-      );
-      err.digest = "DYNAMIC_SERVER_USAGE";
-      throw err;
-    }
+    assertNotBuildPhase();
     const real = initDb();
     return Reflect.get(real, prop, receiver);
   },
 });
+
+// The same connection drizzle uses, typed as the SqlDb surface the shared card
+// operations in lib/card-ops/ take — the MCP server hands them its node:sqlite
+// connection instead. Same object every call, so lib/card-ops' transaction()
+// sees its own nesting.
+export function sqlite(): SqlDb {
+  assertNotBuildPhase();
+  initDb();
+  return cachedSqlite!;
+}
 
 export { schema };

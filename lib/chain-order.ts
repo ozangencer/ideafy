@@ -6,11 +6,10 @@
  * worse than no `next` at all. So the rule lives here once and everything
  * asks it.
  *
- * Zero imports on purpose: scripts/sync-mcp-shared.mjs copies this file
- * verbatim into mcp-server/chain-order.generated.ts, which has to compile
- * inside mcp-server without the `@/` alias or the repo's lib/. That is why the
- * types below are structural instead of `Card`: the MCP server has raw SQLite
- * rows, not the app's Card. lib/card-group.ts re-exports these for the app.
+ * A leaf module on purpose: the MCP server bundles it (via
+ * mcp-server/shared.ts), and whatever it imports goes into the plugin too. The
+ * types below are structural instead of `Card` because the MCP server has raw
+ * SQLite rows, not the app's Card. lib/card-group.ts re-exports these for the app.
  */
 
 export interface ChainOrderable {

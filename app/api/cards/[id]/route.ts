@@ -5,6 +5,7 @@ import { Card } from "@/lib/types";
 import { trashCard } from "@/lib/card-trash";
 import { QUEUE_CLEARING_STATUSES } from "@/lib/card-queue";
 import { parseOutputPaths } from "@/lib/output-paths";
+import { completedAtFor } from "@/lib/card-ops";
 import {
   ensureHtml,
   ensureTestScenariosHtml,
@@ -102,18 +103,13 @@ export async function PUT(
   const newProjectId = body.projectId !== undefined ? body.projectId : existing.projectId;
   let taskNumber = existing.taskNumber;
 
-  // Handle completedAt timestamp based on status transition
-  const oldStatus = existing.status;
-  const newStatus = body.status ?? existing.status;
-  let completedAt = existing.completedAt;
-
-  if (newStatus === 'completed' && oldStatus !== 'completed') {
-    // Moving TO completed: set timestamp
-    completedAt = now;
-  } else if (newStatus !== 'completed' && oldStatus === 'completed') {
-    // Moving FROM completed: clear timestamp
-    completedAt = null;
-  }
+  // The same completed_at rule the MCP's move_card and update_card apply.
+  let completedAt = completedAtFor(
+    existing.status,
+    body.status ?? existing.status,
+    existing.completedAt,
+    now
+  );
 
   // Undo sends the timestamp it is rolling back to, so a card pulled out of
   // Completed and put back keeps the day it was actually finished.

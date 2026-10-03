@@ -1,4 +1,5 @@
 import type { Db } from "./db.js";
+import { hasCapability } from "./schema-caps.js";
 import { existsSync, realpathSync, statSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, relative, resolve, sep } from "path";
@@ -17,34 +18,6 @@ import { isAbsolute, relative, resolve, sep } from "path";
 // does not turn every recorded output into a dead pointer.
 
 export class OutputPathError extends Error {}
-
-const knownColumns = new WeakMap<Db, Set<string>>();
-
-// Whether `table` has `column`, by PRAGMA. The plugin can run against a DB
-// the app has not migrated yet — the two update independently, in either
-// order — so a column this server needs is asked for, not assumed.
-//
-// A hit is cached for the life of the connection: a column does not go away
-// without a destructive migration. A miss is re-probed on every call, so an
-// app updated while this server was already running is noticed on the next
-// attempt rather than at the next restart. table_info on one table costs
-// microseconds.
-export function hasColumn(db: Db, table: string, column: string): boolean {
-  const key = `${table}.${column}`;
-  let known = knownColumns.get(db);
-  if (!known) {
-    known = new Set();
-    knownColumns.set(db, known);
-  }
-  if (known.has(key)) return true;
-
-  const rows = db
-    .prepare(`PRAGMA table_info(${JSON.stringify(table)})`)
-    .all() as Array<{ name: string }>;
-  const present = rows.some((row) => row.name === column);
-  if (present) known.add(key);
-  return present;
-}
 
 // The stored JSON, tolerating null, an empty string and anything that is not
 // an array of strings — a hand-edited row or a stranger's backup must not
@@ -137,7 +110,7 @@ export function recordOutputPath(
   cardId: string,
   inputPath: string
 ): RecordOutputResult {
-  if (!hasColumn(db, "cards", "output_paths")) {
+  if (!hasCapability(db, "outputPaths")) {
     throw new OutputPathError(
       "This Ideafy app does not store output paths yet (cards.output_paths is missing). " +
         "Update the Ideafy app — it adds the column on its next start — then call save_output again. Nothing was recorded."

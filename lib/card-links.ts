@@ -13,9 +13,8 @@
  * mention, and any ID the resolver does not know (UTF-8, SHA-256, a typo).
  * Running it twice changes nothing.
  *
- * Zero imports on purpose: scripts/sync-mcp-shared.mjs copies this file
- * verbatim into mcp-server/card-links.generated.ts, which has to compile
- * inside mcp-server without the `@/` alias or the repo's lib/.
+ * A leaf module on purpose: the MCP server bundles it (via
+ * mcp-server/shared.ts), and whatever it imports goes into the plugin too.
  */
 
 export interface LinkedCard {

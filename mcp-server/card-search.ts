@@ -5,7 +5,8 @@ import {
   htmlToText,
   normalizePath,
   pathsOverlap,
-} from "./plan-files.generated.js";
+} from "./shared.js";
+import { hasCapability } from "./schema-caps.js";
 
 export { extractPlanFiles, htmlToText };
 
@@ -63,11 +64,6 @@ function snippetAround(text: string, at: number): string {
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`;
 }
 
-function hasColumn(db: Db, table: string, column: string): boolean {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  return cols.some((c) => c.name === column);
-}
-
 function projectPrefix(db: Db, projectId: string): string | null {
   const row = db
     .prepare(`SELECT id_prefix as idPrefix FROM projects WHERE id = ?`)
@@ -121,7 +117,7 @@ export function searchCards(
   const statuses = opts.statuses?.length ? opts.statuses : [...DEFAULT_SEARCH_STATUSES];
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? DEFAULT_SEARCH_LIMIT)), MAX_SEARCH_LIMIT);
   // completed_at came with a migration; the plugin can be newer than the app.
-  const completedAt = hasColumn(db, "cards", "completed_at") ? "completed_at" : "NULL";
+  const completedAt = hasCapability(db, "completedAt") ? "completed_at" : "NULL";
 
   const rows = db
     .prepare(
@@ -250,7 +246,7 @@ export async function listOpenWork(
     .get(opts.projectId) as { folderPath: string | null; idPrefix: string | null } | undefined;
   if (!project) return [];
 
-  const hasBranchColumns = hasColumn(db, "cards", "git_branch_status");
+  const hasBranchColumns = hasCapability(db, "branchStatus");
   const rows = db
     .prepare(
       `SELECT id, title, status, task_number as taskNumber,

@@ -216,57 +216,6 @@ test("move_card validates the status against the column list at runtime", () => 
 });
 
 // ---------------------------------------------------------------------------
-// The generated copies must match their sources
-// ---------------------------------------------------------------------------
-// scripts/sync-mcp-shared.mjs runs from mcp-server's prebuild, so a normal
-// build can never ship a stale copy. But `npm run dev` / tsx read the
-// committed copy directly, and nothing stopped someone editing the generated
-// file instead of the source — the DO NOT EDIT header is a request, not a
-// guard. These make it a guard.
-
-const COPIES = [
-  { source: "lib/prompts/test-style.ts", target: "test-style.generated.ts" },
-  { source: "lib/prompts/phase-policy.ts", target: "phase-policy.generated.ts" },
-  { source: "lib/prompts/opinion.ts", target: "opinion.generated.ts" },
-  { source: "lib/prompts/prior-decisions.ts", target: "prior-decisions.generated.ts" },
-  { source: "lib/card-links.ts", target: "card-links.generated.ts" },
-  { source: "lib/chain-order.ts", target: "chain-order.generated.ts" },
-  { source: "lib/plan-files.ts", target: "plan-files.generated.ts" },
-];
-
-for (const { source, target } of COPIES) {
-  test(`${target} is a verbatim copy of ${source}`, () => {
-    const sourceText = readFileSync(
-      new URL(`../../${source}`, import.meta.url),
-      "utf8"
-    );
-    const generated = readFileSync(new URL(`../${target}`, import.meta.url), "utf8");
-    const marker = "// ─────────────────────────────────────────────────────────────────────────\n\n";
-    const bodyAt = generated.indexOf(marker);
-
-    assert.ok(bodyAt !== -1, `${target} lost its GENERATED FILE header`);
-    assert.strictEqual(
-      generated.slice(bodyAt + marker.length),
-      sourceText,
-      `${target} has drifted from ${source}. Run scripts/sync-mcp-shared.mjs — ` +
-        `and if the difference is a deliberate change, make it in the source.`
-    );
-  });
-}
-
-test("the copied policy module has no imports", () => {
-  // mcp-server's tsconfig pins rootDir: "." and its dist/ is copied into the
-  // plugin repo without lib/. One import in the source and the generated copy
-  // stops compiling — at build time, in a different repo, long after the edit.
-  assert.doesNotMatch(
-    policySrc,
-    /^\s*import\s/m,
-    "lib/prompts/phase-policy.ts gained an import. It has to compile standalone " +
-      "inside mcp-server — move whatever needs the dependency to lib/hook-policy.ts."
-  );
-});
-
-// ---------------------------------------------------------------------------
 // The policy has to reach the model on the turn the card is bound
 // ---------------------------------------------------------------------------
 // The bug: create_card + bind_session_to_card both run inside one turn, but the

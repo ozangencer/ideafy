@@ -4,8 +4,8 @@ import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 
 // Minimal git helpers used by the ensure_branch tool. Kept separate from
-// lib/git.ts because the mcp-server is a standalone package (its own
-// rootDir and tsconfig) and cannot import from the Next app tree.
+// lib/git.ts, which reaches lib/db and so cannot enter the MCP bundle; it
+// moves into a shared module when a card touches this path.
 const execFileAsync = promisify(execFile);
 
 export async function git(

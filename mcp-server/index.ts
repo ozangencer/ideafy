@@ -22,12 +22,17 @@ import {
   buildChainImplementationNote,
   type ExtractedImage,
 } from "./serialize-card.js";
-import { hasColumn, parseOutputPaths, recordOutputPath } from "./output-paths.js";
-import { completedAtAssignment } from "./completed-at.js";
-import { buildTestStyleContract } from "./test-style.generated.js";
-import { AI_OPINION_PLANNING_RULE } from "./opinion.generated.js";
-import { PRIOR_DECISIONS_RULE } from "./prior-decisions.generated.js";
-import { buildPhaseHint, buildPhasePolicyBody } from "./phase-policy.generated.js";
+import { parseOutputPaths, recordOutputPath } from "./output-paths.js";
+import { hasCapability, missingCapabilityMessage } from "./schema-caps.js";
+import {
+  AI_OPINION_PLANNING_RULE,
+  PRIOR_DECISIONS_RULE,
+  buildPhaseHint,
+  buildPhasePolicyBody,
+  buildTestStyleContract,
+  completedAtFor,
+  moveCard,
+} from "./shared.js";
 import {
   createWorktree,
   ensureBranchInPlace,
@@ -58,8 +63,8 @@ import {
   updateGroup,
 } from "./card-groups.js";
 
-// The same style contract every other AI surface injects, pulled from
-// lib/prompts/test-style.ts via scripts/sync-mcp-shared.mjs. Built without a
+// The same style contract every other AI surface injects, imported from
+// lib/prompts/test-style.ts. Built without a
 // language so the card-language rule stays in play: a tool description is
 // static text assembled at server start, long before any card is known, so it
 // cannot pick the Turkish or English body per card the way the in-app prompts
@@ -987,7 +992,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // output_paths arrived with a migration the app may not have run yet
         // (the plugin and the app update independently), so it is selected
         // only when the column exists and reads as "none" otherwise.
-        const outputPathsColumn = hasColumn(db, "cards", "output_paths")
+        const outputPathsColumn = hasCapability(db, "outputPaths")
           ? "output_paths as outputPaths,"
           : "NULL as outputPaths,";
         const card = db.prepare(`
@@ -1200,12 +1205,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         }
 
-        if (typeof updates.status === "string") {
-          const completedAt = completedAtAssignment(db, updates.status, now);
-          if (completedAt) {
-            setClauses.push(completedAt.sql);
-            values.push(...completedAt.params);
-          }
+        // completed_at follows the status the same way move_card and the
+        // app's PUT route keep it — lib/card-ops' completedAtFor, computed
+        // from the stored status inside the transaction below.
+        const writesStatus = typeof updates.status === "string";
+        if (writesStatus && !hasCapability(db, "completedAt")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("update_card", "completedAt") }],
+            isError: true,
+          };
         }
 
         // Only `updated_at` in the SET list means the caller passed an id and
@@ -1224,17 +1232,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        values.push(id);
-
         // One transaction: groupId is written first (0016's trigger clears
         // the old position), then the order is computed in the new chain. A
         // rejected afterCardId rolls the field writes back with it.
         const outcome = transaction(db, () => {
           if (writeFields) {
+            if (writesStatus) {
+              const current = db
+                .prepare(`SELECT status, completed_at FROM cards WHERE id = ?`)
+                .get(id) as { status: string; completed_at: string | null } | undefined;
+              if (!current) return null;
+              setClauses.push("completed_at = ?");
+              values.push(
+                completedAtFor(current.status, updates.status as string, current.completed_at, now)
+              );
+            }
             const result = db.prepare(`
               UPDATE cards SET ${setClauses.join(", ")} WHERE id = ?
-            `).run(...values);
-            if (result.changes === 0) return null;
+            `).run(...values, id);
+            if (Number(result.changes) === 0) return null;
           }
           return {
             placed: reorder ? moveCardInChain(db, id, afterCardId ?? null) : null,
@@ -1286,13 +1302,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const now = new Date().toISOString();
-        const completedAt = completedAtAssignment(db, status, now);
-        const result = db.prepare(`
-          UPDATE cards SET status = ?, updated_at = ?${completedAt ? `, ${completedAt.sql}` : ""} WHERE id = ?
-        `).run(status, now, ...(completedAt?.params ?? []), id);
+        if (!hasCapability(db, "completedAt")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("move_card", "completedAt") }],
+            isError: true,
+          };
+        }
 
-        if (result.changes === 0) {
+        // The same move the app makes: lib/card-ops/move-card.ts.
+        const moved = moveCard(db, id, status, new Date().toISOString());
+        if (!moved.ok) {
           return {
             content: [{ type: "text", text: `Card not found: ${id}` }],
             isError: true,

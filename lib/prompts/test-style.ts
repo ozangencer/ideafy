@@ -5,10 +5,8 @@
  * MCP save_tests tool description) MUST inject this contract so the output
  * voice stays consistent across entry points.
  *
- * mcp-server is a separate package and cannot import across the repo root
- * (its tsconfig pins `rootDir: "."`), so scripts/sync-mcp-shared.mjs copies
- * this file verbatim to mcp-server/test-style.generated.ts on every mcp-server
- * build. Keep this module import-free — the copy has to compile standalone.
+ * The MCP server bundles this module (via mcp-server/shared.ts), so keep it a
+ * leaf: whatever it imports goes into the plugin too.
  *
  * Default voice: a manual tester / BA walking a solo founder through each
  * step — second-person imperative, setup → action → expected. Spec-style

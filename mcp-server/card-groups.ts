@@ -7,8 +7,8 @@ import {
   placeAfter,
   type ChainCardRef,
   type ChainContext,
-} from "./chain-order.generated.js";
-import { hasColumn } from "./output-paths.js";
+} from "./shared.js";
+import { hasCapability } from "./schema-caps.js";
 
 // Card groups over MCP. A group is a chain of cards that belong to one piece
 // of work — a label with an identity, not an epic (no status, no completion
@@ -180,7 +180,7 @@ export function assertGroupAssignable(
 // ---------------------------------------------------------------------------
 // Chain context: where a card sits in its group
 // ---------------------------------------------------------------------------
-// The order is the board's, from lib/chain-order.ts via the generated copy —
+// The order is the board's, from lib/chain-order.ts —
 // an MCP `next` that disagrees with the board's row would be worse than none.
 
 export interface CardChain extends ChainContext {
@@ -211,7 +211,7 @@ export interface GroupWithChain extends CardGroupRow {
 // reads as unplaced, so the order falls back to task numbers — the rule every
 // chain followed before manual ordering existed.
 function groupOrderSelect(db: Db): string {
-  return hasColumn(db, "cards", "group_order") ? "c.group_order" : "NULL";
+  return hasCapability(db, "groupOrder") ? "c.group_order" : "NULL";
 }
 
 // Joined per card, not per group: without a projectId, list_groups returns
@@ -299,7 +299,7 @@ export function moveCardInChain(
   cardId: string,
   afterCardId: string | null
 ): { position: number; total: number } {
-  if (!hasColumn(db, "cards", "group_order")) {
+  if (!hasCapability(db, "groupOrder")) {
     throw new CardGroupError(
       "This Ideafy database cannot store a chain order yet. Update the Ideafy app, then try again."
     );

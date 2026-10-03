@@ -7,9 +7,8 @@ import {
   listGroupsWithChains,
   moveCardInChain,
 } from "../card-groups.js";
-import { buildChainContext } from "../chain-order.generated.js";
 import { buildChainImplementationNote } from "../serialize-card.js";
-import { CHAIN_IMPLEMENTATION_RULE } from "../prior-decisions.generated.js";
+import { buildChainContext, CHAIN_IMPLEMENTATION_RULE } from "../shared.js";
 
 // A card's place in its chain over MCP: get_card's `chain`, list_groups'
 // members and next, and update_card's afterCardId.

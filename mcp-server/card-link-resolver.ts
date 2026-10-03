@@ -1,5 +1,5 @@
 import type { Db } from "./db.js";
-import { linkCardReferences, type CardResolver, type LinkedCard } from "./card-links.generated.js";
+import { linkCardReferences, type CardResolver, type LinkedCard } from "./shared.js";
 
 // Resolves "IDE-318" to a card. The card's own project wins when two projects
 // share a prefix; otherwise a prefix only resolves when exactly one project

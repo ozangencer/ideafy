@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import type { SqlDb } from "./shared.js";
 
 // The MCP server talks to SQLite through Node's built-in `node:sqlite`, not
 // better-sqlite3. Claude Code installs plugin dependencies with
@@ -6,19 +7,14 @@ import { createRequire } from "node:module";
 // server died on start with "Could not locate the bindings file". A built-in
 // module has nothing to install.
 //
-// Db is the slice of DatabaseSync the server uses, typed the way
-// better-sqlite3 was: rows come back as unknown and callers cast them.
-// node:sqlite's own typings return Record<string, SQLOutputValue>, which
-// would need a double cast at every query.
-export interface Statement {
-  run(...params: unknown[]): { changes: number | bigint; lastInsertRowid: number | bigint };
-  get(...params: unknown[]): unknown;
-  all(...params: unknown[]): unknown[];
-}
+// Db is lib/card-ops' SqlDb plus close(): the same surface the app's
+// better-sqlite3 connection offers, so the shared card operations run on
+// either. The driver differences (bigint counts, null-prototype rows, nested
+// transactions) are closed in lib/card-ops/db.ts.
+export type { Statement } from "./shared.js";
+export { transaction } from "./shared.js";
 
-export interface Db {
-  prepare(sql: string): Statement;
-  exec(sql: string): void;
+export interface Db extends SqlDb {
   close(): void;
 }
 
@@ -53,30 +49,4 @@ export function openDatabase(path: string): Db {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA busy_timeout = 5000");
   return db;
-}
-
-const depth = new WeakMap<Db, number>();
-
-// Runs fn in a transaction and returns its result, rolling back on throw.
-// Nested calls become savepoints, as better-sqlite3's db.transaction() did —
-// moveCardInChain runs on its own and inside update_card's transaction.
-export function transaction<T>(db: Db, fn: () => T): T {
-  const level = depth.get(db) ?? 0;
-  const savepoint = `ideafy_tx_${level}`;
-  db.exec(level === 0 ? "BEGIN IMMEDIATE" : `SAVEPOINT ${savepoint}`);
-  depth.set(db, level + 1);
-  try {
-    const result = fn();
-    db.exec(level === 0 ? "COMMIT" : `RELEASE ${savepoint}`);
-    return result;
-  } catch (error) {
-    try {
-      db.exec(level === 0 ? "ROLLBACK" : `ROLLBACK TO ${savepoint}; RELEASE ${savepoint}`);
-    } catch {
-      // SQLite may already have rolled back on its own; the original error matters.
-    }
-    throw error;
-  } finally {
-    depth.set(db, level);
-  }
 }

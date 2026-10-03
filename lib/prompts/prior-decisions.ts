@@ -11,9 +11,8 @@
  * Mode-independent on purpose: no branch, code or test wording beyond what a
  * Work project can also read, so a non-git project runs the same rule.
  *
- * Zero imports on purpose: scripts/sync-mcp-shared.mjs copies this file
- * verbatim into mcp-server/prior-decisions.generated.ts, which has to compile
- * inside mcp-server without the `@/` alias or the repo's lib/.
+ * A leaf module on purpose: the MCP server bundles it (via
+ * mcp-server/shared.ts), and whatever it imports goes into the plugin too.
  */
 
 const PRIOR_DECISIONS_CHECK = `Check this card against the project's other cards before you commit to an approach. Use this card's \`id\` and \`projectId\` (get_card returns both):

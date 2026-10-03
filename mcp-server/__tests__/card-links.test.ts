@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { openDatabase } from "../db.js";
-import { linkCardReferences, type CardResolver } from "../card-links.generated.js";
+import { linkCardReferences, type CardResolver } from "../shared.js";
 import { linkCardsInHtml } from "../card-link-resolver.js";
 
 const known: CardResolver = (displayId) =>

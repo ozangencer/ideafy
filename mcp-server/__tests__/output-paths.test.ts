@@ -13,12 +13,12 @@ import { join } from "node:path";
 import { openDatabase } from "../db.js";
 import {
   OutputPathError,
-  hasColumn,
   parseOutputPaths,
   recordOutputPath,
   resolveOutputPath,
 } from "../output-paths.js";
-import { buildPhasePolicyBody } from "../phase-policy.generated.js";
+import { hasColumn } from "../schema-caps.js";
+import { buildPhasePolicyBody } from "../shared.js";
 
 // save_output's contract: the file exists, it is a file, and it sits under the
 // card's project folder once every symlink is resolved. Everything else is

@@ -4,9 +4,8 @@ import { db, schema } from "@/lib/db";
 import { generateBranchName } from "@/lib/git";
 import { shouldUseWorktree } from "@/lib/workspace";
 
-// The policy TEXT moved to lib/prompts/phase-policy.ts, which has to stay
-// import-free so scripts/sync-mcp-shared.mjs can copy it into mcp-server
-// verbatim (see the header there). Only the two functions that need the
+// The policy TEXT moved to lib/prompts/phase-policy.ts, a leaf module the MCP
+// server bundles too (see the header there). Only the two functions that need the
 // database and the git helpers stayed behind. Everything else is re-exported
 // so this file is still the one import site callers know about.
 export {
