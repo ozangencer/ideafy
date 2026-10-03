@@ -16,11 +16,23 @@
  */
 
 import { cardLastActivityAt, formatAgeShort, partitionStaleCards } from "./card-age";
+import { SECTION_LABEL } from "./process-labels";
 import { parseTestProgress } from "./test-progress";
-import { Card, COLUMNS, getColumns, ProjectMode, SectionType, StaleThresholds, Status } from "./types";
+import {
+  ActivityEvent,
+  ActivityType,
+  Card,
+  COLUMNS,
+  getColumns,
+  ProjectMode,
+  SectionType,
+  StaleThresholds,
+  Status,
+} from "./types";
 
 export type FocusState =
   | "blocked"
+  | "your-reply"
   | "your-review"
   | "your-test"
   | "your-decision"
@@ -30,6 +42,9 @@ export type FocusState =
 /** The states that put a card in front of you, in the order they earn attention. */
 const YOUR_TURN_ORDER: FocusState[] = [
   "blocked",
+  // A conversation waiting on your answer loses its context the longer it
+  // waits, so it outranks a finished run that will read the same tomorrow.
+  "your-reply",
   "your-review",
   "your-test",
   "your-decision",
@@ -60,7 +75,7 @@ export function getFocusState(card: Card): FocusState {
 
 export interface FocusStateStyle {
   /** The row's leading icon, by lucide name. */
-  icon: "AlertTriangle" | "Check" | "FlaskConical" | "Lightbulb";
+  icon: "AlertTriangle" | "Check" | "FlaskConical" | "Lightbulb" | "MessageSquare";
   /** Tailwind text colour for the icon. */
   color: string;
   /** The row's action button. */
@@ -75,13 +90,21 @@ export interface FocusStateStyle {
  * and the verb says what the click will cost you.
  */
 export const FOCUS_STATE_STYLES: Record<
-  "blocked" | "your-review" | "your-test" | "your-decision",
+  "blocked" | "your-reply" | "your-review" | "your-test" | "your-decision",
   FocusStateStyle
 > = {
   blocked: {
     icon: "AlertTriangle",
     color: "text-red-500",
     action: "Resolve",
+    section: "detail",
+  },
+  // The section is only a fallback: the row opens the tab the reply landed
+  // on, which it reads from `row.reply.section`.
+  "your-reply": {
+    icon: "MessageSquare",
+    color: "text-amber-500",
+    action: "Reply",
     section: "detail",
   },
   "your-review": {
@@ -139,8 +162,13 @@ export function formatSince(iso: string | null | undefined, now = Date.now()): s
  * a timestamp column, and a timestamp does not tell you that four of five core
  * checks already passed and only one is left for you.
  */
-export function focusDetail(card: Card, now = Date.now()): string {
-  switch (getFocusState(card)) {
+export function focusDetail(
+  card: Card,
+  now = Date.now(),
+  state: FocusState = getFocusState(card),
+  reply?: UnreadReply
+): string {
+  switch (state) {
     case "blocked": {
       const files = card.conflictFiles?.length ?? 0;
       return files > 0
@@ -181,6 +209,11 @@ export function focusDetail(card: Card, now = Date.now()): string {
         : `${progress.checked}/${progress.total} checked`;
     }
 
+    case "your-reply":
+      return reply
+        ? replyLine(reply, now)
+        : `new reply · ${formatSince(cardLastActivityAt(card), now)}`;
+
     case "your-decision":
       return card.aiVerdict === "positive"
         ? "verdict: yes · move to backlog?"
@@ -197,9 +230,67 @@ export function focusDetail(card: Card, now = Date.now()): string {
   }
 }
 
+/**
+ * A chat answer on a card that you have not opened since it landed.
+ *
+ * It lives in `activity_events`, not on the card, which is why it reaches
+ * `buildFocusBoard` as a parameter instead of through `getFocusState`.
+ */
+export interface UnreadReply {
+  /** The tab the conversation happened on, so the row can open it there. */
+  section: SectionType;
+  at: string;
+  /** The turn died. Still your move — read why and ask again. */
+  failed: boolean;
+}
+
+const CHAT_SECTIONS: Partial<Record<ActivityType, SectionType>> = {
+  "chat-detail": "detail",
+  "chat-opinion": "opinion",
+  "chat-solution": "solution",
+  "chat-tests": "tests",
+};
+
+/**
+ * Unread chat replies, one per card, the newest winning.
+ *
+ * Only `chat-*`: a finished opinion or plan already puts the card in front of
+ * you as a decision or a review, and a second signal for the same event would
+ * only teach you to ignore one of them.
+ */
+export function unreadRepliesByCard(events: ActivityEvent[]): Map<string, UnreadReply> {
+  const replies = new Map<string, UnreadReply>();
+  for (const event of events) {
+    if (event.isRead || !event.cardId) continue;
+    const section = CHAT_SECTIONS[event.type];
+    if (!section) continue;
+
+    const previous = replies.get(event.cardId);
+    if (previous && previous.at >= event.updatedAt) continue;
+    replies.set(event.cardId, {
+      section,
+      at: event.updatedAt,
+      failed: event.payload?.failed === true,
+    });
+  }
+  return replies;
+}
+
+/** "new reply · Solution · 12m ago" — the line a reply adds under its row. */
+export function replyLine(reply: UnreadReply, now = Date.now()): string {
+  return `${reply.failed ? "reply failed" : "new reply"} · ${
+    SECTION_LABEL[reply.section]
+  } · ${formatSince(reply.at, now)}`;
+}
+
 export interface FocusRow {
   card: Card;
   state: Exclude<FocusState, "agent-running" | "waiting">;
+  /**
+   * An unread chat reply on a card that is in Your turn for its own reason.
+   * The row keeps its action; the reply rides along beneath it.
+   */
+  reply?: UnreadReply;
 }
 
 export interface WaitingBucket {
@@ -233,12 +324,16 @@ const PRIORITY_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
  * in three months is not a task you forgot to do this morning; putting it in
  * the same list would make the list unreliable, and an unreliable "your turn"
  * gets ignored wholesale. It is counted once, at the end, next to the columns.
+ *
+ * An unread chat reply lifts an otherwise waiting card into Your turn: someone
+ * answered you, so the next move is yours whatever column the card sits in.
  */
 export function buildFocusBoard(
   cards: Card[],
   staleThresholds?: StaleThresholds,
   now = Date.now(),
-  mode: ProjectMode = "development"
+  mode: ProjectMode = "development",
+  unreadReplies: Map<string, UnreadReply> = new Map()
 ): FocusBoard {
   const yourTurn: FocusRow[] = [];
   const agentRunning: Card[] = [];
@@ -259,12 +354,17 @@ export function buildFocusBoard(
 
     for (const card of live) {
       const state = getFocusState(card);
+      const reply = unreadReplies.get(card.id);
       if (state === "agent-running") {
         agentRunning.push(card);
       } else if (state === "waiting") {
-        waitingByStatus.set(column.id, (waitingByStatus.get(column.id) ?? 0) + 1);
+        if (reply) {
+          yourTurn.push({ card, state: "your-reply", reply });
+        } else {
+          waitingByStatus.set(column.id, (waitingByStatus.get(column.id) ?? 0) + 1);
+        }
       } else {
-        yourTurn.push({ card, state });
+        yourTurn.push(reply ? { card, state, reply } : { card, state });
       }
     }
   }

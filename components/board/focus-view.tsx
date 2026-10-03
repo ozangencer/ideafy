@@ -8,6 +8,7 @@ import {
   Cpu,
   FlaskConical,
   Lightbulb,
+  MessageSquare,
   Unlock,
 } from "lucide-react";
 import {
@@ -15,10 +16,19 @@ import {
   focusDetail,
   FOCUS_STATE_STYLES,
   FocusRow,
+  replyLine,
+  unreadRepliesByCard,
 } from "@/lib/board-focus";
 import type { PhaseAction } from "@/lib/card-phase";
 import { useKanbanStore } from "@/lib/store";
-import { BoardView, Card, getDisplayId, Project, TodaySource } from "@/lib/types";
+import {
+  BoardView,
+  Card,
+  getDisplayId,
+  Project,
+  SectionType,
+  TodaySource,
+} from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CardPhaseActions } from "./card-phase-actions";
 import { TodayPanel } from "./today-panel";
@@ -28,6 +38,7 @@ const STATE_ICONS = {
   Check,
   FlaskConical,
   Lightbulb,
+  MessageSquare,
 } as const;
 
 /**
@@ -186,34 +197,57 @@ function YourTurnRow({ row }: { row: FocusRow }) {
   const Icon = STATE_ICONS[style.icon];
   const project = projects.find((p) => p.id === row.card.projectId);
   const displayId = getDisplayId(row.card, project);
-  const detail = focusDetail(row.card);
+  const detail = focusDetail(row.card, Date.now(), row.state, row.reply);
 
-  const open = () => {
+  const openAt = (section: SectionType) => {
     // The row already named the next move, so landing on the Detail tab and
     // making you find it again would waste the one thing the row bought.
-    setPendingCardSection(style.section);
+    setPendingCardSection(section);
     selectCard(row.card);
     openModal();
   };
+  const open = () =>
+    openAt(row.state === "your-reply" && row.reply ? row.reply.section : style.section);
+
+  // A reply on a row that is here for its own reason gets its own line rather
+  // than taking over the detail: "new reply" in front of "4/5 core ✓" would
+  // truncate the counter the row exists to show.
+  const sideReply = row.state !== "your-reply" ? row.reply : undefined;
 
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2">
-      <span className={`grid w-4 shrink-0 place-items-center ${style.color}`}>
+      <span className={`relative grid w-4 shrink-0 place-items-center ${style.color}`}>
         <Icon className="w-3.5 h-3.5" />
+        {sideReply && (
+          <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+        )}
       </span>
-      <button
-        type="button"
-        onClick={open}
-        className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left"
-      >
-        <span className="w-full truncate text-[13px] font-medium text-card-foreground">
-          {row.card.title}
-        </span>
-        <span className="flex w-full min-w-0 items-center gap-1.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
-          {displayId && <ProjectIdPill displayId={displayId} project={project} />}
-          <span className="truncate">{detail}</span>
-        </span>
-      </button>
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+        <button
+          type="button"
+          onClick={open}
+          className="flex w-full min-w-0 flex-col items-start gap-0.5 text-left"
+        >
+          <span className="w-full truncate text-[13px] font-medium text-card-foreground">
+            {row.card.title}
+          </span>
+          <span className="flex w-full min-w-0 items-center gap-1.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+            {displayId && <ProjectIdPill displayId={displayId} project={project} />}
+            <span className="truncate">{detail}</span>
+          </span>
+        </button>
+        {sideReply && (
+          <button
+            type="button"
+            onClick={() => openAt(sideReply.section)}
+            className={`max-w-full truncate text-left font-mono text-[10.5px] tabular-nums transition-colors hover:text-foreground ${
+              sideReply.failed ? "text-red-500" : "text-amber-600 dark:text-amber-500"
+            }`}
+          >
+            {replyLine(sideReply)}
+          </button>
+        )}
+      </div>
       {row.state === "your-test" && <TestRowActions card={row.card} />}
       <button
         type="button"
@@ -258,10 +292,15 @@ export function FocusView({
   const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
   const selectCard = useKanbanStore((s) => s.selectCard);
   const openModal = useKanbanStore((s) => s.openModal);
+  // The bell polls this list for the topbar, so Focus reads the same copy
+  // instead of fetching its own and drifting from the bell's dots.
+  const activityEvents = useKanbanStore((s) => s.activityEvents);
+
+  const unreadReplies = useMemo(() => unreadRepliesByCard(activityEvents), [activityEvents]);
 
   const focus = useMemo(
-    () => buildFocusBoard(cards, staleThresholds, Date.now(), activeWorkspace),
-    [cards, staleThresholds, activeWorkspace]
+    () => buildFocusBoard(cards, staleThresholds, Date.now(), activeWorkspace, unreadReplies),
+    [cards, staleThresholds, activeWorkspace, unreadReplies]
   );
 
   const isQuiet =

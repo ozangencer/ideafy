@@ -52,6 +52,19 @@ export const createActivitySlice: StoreSlice<
         activityUnseenCount: countUnseen(list, lastSeenAt),
         activityLastSeenAt: lastSeenAt,
       });
+
+      // A reply that lands while its card is open was read as it streamed.
+      // The modal only marks on card switch, so without this the bell dot and
+      // Focus's "new reply" would outlive the conversation you just watched.
+      const { isModalOpen, selectedCard } = get();
+      const openId = isModalOpen ? selectedCard?.id : undefined;
+      if (
+        openId &&
+        !openId.startsWith("draft-") &&
+        list.some((e) => e.cardId === openId && !e.isRead)
+      ) {
+        void get().markActivityReadForCard(openId);
+      }
     } catch (error) {
       console.error("Failed to fetch activity:", error);
     }
