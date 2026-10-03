@@ -610,6 +610,8 @@ export interface BackgroundProcess {
   endReason?: ProcessEndReason; // Present when status === "completed"
   warning?: string | null; // Finished, but the output was not (fully) written
   error?: string | null;   // Why a "failed" run failed (stderr tail, timeout, …)
+  phase?: string | null;   // Autonomous runs: planning / implementation / retest / verify
+  targetColumn?: string | null; // Column the run moves the card to; null when it stays
 }
 
 // Activity inbox: completed AI-work events that back the topbar bell.

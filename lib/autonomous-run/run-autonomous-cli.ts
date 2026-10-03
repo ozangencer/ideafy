@@ -34,6 +34,10 @@ export interface AutonomousTracking {
   /** Label for the card's CLI session list. Defaults to processType; Start
    *  passes its phase so a plan run and a verify run read differently. */
   runKind?: string;
+  /** Start's phase and the column it moves the card to, so the bell and the
+   *  banner can say "Plan ready → In Progress" instead of "Autonomous task". */
+  phase?: string | null;
+  targetColumn?: string | null;
 }
 
 export interface RunAutonomousOptions {
@@ -142,6 +146,8 @@ export async function runAutonomousCli(
         cardTitle: tracking.cardTitle,
         displayId: tracking.displayId,
         startedAt: new Date().toISOString(),
+        phase: tracking.phase ?? null,
+        targetColumn: tracking.targetColumn ?? null,
       });
     }
 

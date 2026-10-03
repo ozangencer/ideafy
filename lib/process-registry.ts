@@ -14,6 +14,10 @@ interface ProcessEntry {
     cardTitle: string;
     displayId: string | null;
     startedAt: string;
+    // Autonomous runs only: the phase fixed at start and the column the run
+    // moves the card to (null when it stays). Titles the bell and the banner.
+    phase?: string | null;
+    targetColumn?: string | null;
   };
 }
 
@@ -31,6 +35,8 @@ interface CompletedEntry {
   displayId: string | null;
   startedAt: string;
   completedAt: string;
+  phase: string | null;
+  targetColumn: string | null;
   endReason: EndReason;
   warning: string | null;
   error: string | null;
@@ -93,6 +99,8 @@ export function completeProcess(
       displayId: entry.metadata.displayId,
       startedAt: entry.metadata.startedAt,
       completedAt: new Date().toISOString(),
+      phase: entry.metadata.phase ?? null,
+      targetColumn: entry.metadata.targetColumn ?? null,
       endReason,
       warning,
       error,
@@ -115,6 +123,8 @@ export function completeProcess(
         sectionType: entry.metadata.sectionType,
         startedAt: entry.metadata.startedAt,
         completedAt: completedEntry.completedAt,
+        phase: completedEntry.phase,
+        targetColumn: completedEntry.targetColumn,
         endReason,
         warning,
         error,
@@ -174,6 +184,8 @@ export function getAllProcesses(): BackgroundProcess[] {
       pid: entry.process.pid || 0,
       status: isRunning ? "running" : "completed",
       startedAt: entry.metadata.startedAt,
+      phase: entry.metadata.phase ?? null,
+      targetColumn: entry.metadata.targetColumn ?? null,
     });
   });
 
@@ -190,6 +202,8 @@ export function getAllProcesses(): BackgroundProcess[] {
       status: "completed",
       startedAt: entry.startedAt,
       completedAt: entry.completedAt,
+      phase: entry.phase,
+      targetColumn: entry.targetColumn,
       endReason: entry.endReason,
       warning: entry.warning,
       error: entry.error,

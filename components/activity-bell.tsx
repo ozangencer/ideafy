@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useKanbanStore } from "@/lib/store";
 import { openCardById } from "@/lib/open-card";
 import { getDisplayId } from "@/lib/types";
+import { phaseLabel } from "@/lib/process-labels";
 import { RunErrorDetails, RunErrorToggle } from "@/components/run-error-details";
 import type {
   ActivityEvent,
@@ -344,12 +345,16 @@ function ActivityGroup({
                 </div>
                 {isExpanded && history.length > 0 && (
                   <div className="mt-2 pl-2 border-l border-border space-y-1.5">
-                    {history.map((entry, idx) => (
-                      <div key={idx} className="text-xs text-muted-foreground">
-                        <span className="opacity-70">{formatRelative(entry.at)} — </span>
-                        {entry.summary || "(no summary)"}
-                      </div>
-                    ))}
+                    {history.map((entry, idx) => {
+                      const phase = phaseLabel(entry.payload?.phase);
+                      return (
+                        <div key={idx} className="text-xs text-muted-foreground">
+                          <span className="opacity-70">{formatRelative(entry.at)} — </span>
+                          {phase && `${phase} · `}
+                          {entry.summary || "(no summary)"}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

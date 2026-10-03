@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@/lib/db";
-import { PROCESS_LABEL, SECTION_LABEL } from "@/lib/process-labels";
+import { PROCESS_LABEL, SECTION_LABEL, autonomousRunTitle } from "@/lib/process-labels";
 import { firstLine } from "@/lib/run-error";
 import type {
   ActivityHistoryEntry,
@@ -211,6 +211,9 @@ interface ProcessCompletionInput {
   endReason: "completed" | "aborted" | "failed";
   warning?: string | null;
   error?: string | null;
+  /** Autonomous runs: the phase fixed at start and the column it moved the card to. */
+  phase?: string | null;
+  targetColumn?: string | null;
 }
 
 /**
@@ -243,7 +246,9 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
     type = nonChatTypeFor(input.processType);
     if (!type) return;
     const label = PROCESS_LABEL[input.processType] ?? input.processType;
-    title = warning ? `${label} finished with a warning` : `${label} completed`;
+    title =
+      autonomousRunTitle(input.phase, warning ? "warning" : "completed", input.targetColumn) ??
+      (warning ? `${label} finished with a warning` : `${label} completed`);
   }
 
   recordActivity({
@@ -256,6 +261,9 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
       processType: input.processType,
       sectionType: input.sectionType,
       durationMs,
+      // Kept per run, so the ×N history can tell a plan from an implementation
+      // while the row itself stays one per card (IDE-203).
+      ...(input.phase ? { phase: input.phase } : {}),
       ...(warning ? { warning } : {}),
     },
   });
@@ -281,17 +289,19 @@ function recordProcessFailed(input: ProcessCompletionInput): void {
     label = PROCESS_LABEL[input.processType] ?? input.processType;
   }
   if (!type) return;
+  const title = autonomousRunTitle(input.phase, "failed", null) ?? `${label} failed`;
 
   recordActivity({
     type,
     cardId: input.cardId,
     projectId: input.projectId,
-    title: `${label} failed`,
+    title,
     summary: firstLine(error) || `Failed after ${formatDuration(durationMs)}`,
     payload: {
       processType: input.processType,
       sectionType: input.sectionType,
       durationMs,
+      ...(input.phase ? { phase: input.phase } : {}),
       failed: true,
       ...(error ? { error } : {}),
     },

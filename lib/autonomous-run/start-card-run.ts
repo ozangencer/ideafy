@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
 import { marked } from "marked";
-import type { Status } from "@/lib/types";
+import { getColumnTitle, type Status } from "@/lib/types";
 import {
   stripHtml,
   convertToTipTapTaskList,
@@ -199,6 +199,10 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
         displayId,
         processType: "autonomous",
         runKind: phase,
+        phase,
+        targetColumn: newStatus !== card.status
+          ? getColumnTitle(newStatus, normalizeProjectMode(project?.mode))
+          : null,
       },
     });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import type { BackgroundProcess, ProcessType, SectionType } from "@/lib/types";
-import { PROCESS_LABEL, SECTION_LABEL } from "@/lib/process-labels";
+import { PROCESS_LABEL, SECTION_LABEL, autonomousRunTitle } from "@/lib/process-labels";
 import { firstLine } from "@/lib/run-error";
 
 // Renderer side of the OS-banner bridge in electron/notifications.js. Every
@@ -99,11 +99,13 @@ export function notifyFinishedRuns(finished: BackgroundProcess[]): void {
     const label = runLabel(run.processType, run.sectionType);
     let outcome: string;
     if (run.endReason === "failed") {
-      outcome = `${label} failed`;
+      outcome = autonomousRunTitle(run.phase, "failed", null) ?? `${label} failed`;
     } else if (run.processType === "chat") {
       outcome = "AI replied";
     } else {
-      outcome = run.warning ? `${label} finished with a warning` : `${label} completed`;
+      outcome =
+        autonomousRunTitle(run.phase, run.warning ? "warning" : "completed", run.targetColumn) ??
+        (run.warning ? `${label} finished with a warning` : `${label} completed`);
     }
     const detail = run.endReason === "failed" ? firstLine(run.error) : run.warning;
     notify({
