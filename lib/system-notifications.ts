@@ -70,7 +70,9 @@ function runLabel(processType: ProcessType, sectionType: SectionType | null): st
 function sectionFor(process: BackgroundProcess): SectionType | null {
   if (process.processType === "chat") return process.sectionType;
   if (process.processType === "evaluate") return "opinion";
-  return "solution";
+  // Other runs can move the card to another column; let the modal pick the
+  // tab from where the card stands now.
+  return null;
 }
 
 /**

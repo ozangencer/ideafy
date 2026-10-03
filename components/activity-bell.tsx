@@ -26,9 +26,12 @@ import type {
 } from "@/lib/types";
 
 // Map an activity event to the card-modal section it should land on. For
-// "apply" events the field name in payload is authoritative; for everything
-// else we fall back to a per-type default. Returns null when there is no
-// useful target (e.g. team/sync events with no card binding).
+// "apply" events the field name in payload is authoritative; opinion and chat
+// events point at the tab their conversation happened in. Run events (plan,
+// implementation, autonomous, quickfix, queue) return null on purpose: a run
+// can move the card to another column, so the modal picks the tab from the
+// card's current column, the same way a board click does. Also null when
+// there is no useful target (e.g. team/sync events with no card binding).
 function sectionForEvent(event: ActivityEvent): SectionType | null {
   if (event.type === "apply") {
     const field = event.payload?.field as string | undefined;
@@ -40,11 +43,6 @@ function sectionForEvent(event: ActivityEvent): SectionType | null {
   }
   const map: Partial<Record<ActivityType, SectionType>> = {
     opinion: "opinion",
-    plan: "solution",
-    implementation: "solution",
-    autonomous: "solution",
-    quickfix: "solution",
-    queue: "solution",
     "chat-detail": "detail",
     "chat-opinion": "opinion",
     "chat-solution": "solution",
