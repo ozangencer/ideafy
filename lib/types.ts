@@ -35,7 +35,7 @@ export interface MergeReality {
   needsCommit: boolean;
   state: MergeRealityState;
 }
-export type AiVerdict = "positive" | "negative" | null;
+export type AiVerdict = "positive" | "negative" | "maybe" | null;
 
 export interface Card {
   id: string;

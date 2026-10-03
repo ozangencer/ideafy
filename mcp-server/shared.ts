@@ -33,7 +33,7 @@ export const { PRIOR_DECISIONS_RULE, CHAIN_IMPLEMENTATION_RULE } = unwrap(priorD
 export const { linkCardReferences } = unwrap(cardLinksNs);
 export const { buildChainContext, compareByChainOrder, isFinished, placeAfter } = unwrap(chainOrderNs);
 export const { extractPlanFiles, htmlToText, normalizePath, pathsOverlap } = unwrap(planFilesNs);
-export const { transaction, moveCard, completedAtFor, isStatus } = unwrap(cardOpsNs);
+export const { transaction, moveCard, completedAtFor, isStatus, saveOpinion } = unwrap(cardOpsNs);
 
 export type { CardResolver, LinkedCard } from "../lib/card-links";
 export type { ChainCardRef, ChainContext } from "../lib/chain-order";

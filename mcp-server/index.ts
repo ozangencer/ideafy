@@ -32,6 +32,7 @@ import {
   buildTestStyleContract,
   completedAtFor,
   moveCard,
+  saveOpinion,
 } from "./shared.js";
 import {
   createWorktree,
@@ -827,12 +828,12 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             },
             aiOpinion: {
               type: "string",
-              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low/medium/high] - reasoning), ## Final Score ([X/10] - justification). Adapt the prose inside each section to the project's voice (see tool description).",
+              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low/medium/high] - reasoning), ## Final Score ([X/10] - justification). Adapt the prose inside each section to the project's voice (see tool description). Start the Summary Verdict body with one of Strong Yes / Yes / Maybe / No / Strong No.",
             },
             aiVerdict: {
               type: "string",
-              enum: ["positive", "negative"],
-              description: "The verdict based on Summary Verdict: positive (Strong Yes, Yes, Maybe with score >= 6) or negative (No, Strong No, Maybe with score < 6)",
+              enum: ["positive", "negative", "maybe"],
+              description: "Optional fallback. The server reads the verdict from your Summary Verdict line; this is used only when it cannot. Strong Yes/Yes → positive, Maybe → maybe, No/Strong No → negative. Maybe stays maybe whatever the score.",
             },
           },
           required: ["id", "aiOpinion"],
@@ -1724,7 +1725,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "save_opinion": {
-        const { id: rawId, aiOpinion, aiVerdict } = args as { id: string; aiOpinion: string; aiVerdict?: "positive" | "negative" };
+        const { id: rawId, aiOpinion, aiVerdict } = args as {
+          id: string;
+          aiOpinion: string;
+          aiVerdict?: "positive" | "negative" | "maybe";
+        };
         const id = resolveCardId(rawId);
         if (!id) {
           return {
@@ -1737,13 +1742,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Cards becomes a clickable [[ chip.
         const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(aiOpinion), projectIdOfCard(db, id));
 
-        const result = db.prepare(`
-          UPDATE cards
-          SET ai_opinion = ?, ai_verdict = ?, updated_at = ?
-          WHERE id = ?
-        `).run(htmlContent, aiVerdict || null, new Date().toISOString(), id);
+        // The verdict is read from the Summary Verdict text, as Evaluate and
+        // Apply do; the aiVerdict argument only fills in when the text names none.
+        const result = saveOpinion(db, {
+          id,
+          html: htmlContent,
+          source: aiOpinion,
+          fallbackVerdict: aiVerdict ?? null,
+          now: new Date().toISOString(),
+        });
 
-        if (result.changes === 0) {
+        if (!result.ok) {
           return {
             content: [{ type: "text", text: `Card not found: ${id}` }],
             isError: true,
@@ -1753,7 +1762,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{
             type: "text",
-            text: `AI opinion saved to card ${id}${aiVerdict ? ` (verdict: ${aiVerdict})` : ''}. ` +
+            text: `AI opinion saved to card ${id}${result.verdict ? ` (verdict: ${result.verdict})` : ''}. ` +
               `Card is still in "${readStatus(id)}" — this tool does not move cards. ` +
               `Ask the user before calling move_card.`,
           }],

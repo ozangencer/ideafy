@@ -13,6 +13,7 @@ import {
   testScenariosToMarkdown,
 } from "@/lib/markdown";
 import { recordApplyMessage } from "@/lib/activity-registry";
+import { parseAiVerdict } from "@/lib/opinion-markers";
 import { persistArtifacts as persistArtifactFiles } from "@/lib/artifact-links";
 import { getCardImageDir } from "@/lib/prompts";
 import { codePathsToFileLinks } from "@/lib/artifact-url";
@@ -137,12 +138,12 @@ export async function POST(
     updates.status = "progress";
   }
 
-  // Verdict parsing: applying an Opinion populates aiVerdict from the
-  // "## Summary Verdict (...)" line in the markdown content. Mirrors the
-  // verdict-derivation save_opinion used to do server-side. Leaves verdict
-  // untouched when the content has no recognizable verdict line.
+  // Verdict parsing: applying an Opinion populates aiVerdict from its Summary
+  // Verdict section, through the same reader Evaluate and save_opinion use.
+  // Leaves verdict untouched when the content names no verdict (an appended
+  // fragment without that section, for one).
   if (field === "aiOpinion") {
-    const verdict = parseVerdict(content);
+    const verdict = parseAiVerdict(content);
     if (verdict) updates.aiVerdict = verdict;
   }
 
@@ -159,18 +160,4 @@ export async function POST(
     verdictSet: updates.aiVerdict,
     added,
   });
-}
-
-/**
- * Extract verdict from "## Summary Verdict (Strong Yes/Yes/Maybe/No/Strong No)"
- * style markdown headings. Maps Strong Yes/Yes → positive, No/Strong No →
- * negative. "Maybe" alone is ambiguous (depends on score) so we leave it null;
- * the user can flip the verdict manually if they want.
- */
-function parseVerdict(markdown: string): "positive" | "negative" | null {
-  const headingMatch = markdown.match(/##\s*Summary\s*Verdict[^\n]*/i);
-  const line = headingMatch?.[0] ?? "";
-  if (/strong\s*yes|(^|[^a-z])yes([^a-z]|$)/i.test(line)) return "positive";
-  if (/strong\s*no|(^|[^a-z])no([^a-z]|$)/i.test(line)) return "negative";
-  return null;
 }

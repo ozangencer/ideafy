@@ -11,6 +11,7 @@ import {
   ListVideo,
   Loader2,
   MessagesSquare,
+  Minus,
   Play,
   Terminal,
   Unlock,
@@ -196,6 +197,14 @@ export function reportRunFailure(cardId: string, label: string, error?: string) 
     description: error || "Nothing was changed on the card.",
   });
 }
+
+// The brain icon's corner badge: green = do it, amber = let's talk, red = don't.
+// An opinion whose verdict could not be read gets a plain grey dot, not a tick.
+const VERDICT_BADGE = {
+  positive: { bg: "bg-green-500", Icon: Check, label: "Yes" },
+  maybe: { bg: "bg-amber-500", Icon: Minus, label: "Maybe" },
+  negative: { bg: "bg-red-500", Icon: X, label: "No" },
+} as const;
 
 export function CardPhaseActions({
   card,
@@ -559,12 +568,16 @@ export function CardPhaseActions({
     generate: handleGenerateClick,
   };
 
+  const verdictBadge = card.aiVerdict ? VERDICT_BADGE[card.aiVerdict] : null;
+
   const tooltipFor = (action: PhaseAction): string => {
     switch (action) {
       case "discuss":
         return "Discuss Idea (Interactive)";
       case "evaluate":
-        return isEvaluating ? "Evaluating..." : hasAiOpinion ? "Re-evaluate Idea" : "Evaluate Idea";
+        if (isEvaluating) return "Evaluating...";
+        if (!hasAiOpinion) return "Evaluate Idea";
+        return verdictBadge ? `Re-evaluate Idea · Verdict: ${verdictBadge.label}` : "Re-evaluate Idea";
       case "quick-fix":
         return isQuickFixing ? "Quick fixing..." : "Quick Fix (No Plan)";
       case "terminal":
@@ -643,13 +656,11 @@ export function CardPhaseActions({
                 {hasAiOpinion && (
                   <span
                     className={`absolute -bottom-1 -right-1 flex items-center justify-center w-2.5 h-2.5 rounded-full ${
-                      card.aiVerdict === "negative" ? "bg-red-500" : "bg-green-500"
+                      verdictBadge?.bg ?? "bg-muted-foreground/60"
                     }`}
                   >
-                    {card.aiVerdict === "negative" ? (
-                      <X className="w-1.5 h-1.5 text-white" strokeWidth={4} />
-                    ) : (
-                      <Check className="w-1.5 h-1.5 text-white" strokeWidth={4} />
+                    {verdictBadge && (
+                      <verdictBadge.Icon className="w-1.5 h-1.5 text-white" strokeWidth={4} />
                     )}
                   </span>
                 )}

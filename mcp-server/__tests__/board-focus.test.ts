@@ -232,3 +232,14 @@ test("a reply alone is enough to make the board not quiet", () => {
   assert.equal(result.waiting.total, 0);
   assert.equal(result.yourTurn[0].reply?.section, "opinion");
 });
+
+test("a Maybe asks to discuss, not to move or withdraw (IDE-400)", () => {
+  const line = (aiVerdict: Card["aiVerdict"]) =>
+    focusDetail(card("idea", "ideation", { aiVerdict } as Partial<Card>), NOW, "your-decision");
+  assert.equal(line("positive"), "verdict: yes · move to backlog?");
+  assert.equal(line("maybe"), "verdict: maybe · discuss?");
+  assert.equal(line("negative"), "verdict: no · withdraw?");
+
+  const result = board([card("idea", "ideation", { aiVerdict: "maybe" } as Partial<Card>)], []);
+  assert.deepEqual(result.yourTurn.map((row) => row.state), ["your-decision"]);
+});

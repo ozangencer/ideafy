@@ -215,9 +215,11 @@ export function focusDetail(
         : `new reply · ${formatSince(cardLastActivityAt(card), now)}`;
 
     case "your-decision":
-      return card.aiVerdict === "positive"
-        ? "verdict: yes · move to backlog?"
-        : "verdict: no · withdraw?";
+      // A Maybe is neither a go nor a stop: the Decide button opens the
+      // Opinion tab and its chat, which is where a Maybe gets settled.
+      if (card.aiVerdict === "positive") return "verdict: yes · move to backlog?";
+      if (card.aiVerdict === "maybe") return "verdict: maybe · discuss?";
+      return "verdict: no · withdraw?";
 
     case "agent-running":
       return `${PROCESSING_LABELS[card.processingType ?? ""] ?? "running"} · started ${formatSince(

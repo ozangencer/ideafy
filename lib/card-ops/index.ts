@@ -14,3 +14,4 @@ export {
   type Statement,
 } from "./db";
 export { moveCard, completedAtFor, isStatus, type MoveCardResult } from "./move-card";
+export { saveOpinion, type SaveOpinionResult } from "./save-opinion";
