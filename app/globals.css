@@ -589,6 +589,13 @@ button:disabled {
 .artifact-mention[data-kind="doc"]::before {
   content: "≡";
 }
+/* A chip whose file is gone or outside the card's folders: shown, not offered */
+.artifact-mention[data-missing],
+.artifact-mention[data-missing]:hover,
+.light .artifact-mention[data-missing],
+.light .artifact-mention[data-missing]:hover {
+  @apply bg-transparent text-muted-foreground line-through opacity-60 cursor-default;
+}
 
 /* Estimate markers — [COMPLEXITY: …] / [PRIORITY: …] written by the model.
    Three adjacent decoration spans (start · value · end) drawn as one chip. */

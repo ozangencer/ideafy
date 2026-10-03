@@ -48,6 +48,7 @@ import { extractApplicableContent, hasApplyBlock } from "@/lib/apply-content";
 import { artifactBasename, artifactKind, fileUrlToPath, localPathFromText } from "@/lib/artifact-url";
 import { openArtifactChip } from "@/lib/open-path";
 import { useToast } from "@/hooks/use-toast";
+import { useArtifactAvailable } from "@/hooks/use-artifact-available";
 
 // react-markdown blanks unsafe URLs before our renderers see them; keep
 // `file:` so the `a` renderer can make it a chip.
@@ -59,7 +60,17 @@ function localPathFromCode(children: ReactNode): string | null {
   return typeof children === "string" ? localPathFromText(children) : null;
 }
 
-function ArtifactChip({ path, label, onOpen }: { path: string; label?: string; onOpen: (path: string) => void }) {
+interface ArtifactChipProps {
+  path: string;
+  label?: string;
+  cardId?: string;
+  /** Off while the reply streams: the model often links a file before writing it. */
+  checkAvailable: boolean;
+  onOpen: (path: string) => void;
+}
+
+function ArtifactChip({ path, label, cardId, checkAvailable, onOpen }: ArtifactChipProps) {
+  const available = useArtifactAvailable(cardId, path, checkAvailable);
   const open = () => onOpen(path);
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -67,6 +78,20 @@ function ArtifactChip({ path, label, onOpen }: { path: string; label?: string; o
       open();
     }
   };
+  // Outside the card's folders, or swept from scratch/: show it, never offer it.
+  if (!available) {
+    return (
+      <span
+        aria-disabled="true"
+        data-missing=""
+        title={`${path} — not available`}
+        data-kind={artifactKind(path)}
+        className="mention artifact-mention"
+      >
+        {label || artifactBasename(path)}
+      </span>
+    );
+  }
   return (
     <span
       role="button"
@@ -237,15 +262,15 @@ export function ConversationMessage({
         if (!path) return <a href={href} {...rest}>{children}</a>;
         const text = typeof children === "string" ? children.trim() : "";
         const label = !text || text.startsWith("/") || text.startsWith("file://") ? undefined : text;
-        return <ArtifactChip path={path} label={label} onOpen={onOpen} />;
+        return <ArtifactChip path={path} label={label} cardId={cardId} checkAvailable={!isStreaming} onOpen={onOpen} />;
       },
       code: ({ className, children, node: _node, ...rest }) => {
         const path = className ? null : localPathFromCode(children);
-        if (path) return <ArtifactChip path={path} onOpen={onOpen} />;
+        if (path) return <ArtifactChip path={path} cardId={cardId} checkAvailable={!isStreaming} onOpen={onOpen} />;
         return <code className={className} {...rest}>{children}</code>;
       },
     };
-  }, [cardId, toast]);
+  }, [cardId, toast, isStreaming]);
 
   // Show "Apply" button when: assistant message, not streaming, has content,
   // and either no persist tool was called or the reply still fences a proposal

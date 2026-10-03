@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { realpathSync, statSync } from "fs";
+import { statSync } from "fs";
 import path from "path";
-import os from "os";
-import { eq } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
-import { getCardImageDir } from "@/lib/prompts";
-import { getClaudeMemoryDir } from "@/lib/claude-memory";
+import { artifactRootsFor, resolveArtifactPath } from "@/lib/artifact-roots";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,19 +20,6 @@ const EXECUTABLE_EXT = new Set([
   ".tool",
   ".action",
 ]);
-
-function realOrNull(p: string | null | undefined): string | null {
-  if (!p) return null;
-  try {
-    return realpathSync(p);
-  } catch {
-    return null;
-  }
-}
-
-function isInside(child: string, parent: string): boolean {
-  return child === parent || child.startsWith(parent + path.sep);
-}
 
 /**
  * POST /api/cards/[id]/open-artifact { path }
@@ -59,49 +42,16 @@ export async function POST(
     return NextResponse.json({ error: "Path is required" }, { status: 400 });
   }
 
-  const card = db
-    .select({ id: schema.cards.id, projectId: schema.cards.projectId })
-    .from(schema.cards)
-    .where(eq(schema.cards.id, id))
-    .get();
-  if (!card) {
+  const scope = artifactRootsFor(id);
+  if (!scope) {
     return NextResponse.json({ error: "Card not found" }, { status: 404 });
   }
 
-  const project = card.projectId
-    ? db
-        .select({ folderPath: schema.projects.folderPath })
-        .from(schema.projects)
-        .where(eq(schema.projects.id, card.projectId))
-        .get()
-    : null;
-  const projectFolder = project?.folderPath || null;
-
-  // Document chips store project-relative paths; artifacts are absolute.
-  // Chat replies may write `~/…`.
-  const expanded = rawPath.startsWith("~/") ? path.join(os.homedir(), rawPath.slice(2)) : rawPath;
-  const absolute = path.isAbsolute(expanded)
-    ? expanded
-    : projectFolder
-      ? path.resolve(projectFolder, rawPath)
-      : null;
-  const target = realOrNull(absolute);
-  if (!target) {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+  const resolved = resolveArtifactPath(rawPath, scope.roots, scope.projectFolder);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error }, { status: resolved.status });
   }
-
-  const roots = [
-    realOrNull(getCardImageDir(id)),
-    realOrNull(projectFolder),
-    projectFolder ? realOrNull(getClaudeMemoryDir(projectFolder)) : null,
-  ].filter((root): root is string => Boolean(root));
-
-  if (!roots.some((root) => isInside(target, root))) {
-    return NextResponse.json(
-      { error: "This file is outside the card's folders" },
-      { status: 403 },
-    );
-  }
+  const target = resolved.target;
 
   const reveal =
     EXECUTABLE_EXT.has(path.extname(target).toLowerCase()) || statSync(target).isDirectory();

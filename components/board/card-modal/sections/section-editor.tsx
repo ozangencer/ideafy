@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { openArtifactChip } from "@/lib/open-path";
 import { codePathsToArtifactChips } from "@/lib/artifact-url";
 import { useToast } from "@/hooks/use-toast";
+import { checkArtifactPaths } from "@/hooks/use-artifact-available";
 import { SectionType, SECTION_CONFIG } from "@/lib/types";
 import { EnrichButton } from "./enrich-button";
 
@@ -58,22 +60,47 @@ export function SectionEditor({
 }: SectionEditorProps) {
   const config = SECTION_CONFIG[sectionType];
   const { toast } = useToast();
+  const readOnlyRef = useRef<HTMLDivElement>(null);
+
+  // DOMPurify default config preserves every tag/attr TipTap produces
+  // (p, ul, li, table, img, code, blockquote, task-list classes …) while
+  // stripping <script>, on* event handlers, and javascript: URLs.
+  const sanitized =
+    readOnly && value ? shapeTaskItemsForDisplay(codePathsToArtifactChips(DOMPurify.sanitize(value))) : "";
+
+  // Chips whose file cannot be opened (outside the card's folders, or swept
+  // from scratch/) are marked so they render faded and ignore clicks.
+  useEffect(() => {
+    const root = readOnlyRef.current;
+    if (!root || !cardId || cardId.startsWith("draft-")) return;
+    const chips = Array.from(root.querySelectorAll<HTMLElement>(".artifact-mention[data-path]"));
+    const paths = Array.from(new Set(chips.map((chip) => chip.getAttribute("data-path")!)));
+    if (paths.length === 0) return;
+    let cancelled = false;
+    void checkArtifactPaths(cardId, paths).then((available) => {
+      if (cancelled) return;
+      for (const chip of chips) {
+        if (available[chip.getAttribute("data-path")!] === false) {
+          chip.setAttribute("data-missing", "");
+          chip.setAttribute("aria-disabled", "true");
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sanitized, cardId]);
 
   if (readOnly) {
-    // DOMPurify default config preserves every tag/attr TipTap produces
-    // (p, ul, li, table, img, code, blockquote, task-list classes …) while
-    // stripping <script>, on* event handlers, and javascript: URLs.
-    const sanitized = value
-      ? shapeTaskItemsForDisplay(codePathsToArtifactChips(DOMPurify.sanitize(value)))
-      : "";
     return (
       <div className="h-full flex flex-col p-4 overflow-hidden">
         <div
+          ref={readOnlyRef}
           className="flex-1 min-h-0 overflow-y-auto prose-kanban"
           onClick={(event) => {
             const chip = (event.target as HTMLElement).closest(".artifact-mention") as HTMLElement | null;
             const filePath = chip?.getAttribute("data-path");
-            if (!filePath) return;
+            if (!filePath || chip?.hasAttribute("data-missing")) return;
             event.preventDefault();
             void openArtifactChip(cardId, filePath, toast);
           }}
