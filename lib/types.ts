@@ -581,6 +581,16 @@ export interface ConversationMessage {
   runId?: string;
 }
 
+/**
+ * A chat turn ended while background work it started was still running; the
+ * CLI stopped that work on exit, so nothing will come back (IDE-392).
+ * Client-only, gone after a restart.
+ */
+export interface BackgroundStopNotice {
+  messageId: string;
+  tasks: Array<{ taskId: string; summary: string }>;
+}
+
 // Background process tracking
 export type ProcessType = "chat" | "autonomous" | "quick-fix" | "evaluate" | "generate";
 

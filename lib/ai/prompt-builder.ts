@@ -210,6 +210,14 @@ export function buildArtifactLinkRule(ctx: CardContext): string {
 When the user approves an artifact you produced for this card — an HTML mockup, an image, a document — save the file under \`${ctx.artifactDir}/\` and make the FIRST line inside your apply block a markdown link to it with its absolute path: \`[mockup name](file://${ctx.artifactDir}/file-name.html)\`. Encode spaces as %20. The card shows that link as a clickable chip that opens the file; without it the artifact is lost to the card. A claude.ai artifact is linked with its normal https:// URL instead.`;
 }
 
+// Each chat turn is its own `claude -p`: background work it starts is stopped
+// when the turn ends, and the promised notification never arrives (IDE-392).
+// Unlike the one-shot run rule the user is here, so asking them stays allowed.
+const CHAT_TURN_RULE = `
+
+## Finish your work inside this turn
+This turn ends when your reply ends, and anything you started in the background is stopped then — no notification will ever reach you. Do not use \`run_in_background\`, and do not end the turn with "I'll report when it finishes". If you need parallel work, start several Agents in the same message in the foreground and wait for all of their results.`;
+
 // Shared MCP tool usage instructions
 export function buildToolUsageContext(section: SectionType, mode?: ProjectMode): string {
   const isWork = mode === "work";
@@ -245,7 +253,7 @@ Do NOT automatically generate test scenarios when producing a plan. Only generat
 Do NOT call update_card to write the description. The user reviews your reply and decides whether to Append or Replace via the Apply buttons in the chat UI. If you call update_card with a description, you will silently overwrite their existing content — that is the destructive bug Apply was built to prevent. Respond with your refined content as normal markdown text and let the user click Apply.` : ""}${section === "opinion" ? `
 Do NOT call save_opinion. The user reviews your evaluation and clicks Append or Replace via the Apply buttons in the chat UI; the verdict is parsed from your "## Summary Verdict (...)" line automatically when Apply is clicked. If you call save_opinion you will silently overwrite their existing opinion — that is the destructive bug Apply was built to prevent. Respond with your evaluation as normal markdown (include the Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections) and let the user click Apply.` : ""}${section === "tests" ? `
 On the turns where you do call save_tests, send markdown checkbox format and NEVER use update_card for testScenarios — it bypasses checkbox state preservation. Send the full checklist the card should end up with: existing items plus your additions on an append, or the surviving items only when the user asked for a removal and you pass allowDeletion. save_tests merges checkbox states automatically on appends.
-After ${isWork ? "changing the output" : "a code change"}, do not reach for save_tests reflexively. Describe what you changed, propose any new scenarios as checkboxes in your reply, and let the user apply them.` : ""}${buildApplyMarkerContext(section)}`;
+After ${isWork ? "changing the output" : "a code change"}, do not reach for save_tests reflexively. Describe what you changed, propose any new scenarios as checkboxes in your reply, and let the user apply them.` : ""}${buildApplyMarkerContext(section)}${CHAT_TURN_RULE}`;
 }
 
 // Section-specific system prompts

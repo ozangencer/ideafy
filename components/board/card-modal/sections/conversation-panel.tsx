@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useKanbanStore } from "@/lib/store";
 import { parseTestScenarios } from "./conversation-panel/parse-test-scenarios";
 import { useAutoScrollToBottom } from "./conversation-panel/use-auto-scroll-to-bottom";
+import { BackgroundStopNotice } from "./conversation-panel/background-stop-notice";
 import {
   DialogScenario,
   TestScenarioDialog,
@@ -289,6 +290,14 @@ export function ConversationPanel({
               }}
             />
           ))
+        )}
+        {!streamingMessage && (
+          <BackgroundStopNotice
+            cardId={cardId}
+            sectionType={sectionType}
+            disabled={isLoading}
+            onRunAgain={(content) => onSendMessage(content, [])}
+          />
         )}
       </div>
 

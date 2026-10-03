@@ -1,5 +1,6 @@
 import {
   BackgroundProcess,
+  BackgroundStopNotice,
   ConversationActivityEntry,
   ConversationMessage,
   SectionType,
@@ -171,6 +172,7 @@ export const createConversationSlice: StoreSlice<
     | "streamingMessages"
     | "conversationAbortControllers"
     | "conversationError"
+    | "backgroundStopNotices"
     | "mcpWriteVersion"
     | "mcpWriteCardId"
     | "applyMessageVersion"
@@ -203,6 +205,21 @@ export const createConversationSlice: StoreSlice<
       if (next === current) return state;
       return { streamingMessages: { ...state.streamingMessages, [key]: next } };
     });
+
+  /** The `close` event lists the background tasks the turn's exit stopped. */
+  const recordStrandedTasks = (key: string, data: unknown) => {
+    const { messageId, strandedTasks } = (data ?? {}) as {
+      messageId?: string;
+      strandedTasks?: BackgroundStopNotice["tasks"];
+    };
+    if (!messageId || !strandedTasks?.length) return;
+    set((state) => ({
+      backgroundStopNotices: {
+        ...state.backgroundStopNotices,
+        [key]: { messageId, tasks: strandedTasks },
+      },
+    }));
+  };
 
   /**
    * Stream finished: refresh server-side messages, refresh
@@ -253,6 +270,7 @@ export const createConversationSlice: StoreSlice<
     streamingMessages: {},
     conversationAbortControllers: {},
     conversationError: null,
+    backgroundStopNotices: {},
     mcpWriteVersion: 0,
     mcpWriteCardId: null,
     applyMessageVersion: 0,
@@ -301,6 +319,7 @@ export const createConversationSlice: StoreSlice<
 
       const abortController = new AbortController();
       set((state) => ({
+        backgroundStopNotices: withoutKey(state.backgroundStopNotices, key),
         conversations: {
           ...state.conversations,
           [key]: [...(state.conversations[key] || []), userMessage],
@@ -346,6 +365,7 @@ export const createConversationSlice: StoreSlice<
         let hadToolCalls = false;
         for await (const event of readStreamEvents(response.body.getReader())) {
           if (event.type === "close") {
+            recordStrandedTasks(key, event.data);
             await finishStream(cardId, sectionType, runId, hadToolCalls);
             continue;
           }
@@ -437,6 +457,7 @@ export const createConversationSlice: StoreSlice<
       try {
         for await (const event of readStreamEvents(reader)) {
           if (event.type === "close") {
+            recordStrandedTasks(key, event.data);
             await finishStream(cardId, sectionType, runId, hadToolCalls);
             continue;
           }
@@ -461,6 +482,7 @@ export const createConversationSlice: StoreSlice<
             ...state.conversations,
             [key]: [],
           },
+          backgroundStopNotices: withoutKey(state.backgroundStopNotices, key),
         }));
       } catch (error) {
         console.error("Failed to clear conversation:", error);

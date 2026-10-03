@@ -6,6 +6,7 @@ import {
   AgentPreview,
   AppSettings,
   BackgroundProcess,
+  BackgroundStopNotice,
   BoardView,
   BoardViewPreference,
   Card,
@@ -184,6 +185,9 @@ export interface KanbanStore {
   streamingMessages: Record<string, ConversationMessage>;
   conversationAbortControllers: Record<string, AbortController>;
   conversationError: string | null;
+  // Turns whose background work was stopped when they ended, keyed like
+  // `conversations`. Cleared by the next message in that chat.
+  backgroundStopNotices: Record<string, BackgroundStopNotice>;
   // Bumped after a chat-stream that ran MCP tools finishes and fetchCards has
   // returned. Modals watch this to force-resync form fields with the freshly
   // written card, bypassing the "skip if user has unsaved changes" guard

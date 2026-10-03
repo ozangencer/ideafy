@@ -173,6 +173,31 @@ test("claude collector does not flag a wait followed by more work", () => {
   assert.equal(selectRunOutput(parsed, RUN_OUTPUT_CONTRACTS.verify).endedWhileWaiting, false);
 });
 
+// IDE-392: the tail of a real `claude -p` turn (CLI 2.1.288) that backgrounded
+// `sleep 25` and ended — the exit stops the task after the result envelope.
+test("claude stream parser surfaces a background task stopped at exit", () => {
+  const lines = [
+    { type: "system", subtype: "task_started", task_id: "bo2tv2q14", description: "Wait 25 seconds then write marker file", is_backgrounded: true },
+    { type: "result", subtype: "success", result: "started", is_error: false },
+    { type: "system", subtype: "task_updated", task_id: "bo2tv2q14", patch: { status: "killed" } },
+    { type: "system", subtype: "task_notification", task_id: "bo2tv2q14", status: "stopped", summary: "Wait 25 seconds then write marker file" },
+  ];
+  const events = lines.flatMap((line) => claudeProvider.parseStreamLine(JSON.stringify(line)));
+
+  assert.deepEqual(
+    events.filter((e) => e.type === "background_task_stopped").map((e) => e.data),
+    [{ taskId: "bo2tv2q14", summary: "Wait 25 seconds then write marker file" }],
+  );
+  // The plain system event is still there for the chat stream.
+  assert.ok(events.some((e) => e.type === "system" && (e.data as { subtype: string }).subtype === "task_notification"));
+});
+
+test("claude stream parser ignores a background task that completed", () => {
+  const line = { type: "system", subtype: "task_notification", task_id: "t1", status: "completed", summary: "done" };
+  const events = claudeProvider.parseStreamLine(JSON.stringify(line));
+  assert.ok(!events.some((e) => e.type === "background_task_stopped"));
+});
+
 // ---------------------------------------------------------------------------
 // Codex
 // ---------------------------------------------------------------------------

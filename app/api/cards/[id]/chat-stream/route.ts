@@ -36,6 +36,7 @@ import {
 } from "@/lib/ai/prompt-builder";
 import { testScenariosToMarkdown } from "@/lib/markdown";
 import { mcpServerKey } from "@/lib/platform/mcp-tool-names";
+import type { StoppedBackgroundTask } from "@/lib/platform/types";
 
 function processMentions(
   message: string,
@@ -258,6 +259,11 @@ function isTestActionFor(sectionType: string, status: string): boolean {
   let streamSessionId: string | null = null;
   let stderrBuffer = "";
   const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+  // Background tasks the CLI stopped after the turn's result: the exit took
+  // them down, so whatever they were meant to report never arrives (IDE-392).
+  // One stopped before the result was the model's own TaskStop and is skipped.
+  let sawResult = false;
+  const strandedTasks: StoppedBackgroundTask[] = [];
 
   // Gemini emits each chunk as a full snapshot of the *current* message; when
   // the assistant starts a new message after a tool call, the next snapshot
@@ -472,6 +478,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
                   sendEvent("tool_result", event.data);
                   break;
                 case "result": {
+                  sawResult = true;
                   const resultText = String(event.data);
                   if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
                     fullResponse += (fullResponse ? '\n' : '') + resultText;
@@ -481,6 +488,9 @@ function isTestActionFor(sectionType: string, status: string): boolean {
                 }
                 case "system":
                   sendEvent("system", event.data);
+                  break;
+                case "background_task_stopped":
+                  if (sawResult) strandedTasks.push(event.data as StoppedBackgroundTask);
                   break;
                 case "session_id":
                   if (!streamSessionId) {
@@ -524,6 +534,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
                   sendEvent("tool_use", event.data);
                   break;
                 case "result": {
+                  sawResult = true;
                   const resultText = String(event.data);
                   if (resultText.trim() && !fullResponse.includes(resultText.trim())) {
                     fullResponse += (fullResponse ? '\n' : '') + resultText;
@@ -535,6 +546,10 @@ function isTestActionFor(sectionType: string, status: string): boolean {
                   if (!streamSessionId) {
                     streamSessionId = String(event.data);
                   }
+                  break;
+                // Usually the very last line, so it often lands here.
+                case "background_task_stopped":
+                  if (sawResult) strandedTasks.push(event.data as StoppedBackgroundTask);
                   break;
               }
             }
@@ -564,6 +579,8 @@ function isTestActionFor(sectionType: string, status: string): boolean {
             streamSessionId = null;
             stderrBuffer = "";
             toolCalls.length = 0;
+            sawResult = false;
+            strandedTasks.length = 0;
             runSpawn("fresh");
             return;
           }
@@ -642,7 +659,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
             console.error("[chat-stream] session management error:", sessionMgmtError);
           }
 
-          sendEvent("close", { code, messageId: assistantMessageId });
+          sendEvent("close", { code, messageId: assistantMessageId, strandedTasks });
           completeLiveStream(bufferKey);
           if (!isClosed) {
             isClosed = true;

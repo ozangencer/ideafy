@@ -1,4 +1,4 @@
-import type { StreamEvent } from "../types";
+import type { StoppedBackgroundTask, StreamEvent } from "../types";
 
 /**
  * Parse a single line of Claude Code `stream-json` output into zero or more
@@ -57,6 +57,20 @@ export function parseClaudeStreamLine(line: string): StreamEvent[] {
     // Non-init system notices (e.g. rate limit hints).
     if (json.type === "system" && json.subtype && json.subtype !== "init") {
       events.push({ type: "system", data: { subtype: json.subtype, message: json.message } });
+    }
+
+    // A background task the CLI stopped. Only the caller knows whether that
+    // happened inside the turn or at exit, so it gets no verdict here.
+    if (
+      json.type === "system" &&
+      json.subtype === "task_notification" &&
+      (json.status === "stopped" || json.status === "killed")
+    ) {
+      const task: StoppedBackgroundTask = {
+        taskId: String(json.task_id ?? ""),
+        summary: String(json.summary ?? ""),
+      };
+      events.push({ type: "background_task_stopped", data: task });
     }
 
     return events;

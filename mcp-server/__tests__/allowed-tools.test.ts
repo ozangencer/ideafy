@@ -62,3 +62,22 @@ test("skipPermissions drops the allow-list", () => {
   });
   assert.ok(!args.includes("--allowedTools"));
 });
+
+/**
+ * A chat turn is its own `-p`: background work it leaves running is stopped at
+ * exit (IDE-392), so the wait tools are denied on every turn, resumed or not.
+ */
+function disallowedTools(args: string[]): string[] {
+  const flags = args.filter((a) => a === "--disallowedTools");
+  assert.equal(flags.length, 1, "one --disallowedTools flag");
+  return args[args.indexOf("--disallowedTools") + 1].split(",");
+}
+
+test("a chat turn denies the background wait tools, resumed too", () => {
+  for (const extra of [{}, { resumeSessionId: "abc" }]) {
+    const denied = disallowedTools(claudeProvider.buildStreamArgs({ prompt: "hi", ...extra }));
+    assert.ok(denied.includes("Monitor"));
+    assert.ok(denied.includes("ScheduleWakeup"));
+    assert.ok(!denied.includes("Edit"));
+  }
+});

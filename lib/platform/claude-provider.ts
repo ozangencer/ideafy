@@ -204,6 +204,10 @@ class ClaudeProvider implements PlatformProvider {
     if (opts.skipPermissions) {
       args.push("--dangerously-skip-permissions");
     }
+    // A chat turn is a `-p` too: whatever it leaves waiting in the background
+    // is stopped when the turn ends (IDE-392), so the wait tools go on every
+    // turn, resumed ones included.
+    args.push("--disallowedTools", AUTONOMOUS_DISALLOWED_TOOLS.join(","));
 
     if (opts.resumeSessionId) {
       args.push("--resume", opts.resumeSessionId);

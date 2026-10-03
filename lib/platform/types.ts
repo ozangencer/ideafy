@@ -123,8 +123,18 @@ export interface StreamEvent {
   // accumulated snapshot (Gemini emits the full message-so-far on every
   // chunk) and the consumer must overwrite, not append, to avoid quadratic
   // duplication when chunks pile up.
-  type: "text" | "text_replace" | "thinking" | "tool_use" | "tool_result" | "result" | "system" | "session_id";
+  type: "text" | "text_replace" | "thinking" | "tool_use" | "tool_result" | "result" | "system" | "session_id" | "background_task_stopped";
   data: unknown;
+}
+
+/**
+ * `background_task_stopped` data: a background task (Bash or Agent with
+ * `run_in_background`) the CLI stopped. After the turn's `result` it means the
+ * process exit took it down and nothing will report back (IDE-392).
+ */
+export interface StoppedBackgroundTask {
+  taskId: string;
+  summary: string;
 }
 
 export type Result = { success: boolean; error?: string };
