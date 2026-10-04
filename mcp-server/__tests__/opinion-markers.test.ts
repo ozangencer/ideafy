@@ -188,3 +188,38 @@ test("save_opinion writes verdict, score, priority and complexity from one opini
   saveOpinion(db, { id: "c1", html: "<p/>", source: "## Concerns\n\n- Unclear.", now: "t3" });
   assert.deepEqual(read(), { ai_verdict: null, ai_score: null, priority: "high", complexity: "high" });
 });
+
+// The card modal's hand edit goes through the app's PUT route, which used to
+// store the HTML and leave verdict and score as they were — an opinion
+// rewritten from yes to no kept its green badge. opinionEditFields is what the
+// route reads now: only a marker the edit changed moves its field.
+import * as cardOpsNs from "../../lib/card-ops";
+const { opinionEditFields } = interop(cardOpsNs);
+
+const html = (verdict: string, score: number, priority = "medium") =>
+  `<h2>Summary Verdict</h2><p>[VERDICT: ${verdict}] Fine.</p>` +
+  `<h2>Priority</h2><p>[PRIORITY: ${priority}]</p>` +
+  `<h2>Final Score</h2><p>[SCORE: ${score}/10]</p>`;
+
+test("opinionEditFields: a changed verdict and score move their fields", () => {
+  assert.deepEqual(opinionEditFields(html("yes", 8), html("no", 3)), { verdict: "negative", score: 3 });
+});
+
+test("opinionEditFields: an edit that leaves the markers alone changes nothing", () => {
+  const before = html("yes", 8);
+  assert.deepEqual(opinionEditFields(before, before.replace("Fine.", "Fine, with one caveat.")), {});
+});
+
+test("opinionEditFields: a removed verdict clears it, a removed priority keeps the card's", () => {
+  const before = html("yes", 8, "high");
+  const after = before.replace("[VERDICT: yes] ", "").replace("[PRIORITY: high]", "");
+  assert.deepEqual(opinionEditFields(before, after), { verdict: null });
+});
+
+test("opinionEditFields: a changed priority marker moves priority", () => {
+  assert.deepEqual(opinionEditFields(html("yes", 8, "low"), html("yes", 8, "high")), { priority: "high" });
+});
+
+test("opinionEditFields: an old opinion with no markers keeps its verdict on a typo fix", () => {
+  assert.deepEqual(opinionEditFields("<p>Looks good.</p>", "<p>Looks good!</p>"), {});
+});

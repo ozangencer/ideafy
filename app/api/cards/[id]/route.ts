@@ -5,7 +5,7 @@ import { Card } from "@/lib/types";
 import { trashCard } from "@/lib/card-trash";
 import { QUEUE_CLEARING_STATUSES } from "@/lib/card-queue";
 import { parseOutputPaths } from "@/lib/output-paths";
-import { completedAtFor } from "@/lib/card-ops";
+import { completedAtFor, isStatus, opinionEditFields } from "@/lib/card-ops";
 import {
   ensureHtml,
   ensureTestScenariosHtml,
@@ -97,6 +97,15 @@ export async function PUT(
     body.title = trimmedTitle;
   }
 
+  // A status that is not a column would take the card off every column of
+  // the board. move_card, update_card and create_card refuse it the same way.
+  if (body.status != null && !isStatus(body.status)) {
+    return NextResponse.json(
+      { error: `"${body.status}" is not a column` },
+      { status: 400 }
+    );
+  }
+
   const now = new Date().toISOString();
   const baseUpdatedAt =
     typeof body.baseUpdatedAt === "string" ? body.baseUpdatedAt : null;
@@ -167,17 +176,38 @@ export async function PUT(
     }
   }
 
+  // An opinion edited by hand is read like one written by Evaluate, Apply or
+  // save_opinion (lib/opinion-markers.ts): a marker the edit changed moves its
+  // field. A value the request sets explicitly still wins — the verdict a
+  // caller sends, or a priority/complexity the user changed in the dropdown
+  // (the modal's Save sends both on every save, so "explicit" means "differs
+  // from the stored value").
+  const nextOpinion = body.aiOpinion !== undefined ? ensureHtml(body.aiOpinion) : existing.aiOpinion;
+  const edited = body.aiOpinion !== undefined ? opinionEditFields(existing.aiOpinion, nextOpinion ?? "") : {};
+  const pickedByHand = (field: "priority" | "complexity") =>
+    body[field] !== undefined && body[field] !== existing[field];
+
   const updatedCard = {
     title: body.title ?? existing.title,
     description: body.description !== undefined ? ensureHtml(body.description) : existing.description,
     solutionSummary: body.solutionSummary !== undefined ? ensureHtml(body.solutionSummary) : existing.solutionSummary,
     testScenarios: resolvedTestScenarios,
-    aiOpinion: body.aiOpinion !== undefined ? ensureHtml(body.aiOpinion) : existing.aiOpinion,
-    aiVerdict: body.aiVerdict !== undefined ? body.aiVerdict : existing.aiVerdict,
-    aiScore: body.aiScore !== undefined ? (typeof body.aiScore === "number" ? body.aiScore : null) : existing.aiScore,
+    aiOpinion: nextOpinion,
+    aiVerdict:
+      body.aiVerdict !== undefined
+        ? body.aiVerdict
+        : "verdict" in edited ? edited.verdict ?? null : existing.aiVerdict,
+    aiScore:
+      body.aiScore !== undefined
+        ? (typeof body.aiScore === "number" ? body.aiScore : null)
+        : "score" in edited ? edited.score ?? null : existing.aiScore,
     status: body.status ?? existing.status,
-    complexity: body.complexity ?? existing.complexity,
-    priority: body.priority ?? existing.priority,
+    complexity: pickedByHand("complexity")
+      ? body.complexity
+      : edited.complexity ?? body.complexity ?? existing.complexity,
+    priority: pickedByHand("priority")
+      ? body.priority
+      : edited.priority ?? body.priority ?? existing.priority,
     projectFolder: body.projectFolder ?? existing.projectFolder,
     projectId: newProjectId,
     // `null` is a meaningful value here (leave the group), so an explicit

@@ -81,3 +81,27 @@ export function saveOpinion(
     complexity: row?.complexity ?? null,
   };
 }
+
+/**
+ * What a hand edit of an opinion (the card modal, through the app's PUT
+ * route) changes on the card. Only a field whose marker the edit actually
+ * changed is returned: rewriting [VERDICT: yes] to [VERDICT: no] moves the
+ * verdict, deleting it clears the verdict, and fixing a typo elsewhere leaves
+ * every field alone — including a verdict an older opinion only got through
+ * save_opinion's fallback, which no marker in the text would reproduce.
+ *
+ * Priority and complexity are NOT NULL, so a removed marker keeps the value.
+ */
+export function opinionEditFields(
+  previous: string | null,
+  next: string
+): Partial<SavedOpinionFields> {
+  const before = parseOpinionMarkers(previous ?? "");
+  const after = parseOpinionMarkers(next);
+  const changed: Partial<SavedOpinionFields> = {};
+  if (after.verdict !== before.verdict) changed.verdict = after.verdict;
+  if (after.score !== before.score) changed.score = after.score;
+  if (after.priority !== before.priority && after.priority) changed.priority = after.priority;
+  if (after.complexity !== before.complexity && after.complexity) changed.complexity = after.complexity;
+  return changed;
+}

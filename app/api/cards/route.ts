@@ -5,7 +5,7 @@ import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml, ensureTestScenariosHtml } from "@/lib/markdown";
 import { parseOutputPaths } from "@/lib/output-paths";
-import { completedAtOnCreate } from "@/lib/card-ops";
+import { completedAtOnCreate, isStatus } from "@/lib/card-ops";
 
 // Processing timeout in milliseconds (30 minutes)
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
@@ -74,6 +74,13 @@ export async function POST(request: NextRequest) {
   if (!title) {
     return NextResponse.json(
       { error: "Title is required" },
+      { status: 400 }
+    );
+  }
+
+  if (body.status && !isStatus(body.status)) {
+    return NextResponse.json(
+      { error: `"${body.status}" is not a column` },
       { status: 400 }
     );
   }

@@ -22,4 +22,9 @@ export {
   statusAfterTests,
   type MoveCardResult,
 } from "./move-card";
-export { saveOpinion, type SaveOpinionResult, type SavedOpinionFields } from "./save-opinion";
+export {
+  saveOpinion,
+  opinionEditFields,
+  type SaveOpinionResult,
+  type SavedOpinionFields,
+} from "./save-opinion";
