@@ -139,7 +139,7 @@ test("run queue: a pre-verify ahead leaves no diff to share", () => {
   assert.equal(sharedWorkingCopyWith(run("self", false, "p1", "verify"), [run("a", false)])?.id, "a");
 });
 
-type LiveKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix";
+type LiveKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix" | "tests-chat";
 const live = (id: string, runsInWorktree: boolean, kind: LiveKind = "implementation", projectId: string | null = "p1") => ({
   id,
   projectId,
@@ -153,6 +153,16 @@ test("run conflict: two runs on main in one project collide", () => {
   assert.equal(conflictingLiveRun(live("self", false, "verify"), [live("a", false)])?.id, "a");
   assert.equal(conflictingLiveRun(live("self", false), [live("a", false, "quick-fix")])?.id, "a");
   assert.equal(conflictingLiveRun(live("self", false, "quick-fix"), [live("a", false, "retest")])?.id, "a");
+});
+
+test("run conflict: a Tests chat answering on main counts as a run", () => {
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", false, "tests-chat")])?.id, "a");
+  assert.equal(conflictingLiveRun(live("self", false, "quick-fix"), [live("a", false, "tests-chat")])?.id, "a");
+  assert.equal(conflictingLiveRun(live("self", false, "verify"), [live("a", false, "tests-chat")])?.id, "a");
+  // A run in its own worktree still goes ahead next to it, and a chat in its
+  // card's worktree leaves main alone.
+  assert.equal(conflictingLiveRun(live("self", true), [live("a", false, "tests-chat")]), null);
+  assert.equal(conflictingLiveRun(live("self", false), [live("a", true, "tests-chat")]), null);
 });
 
 test("run conflict: a worktree on either side keeps them apart", () => {

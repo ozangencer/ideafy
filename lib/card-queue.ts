@@ -120,8 +120,11 @@ export function sharedWorkingCopyWith<T extends WorkingCopyRun>(self: WorkingCop
   return null;
 }
 
-/** What a live or about-to-start run does in its folder. */
-export type LiveRunKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix";
+/**
+ * What a live or about-to-start run does in its folder. `tests-chat` is a
+ * Tests tab chat with write access answering right now.
+ */
+export type LiveRunKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix" | "tests-chat";
 
 /** A running or about-to-start run, as far as sharing a folder at once goes. */
 export interface FolderRun {
@@ -146,6 +149,14 @@ export function conflictingLiveRun<T extends FolderRun>(self: FolderRun, live: T
     if (other.projectId === self.projectId) return other;
   }
   return null;
+}
+
+/** Why a Tests chat turn may read but not edit right now. */
+export interface ChatWriteBlock {
+  conflictCardId: string;
+  message: string;
+  /** Pausing the queue is part of getting write access back. */
+  pausable: boolean;
 }
 
 /** GET /api/queue. */

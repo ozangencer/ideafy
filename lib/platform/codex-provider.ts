@@ -113,10 +113,13 @@ class CodexProvider implements PlatformProvider {
     // `--full-auto` allows shell commands but still prompts for MCP tool
     // approvals in non-interactive exec. When the caller opts into
     // skipPermissions (e.g. test runs that need MCP), bypass approvals fully.
-    const automationFlag = opts.skipPermissions
+    // Read-only goes through the sandbox, which `exec resume` cannot take, so
+    // a resumed read-only turn is only as read-only as --full-auto.
+    const bypass = opts.skipPermissions && !opts.readOnly;
+    const automationFlag = bypass
       ? "--dangerously-bypass-approvals-and-sandbox"
       : "--full-auto";
-    const sandboxArgs = opts.skipPermissions ? [] : ["--sandbox", "read-only"];
+    const sandboxArgs = bypass ? [] : ["--sandbox", "read-only"];
     const dirArgs = opts.addDirs?.flatMap((dir) => ["--add-dir", dir]) ?? [];
 
     if (opts.resumeSessionId) {

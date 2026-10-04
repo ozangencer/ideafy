@@ -42,6 +42,11 @@ export interface StreamOptions {
   prompt: string;
   allowedTools?: string[];
   skipPermissions?: boolean;
+  /**
+   * Answer without touching files: a Tests chat turn whose folder a run or the
+   * queue holds. It keeps its other tools, the Ideafy MCP among them.
+   */
+  readOnly?: boolean;
   addDirs?: string[];
   resumeSessionId?: string;
   newSessionId?: string;

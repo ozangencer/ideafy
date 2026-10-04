@@ -4,6 +4,15 @@ import { mcpServerKey } from "../platform/mcp-tool-names";
 export type AllowedToolsMention = { type: string; id: string; label: string };
 
 /**
+ * The Tests tab on a card past planning runs with every permission, so it gets
+ * no allow-list. Asked to fix something, it writes, in the card's worktree or
+ * else the project folder, and the run queue counts it as a run for that reason.
+ */
+export function isTestActionFor(sectionType: string, status: string): boolean {
+  return sectionType === "tests" && ["progress", "test", "completed"].includes(status);
+}
+
+/**
  * The `--allowedTools` list for a chat-stream spawn: read-only file tools plus
  * whatever the referenced MCP servers may be asked for in this section.
  */

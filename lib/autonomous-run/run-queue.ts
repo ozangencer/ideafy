@@ -19,12 +19,14 @@ import { infrastructureRunError } from "@/lib/run-error";
 import {
   conflictingLiveRun,
   sharedWorkingCopyWith,
+  type ChatWriteBlock,
   type LiveRunKind,
   type QueueOverlap,
   type QueueSnapshot,
 } from "@/lib/card-queue";
 import { extractPlanFiles, sharedPlanFiles } from "@/lib/plan-files";
 import { shouldUseWorktree } from "@/lib/workspace";
+import { isTestActionFor } from "@/lib/ai/allowed-tools";
 import type { VerifyScope } from "@/lib/test-progress";
 
 /**
@@ -57,6 +59,12 @@ interface RunQueueState {
   inFlight: Set<string>;
   /** The card the queue itself launched last, while it runs. */
   queueStartedCardId: string | null;
+  /**
+   * Tests chat turns started read-only, card id → turn id. They cannot write,
+   * so they do not hold the queue. The turn id keeps an old turn's late close
+   * from clearing the flag of the turn that replaced it.
+   */
+  readOnlyChats: Map<string, string>;
   initialized: boolean;
 }
 
@@ -70,11 +78,14 @@ function queueState(): RunQueueState {
       consecutiveFailures: 0,
       advancing: false,
       inFlight: new Set(),
+      readOnlyChats: new Map(),
       queueStartedCardId: null,
       initialized: false,
     };
   }
   const state = g.__kanban_runQueue;
+  // A dev server keeps the object across reloads, from before the field.
+  state.readOnlyChats ??= new Map();
   if (!state.initialized) {
     state.initialized = true;
     // Cards still queued from a previous session: say so, and wait for Resume
@@ -165,8 +176,9 @@ export function restoreQueue(
 // ============================================================================
 
 /**
- * Card ids with a code-writing run going right now: autonomous or quick fix.
- * Evaluate and chat write no code, so the queue does not wait for them.
+ * Card ids with a code-writing run going right now: autonomous, quick fix, or
+ * a Tests tab chat with write access. Evaluate and the other chat tabs are
+ * read-only, so the queue does not wait for them.
  */
 function runningCardIds(): Set<string> {
   const ids = new Set(queueState().inFlight);
@@ -174,6 +186,20 @@ function runningCardIds(): Set<string> {
     if ((p.processType === "autonomous" || p.processType === "quick-fix") && p.status === "running") {
       ids.add(p.cardId);
     }
+  }
+  for (const id of testsChatCardIds()) ids.add(id);
+  return ids;
+}
+
+/** Cards whose Tests tab chat is answering right now with every permission. */
+function testsChatCardIds(): Set<string> {
+  const ids = new Set<string>();
+  const readOnly = queueState().readOnlyChats;
+  for (const p of getAllProcesses()) {
+    if (p.processType !== "chat" || p.sectionType !== "tests" || p.status !== "running") continue;
+    if (readOnly.has(p.cardId)) continue;
+    const row = getRow(p.cardId);
+    if (row && isTestActionFor("tests", row.status)) ids.add(p.cardId);
   }
   return ids;
 }
@@ -228,7 +254,8 @@ function liveKindOf(row: QueueRow): LiveRunKind {
  */
 function runsInWorktree(row: QueueRow, kind: LiveRunKind = liveKindOf(row)): boolean {
   const activeWorktree = !!row.gitWorktreePath && row.gitWorktreeStatus === "active";
-  if (kind === "verify") return activeWorktree;
+  // A Tests chat, like a pre-verify, works in the card's active worktree.
+  if (kind === "verify" || kind === "tests-chat") return activeWorktree;
   if (kind === "planning") return false;
   const useWorktree = shouldUseWorktree(
     { useWorktree: row.useWorktree },
@@ -255,22 +282,71 @@ export interface RunConflict {
  * Synchronous on purpose: the caller checks and marks itself in flight in the
  * same tick, so a second request cannot slip in between.
  */
+function folderRun(row: QueueRow, kind: LiveRunKind = liveKindOf(row)) {
+  return { ...row, kind, runsInWorktree: runsInWorktree(row, kind) };
+}
+
+function liveFolderRuns() {
+  const chats = testsChatCardIds();
+  // A card with both a run and a chat going: the chat is the one on main.
+  return runningRows().map((row) => folderRun(row, chats.has(row.id) ? "tests-chat" : undefined));
+}
+
 export function runConflictFor(cardId: string, kind?: "quick-fix"): RunConflict | null {
   const self = getRow(cardId);
   if (!self) return null;
-  const toRun = (row: QueueRow, runKind: LiveRunKind = liveKindOf(row)) => ({
-    ...row,
-    kind: runKind,
-    runsInWorktree: runsInWorktree(row, runKind),
-  });
-  const other = conflictingLiveRun(
-    toRun(self, kind ?? detectPhase(self)),
-    runningRows().map((row) => toRun(row))
-  );
+  const other = conflictingLiveRun(folderRun(self, kind ?? detectPhase(self)), liveFolderRuns());
   if (!other) return null;
-  const where = other.id === queueState().queueStartedCardId ? "from the queue in the same folder" : "in the same folder";
+  const what =
+    other.kind === "tests-chat"
+      ? `${displayIdOf(other)}'s Tests chat is working in the same folder.`
+      : other.id === queueState().queueStartedCardId
+        ? `${displayIdOf(other)} is running from the queue in the same folder.`
+        : `${displayIdOf(other)} is running in the same folder.`;
   const then = kind === "quick-fix" ? "Wait for it to finish." : "Wait for it, or use Add to queue.";
-  return { conflictCardId: other.id, error: `${displayIdOf(other)} is running ${where}. ${then}` };
+  return { conflictCardId: other.id, error: `${what} ${then}` };
+}
+
+/**
+ * Whether a Tests chat on `cardId` may edit this turn. Not while a live run
+ * works in the same folder, and not while the armed queue has a card waiting
+ * for that folder either: the queue goes first, and Pause is how you take the
+ * folder back. A chat in its card's own worktree is never held back. Such a
+ * turn still answers; it only loses the tools that write.
+ */
+export function testsChatWriteBlock(cardId: string): ChatWriteBlock | null {
+  const self = getRow(cardId);
+  if (!self || !isTestActionFor("tests", self.status)) return null;
+  const chat = folderRun(self, "tests-chat");
+  const live = conflictingLiveRun(chat, liveFolderRuns());
+  const waiting = queueState().armed
+    ? listQueueRows().find((row) => conflictingLiveRun(chat, [folderRun(row, kindOf(row))]))
+    : undefined;
+
+  if (live) {
+    const name = displayIdOf(live);
+    if (waiting) {
+      return {
+        conflictCardId: live.id,
+        pausable: true,
+        message: `Read-only: ${name} is running on main and the queue has more waiting. Pause the queue and let ${name} finish to let this chat edit.`,
+      };
+    }
+    const who = live.kind === "tests-chat" ? `${name}'s Tests chat is working` : `${name} is running`;
+    return {
+      conflictCardId: live.id,
+      pausable: false,
+      message: `Read-only: ${who} on main. This chat can edit again once it finishes.`,
+    };
+  }
+  if (waiting) {
+    return {
+      conflictCardId: waiting.id,
+      pausable: true,
+      message: `Read-only: the queue is running on main (${displayIdOf(waiting)} is next). Pause it to let this chat edit.`,
+    };
+  }
+  return null;
 }
 
 /**
@@ -436,6 +512,24 @@ export function beginTrackedStart(cardId: string): () => void {
     if (state.queueStartedCardId === cardId) state.queueStartedCardId = null;
     scheduleAdvance();
   };
+}
+
+/** A Tests chat turn starting; a read-only one is kept from holding the queue. */
+export function onTestsChatStarted(cardId: string, turnId: string, readOnly: boolean): void {
+  const chats = queueState().readOnlyChats;
+  if (readOnly) chats.set(cardId, turnId);
+  else chats.delete(cardId);
+}
+
+/**
+ * A Tests chat turn ended. One with write access held the queue while it
+ * answered, like a manual run, but reports to nothing else, so the queue gets
+ * its chance to move on here.
+ */
+export function onTestsChatEnded(cardId: string, turnId: string): void {
+  const chats = queueState().readOnlyChats;
+  if (chats.get(cardId) === turnId) chats.delete(cardId);
+  scheduleAdvance();
 }
 
 function hasLiveRun(): boolean {

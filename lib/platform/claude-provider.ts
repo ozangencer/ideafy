@@ -22,6 +22,9 @@ import { buildMcpInvocation } from "./mcp-invocation";
 import { IDEAFY_MCP_SERVER } from "./mcp-tool-names";
 
 /** Tools an autonomous `claude -p` run cannot use to any effect; see buildAutonomousArgs. */
+/** Everything that writes to the folder; Bash because a shell writes too. */
+const READ_ONLY_DISALLOWED_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"];
+
 export const AUTONOMOUS_DISALLOWED_TOOLS = [
   "Monitor",
   "ScheduleWakeup",
@@ -206,8 +209,12 @@ class ClaudeProvider implements PlatformProvider {
     }
     // A chat turn is a `-p` too: whatever it leaves waiting in the background
     // is stopped when the turn ends (IDE-392), so the wait tools go on every
-    // turn, resumed ones included.
-    args.push("--disallowedTools", AUTONOMOUS_DISALLOWED_TOOLS.join(","));
+    // turn, resumed ones included. Read-only write denials share the flag;
+    // they are denied by name rather than narrowed to an allow-list, so a
+    // read-only Tests turn can still save results through the Ideafy MCP.
+    const disallowed: string[] = [...AUTONOMOUS_DISALLOWED_TOOLS];
+    if (opts.readOnly) disallowed.push(...READ_ONLY_DISALLOWED_TOOLS);
+    args.push("--disallowedTools", disallowed.join(","));
 
     if (opts.resumeSessionId) {
       args.push("--resume", opts.resumeSessionId);

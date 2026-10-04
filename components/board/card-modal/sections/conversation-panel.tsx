@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useKanbanStore } from "@/lib/store";
 import { parseTestScenarios } from "./conversation-panel/parse-test-scenarios";
 import { useAutoScrollToBottom } from "./conversation-panel/use-auto-scroll-to-bottom";
+import { TestsChatReadOnlyNotice } from "./conversation-panel/tests-chat-read-only-notice";
 import { BackgroundStopNotice } from "./conversation-panel/background-stop-notice";
 import {
   DialogScenario,
@@ -303,6 +304,7 @@ export function ConversationPanel({
 
       {/* Input */}
       <div className="border-t border-border/50 p-3 bg-surface/30">
+        {sectionType === "tests" && <TestsChatReadOnlyNotice cardId={cardId} />}
         <ConversationInput
           cardId={cardId}
           sectionType={sectionType}

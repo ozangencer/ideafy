@@ -90,3 +90,12 @@ test("a chat turn denies the background wait tools, resumed too", () => {
     assert.ok(!denied.includes("Edit"));
   }
 });
+
+test("a read-only Tests turn shares the flag with the write denials", () => {
+  const denied = disallowedTools(
+    claudeProvider.buildStreamArgs({ prompt: "hi", skipPermissions: true, readOnly: true }),
+  );
+  assert.ok(denied.includes("Monitor"));
+  assert.ok(denied.includes("Edit"));
+  assert.ok(denied.includes("Bash"));
+});

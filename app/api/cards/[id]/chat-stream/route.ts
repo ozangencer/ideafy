@@ -38,6 +38,8 @@ import { testScenariosToMarkdown } from "@/lib/markdown";
 import { materializeArtifactFences } from "@/lib/artifact-links";
 import { mcpServerKey } from "@/lib/platform/mcp-tool-names";
 import type { StoppedBackgroundTask } from "@/lib/platform/types";
+import { isTestActionFor } from "@/lib/ai/allowed-tools";
+import { onTestsChatEnded, onTestsChatStarted, testsChatWriteBlock } from "@/lib/autonomous-run/run-queue";
 
 function processMentions(
   message: string,
@@ -131,11 +133,6 @@ export async function POST(
     }
   }
 
-  // The Tests tab on a card past planning runs with every permission, so it gets
-// no allow-list.
-function isTestActionFor(sectionType: string, status: string): boolean {
-  return sectionType === "tests" && ["progress", "test", "completed"].includes(status);
-}
 
 // Read narrative content for opinion section
   if (sectionType === "opinion" && projectFolderPath) {
@@ -243,9 +240,27 @@ function isTestActionFor(sectionType: string, status: string): boolean {
     const { cleanContent, savedImages } = extractConversationImages(content, cardId, msgIndex);
     return { cleanContent, imageRefs: generateImageReferences(savedImages) };
   });
-  const fullPrompt = `${systemPrompt}${conversationContext}\n\nUser: ${userMessage}`;
+  // While a run or the armed queue holds this folder the turn still answers,
+  // without the tools that write. The model hears why, so it can say so.
+  const writeBlock = isTestActionFor(sectionType, card.status) ? testsChatWriteBlock(cardId) : null;
+  const readOnlyNote = writeBlock
+    ? `[This turn is read-only. ${writeBlock.message} Editing tools and Bash are switched off: if a change is needed, describe it and say so.]\n\n`
+    : "";
+  const fullPrompt = `${systemPrompt}${conversationContext}\n\n${readOnlyNote}User: ${userMessage}`;
 
-  const cwd = projectPath || process.cwd();
+  // A Tests chat with write access works where the card's code is: its own
+  // worktree while that is active, so a fix asked for while testing a branch
+  // lands on that branch and not on main. Every other chat reads, and reads
+  // the project folder. A session started in the other folder fails to resume
+  // and takes the fresh-retry path below.
+  const cardWorktree =
+    isTestActionFor(sectionType, card.status) &&
+    card.gitWorktreeStatus === "active" &&
+    card.gitWorktreePath &&
+    existsSync(card.gitWorktreePath)
+      ? card.gitWorktreePath
+      : null;
+  const cwd = cardWorktree || projectPath || process.cwd();
 
   // Kill any existing process for this card+section
   const processKey = `${cardId}-${sectionType}`;
@@ -327,6 +342,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
     ? uuidv4() : undefined;
 
   const isTestAction = isTestActionFor(sectionType, card.status);
+  if (isTestAction) onTestsChatStarted(cardId, assistantMessageId, !!writeBlock);
 
   const bufferKey = liveStreamKey(cardId, sectionType);
   startLiveStream(bufferKey);
@@ -393,9 +409,11 @@ function isTestActionFor(sectionType: string, status: string): boolean {
               resumeMessage = `[Current test scenarios state — use this, not any earlier version you remember]\n${snapshot}\n\n---\n\n${userMessage}`;
             }
           }
+          resumeMessage = `${readOnlyNote}${resumeMessage}`;
           cliArgs = provider.buildStreamArgs({
             prompt: resumeMessage,
             skipPermissions: isTestAction,
+            readOnly: !!writeBlock,
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             allowedTools,
             resumeSessionId: existingSession.cliSessionId,
@@ -412,6 +430,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
           cliArgs = provider.buildStreamArgs({
             prompt: fullPrompt,
             skipPermissions: isTestAction,
+            readOnly: !!writeBlock,
             allowedTools,
             addDirs: [tmpdir(), getCardImageDir(cardId)],
             newSessionId: freshSpawnSessionId,
@@ -603,6 +622,8 @@ function isTestActionFor(sectionType: string, status: string): boolean {
               ? describeRunError(`${provider.displayName} exited with code ${code}${signal ? ` (${signal})` : ""}: ${failureOutput}`)
               : null,
           });
+          // A Tests chat with write access held the run queue while it answered.
+          if (isTestAction) onTestsChatEnded(cardId, assistantMessageId);
 
           // Mockup blocks become files in the card folder and a link in the
           // reply, so the chat and the stored message carry the link only.
@@ -683,6 +704,7 @@ function isTestActionFor(sectionType: string, status: string): boolean {
 
         cliProcess.on("error", (error) => {
           completeProcess(processKey, "failed", { error: describeRunError(error) });
+          if (isTestAction) onTestsChatEnded(cardId, assistantMessageId);
           sendEvent("error", error.message);
           completeLiveStream(bufferKey);
           if (!isClosed) {
