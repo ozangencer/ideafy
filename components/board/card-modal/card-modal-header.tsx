@@ -132,6 +132,17 @@ export function CardModalHeader({
   const globalAiPlatformLabel =
     AI_PLATFORM_OPTIONS.find((o) => o.value === globalAiPlatform)?.label ?? globalAiPlatform;
   const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
+  const cardGroups = useKanbanStore((s) => s.cardGroups);
+  // A card cannot stay in another project's group — the server refuses the
+  // save — so moving it to a project its group is not offered in takes it out
+  // of the group in the same edit. A global group goes along.
+  const handleProjectChange = (nextProjectId: string | null) => {
+    const group = groupId ? cardGroups.find((g) => g.id === groupId) : null;
+    if (group?.projectId && nextProjectId && group.projectId !== nextProjectId) {
+      onGroupChange(null);
+    }
+    onProjectChange(nextProjectId);
+  };
   // The modal is always the selected card's. A number and a string rather than
   // the snapshot, so the 10s queue poll leaves the header alone.
   const cardId = useKanbanStore((s) => s.selectedCard?.id ?? null);
@@ -292,7 +303,7 @@ export function CardModalHeader({
           </label>
           <Select
             value={projectId || "none"}
-            onValueChange={(v) => onProjectChange(v === "none" ? null : v)}
+            onValueChange={(v) => handleProjectChange(v === "none" ? null : v)}
             disabled={isReadOnly}
           >
             <SelectTrigger className={`h-8 text-sm ${!projectId ? "border-destructive" : ""}`}>

@@ -12,6 +12,8 @@ import {
 import { PRESET_COLORS } from "@/components/sidebar/project-form/constants";
 import { CardGroupChip } from "@/components/board/card-group-chip";
 import { summarizeCardGroups } from "@/lib/card-group";
+import { DEFAULT_GROUP_COLOR } from "@/lib/card-ops/groups";
+import { toast } from "@/hooks/use-toast";
 import { useKanbanStore } from "@/lib/store";
 import type { CardGroup } from "@/lib/types";
 
@@ -92,7 +94,7 @@ export function CardGroupPicker({
   // Nullable, because a group can genuinely have no colour — the backfill
   // wrote plenty. Defaulting the swatch on the way in would repaint a chain's
   // chip on the board as a side effect of fixing a typo in its name.
-  const [newColor, setNewColor] = useState<string | null>(PRESET_COLORS[0]);
+  const [newColor, setNewColor] = useState<string | null>(DEFAULT_GROUP_COLOR);
   const [isSaving, setIsSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
@@ -173,7 +175,7 @@ export function CardGroupPicker({
     setForm(null);
     setNewCode("");
     setNewName("");
-    setNewColor(PRESET_COLORS[0]);
+    setNewColor(DEFAULT_GROUP_COLOR);
     setConfirmingDelete(false);
   };
 
@@ -185,7 +187,7 @@ export function CardGroupPicker({
   const startCreating = () => {
     setNewCode("");
     setNewName("");
-    setNewColor(PRESET_COLORS[0]);
+    setNewColor(DEFAULT_GROUP_COLOR);
     setConfirmingDelete(false);
     setForm({ mode: "create" });
   };
@@ -208,12 +210,18 @@ export function CardGroupPicker({
     setIsSaving(true);
 
     if (editing) {
-      await updateCardGroup(editing.id, {
+      const saved = await updateCardGroup(editing.id, {
         code: newCode,
         name: newName.trim() || newCode,
         color: newColor,
       });
       setIsSaving(false);
+      // The server applies the same code rules as the terminal now; a refusal
+      // keeps the form open with the user's input instead of closing on it.
+      if (!saved) {
+        toast({ title: "Couldn't save the group", variant: "destructive" });
+        return;
+      }
       // Renaming is not picking: the list comes back so the next chain can be
       // tidied in the same pass.
       closeForm();
@@ -227,7 +235,10 @@ export function CardGroupPicker({
       projectId,
     });
     setIsSaving(false);
-    if (!group) return;
+    if (!group) {
+      toast({ title: "Couldn't create the group", variant: "destructive" });
+      return;
+    }
     onChange(group.id);
     closeAll();
   };
