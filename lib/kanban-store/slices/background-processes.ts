@@ -1,4 +1,4 @@
-import { BackgroundProcess } from "../../types";
+import { BackgroundProcess, OrphanServer } from "../../types";
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
 
@@ -9,9 +9,13 @@ export const createBackgroundProcessesSlice: StoreSlice<
     | "fetchBackgroundProcesses"
     | "killBackgroundProcess"
     | "clearCompletedProcesses"
+    | "orphanServers"
+    | "fetchOrphanServers"
+    | "stopOrphanServer"
   >
 > = (set, get) => ({
   backgroundProcesses: [],
+  orphanServers: [],
 
   fetchBackgroundProcesses: async () => {
     try {
@@ -72,6 +76,37 @@ export const createBackgroundProcessesSlice: StoreSlice<
       }
     } catch (error) {
       console.error("Failed to clear completed processes:", error);
+    }
+  },
+
+  fetchOrphanServers: async (refresh = false) => {
+    try {
+      const response = await fetch(
+        `/api/cards/dev-servers/orphans${refresh ? "?refresh=1" : ""}`
+      );
+      const servers = await parseJson<OrphanServer[]>(response);
+      const next = Array.isArray(servers) ? servers : [];
+      if (JSON.stringify(next) === JSON.stringify(get().orphanServers)) return;
+      set({ orphanServers: next });
+    } catch (error) {
+      console.error("Failed to fetch orphan servers:", error);
+    }
+  },
+
+  stopOrphanServer: async (id: string) => {
+    try {
+      const response = await fetch(
+        `/api/cards/dev-servers/orphans?id=${encodeURIComponent(id)}`,
+        { method: "DELETE" }
+      );
+      const body = await parseJson<{ servers?: OrphanServer[]; error?: string }>(response);
+      // 404 means the server was already gone; either way the fresh list wins.
+      if (Array.isArray(body?.servers)) set({ orphanServers: body.servers });
+      else if (response.status === 404) await get().fetchOrphanServers(true);
+      return response.ok;
+    } catch (error) {
+      console.error("Failed to stop orphan server:", error);
+      return false;
     }
   },
 });

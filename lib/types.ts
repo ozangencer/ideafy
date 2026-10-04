@@ -619,6 +619,24 @@ export interface BackgroundProcess {
   targetColumn?: string | null; // Column the run moves the card to; null when it stays
 }
 
+// A dev server nobody owns any more (lib/orphan-servers.ts): left behind by an
+// AI verification, a terminal or an old Stop, in a scratch folder.
+export interface OrphanServer {
+  id: string;                  // pgid, or `pgid:pid` for a server in a shared group
+  pgid: number;
+  pid: number;                 // topmost process of the server
+  port: number | null;
+  memoryBytes: number | null;  // footprint incl. compressed memory; null = unreadable
+  ageSec: number;
+  cwd: string | null;
+  label: string;               // card display id, or a short folder name
+  cardId: string | null;
+  source: "registry" | "scan"; // listed by the verify-server registry, or found by the scan
+  stale: boolean;              // open longer than 12 hours
+  verifyDeadline: string | null; // verify server whose watcher still closes it at this time
+  scannedAt: string;
+}
+
 // Activity inbox: completed AI-work events that back the topbar bell.
 // Distinct from BackgroundProcess (running) — this is the persistent history.
 export type ActivityType =

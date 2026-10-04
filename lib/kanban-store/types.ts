@@ -15,6 +15,7 @@ import {
   ConversationMessage,
   DocumentFile,
   MentionData,
+  OrphanServer,
   Project,
   ProjectMode,
   ProjectSection,
@@ -205,6 +206,8 @@ export interface KanbanStore {
 
   // Background processes state
   backgroundProcesses: BackgroundProcess[];
+  // Dev servers nobody owns (lib/orphan-servers.ts), biggest first
+  orphanServers: OrphanServer[];
 
   // Run queue, as the server last reported it (null until the first poll)
   queueState: QueueSnapshot | null;
@@ -431,6 +434,10 @@ export interface KanbanStore {
   fetchBackgroundProcesses: () => Promise<void>;
   killBackgroundProcess: (processKey: string) => Promise<void>;
   clearCompletedProcesses: () => Promise<void>;
+  // refresh rescans now (rate-limited server-side) instead of reading the cache
+  fetchOrphanServers: (refresh?: boolean) => Promise<void>;
+  // Resolves true once the server is closed
+  stopOrphanServer: (id: string) => Promise<boolean>;
 
   // Run queue actions. addToQueue appends in the order given;
   // moveInQueue's null afterCardId moves the card to the front.

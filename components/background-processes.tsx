@@ -14,7 +14,8 @@ import { notifyFinishedRuns } from "@/lib/system-notifications";
 import { firstLine } from "@/lib/run-error";
 import { processBaseLabel, processRowLabel, processTimeHint } from "@/lib/process-labels";
 import { RunErrorDetails, RunErrorToggle } from "@/components/run-error-details";
-import type { BackgroundProcess, ProcessType } from "@/lib/types";
+import { OrphanServerRow } from "@/components/orphan-server-row";
+import type { BackgroundProcess, OrphanServer, ProcessType } from "@/lib/types";
 
 // Colour per process type; the row text comes from processRowLabel.
 const PROCESS_TYPE_CONFIG: Record<ProcessType, { color: string; bgColor: string }> = {
@@ -27,6 +28,12 @@ const PROCESS_TYPE_CONFIG: Record<ProcessType, { color: string; bgColor: string 
 
 // How often an open popover re-renders its elapsed / "ago" hints.
 const TIME_HINT_TICK_MS = 15000;
+
+// Orphan dev servers: scanned at launch and on this beat, not on the 10s
+// heartbeat — a scan runs ps, lsof and footprint.
+const ORPHAN_SCAN_MS = 10 * 60 * 1000;
+// Rows shown before the "n more" toggle.
+const ORPHAN_ROWS_VISIBLE = 5;
 
 function ProcessItem({
   process,
@@ -130,6 +137,9 @@ export function BackgroundProcesses() {
     selectCard,
     openModal,
     settings,
+    orphanServers,
+    fetchOrphanServers,
+    stopOrphanServer,
   } = useKanbanStore(
     useShallow((s) => ({
       backgroundProcesses: s.backgroundProcesses,
@@ -144,11 +154,17 @@ export function BackgroundProcesses() {
       selectCard: s.selectCard,
       openModal: s.openModal,
       settings: s.settings,
+      orphanServers: s.orphanServers,
+      fetchOrphanServers: s.fetchOrphanServers,
+      stopOrphanServer: s.stopOrphanServer,
     }))
   );
   const [isOpen, setIsOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [openDetailIds, setOpenDetailIds] = useState<Set<string>>(new Set());
+  const [showAllOrphans, setShowAllOrphans] = useState(false);
+  // An orphan row's confirm dialog is portalled outside the popover.
+  const [orphanConfirmOpen, setOrphanConfirmOpen] = useState(false);
   const { toast } = useToast();
 
   const toggleDetails = (id: string) => {
@@ -327,6 +343,27 @@ export function BackgroundProcesses() {
     return () => clearInterval(interval);
   }, [fetchBackgroundProcesses, fetchQueue]);
 
+  useEffect(() => {
+    fetchOrphanServers();
+    const interval = setInterval(() => fetchOrphanServers(), ORPHAN_SCAN_MS);
+    return () => clearInterval(interval);
+  }, [fetchOrphanServers]);
+
+  // Numbers the user is about to act on should be fresh, not up to 10 min old.
+  useEffect(() => {
+    if (isOpen) fetchOrphanServers(true);
+  }, [isOpen, fetchOrphanServers]);
+
+  const handleStopOrphan = async (server: OrphanServer) => {
+    const ok = await stopOrphanServer(server.id);
+    toast(
+      ok
+        ? { title: "Server closed", description: `${server.label}${server.port ? ` :${server.port}` : ""}` }
+        : { variant: "destructive", title: "Could not close server", description: server.label }
+    );
+    return ok;
+  };
+
   // Elapsed / "ago" hints only matter while someone is looking.
   useEffect(() => {
     if (!isOpen) return;
@@ -337,10 +374,15 @@ export function BackgroundProcesses() {
 
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;
+  const orphanCount = orphanServers.length;
+  const hasStaleOrphan = orphanServers.some((s) => s.stale);
+  const visibleOrphans = showAllOrphans
+    ? orphanServers
+    : orphanServers.slice(0, ORPHAN_ROWS_VISIBLE);
 
   // Don't render the button when nothing to show, but keep the component
   // mounted so polling continues.
-  if (backgroundProcesses.length === 0) {
+  if (backgroundProcesses.length === 0 && orphanCount === 0) {
     return null;
   }
 
@@ -372,15 +414,28 @@ export function BackgroundProcesses() {
               {runningCount}
             </span>
           )}
+          {/* A server open 12h+ that nobody owns */}
+          {hasStaleOrphan && (
+            <span
+              className={`absolute ${runningCount > 0 ? "-bottom-0.5" : "-top-0.5"} -right-0.5 h-2 w-2 rounded-full bg-amber-500`}
+            />
+          )}
           <span className="sr-only">Background processes</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className={`${detailsVisible ? "w-96" : "w-72"} p-0`}>
+      <PopoverContent
+        align="end"
+        className={`${detailsVisible ? "w-96" : "w-72"} p-0`}
+        onInteractOutside={(e) => {
+          if (orphanConfirmOpen) e.preventDefault();
+        }}
+      >
         <div className="p-3 border-b border-border flex items-center justify-between">
           <div>
             <h4 className="text-sm font-medium">Background Processes</h4>
             <p className="text-xs text-muted-foreground">
               {runningCount} running, {completedCount} completed
+              {orphanCount > 0 && `, ${orphanCount} orphan`}
             </p>
           </div>
           {completedCount > 0 && (
@@ -423,6 +478,34 @@ export function BackgroundProcesses() {
               onToggleDetails={() => toggleDetails(process.id)}
             />
           ))}
+          {/* Dev servers nobody owns: left by an AI verification, a terminal, an old Stop */}
+          {orphanCount > 0 && (
+            <>
+              {backgroundProcesses.length > 0 && <div className="my-2 border-t border-border" />}
+              <div className="px-1 pb-1 text-xs font-medium text-muted-foreground">
+                Orphan servers
+              </div>
+              {visibleOrphans.map((server) => (
+                <OrphanServerRow
+                  key={server.id}
+                  server={server}
+                  now={now}
+                  onStop={() => handleStopOrphan(server)}
+                  onCardClick={server.cardId ? () => handleCardClick(server.cardId!) : undefined}
+                  onConfirmOpenChange={setOrphanConfirmOpen}
+                />
+              ))}
+              {orphanCount > ORPHAN_ROWS_VISIBLE && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllOrphans((v) => !v)}
+                  className="w-full px-1 py-1.5 text-left text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {showAllOrphans ? "Show less" : `${orphanCount - ORPHAN_ROWS_VISIBLE} more`}
+                </button>
+              )}
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>
