@@ -55,8 +55,11 @@ export function ConversationInput({
   onCancel,
   placeholder = "Type a message...",
 }: ConversationInputProps) {
-  const { cards, projects, activeProjectId } = useKanbanStore(
-    useShallow((s) => ({ cards: s.cards, projects: s.projects, activeProjectId: s.activeProjectId }))
+  // No `cards` here: the card list is read from the store when the popup asks
+  // for it. A render that holds it hands it to every closure the editor keeps,
+  // and each one pins that whole list in memory long after the next fetch.
+  const { projects, activeProjectId } = useKanbanStore(
+    useShallow((s) => ({ projects: s.projects, activeProjectId: s.activeProjectId }))
   );
   const [isEmpty, setIsEmpty] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -138,7 +141,7 @@ export function ConversationInput({
   // visible when the user later opens the popup.
   const getUnifiedItemsRef = useRef(getUnifiedItems);
   const getDocumentsRef = useRef(getDocuments);
-  const cardSuggestionDataRef = useRef({ cards, projects, activeProjectId });
+  const cardSuggestionDataRef = useRef({ projects, activeProjectId });
   useLayoutEffect(() => {
     getUnifiedItemsRef.current = getUnifiedItems;
   }, [getUnifiedItems]);
@@ -146,8 +149,8 @@ export function ConversationInput({
     getDocumentsRef.current = getDocuments;
   }, [getDocuments]);
   useLayoutEffect(() => {
-    cardSuggestionDataRef.current = { cards, projects, activeProjectId };
-  }, [cards, projects, activeProjectId]);
+    cardSuggestionDataRef.current = { projects, activeProjectId };
+  }, [projects, activeProjectId]);
 
   const unifiedSuggestion = useMemo(
     () => createUnifiedSuggestion({ getItems: () => getUnifiedItemsRef.current() }),
@@ -155,7 +158,11 @@ export function ConversationInput({
   );
 
   const cardSuggestion = useMemo(
-    () => createCardSuggestion(() => cardSuggestionDataRef.current),
+    () =>
+      createCardSuggestion(() => ({
+        ...cardSuggestionDataRef.current,
+        cards: useKanbanStore.getState().cards,
+      })),
     [],
   );
 

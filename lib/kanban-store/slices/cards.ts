@@ -44,6 +44,31 @@ const createDraftCard = (status: Status, projectId: string | null, projectFolder
 const cardLabel = (card: Card | undefined) => (card?.title ? `"${card.title}"` : "card");
 
 /**
+ * The card already in the store when the server sent back the same fields.
+ * Every fetch parses the whole board afresh — plans, opinions and pasted
+ * base64 images included, ~30 MB here — so a closure that still holds an
+ * older list used to pin a full second copy of every string. Reusing
+ * unchanged cards makes such a leftover cost a few pointers, and keeps the
+ * object identity that memoized rows compare on.
+ */
+function reuseIfUnchanged(next: Card, prev: Card | undefined): Card {
+  if (!prev) return next;
+  const keys = Object.keys(next) as (keyof Card)[];
+  if (keys.length !== Object.keys(prev).length) return next;
+  for (const key of keys) {
+    const a = next[key];
+    const b = prev[key];
+    if (a === b) continue;
+    // outputPaths and the like arrive as fresh arrays on every fetch.
+    if (a && b && typeof a === "object" && typeof b === "object" && JSON.stringify(a) === JSON.stringify(b)) {
+      continue;
+    }
+    return next;
+  }
+  return prev;
+}
+
+/**
  * Cards with a run in flight can't be dragged one by one either, so a bulk
  * action leaves them alone rather than moving a card out from under its agent.
  */
@@ -134,7 +159,7 @@ export const createCardsSlice: StoreSlice<
       // so the spinner doesn't flicker off mid-run.
       const { startingCardIds, quickFixingCardIds, generatingCardIds, evaluatingCardIds, cards: prevCards } = get();
       const prevById = new Map(prevCards.map((c) => [c.id, c]));
-      const mergedCards = cards.map((serverCard) => {
+      const freshCards = cards.map((serverCard) => {
         if (serverCard.processingType) return serverCard;
         const prev = prevById.get(serverCard.id);
         if (!prev?.processingType) return serverCard;
@@ -147,6 +172,13 @@ export const createCardsSlice: StoreSlice<
         }
         return serverCard;
       });
+      const sharedCards = freshCards.map((card) => reuseIfUnchanged(card, prevById.get(card.id)));
+      // Nothing changed at all: keep the list itself too, so the board's
+      // `cards` subscribers have nothing to re-render for.
+      const mergedCards =
+        sharedCards.length === prevCards.length && sharedCards.every((card, i) => card === prevCards[i])
+          ? prevCards
+          : sharedCards;
 
       const currentSelectedCard = get().selectedCard;
       let newSelectedCard = currentSelectedCard;

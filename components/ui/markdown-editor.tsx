@@ -57,8 +57,13 @@ export function MarkdownEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const lastSelectionRef = useRef<number | null>(null);
   const lastProcessedDropRef = useRef<number | null>(null);
+  // No `cards` here: the mention popup and the hover tooltips read the card
+  // list from the store when they need it. A render that holds the list hands
+  // it to every closure TipTap keeps (onUpdate, handlePaste, node views,
+  // timers), and each one pinned a full copy of the board — 14 copies, ~1 GB,
+  // after a few hours (IDE-432).
+  const cardCount = useKanbanStore((s) => s.cards.length);
   const {
-    cards,
     projects,
     activeProjectId,
     documents,
@@ -73,7 +78,6 @@ export function MarkdownEditor({
     toolkitItems,
   } = useKanbanStore(
     useShallow((s) => ({
-      cards: s.cards,
       projects: s.projects,
       activeProjectId: s.activeProjectId,
       documents: s.documents,
@@ -214,7 +218,7 @@ export function MarkdownEditor({
   // documents) are still visible when the user later opens the popup.
   const getUnifiedItemsRef = useRef(getUnifiedItems);
   const getDocumentsRef = useRef(getDocuments);
-  const cardSuggestionDataRef = useRef({ cards, projects, activeProjectId });
+  const cardSuggestionDataRef = useRef({ projects, activeProjectId });
   useEffect(() => {
     getUnifiedItemsRef.current = getUnifiedItems;
   }, [getUnifiedItems]);
@@ -222,8 +226,8 @@ export function MarkdownEditor({
     getDocumentsRef.current = getDocuments;
   }, [getDocuments]);
   useEffect(() => {
-    cardSuggestionDataRef.current = { cards, projects, activeProjectId };
-  }, [cards, projects, activeProjectId]);
+    cardSuggestionDataRef.current = { projects, activeProjectId };
+  }, [projects, activeProjectId]);
 
   const unifiedSuggestion = useMemo(
     () => createUnifiedSuggestion({ getItems: () => getUnifiedItemsRef.current() }),
@@ -231,7 +235,11 @@ export function MarkdownEditor({
   );
 
   const cardSuggestion = useMemo(
-    () => createCardSuggestion(() => cardSuggestionDataRef.current),
+    () =>
+      createCardSuggestion(() => ({
+        ...cardSuggestionDataRef.current,
+        cards: useKanbanStore.getState().cards,
+      })),
     []
   );
 
@@ -426,7 +434,9 @@ export function MarkdownEditor({
     lastSelectionRef.current = editor.state.selection.from;
   }, [editor]);
 
-  // Setup hover tooltips for card mentions
+  // Setup hover tooltips for card mentions. cardCount stands in for the card
+  // list: a mention to a card that loaded after this editor still gets its
+  // tooltip, and the list itself stays out of this render's closures.
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -434,6 +444,7 @@ export function MarkdownEditor({
     const timeoutId = setTimeout(() => {
       const mentions = containerRef.current?.querySelectorAll(".card-mention");
       if (!mentions) return;
+      const { cards } = useKanbanStore.getState();
 
       mentions.forEach((mention) => {
         // Skip if already has tippy
@@ -498,7 +509,7 @@ export function MarkdownEditor({
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [value, cards, projects]);
+  }, [value, cardCount, projects]);
 
   // Handle card, artifact and document mention clicks
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
