@@ -1,0 +1,1 @@
+ALTER TABLE `cards` ADD `queue_verify_scope` text;

@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { openDatabase } from "../db.js";
 import { clearQueue, dequeueCard, enqueueCard, listQueueRows, queuedRunsInWorktree, type SqlDb } from "../shared.js";
+import * as cardOpsQueueNs from "../../lib/card-ops/queue";
+
+// See run-output.test.ts: lib/ modules come back through the CJS interop.
+const { restoreQueueCards } = ((cardOpsQueueNs as { default?: typeof cardOpsQueueNs }).default ?? cardOpsQueueNs);
 
 // lib/card-ops/queue.ts is the one queue the app's popover and the MCP's
 // queue tools share, so it runs on both drivers behind SqlDb: node:sqlite
@@ -101,6 +105,7 @@ for (const driver of DRIVERS) {
 // plan, IDE-505 is a Human Test card with a core flow, IDE-506 is completed.
 const PLAN = "<p>Files: lib/a.ts</p>";
 const CORE = '<h2>Temel akış</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false">x</li></ul>';
+const EDGE = '<h2>Kenar durumlar</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false">y</li></ul>';
 
 function seedFull(db: SqlDb): void {
   db.exec(`
@@ -114,6 +119,7 @@ function seedFull(db: SqlDb): void {
       test_scenarios TEXT NOT NULL DEFAULT '',
       processing_type TEXT,
       queue_position INTEGER,
+      queue_verify_scope TEXT,
       task_number INTEGER,
       use_worktree INTEGER,
       git_branch_status TEXT,
@@ -184,12 +190,31 @@ for (const driver of DRIVERS) {
     assert.deepEqual(order(db), ["c501", "c502"]);
   });
 
-  t("a pre-verify with every core item ticked is refused, one left open is queued", (db) => {
-    db.exec(`UPDATE cards SET test_scenarios = '${CORE.replace('"false"', '"true"')}' WHERE id = 'c505'`);
+  t("a pre-verify with every item ticked is refused, one left open in any group is queued", (db) => {
+    const tickedCore = CORE.replace('"false"', '"true"');
+    db.exec(`UPDATE cards SET test_scenarios = '${tickedCore}' WHERE id = 'c505'`);
     const ticked = enqueueCard(db, "c505");
-    assert.ok(!ticked.ok && ticked.reason === "ineligible" && /core flow is already ticked/.test(ticked.message));
-    db.exec(`UPDATE cards SET test_scenarios = '${CORE}' WHERE id = 'c505'`);
+    assert.ok(!ticked.ok && ticked.reason === "ineligible" && /checklist is fully ticked/.test(ticked.message));
+    db.exec(`UPDATE cards SET test_scenarios = '${tickedCore}${EDGE}' WHERE id = 'c505'`);
     assert.ok(enqueueCard(db, "c505").ok);
+  });
+
+  t("a pre-verify's scope is written on add, kept on a move, and back after a clear", (db) => {
+    const scope = () => listQueueRows(db).find((row) => row.id === "c505")?.queueVerifyScope;
+    enqueueCard(db, "c505", undefined, "all");
+    assert.equal(scope(), "all");
+    enqueueCard(db, "c505", null);
+    assert.equal(scope(), "all");
+    const cleared = clearQueue(db);
+    restoreQueueCards(db, cleared.map((c) => c.cardId));
+    assert.equal(scope(), "all");
+    // A fresh add never inherits an old stay's scope.
+    dequeueCard(db, "c505");
+    enqueueCard(db, "c505");
+    assert.equal(scope(), null);
+    // An implementation run has no scope to keep.
+    enqueueCard(db, "c503", undefined, "all");
+    assert.equal(listQueueRows(db).find((row) => row.id === "c503")?.queueVerifyScope, null);
   });
 
   t("dequeue closes the gap and says whether the card was queued", (db) => {

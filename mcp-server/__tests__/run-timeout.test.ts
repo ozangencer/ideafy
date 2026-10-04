@@ -25,6 +25,14 @@ test("run limits: implementation hard limit scales with complexity", () => {
   assert.equal(autonomousRunLimits("implementation", "very_high").hardMs, 90 * MIN);
 });
 
+test("run limits: a pre-verify of all remaining groups grows with its items, up to 90 minutes", () => {
+  assert.equal(autonomousRunLimits("verify", "high").hardMs, 30 * MIN);
+  assert.equal(autonomousRunLimits("verify", "high", 5).hardMs, 45 * MIN);
+  assert.equal(autonomousRunLimits("verify", "high", 40).hardMs, 90 * MIN);
+  // Only verify grows this way.
+  assert.equal(autonomousRunLimits("planning", null, 5).hardMs, 30 * MIN);
+});
+
 test("run limits: unknown complexity falls back to medium", () => {
   assert.equal(autonomousRunLimits("implementation", null).hardMs, 40 * MIN);
   assert.equal(autonomousRunLimits("implementation", "huge").hardMs, 40 * MIN);

@@ -2,6 +2,7 @@
 
 import { Card, Project } from "@/lib/types";
 import { PhaseActionFlags } from "@/lib/card-phase";
+import { canVerifyAllGroups, nextVerifyGroup, TestProgress, VerifyScope } from "@/lib/test-progress";
 import { useKanbanStore } from "@/lib/store";
 
 /**
@@ -19,7 +20,11 @@ export function useQueuePlace(cardId: string) {
   const kind = useKanbanStore(
     (s) => s.queueState?.items.find((item) => item.cardId === cardId)?.kind ?? null
   );
-  return { rank, kind };
+  // Same again: null unless a queued pre-verify was asked to walk everything.
+  const verifyScope = useKanbanStore(
+    (s) => s.queueState?.items.find((item) => item.cardId === cardId)?.verifyScope ?? null
+  );
+  return { rank, kind, verifyScope };
 }
 
 /**
@@ -28,18 +33,21 @@ export function useQueuePlace(cardId: string) {
  * footer both read it, so the next queue rule lands in one place instead of
  * drifting between the two surfaces.
  *
- * `flags` comes from the caller, which already computed it for its buttons.
+ * `flags` and `testProgress` come from the caller, which already computed
+ * them for its buttons.
  */
 export function useCardQueueActions({
   card,
   flags,
   project,
+  testProgress,
 }: {
   card: Card;
   flags: PhaseActionFlags;
   project: Project | undefined;
+  testProgress: TestProgress | null;
 }) {
-  const { rank, kind } = useQueuePlace(card.id);
+  const { rank, kind, verifyScope } = useQueuePlace(card.id);
   const addToQueue = useKanbanStore((s) => s.addToQueue);
   const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
 
@@ -53,6 +61,10 @@ export function useCardQueueActions({
   // No branch to pick: a pre-verify runs where the card was implemented.
   const canQueueVerify =
     flags.canRunAutonomous && flags.phase === "verify" && projectMode !== "work";
+  // The group a queued pre-verify starts with, and whether "all remaining
+  // groups" would cover more than that one. Same rule as the Start dialog.
+  const verifyGroup = canQueueVerify ? nextVerifyGroup(testProgress) : null;
+  const canQueueVerifyAll = canQueueVerify && canVerifyAllGroups(testProgress);
 
   // The card's current setting comes first, so a hover and one click still
   // queue it the way it was going to run.
@@ -65,15 +77,21 @@ export function useCardQueueActions({
   );
 
   // `ids` lets a board selection ride along; the card alone otherwise.
-  const add = (useWorktree?: boolean, ids: string[] = [card.id]) =>
-    addToQueue(ids, useWorktree === undefined ? undefined : { useWorktree });
+  const add = (useWorktree?: boolean, ids: string[] = [card.id], scope?: VerifyScope) =>
+    addToQueue(ids, {
+      ...(useWorktree === undefined ? {} : { useWorktree }),
+      ...(scope ? { verifyScope: scope } : {}),
+    });
   const remove = () => removeFromQueue(card.id);
 
   return {
     rank,
     kind,
+    verifyScope,
     canQueueImplementation,
     canQueueVerify,
+    verifyGroup,
+    canQueueVerifyAll,
     effectiveUseWorktree,
     branchChoices,
     add,

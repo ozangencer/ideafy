@@ -6,14 +6,14 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardGroup, getDisplayId, getColumns, RUN_MODE_LABELS } from "@/lib/types";
 import { CardGroupChip } from "./card-group-chip";
 import { cardLastActivityAt, formatAgeLong, getCardStaleness } from "@/lib/card-age";
-import { parseTestProgress } from "@/lib/test-progress";
+import { parseTestProgress, type VerifyScope } from "@/lib/test-progress";
 import {
   BOARD_PHASE_ACTIONS,
   getPhaseActionFlags,
   isPhaseActionShown,
 } from "@/lib/card-phase";
 import { CardPhaseActions, useCardChatRunning } from "./card-phase-actions";
-import { QUEUE_KIND_SHORT, QueuePlaceText } from "./run-queue-popover";
+import { queueKindLabel, QueuePlaceText } from "./run-queue-popover";
 import { useCardQueueActions } from "./use-card-queue-actions";
 import { useKanbanStore } from "@/lib/store";
 import { Loader2, Lightbulb, FlaskConical, ExternalLink, ArrowRightLeft, Trash2, Unlock, FileDown, FolderGit2, MonitorPlay, MonitorStop, AlertTriangle, Check, GitCommitHorizontal, ListPlus, ListVideo, ListX } from "lucide-react";
@@ -255,13 +255,16 @@ function TaskCardImpl({
   const {
     rank: queueRank,
     kind: queueKind,
+    verifyScope: queueVerifyScope,
     canQueueImplementation,
     canQueueVerify,
+    verifyGroup: queueVerifyGroup,
+    canQueueVerifyAll,
     effectiveUseWorktree,
     branchChoices: queueBranchChoices,
     add: addToQueue,
     remove: removeFromQueue,
-  } = useCardQueueActions({ card, flags: phaseFlags, project });
+  } = useCardQueueActions({ card, flags: phaseFlags, project, testProgress });
   // Waiting for the queue to start it. The moment the run is live the spinner
   // owns the card, even while the queue poll still lists it.
   const isQueued = queueRank > 0 && !isBackgroundProcessing;
@@ -275,9 +278,9 @@ function TaskCardImpl({
 
   // The choice applies to every card in a selection; the tick follows the
   // card you right-clicked, the way Change Status does.
-  const handleAddToQueue = (useWorktree?: boolean) => {
+  const handleAddToQueue = (useWorktree?: boolean, verifyScope?: VerifyScope) => {
     if (!isSelected) {
-      void addToQueue(useWorktree);
+      void addToQueue(useWorktree, undefined, verifyScope);
       return;
     }
     // Board order, the way you read it: left to right, then top to bottom.
@@ -286,7 +289,7 @@ function TaskCardImpl({
     const ordered = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
       .map((el) => el.dataset.cardId!)
       .filter((id) => selected.delete(id));
-    void addToQueue(useWorktree, [...ordered, ...Array.from(selected)]);
+    void addToQueue(useWorktree, [...ordered, ...Array.from(selected)], verifyScope);
   };
 
   const style = {
@@ -582,7 +585,7 @@ function TaskCardImpl({
                   <TooltipTrigger asChild>
                     <span className="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums px-1 py-0.5 rounded shrink-0 cursor-default bg-violet-500/10 text-violet-600 dark:text-violet-400">
                       <ListVideo className="h-3 w-3" />
-                      {queueRank} · {QUEUE_KIND_SHORT[queueKind]}
+                      {queueRank} · {queueKindLabel(queueKind, queueVerifyScope)}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top">
@@ -891,6 +894,22 @@ function TaskCardImpl({
               <ListX className="w-4 h-4 mr-2" />
               Remove from queue
             </ContextMenuItem>
+          ) : canQueueVerifyAll && queueVerifyGroup ? (
+            // Past the core flow, with more than one group left: the next
+            // group alone, or all of them in one run. A selection gets the
+            // same choice; each card works out its own groups when it starts.
+            <>
+              <ContextMenuItem onClick={() => handleAddToQueue(undefined, "next")}>
+                <ListPlus className="w-4 h-4 mr-2" />
+                <span className="truncate">Add to queue: {queueVerifyGroup.heading}</span>
+                {isSelected && <SelectionCount />}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => handleAddToQueue(undefined, "all")}>
+                <ListPlus className="w-4 h-4 mr-2" />
+                Add to queue: all remaining groups
+                {isSelected && <SelectionCount />}
+              </ContextMenuItem>
+            </>
           ) : canQueueVerify ? (
             <ContextMenuItem onClick={() => handleAddToQueue()}>
               <ListPlus className="w-4 h-4 mr-2" />

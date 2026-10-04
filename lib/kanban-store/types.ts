@@ -1,5 +1,6 @@
 import { StateCreator } from "zustand";
 import type { QueueClearResult, QueueSnapshot } from "../card-queue";
+import type { VerifyScope } from "../test-progress";
 import {
   ActivityEvent,
   AgentListItem,
@@ -372,7 +373,9 @@ export interface KanbanStore {
   renameToolkitFolder: (from: string, to: string | null) => Promise<void>;
 
   // Claude integration actions
-  startTask: (cardId: string, acknowledged?: boolean) => Promise<{ success: boolean; error?: string; warning?: string | null; stopped?: boolean }>;
+  // `verifyScope` only matters on a Human Test card: `all` pre-verifies every
+  // group with unticked items in one run instead of just the next.
+  startTask: (cardId: string, acknowledged?: boolean, verifyScope?: VerifyScope) => Promise<{ success: boolean; error?: string; warning?: string | null; stopped?: boolean }>;
   openTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openIdeationTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
   openTestTerminal: (cardId: string) => Promise<{ success: boolean; error?: string }>;
@@ -445,7 +448,9 @@ export interface KanbanStore {
   // `useWorktree` is the branch choice from the Add to queue submenu, written
   // onto each card (as an override only where it differs from its project)
   // before the card is queued. Omitted, cards keep whatever they had.
-  addToQueue: (cardIds: string[], options?: { useWorktree?: boolean }) => Promise<void>;
+  // `verifyScope` is what a queued pre-verify walks; implementation cards in
+  // the same selection ignore it.
+  addToQueue: (cardIds: string[], options?: { useWorktree?: boolean; verifyScope?: VerifyScope }) => Promise<void>;
   setQueuedCardWorktree: (cardId: string, useWorktree: boolean) => Promise<void>;
   removeFromQueue: (cardId: string) => Promise<void>;
   // Empties the queue; the result (null on failure) carries what Undo needs.

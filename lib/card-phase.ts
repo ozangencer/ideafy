@@ -18,8 +18,10 @@
  * button. Unifying them is a backend change, not a UI one.
  */
 
-import { TestProgress } from "./test-progress";
+import { nextVerifyGroup, TestGroup, TestProgress, VerifyScope } from "./test-progress";
 import { Card, ProjectMode } from "./types";
+
+export type { VerifyScope } from "./test-progress";
 
 export type Phase = "planning" | "implementation" | "retest" | "verify";
 
@@ -49,7 +51,10 @@ export function detectBoardPhase(
 
 export function getPhaseLabels(
   phase: Phase,
-  mode: ProjectMode = "development"
+  mode: ProjectMode = "development",
+  // The group the next Pre-verify press runs. Past the core flow the button
+  // names it, so the press says what it is about to walk.
+  verifyGroup: TestGroup | null = null
 ): { play: string; terminal: string } {
   // A Work card is written, not built: the same session, named for what it does.
   // Its terminal does the work even before a plan exists, so planning's
@@ -83,7 +88,10 @@ export function getPhaseLabels(
       };
     case "verify":
       return {
-        play: "Pre-verify core flow (Autonomous)",
+        play:
+          verifyGroup && !verifyGroup.core
+            ? `Pre-verify: ${verifyGroup.heading} (Autonomous)`
+            : "Pre-verify core flow (Autonomous)",
         // Human Test'te terminal, çeklisti yürüten değil çeklistin dışına çıkan
         // oturumdur: gündemi kullanıcı getirir, kartta yazmayan bir şeydir.
         terminal: "Report an Issue (Interactive)",
@@ -92,15 +100,15 @@ export function getPhaseLabels(
 }
 
 /**
- * Human Test'te otonom koşu yalnızca temel akışı doğrular. Bu grubu ilan
- * etmeyen bir çeklistte agent hangi maddenin temel olduğunu bilemez, o yüzden
- * orada buton hiç çıkmaz — çıkarsa hiçbir şey işaretlemeyen bir koşu vaat eder.
- * Temel akışın tamamı zaten işaretliyse de çıkmaz: koşu işaretli maddeleri
- * atlar, geriye yürütecek madde kalmamıştır.
+ * Human Test'te otonom koşu önce temel akışı, o bitince işaretsiz maddesi
+ * kalan sıradaki grubu doğrular. Temel akış grubunu ilan etmeyen bir çeklistte
+ * agent hangi maddenin temel olduğunu bilemez, o yüzden orada buton hiç çıkmaz
+ * — çıkarsa hiçbir şey işaretlemeyen bir koşu vaat eder. Her grup zaten
+ * işaretliyse de çıkmaz: koşu işaretli maddeleri atlar, geriye yürütecek madde
+ * kalmamıştır.
  */
 export function canPreVerify(card: Card, testProgress: TestProgress | null): boolean {
-  const core = testProgress?.core;
-  return card.status === "test" && !!core && core.checked < core.total;
+  return card.status === "test" && !!nextVerifyGroup(testProgress);
 }
 
 export function canStartCard(card: Card): boolean {
@@ -113,7 +121,7 @@ export function canStartCard(card: Card): boolean {
 }
 
 /**
- * Otonom koşu Human Test'te yalnızca temel akışı doğrular, o yüzden core
+ * Otonom koşu Human Test'te temel akıştan başlayarak doğrular, o yüzden core
  * grubuna bağlı. Interaktif oturum ise çeklistten bağımsızdır: çeklisti
  * olmayan bir kartta da kullanıcının anlatacak bir sorunu olabilir.
  */
@@ -138,13 +146,20 @@ export function canTestTogetherFor(card: Card, testScenariosText: string): boole
 /**
  * The body of the confirm dialog behind the Pre-verify button.
  *
- * A constant rather than two literals because the promise it makes — that your
- * own ticks survive the run — is the whole reason someone presses the button,
- * and a focus row promising something the board does not would make both
- * untrustworthy.
+ * One function rather than literals at each surface because the promise it
+ * makes — that your own ticks survive the run — is the whole reason someone
+ * presses the button, and a focus row promising something the board does not
+ * would make both untrustworthy. `group` is the one the press starts with.
  */
-export const VERIFY_RUN_BLURB =
-  "The agent runs the core flow only and ticks the steps that pass. Later groups and your own ticks stay untouched.";
+export function verifyRunBlurb(scope: VerifyScope, group: TestGroup | null): string {
+  if (scope === "all" && group) {
+    return `The agent runs every group that still has unticked steps, starting with "${group.heading}", and ticks the steps that pass. Your own ticks stay untouched.`;
+  }
+  if (group && !group.core) {
+    return `The agent runs the "${group.heading}" group only and ticks the steps that pass. Other groups and your own ticks stay untouched.`;
+  }
+  return "The agent runs the core flow only and ticks the steps that pass. Later groups and your own ticks stay untouched.";
+}
 
 export function canQuickFixFor(card: Card): boolean {
   return card.status === "bugs" && !!(card.description && (card.projectId || card.projectFolder));
@@ -239,7 +254,7 @@ export function getPhaseActionFlags(
   const isWork = mode === "work";
   return {
     phase,
-    labels: getPhaseLabels(phase, mode),
+    labels: getPhaseLabels(phase, mode, phase === "verify" ? nextVerifyGroup(testProgress) : null),
     canStart: canStartCard(card),
     // Autonomous implement writes code on a branch; a Work card has neither.
     // Planning and pre-verify stay: both read and write the card, not a repo.

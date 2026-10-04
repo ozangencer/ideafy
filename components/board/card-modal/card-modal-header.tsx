@@ -17,7 +17,7 @@ import {
 import { ChevronsRight, ArrowLeft, FileDown, ListVideo, Maximize2, Minimize2, Settings2 } from "lucide-react";
 import { PlatformIcon } from "@/components/icons/platform-icons";
 import { CardGroupPicker } from "./card-group-picker";
-import { QUEUE_KIND_SHORT } from "../run-queue-popover";
+import { queueKindLabel } from "../run-queue-popover";
 import { Status, getColumns, Complexity, Priority, COMPLEXITY_OPTIONS, PRIORITY_OPTIONS, AiPlatform, AI_PLATFORM_OPTIONS, DEFAULT_SETTINGS } from "@/lib/types";
 import { Project } from "@/lib/types";
 import { useKanbanStore } from "@/lib/store";
@@ -152,6 +152,9 @@ export function CardModalHeader({
   const queueKind = useKanbanStore(
     (s) => s.queueState?.items.find((item) => item.cardId === cardId)?.kind ?? null
   );
+  const queueVerifyScope = useKanbanStore(
+    (s) => s.queueState?.items.find((item) => item.cardId === cardId)?.verifyScope ?? null
+  );
   const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
   // Labels follow the project picked in this modal, so switching the picker to
   // a Work project renames the statuses before anything is saved.
@@ -212,7 +215,7 @@ export function CardModalHeader({
             <div className="mb-2 flex items-center gap-2 text-xs">
               <span className="inline-flex items-center gap-1 rounded bg-violet-500/10 px-1.5 py-0.5 font-mono tabular-nums text-violet-600 dark:text-violet-400">
                 <ListVideo className="h-3 w-3" />
-                Queued #{queueRank} · {QUEUE_KIND_SHORT[queueKind]}
+                Queued #{queueRank} · {queueKindLabel(queueKind, queueVerifyScope)}
               </span>
               <button
                 type="button"

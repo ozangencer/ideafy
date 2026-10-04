@@ -1,4 +1,5 @@
 import type { Card, Status } from "./types";
+import type { VerifyScope } from "./test-progress";
 
 /**
  * Statuses that take a card out of the run queue when it moves into them.
@@ -39,7 +40,7 @@ export function queueRanks(cards: Pick<Card, "id" | "queuePosition" | "taskNumbe
   return ranks;
 }
 
-/** What a queued card's run will do: build it, or walk its core flow. */
+/** What a queued card's run will do: build it, or walk its checklist. */
 export type QueueRunKind = "implementation" | "verify";
 
 /**
@@ -162,6 +163,8 @@ export interface QueueSnapshot {
      */
     runsInWorktree: boolean;
     kind: QueueRunKind;
+    /** A pre-verify's reach: `all` walks every group left, null the next one. */
+    verifyScope: VerifyScope | null;
   }[];
   armed: boolean;
   pausedReason: string | null;

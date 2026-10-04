@@ -38,6 +38,15 @@ const IMPLEMENTATION_HARD_LIMIT_MINUTES: Record<string, number> = {
 const OTHER_PHASE_HARD_LIMIT_MINUTES = 30;
 
 /**
+ * A pre-verify that walks every group left (IDE-449) grows with the checklist:
+ * a regression group can take far longer than the core flow. Each unticked
+ * item past the core flow buys a few minutes, up to a ceiling the queue can
+ * still live with.
+ */
+const VERIFY_ALL_MINUTES_PER_ITEM = 3;
+const VERIFY_ALL_MAX_MINUTES = 90;
+
+/**
  * Idle limit for every run that opts into the idle watcher. The env override
  * is an escape hatch, same pattern as BASH_DEFAULT_TIMEOUT_MS.
  */
@@ -49,11 +58,16 @@ export function runIdleTimeoutMs(): number {
 export function autonomousRunLimits(
   phase: string,
   complexity: string | null | undefined,
+  // Verify on the `all` scope: unticked items it walks outside the core flow.
+  verifyAllExtraItems = 0,
 ): RunLimits {
-  const minutes =
+  let minutes =
     phase === "implementation"
       ? IMPLEMENTATION_HARD_LIMIT_MINUTES[complexity ?? ""] ?? 40
       : OTHER_PHASE_HARD_LIMIT_MINUTES;
+  if (phase === "verify" && verifyAllExtraItems > 0) {
+    minutes = Math.min(minutes + VERIFY_ALL_MINUTES_PER_ITEM * verifyAllExtraItems, VERIFY_ALL_MAX_MINUTES);
+  }
   return { hardMs: minutes * MIN, idleMs: runIdleTimeoutMs() };
 }
 

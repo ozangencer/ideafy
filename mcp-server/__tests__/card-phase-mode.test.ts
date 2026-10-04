@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import * as cardPhaseNs from "../../lib/card-phase";
 import * as typesNs from "../../lib/types";
+import * as progressNs from "../../lib/test-progress";
 
 // See run-output.test.ts: lib/ modules come back through the CJS interop.
 function interop<T extends object>(ns: T): T {
@@ -123,10 +124,29 @@ test("column labels: ids and order are shared, only dev titles change", () => {
   assert.equal(title(dev, "test"), "Human Test");
 });
 
-test("Pre-verify is offered only while a core-flow item is still unticked", () => {
+test("Pre-verify is offered while any group from the core flow on has an unticked item", () => {
   const { canPreVerify } = interop(cardPhaseNs);
+  const { parseTestProgress } = interop(progressNs);
+  const item = (checked: boolean) => `<li data-type="taskItem" data-checked="${checked}"><p>x</p></li>`;
+  const checklist = (core: boolean[], edge: boolean[], heading = "Core flow") =>
+    parseTestProgress(`<h2>${heading}</h2><ul>${core.map(item).join("")}</ul><h2>Edge cases</h2><ul>${edge.map(item).join("")}</ul>`);
   const card = makeCard({ status: "test" });
-  assert.equal(canPreVerify(card, { checked: 1, total: 3, core: { checked: 1, total: 2 } }), true);
-  assert.equal(canPreVerify(card, { checked: 2, total: 3, core: { checked: 2, total: 2 } }), false);
-  assert.equal(canPreVerify(card, { checked: 0, total: 3 }), false);
+  assert.equal(canPreVerify(card, checklist([true, false], [false])), true);
+  // The core flow is ticked, but Edge cases is still open: the button stays.
+  assert.equal(canPreVerify(card, checklist([true, true], [false])), true);
+  assert.equal(canPreVerify(card, checklist([true, true], [true])), false);
+  // Without a core heading the agent cannot tell what is essential.
+  assert.equal(canPreVerify(card, checklist([false], [false], "Steps")), false);
+});
+
+test("Pre-verify's label names the group past the core flow", () => {
+  const { getPhaseActionFlags } = interop(cardPhaseNs);
+  const { parseTestProgress } = interop(progressNs);
+  const html =
+    '<h2>Temel akış</h2><ul><li data-type="taskItem" data-checked="true"><p>x</p></li></ul>' +
+    '<h2>Kenar durumlar</h2><ul><li data-type="taskItem" data-checked="false"><p>y</p></li></ul>';
+  const card = makeCard({ status: "test", testScenarios: html });
+  const flags = getPhaseActionFlags(card, "plan", "x y", parseTestProgress(html));
+  assert.equal(flags.labels.play, "Pre-verify: Kenar durumlar (Autonomous)");
+  assert.equal(flags.canRunAutonomous, true);
 });

@@ -131,7 +131,10 @@ export const createQueueSlice: StoreSlice<
           if (options?.useWorktree !== undefined) {
             await writeWorktreeChoice(cardId, options.useWorktree);
           }
-          const result = await request<QueueAddResult>("POST", { cardId });
+          const result = await request<QueueAddResult>(
+            "POST",
+            options?.verifyScope ? { cardId, verifyScope: options.verifyScope } : { cardId }
+          );
           apply(result);
           added += 1;
           const self = result.items.find((item) => item.cardId === cardId);

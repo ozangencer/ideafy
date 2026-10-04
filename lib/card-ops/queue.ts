@@ -2,7 +2,7 @@ import { compareByQueuePosition, queueIneligibleReason, type QueueRunKind } from
 import { placeAfter } from "../chain-order";
 import { detectPhase } from "../prompts/phase";
 import { stripHtml } from "../prompts/utils";
-import { parseTestProgress } from "../test-progress";
+import { nextVerifyGroup, parseTestProgress, type VerifyScope } from "../test-progress";
 import { shouldUseWorktree } from "../workspace";
 import { allRows, getRow, transaction, type SqlDb } from "./db";
 
@@ -19,6 +19,11 @@ import { allRows, getRow, transaction, type SqlDb } from "./db";
 // rather than each rewriting the order it read a moment before. `updated_at`
 // is left alone throughout: queueing is not work on the card, and the Stale
 // row reads it.
+//
+// Next to the position sits `queue_verify_scope`, what a queued pre-verify
+// walks. It only means something while the card is queued, so nothing clears
+// it on the way out: every fresh add rewrites it, and Undo after a Clear gets
+// the old scope back for free.
 
 /** A card as the queue reads it: enough to judge it, place it and name it. */
 export interface QueueRow {
@@ -30,6 +35,8 @@ export interface QueueRow {
   testScenarios: string;
   processingType: string | null;
   queuePosition: number | null;
+  /** What a queued pre-verify walks; null reads as `next`. */
+  queueVerifyScope: VerifyScope | null;
   taskNumber: number | null;
   useWorktree: boolean | null;
   gitBranchStatus: string | null;
@@ -47,6 +54,7 @@ const ROW_SELECT = `
          c.test_scenarios AS testScenarios,
          c.processing_type AS processingType,
          c.queue_position AS queuePosition,
+         c.queue_verify_scope AS queueVerifyScope,
          c.task_number AS taskNumber,
          c.use_worktree AS useWorktree,
          c.git_branch_status AS gitBranchStatus,
@@ -58,15 +66,18 @@ const ROW_SELECT = `
          p.use_worktrees AS projectUseWorktrees
   FROM cards c LEFT JOIN projects p ON p.id = c.project_id`;
 
-type RawRow = Omit<QueueRow, "useWorktree" | "projectUseWorktrees"> & {
+type RawRow = Omit<QueueRow, "useWorktree" | "projectUseWorktrees" | "queueVerifyScope"> & {
   useWorktree: number | null;
   projectUseWorktrees: number | null;
+  queueVerifyScope: string | null;
 };
 
 // SQLite hands booleans back as 0/1; drizzle's boolean mode used to turn them.
 function toQueueRow(raw: RawRow): QueueRow {
   return {
     ...raw,
+    // Anything but "all" is the default; a stray value never widens a run.
+    queueVerifyScope: raw.queueVerifyScope === null ? null : raw.queueVerifyScope === "all" ? "all" : "next",
     useWorktree: raw.useWorktree === null ? null : !!raw.useWorktree,
     projectUseWorktrees: raw.projectUseWorktrees === null ? null : !!raw.projectUseWorktrees,
   };
@@ -94,7 +105,8 @@ export function queueDisplayId(row: Pick<QueueRow, "idPrefix" | "taskNumber" | "
  * and checks that on its own side.
  */
 export function queueRowIneligibleReason(row: QueueRow): string | null {
-  const core = parseTestProgress(row.testScenarios ?? "")?.core;
+  const progress = parseTestProgress(row.testScenarios ?? "");
+  const core = progress?.core;
   const reason = queueIneligibleReason({
     status: row.status,
     hasDescription: stripHtml(row.description ?? "") !== "",
@@ -105,9 +117,10 @@ export function queueRowIneligibleReason(row: QueueRow): string | null {
     gitBranchStatus: row.gitBranchStatus,
   });
   if (reason) return reason;
-  // A pre-verify skips ticked core items, so a fully ticked core flow leaves
-  // it nothing to run. Same rule as the board's Pre-verify button.
-  if (row.status === "test" && core && core.checked >= core.total) return "its core flow is already ticked";
+  // A pre-verify skips ticked items and moves on group by group, so a fully
+  // ticked checklist leaves it nothing to run. Same rule as the board's
+  // Pre-verify button.
+  if (row.status === "test" && !nextVerifyGroup(progress)) return "its checklist is fully ticked";
   return null;
 }
 
@@ -154,8 +167,18 @@ export type EnqueueResult =
  * Puts `cardId` in the queue right behind `afterCardId`: `undefined` appends,
  * `null` moves it to the front. A card already queued is moved, not doubled.
  * Refusals come back as `{ ok: false }` with a message fit to show as is.
+ *
+ * `verifyScope` is what a queued pre-verify will walk. A fresh add always
+ * writes it, so a scope left over from an earlier stay in the queue never
+ * rides along; a move keeps the card's scope unless a new one is given. It is
+ * ignored for a card whose queued run is an implementation.
  */
-export function enqueueCard(db: SqlDb, cardId: string, afterCardId?: string | null): EnqueueResult {
+export function enqueueCard(
+  db: SqlDb,
+  cardId: string,
+  afterCardId?: string | null,
+  verifyScope?: VerifyScope
+): EnqueueResult {
   if (afterCardId === cardId) {
     return { ok: false, reason: "after-self", message: "A card cannot be placed after itself" };
   }
@@ -178,7 +201,12 @@ export function enqueueCard(db: SqlDb, cardId: string, afterCardId?: string | nu
     if (!moved) chainShaped.push({ id: cardId, groupOrder: null, taskNumber: row.taskNumber });
     const order = placeAfter(chainShaped, cardId, after);
     writeQueueOrder(db, order);
-    return { ok: true, row, rank: order.indexOf(cardId) + 1, moved };
+    let queueVerifyScope = row.queueVerifyScope;
+    if (!moved || verifyScope !== undefined) {
+      queueVerifyScope = queueKindOf(row) === "verify" ? verifyScope ?? null : null;
+      db.prepare(`UPDATE cards SET queue_verify_scope = ? WHERE id = ?`).run(queueVerifyScope, cardId);
+    }
+    return { ok: true, row: { ...row, queueVerifyScope }, rank: order.indexOf(cardId) + 1, moved };
   });
 }
 
@@ -206,7 +234,8 @@ export interface SkippedQueueCard {
 /**
  * Undo for a clear: puts the cards back in their old order, in front of
  * anything queued since. A card that can no longer be queued is skipped and
- * named, rather than dropped without a word.
+ * named, rather than dropped without a word. Clear leaves `queue_verify_scope`
+ * in place, so a restored pre-verify walks what it was queued to walk.
  */
 export function restoreQueueCards(
   db: SqlDb,

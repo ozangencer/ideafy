@@ -23,14 +23,20 @@ import { openPredecessors } from "@/lib/card-group";
 import { worktreeOverrideFor } from "@/lib/workspace";
 import { toast } from "@/hooks/use-toast";
 import { stripHtml } from "@/lib/prompts/utils";
-import { parseTestProgress } from "@/lib/test-progress";
+import {
+  canVerifyAllGroups,
+  nextVerifyGroup,
+  parseTestProgress,
+  verifyTargets,
+  type VerifyScope,
+} from "@/lib/test-progress";
 import {
   BOARD_PHASE_ACTIONS,
   getPhaseActionFlags,
   isAutonomousAction,
   isPhaseActionShown,
   PhaseAction,
-  VERIFY_RUN_BLURB,
+  verifyRunBlurb,
 } from "@/lib/card-phase";
 import { resolveWorkTemplate } from "@/lib/work-templates";
 import { useKanbanStore } from "@/lib/store";
@@ -266,6 +272,9 @@ export function CardPhaseActions({
   const [showTestTogetherConfirm, setShowTestTogetherConfirm] = useState(false);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
   const [dialogUseWorktree, setDialogUseWorktree] = useState(true);
+  // Pre-verify's reach for this press. Back to the next group on every open:
+  // walking everything is a choice made each time, never a sticky default.
+  const [dialogVerifyScope, setDialogVerifyScope] = useState<VerifyScope>("next");
   // Covers the flush in beforeRun, so a double click cannot start two runs.
   const [isPreparing, setIsPreparing] = useState(false);
 
@@ -279,7 +288,11 @@ export function CardPhaseActions({
   const flags = getPhaseActionFlags(card, solutionText, testText, testProgress, projectMode);
   const { phase, labels: phaseLabels } = flags;
   // Same rules as the board card's context menu, from the same hook.
-  const queue = useCardQueueActions({ card, flags, project });
+  const queue = useCardQueueActions({ card, flags, project, testProgress });
+  // The group Pre-verify starts with, and the ones "all remaining groups" adds.
+  const verifyGroup = phase === "verify" ? nextVerifyGroup(testProgress) : null;
+  const canVerifyAll = phase === "verify" && canVerifyAllGroups(testProgress);
+  const remainingVerifyGroups = canVerifyAll ? verifyTargets(testProgress, "all") : [];
 
   // Three independent signals converge so the spinner is robust: local
   // trigger state (instant), persisted processingType (DB), and the
@@ -337,9 +350,9 @@ export function CardPhaseActions({
   // Queueing starts no run, so nothing is handed off and the modal stays
   // open. The flush still comes first: the server reads the saved card to
   // decide the phase, and a plan pasted a moment ago must already count.
-  const handleAddToQueue = async (useWorktree?: boolean) => {
+  const handleAddToQueue = async (useWorktree?: boolean, verifyScope?: VerifyScope) => {
     if (isPreparing || !(await prepare())) return;
-    await queue.add(useWorktree);
+    await queue.add(useWorktree, undefined, verifyScope);
   };
 
   // Every handler reaches here only after prepare() and its dialog agreed, so
@@ -438,6 +451,7 @@ export function CardPhaseActions({
     if (isBlocked || isStarting || isQueued || isPreparing || !flags.canRunAutonomous) return;
     if (!(await prepare())) return;
     setDialogUseWorktree(effectiveUseWorktree);
+    setDialogVerifyScope("next");
     setChainWarning(computeChainWarning());
     setShowAutonomousConfirm(true);
   };
@@ -455,7 +469,8 @@ export function CardPhaseActions({
       }
     }
 
-    const result = await handOff("play", startTask(card.id));
+    const verifyScope = phase === "verify" && canVerifyAll ? dialogVerifyScope : undefined;
+    const result = await handOff("play", startTask(card.id, false, verifyScope));
     if (!result.success) {
       console.error("Failed to start task:", result.error);
     }
@@ -800,7 +815,10 @@ export function CardPhaseActions({
               className={`rounded-r-none ${PRIMARY_CLASS[primary]}`}
             >
               {isPreparing ? <Loader2 className="animate-spin" /> : <PrimaryIcon />}
-              {labelFor(primary)}
+              {/* A group heading can be long; the full label is in the title. */}
+              <span className="truncate max-w-[18rem]" title={labelFor(primary)}>
+                {labelFor(primary)}
+              </span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -814,7 +832,18 @@ export function CardPhaseActions({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" side="top" className="w-56">
-                {queue.canQueueVerify ? (
+                {queue.canQueueVerifyAll && queue.verifyGroup ? (
+                  <>
+                    <DropdownMenuItem onSelect={() => void handleAddToQueue(undefined, "next")}>
+                      <ListPlus />
+                      <span className="truncate">Add to queue: {queue.verifyGroup.heading}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void handleAddToQueue(undefined, "all")}>
+                      <ListPlus />
+                      Add to queue: all remaining groups
+                    </DropdownMenuItem>
+                  </>
+                ) : queue.canQueueVerify ? (
                   <DropdownMenuItem onSelect={() => void handleAddToQueue()}>
                     <ListPlus />
                     Add to queue (pre-verify)
@@ -1060,7 +1089,29 @@ export function CardPhaseActions({
                   </p>
                 )}
                 {phase === "verify" && (
-                  <p className="text-muted-foreground">{VERIFY_RUN_BLURB}</p>
+                  <div className="space-y-2">
+                    <p className="text-muted-foreground">
+                      {verifyRunBlurb(canVerifyAll ? dialogVerifyScope : "next", verifyGroup)}
+                    </p>
+                    {/* Only offered past the core flow, and only when more than
+                        one group is left: with one, both choices are the same. */}
+                    {canVerifyAll && (
+                      <div className="flex items-center justify-between pt-2 border-t border-border">
+                        <div className="space-y-0.5">
+                          <label className="text-sm font-medium">All remaining groups</label>
+                          <p className="text-xs text-muted-foreground">
+                            {dialogVerifyScope === "all"
+                              ? remainingVerifyGroups.map((g) => g.heading).join(", ")
+                              : `This group only: ${verifyGroup?.heading ?? ""}`}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={dialogVerifyScope === "all"}
+                          onCheckedChange={(checked) => setDialogVerifyScope(checked ? "all" : "next")}
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </AlertDialogDescription>

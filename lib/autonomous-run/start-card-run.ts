@@ -11,6 +11,7 @@ import {
   saveCardImagesToTemp,
   generateImageReferences,
   type Phase,
+  type VerifyTarget,
 } from "@/lib/prompts";
 import { normalizeProjectMode, normalizeVoice } from "@/lib/project-serialize";
 import { runAutonomousCli, completeProcess } from "@/lib/autonomous-run/run-autonomous-cli";
@@ -24,7 +25,14 @@ import {
 import { setupWorktree } from "@/lib/autonomous-run/setup-worktree";
 import { autonomousRunLimits } from "@/lib/autonomous-run/run-timeout";
 import { beginTrackedStart, dequeueCard, onRunFinished, runConflictFor } from "@/lib/autonomous-run/run-queue";
-import { assessTestRewrite } from "@/lib/markdown";
+import { assessTestRewrite, mergeTestCheckState } from "@/lib/markdown";
+import {
+  describeTestGroup,
+  parseTestProgress,
+  untickedIn,
+  verifyTargets,
+  type VerifyScope,
+} from "@/lib/test-progress";
 import { parseOpinionMarkers } from "@/lib/opinion-markers";
 
 export interface StartCardRunResult {
@@ -46,6 +54,11 @@ function getNewStatus(phase: Phase, currentStatus: Status): Status {
   }
 }
 
+export interface StartCardRunOptions {
+  /** Human Test only: `all` walks every group with unticked items, not just the next. */
+  verifyScope?: VerifyScope;
+}
+
 /**
  * One Start press, from the card row to the finished write-back: pick the
  * phase, set up the worktree, run the CLI, save what it produced.
@@ -54,7 +67,10 @@ function getNewStatus(phase: Phase, currentStatus: Status): Status {
  * HTTP request behind it. The route turns the result into a response; the
  * queue ignores it and hears the outcome through onRunFinished.
  */
-export async function startCardRun(cardId: string): Promise<StartCardRunResult> {
+export async function startCardRun(
+  cardId: string,
+  options: StartCardRunOptions = {}
+): Promise<StartCardRunResult> {
   // Refused before anything is touched — the card keeps its queue spot — and
   // in the same tick as beginTrackedStart, so two presses cannot both pass.
   // The queue's own start never trips this: it only advances with nothing live.
@@ -64,13 +80,13 @@ export async function startCardRun(cardId: string): Promise<StartCardRunResult> 
   }
   const release = beginTrackedStart(cardId);
   try {
-    return await runCardStart(cardId);
+    return await runCardStart(cardId, options);
   } finally {
     release();
   }
 }
 
-async function runCardStart(id: string): Promise<StartCardRunResult> {
+async function runCardStart(id: string, options: StartCardRunOptions): Promise<StartCardRunResult> {
   const card = db
     .select()
     .from(schema.cards)
@@ -103,6 +119,28 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
 
   // Detect current phase
   const phase = detectPhase(card);
+
+  // What a pre-verify walks, read from the checklist as it stands now rather
+  // than when the card was queued: items ticked by hand while it waited are
+  // not run again, and a group finished meanwhile hands over to the next.
+  let verifyTarget: VerifyTarget | undefined;
+  let verifyAllExtraItems = 0;
+  if (phase === "verify") {
+    const progress = parseTestProgress(card.testScenarios ?? "");
+    const scope = options.verifyScope ?? "next";
+    const groups = verifyTargets(progress, scope);
+    if (progress?.core && groups.length === 0) {
+      return { ok: false, status: 400, body: { error: "Every checklist item is already ticked" } };
+    }
+    if (groups.length > 0) {
+      verifyTarget = {
+        scope,
+        groups: groups.map((g) => describeTestGroup(g, progress?.groups ?? [])),
+        core: groups.length === 1 && groups[0].core,
+      };
+      if (scope === "all") verifyAllExtraItems = untickedIn(groups.filter((g) => !g.core));
+    }
+  }
   const promptDisplayId = project && card.taskNumber
     ? `${project.idPrefix}-${card.taskNumber}`
     : null;
@@ -174,6 +212,7 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
     normalizeVoice(project?.voice),
     actualWorkingDir !== workingDir,
     normalizeProjectMode(project?.mode),
+    verifyTarget,
   );
 
   // Extract and save images for CLI context
@@ -183,7 +222,7 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
     prompt = `${prompt}\n\n${imageReferences}`;
   }
 
-  const limits = autonomousRunLimits(phase, card.complexity);
+  const limits = autonomousRunLimits(phase, card.complexity, verifyAllExtraItems);
 
   try {
     const result = await runAutonomousCli({
@@ -269,7 +308,16 @@ async function runCardStart(id: string): Promise<StartCardRunResult> {
           // verification — and writing it would wipe the human's own ticks.
           const assessment = assessTestRewrite(card.testScenarios ?? "", htmlResponse);
           if (assessment.safe) {
-            updates.testScenarios = htmlResponse;
+            // The checklist as it is now, not as the run found it: a long
+            // run gives the person time to tick items themselves, and the
+            // agent's copy would put those back to unticked. A tick on
+            // either side stays a tick.
+            const current = db
+              .select({ testScenarios: schema.cards.testScenarios })
+              .from(schema.cards)
+              .where(eq(schema.cards.id, id))
+              .get();
+            updates.testScenarios = mergeTestCheckState(current?.testScenarios ?? "", htmlResponse);
           } else {
             verifyWarning = `Checklist left untouched — ${assessment.reason}`;
           }

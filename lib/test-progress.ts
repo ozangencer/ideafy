@@ -11,6 +11,10 @@
  * So the core group is counted separately. Cards written before the contract
  * carry no such heading; `core` stays undefined for them and the face falls
  * back to the flat count rather than guessing which items are essential.
+ *
+ * Pre-verify reads the same split one step further: once the core flow is
+ * ticked it moves on to the next group with unticked items, by whatever
+ * heading that group carries — the contract lets a card name its own groups.
  */
 
 export interface TestProgress {
@@ -19,6 +23,37 @@ export interface TestProgress {
   total: number;
   /** The `Core flow` group alone. Undefined when the checklist has no such heading. */
   core?: { checked: number; total: number };
+  /**
+   * Every `<h2>` group with at least one item, in checklist order. Items above
+   * the first heading belong to no group: no pre-verify ever targets them.
+   */
+  groups: TestGroup[];
+}
+
+/** One `## Heading` of the checklist and the items under it. */
+export interface TestGroup {
+  /** The heading as written — casing kept, since a button shows it. */
+  heading: string;
+  /**
+   * 1-based count of groups so far with this same heading. Two `## Regression`
+   * groups are told apart by it when a run is pointed at one of them.
+   */
+  occurrence: number;
+  /** The core flow group, the one Pre-verify always starts with. */
+  core: boolean;
+  checked: number;
+  total: number;
+}
+
+/**
+ * What a pre-verify run covers: the next group with unticked items, or every
+ * group from there on. The default everywhere is `next`; `all` is only ever an
+ * explicit choice.
+ */
+export type VerifyScope = "next" | "all";
+
+export function isVerifyScope(value: unknown): value is VerifyScope {
+  return value === "next" || value === "all";
 }
 
 /** Heading text that opens the core group, in either language the contract writes. */
@@ -32,41 +67,47 @@ function countChecks(html: string): { checked: number; total: number } {
   return { checked, total: checked + unchecked };
 }
 
-/** Heading label without markup, casing, or stray whitespace. */
-function normalizeHeading(raw: string): string {
+/** Heading text as written: no markup, no `#`, single spaces. */
+function headingText(raw: string): string {
   return raw
     .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
     .replace(/^#+\s*/, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+    .trim();
+}
+
+interface Section {
+  heading: string;
+  /** Lower-cased heading, for matching. */
+  label: string;
+  body: string;
 }
 
 /**
- * The markup between the core heading and the next `<h2>` (or the end of the
- * checklist when it is the only group).
+ * Every `<h2>` and the markup up to the next one (or the end of the
+ * checklist for the last group).
  */
-function findCoreSection(html: string): string | null {
-  const headings: { label: string; bodyStart: number }[] = [];
+function splitSections(html: string): Section[] {
+  const headings: { heading: string; bodyStart: number }[] = [];
 
   H2.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = H2.exec(html)) !== null) {
     headings.push({
-      label: normalizeHeading(match[1]),
+      heading: headingText(match[1]),
       bodyStart: match.index + match[0].length,
     });
   }
 
-  const index = headings.findIndex((h) => CORE_HEADING.test(h.label));
-  if (index === -1) return null;
-
-  const next = headings[index + 1];
-  // A following heading ends the section; slice up to where its markup begins,
-  // which is the end of this section's body.
-  const end = next ? html.lastIndexOf("<h2", next.bodyStart) : html.length;
-  return html.slice(headings[index].bodyStart, end);
+  return headings.map((h, index) => {
+    const next = headings[index + 1];
+    // A following heading ends the section; slice up to where its markup
+    // begins, which is the end of this section's body.
+    const end = next ? html.lastIndexOf("<h2", next.bodyStart) : html.length;
+    return { heading: h.heading, label: h.heading.toLowerCase(), body: html.slice(h.bodyStart, end) };
+  });
 }
 
 export function parseTestProgress(html: string): TestProgress | null {
@@ -75,12 +116,71 @@ export function parseTestProgress(html: string): TestProgress | null {
   const overall = countChecks(html);
   if (overall.total === 0) return null;
 
-  const coreSection = findCoreSection(html);
-  if (!coreSection) return overall;
+  const sections = splitSections(html);
+  const coreIndex = sections.findIndex((s) => CORE_HEADING.test(s.label));
+  const seen = new Map<string, number>();
+  const groups: TestGroup[] = [];
+  sections.forEach((section, index) => {
+    const occurrence = (seen.get(section.label) ?? 0) + 1;
+    seen.set(section.label, occurrence);
+    const counts = countChecks(section.body);
+    if (counts.total === 0) return;
+    groups.push({ heading: section.heading, occurrence, core: index === coreIndex, ...counts });
+  });
 
-  const core = countChecks(coreSection);
+  const core = groups.find((g) => g.core);
   // A heading with nothing under it says less than the flat count does.
-  if (core.total === 0) return overall;
+  if (!core) return { ...overall, groups };
 
-  return { ...overall, core };
+  return { ...overall, core: { checked: core.checked, total: core.total }, groups };
+}
+
+/**
+ * The groups a pre-verify run covers, in checklist order. The core flow comes
+ * first while it has unticked items; after that, the first later group that
+ * still has some. `all` takes that group and every later one with unticked
+ * items. Groups above the core heading are never targeted, and neither is
+ * anything in a checklist without one: there the agent cannot tell which
+ * items are essential (IDE-287).
+ */
+export function verifyTargets(progress: TestProgress | null | undefined, scope: VerifyScope): TestGroup[] {
+  if (!progress?.core) return [];
+  const coreIndex = progress.groups.findIndex((g) => g.core);
+  const open = progress.groups.slice(coreIndex).filter((g) => g.checked < g.total);
+  return scope === "all" ? open : open.slice(0, 1);
+}
+
+/** The group the next Pre-verify press runs, or null when nothing is left to run. */
+export function nextVerifyGroup(progress: TestProgress | null | undefined): TestGroup | null {
+  return verifyTargets(progress, "next")[0] ?? null;
+}
+
+/**
+ * Whether "All remaining groups" means anything beyond the next press: the
+ * core flow is done and more than one later group still has unticked items.
+ * While the core flow is open it always goes first on its own.
+ */
+export function canVerifyAllGroups(progress: TestProgress | null | undefined): boolean {
+  const next = nextVerifyGroup(progress);
+  return !!next && !next.core && verifyTargets(progress, "all").length > 1;
+}
+
+/** Unticked items across the groups, for sizing a run's time limit. */
+export function untickedIn(groups: TestGroup[]): number {
+  return groups.reduce((sum, g) => sum + (g.total - g.checked), 0);
+}
+
+/**
+ * How a prompt names a group: its heading, plus which one when the same
+ * heading appears more than once.
+ */
+export function describeTestGroup(group: TestGroup, groups: TestGroup[]): string {
+  const repeated = groups.some((g) => g !== group && g.heading.toLowerCase() === group.heading.toLowerCase());
+  if (!repeated) return `\`## ${group.heading}\``;
+  return `the ${ordinal(group.occurrence)} \`## ${group.heading}\` group`;
+}
+
+function ordinal(n: number): string {
+  const suffix = n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th";
+  return `${n}${suffix}`;
 }

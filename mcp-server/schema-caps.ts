@@ -29,6 +29,8 @@ const CAPABILITIES = {
   queuePosition: ["cards", "queue_position"],
   /** ai_score (0021) — the opinion's Final Score, written by save_opinion. */
   aiScore: ["cards", "ai_score"],
+  /** queue_verify_scope (0023) — what a queued pre-verify walks; read with every queue row. */
+  queueVerifyScope: ["cards", "queue_verify_scope"],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type Capability = keyof typeof CAPABILITIES;

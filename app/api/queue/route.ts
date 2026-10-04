@@ -13,6 +13,7 @@ import {
   worktreeWarningFor,
 } from "@/lib/autonomous-run/run-queue";
 import type { QueueClearResult, QueueRestoreResult } from "@/lib/card-queue";
+import { isVerifyScope } from "@/lib/test-progress";
 
 /** The queue in order, whether it is running, and what is running now. */
 export async function GET() {
@@ -20,8 +21,9 @@ export async function GET() {
 }
 
 /**
- * `{ cardId, afterCardId? }` — queue a card, or move one already queued.
- * Omit `afterCardId` to append; `null` puts it first.
+ * `{ cardId, afterCardId?, verifyScope? }` — queue a card, or move one already
+ * queued. Omit `afterCardId` to append; `null` puts it first. `verifyScope`
+ * (`"next"` | `"all"`) is what a queued pre-verify walks.
  *
  * Answers with the snapshot plus two warnings that never block: the files the
  * card shares with work ahead of it, and whether it runs without a worktree.
@@ -35,8 +37,10 @@ export async function POST(request: NextRequest) {
   const afterCardId =
     body.afterCardId === undefined ? undefined : typeof body.afterCardId === "string" ? body.afterCardId : null;
 
+  const verifyScope = isVerifyScope(body.verifyScope) ? body.verifyScope : undefined;
+
   try {
-    enqueueCard(cardId, afterCardId);
+    enqueueCard(cardId, afterCardId, verifyScope);
   } catch (err) {
     if (err instanceof QueueError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

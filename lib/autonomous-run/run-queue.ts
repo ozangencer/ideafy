@@ -25,6 +25,7 @@ import {
 } from "@/lib/card-queue";
 import { extractPlanFiles, sharedPlanFiles } from "@/lib/plan-files";
 import { shouldUseWorktree } from "@/lib/workspace";
+import type { VerifyScope } from "@/lib/test-progress";
 
 /**
  * The run queue: cards lined up for an autonomous implementation or pre-verify
@@ -117,9 +118,10 @@ const kindOf = queueKindOf;
 /**
  * Puts `cardId` in the queue right behind `afterCardId`: `undefined` appends,
  * `null` moves it to the front. A card already queued is moved, not doubled.
+ * `verifyScope` is what a queued pre-verify walks; a move without one keeps it.
  */
-export function enqueueCard(cardId: string, afterCardId?: string | null): void {
-  const result = enqueueQueueRow(sqlite(), cardId, afterCardId);
+export function enqueueCard(cardId: string, afterCardId?: string | null, verifyScope?: VerifyScope): void {
+  const result = enqueueQueueRow(sqlite(), cardId, afterCardId, verifyScope);
   if (!result.ok) throw new QueueError(result.message, result.reason === "not-found" ? 404 : 400);
 }
 
@@ -311,6 +313,7 @@ export function getQueueSnapshot(): QueueSnapshot {
       overlaps: overlapsFor(row.id, queue, running),
       runsInWorktree: runsInWorktree(row),
       kind: kindOf(row),
+      verifyScope: kindOf(row) === "verify" ? row.queueVerifyScope : null,
     })),
     armed: state.armed,
     pausedReason: state.pausedReason,
@@ -482,7 +485,7 @@ export async function advanceQueue(): Promise<void> {
       // onRunFinished / the release in beginTrackedStart. startCardRun marks
       // itself in flight and dequeues the card before its first await, so
       // the next advance already sees both.
-      startCardRun(next.id).catch((error) => {
+      startCardRun(next.id, { verifyScope: next.queueVerifyScope ?? undefined }).catch((error) => {
         console.error(`[run-queue] start of ${next.id} threw:`, error);
       });
       return;

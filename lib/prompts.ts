@@ -48,6 +48,19 @@ import { buildVoicePrompt } from "./prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "./prompts/opinion";
 import { CHAIN_IMPLEMENTATION_RULE, PRIOR_DECISIONS_RULE } from "./prompts/prior-decisions";
 import { DEFAULT_VOICE, type ProjectMode, type Voice } from "./types";
+import type { VerifyScope } from "./test-progress";
+
+/**
+ * What a pre-verify run walks, worked out from the card's checklist the moment
+ * the run starts, so items ticked while it waited in the queue are not run
+ * again. `groups` are the target groups as the prompt names them, in order;
+ * `core` says the only target is the core flow.
+ */
+export interface VerifyTarget {
+  scope: VerifyScope;
+  groups: string[];
+  core: boolean;
+}
 
 const NO_SAVE_TOOLS_RULE =
   "Do NOT call save_plan, save_tests, save_opinion, or any MCP save tools — output your response as text; it is auto-saved to the card.";
@@ -112,7 +125,9 @@ export function buildPhasePrompt(
   inWorktree = false,
   // The card's project mode. Work only reaches planning and verify (it has no
   // implementation run), so those two phases and the voice are what change.
-  mode: ProjectMode = "development"
+  mode: ProjectMode = "development",
+  // Verify only: which groups this run walks. Omitted, it walks the core flow.
+  verifyTarget?: VerifyTarget
 ): string {
   const isWork = mode === "work";
   const title = stripHtml(card.title);
@@ -230,19 +245,35 @@ ${ONE_SHOT_RUN_RULE}`;
     // Verify is the one phase that takes no voice: it reproduces an existing
     // checklist word for word, and a persona that rewords anything would turn
     // a verification pass into a silent rewrite.
-    case "verify":
+    case "verify": {
+      const target = verifyTarget ?? { scope: "next" as const, groups: [], core: true };
+      const onlyCore = target.core || target.groups.length === 0;
+      const task = onlyCore
+        ? `pre-verify the core flow of "${title}"`
+        : target.groups.length === 1
+          ? `pre-verify the ${target.groups[0]} group of "${title}"`
+          : `pre-verify the groups of "${title}" that still have unticked items`;
+      const whatToRun = onlyCore
+        ? `Run ONLY the items under the checklist's first group — \`## Core flow\` (English) or \`## Temel akış\` (Turkish). Those are the steps that decide whether the feature works at all; everything after them exists to catch what they cannot, and stays for the human. Those core items are your target items.
+
+- Do NOT run, tick, or edit items in any later group (\`## Edge cases\`, \`## Regression\`, and so on).`
+        : target.groups.length === 1
+          ? `Run ONLY the items under ${target.groups[0]}. Those are your target items: the core flow has already passed, and the person asked for this group next.
+
+- Do NOT run, tick, or edit items in any other group — not the core flow, not the groups before or after this one.`
+          : `Run the items under each of these groups, in this order: ${target.groups.join(", ")}. Their items are your target items: the person asked for every group that still has unticked items in one run.
+
+- Do NOT run, tick, or edit items in any group that is not in that list.`;
       return `Ideafy: ${card.id}
 
 Read card via MCP (mcp__ideafy__get_card). The card is in ${isWork ? "In Review" : "Human Test"}: its checklist is waiting for a person to walk it.
 
-Task: pre-verify the core flow of "${title}".
+Task: ${task}.
 ${inWorktree && !isWork ? "\nThis folder is the card's own branch worktree, where its changes were written. Run everything here and do not switch branches.\n" : ""}
 ## What to run
 
-Run ONLY the items under the checklist's first group — \`## Core flow\` (English) or \`## Temel akış\` (Turkish). Those are the steps that decide whether the feature works at all; everything after them exists to catch what they cannot, and stays for the human.
-
-- Do NOT run, tick, or edit items in any later group (\`## Edge cases\`, \`## Regression\`, and so on).
-- Skip core items that are already ticked (\`- [x]\`): a person or an earlier pre-verify has already seen them pass, and some steps (migrations, \`--apply\` scripts, restarts) should not run twice. Leave them ticked and run only the unticked ones. If every core item is already ticked, run nothing and hand the checklist back unchanged.
+${whatToRun}
+- Skip target items that are already ticked (\`- [x]\`): a person or an earlier pre-verify has already seen them pass, and some steps (migrations, \`--apply\` scripts, restarts) should not run twice. Leave them ticked and run only the unticked ones. If every target item is already ticked, run nothing and hand the checklist back unchanged.
 - If the checklist has no \`## Core flow\` / \`## Temel akış\` group, tick nothing and say so — without that heading you cannot tell which items are essential, and guessing would hand back a checklist that looks verified and is not.
 - ${isWork
   ? "Verify by actually checking the output — open the file the step names in the project folder (get_card lists them as outputPaths) and confirm what the step asks. Reasoning that a step \"should\" pass is not verification."
@@ -250,16 +281,17 @@ Run ONLY the items under the checklist's first group — \`## Core flow\` (Engli
 
 ## FINAL response format
 
-Reproduce the ENTIRE checklist: every group, every item, in the original order and wording. The only edit you may make is \`- [ ]\` → \`- [x]\` on core-flow items you ran and saw pass.
+Reproduce the ENTIRE checklist: every group, every item, in the original order and wording. The only edit you may make is \`- [ ]\` → \`- [x]\` on target items you ran and saw pass.
 
-- Do not reword, merge, split, add, or drop items. Later groups come back exactly as they were.
-- Leave a core item unticked when it failed or you could not run it.
-- After the checklist, add one short line naming what blocked any core item you ran and left unticked. Nothing else.
+- Do not reword, merge, split, add, or drop items. Every group you were not asked to run comes back exactly as it was.
+- Leave a target item unticked when it failed or you could not run it.
+- After the checklist, add one short line naming what blocked any target item you ran and left unticked. Nothing else.
 - Your final message is always the checklist itself — even when you could not finish a single item. A message that only says what you are still waiting for leaves the card untouched.
 
 ${NO_SAVE_TOOLS_RULE}
 
 ${ONE_SHOT_RUN_RULE}`;
+    }
   }
 }
 

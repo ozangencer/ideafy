@@ -923,7 +923,7 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
       },
       {
         name: "queue_card",
-        description: "Add a card to the run queue, or move one already queued. Queueing is consent to an unattended, code-writing run: never call this unless the user explicitly asked to queue this card. The app's Add to queue rules apply — a Backlog or In Progress card with a plan and no checklist yet (implementation), or a Human Test card whose checklist opens with Core flow / Temel akış (pre-verify); a refusal says why and writes nothing. What happens next is the app's call, not this tool's: if the app's queue is running, the card starts within about 10 seconds or once the run ahead of it ends; if it is paused, it waits for Resume in the app; if the app is closed, nothing starts, and the queue opens paused on the next launch. This tool cannot start, pause or resume the queue. Moving a card does not bump its updatedAt.",
+        description: "Add a card to the run queue, or move one already queued. Queueing is consent to an unattended, code-writing run: never call this unless the user explicitly asked to queue this card. The app's Add to queue rules apply — a Backlog or In Progress card with a plan and no checklist yet (implementation), or a Human Test card whose checklist opens with Core flow / Temel akış and still has unticked items (pre-verify); a refusal says why and writes nothing. A queued pre-verify walks the core flow while it has unticked items, then the next group that does; scope all walks every group left in one run. What happens next is the app's call, not this tool's: if the app's queue is running, the card starts within about 10 seconds or once the run ahead of it ends; if it is paused, it waits for Resume in the app; if the app is closed, nothing starts, and the queue opens paused on the next launch. This tool cannot start, pause or resume the queue. Moving a card does not bump its updatedAt.",
         inputSchema: {
           type: "object",
           properties: {
@@ -934,6 +934,11 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             afterCardId: {
               type: ["string", "null"],
               description: "Where it goes. Omit to put it last; a queued card's id or displayId puts it right behind that card; null puts it first. On a card already queued, this moves it.",
+            },
+            scope: {
+              type: "string",
+              enum: ["next", "all"],
+              description: "Human Test cards only: \"next\" (default) pre-verifies the next group with unticked items; \"all\" pre-verifies every group with unticked items in one run. Only pass \"all\" when the user asked for it. Omitted on a card already queued, its scope is kept.",
             },
           },
           required: ["cardId"],
@@ -2387,9 +2392,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "list_queue": {
-        if (!hasCapability(db, "queuePosition")) {
+        if (!hasCapability(db, "queueVerifyScope")) {
           return {
-            content: [{ type: "text", text: missingCapabilityMessage("list_queue", "queuePosition") }],
+            content: [{ type: "text", text: missingCapabilityMessage("list_queue", "queueVerifyScope") }],
             isError: true,
           };
         }
@@ -2403,6 +2408,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             status: row.status,
             projectId: row.projectId,
             kind: queueKindOf(row),
+            ...(queueKindOf(row) === "verify" ? { verifyScope: row.queueVerifyScope ?? "next" } : {}),
             runsInWorktree: queuedRunsInWorktree(row),
           }))
           .filter((item) => !projectId || item.projectId === projectId);
@@ -2423,16 +2429,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "queue_card": {
-        if (!hasCapability(db, "queuePosition")) {
+        if (!hasCapability(db, "queueVerifyScope")) {
           return {
-            content: [{ type: "text", text: missingCapabilityMessage("queue_card", "queuePosition") }],
+            content: [{ type: "text", text: missingCapabilityMessage("queue_card", "queueVerifyScope") }],
             isError: true,
           };
         }
-        const { cardId: rawCardId, afterCardId: rawAfterCardId } = args as {
+        const { cardId: rawCardId, afterCardId: rawAfterCardId, scope: rawScope } = args as {
           cardId: string;
           afterCardId?: string | null;
+          scope?: string;
         };
+        if (rawScope !== undefined && rawScope !== "next" && rawScope !== "all") {
+          return { content: [{ type: "text", text: `queue_card: scope must be "next" or "all". Nothing was written.` }], isError: true };
+        }
         const cardId = resolveCardId(rawCardId);
         if (!cardId) {
           return { content: [{ type: "text", text: `Card not found: ${rawCardId}` }], isError: true };
@@ -2446,7 +2456,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         // The same write the app's Add to queue makes: lib/card-ops/queue.ts.
         // The app picks it up on its next 10s poll of the queue.
-        const result = enqueueCard(db, cardId, afterCardId);
+        const result = enqueueCard(db, cardId, afterCardId, rawScope);
         if (!result.ok) {
           return { content: [{ type: "text", text: `queue_card: ${result.message}. Nothing was written.` }], isError: true };
         }
@@ -2464,9 +2474,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "unqueue_card": {
-        if (!hasCapability(db, "queuePosition")) {
+        if (!hasCapability(db, "queueVerifyScope")) {
           return {
-            content: [{ type: "text", text: missingCapabilityMessage("unqueue_card", "queuePosition") }],
+            content: [{ type: "text", text: missingCapabilityMessage("unqueue_card", "queueVerifyScope") }],
             isError: true,
           };
         }

@@ -32,6 +32,11 @@ export const QUEUE_KIND_SHORT: Record<QueueItem["kind"], string> = {
   verify: "verify",
 };
 
+/** The chip's word with a pre-verify's reach: "verify all" walks every group left. */
+export function queueKindLabel(kind: QueueItem["kind"], verifyScope: QueueItem["verifyScope"]): string {
+  return kind === "verify" && verifyScope === "all" ? "verify all" : QUEUE_KIND_SHORT[kind];
+}
+
 /**
  * Where a card stands in the queue, spelled out for its chip's tooltip:
  * "Queued #1 · pre-verify on main · starts after IDE-393".
@@ -42,7 +47,7 @@ export function describeQueuePlace(queue: QueueSnapshot, cardId: string): string
   const item = queue.items[index];
   const parts = [
     `Queued #${index + 1}`,
-    `${item.kind === "verify" ? "pre-verify" : "implementation"} ${
+    `${item.kind === "verify" ? (item.verifyScope === "all" ? "pre-verify of all remaining groups" : "pre-verify") : "implementation"} ${
       item.runsInWorktree ? "on its own branch" : "on main"
     }`,
   ];
@@ -77,7 +82,7 @@ export function QueueRankChip({
   size?: "footer" | "inline";
   className?: string;
 }) {
-  const { rank, kind } = useQueuePlace(cardId);
+  const { rank, kind, verifyScope } = useQueuePlace(cardId);
   if (rank === 0 || !kind) return null;
   return (
     <Tooltip>
@@ -88,7 +93,7 @@ export function QueueRankChip({
           } ${className}`}
         >
           <ListVideo className={size === "footer" ? "h-3 w-3" : "h-2.5 w-2.5"} />
-          {rank} · {QUEUE_KIND_SHORT[kind]}
+          {rank} · {queueKindLabel(kind, verifyScope)}
         </span>
       </TooltipTrigger>
       <TooltipContent side="top">

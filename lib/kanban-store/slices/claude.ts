@@ -32,12 +32,12 @@ function runFailureMessage(data: { error?: string; details?: string }): string |
   return firstLine(data.details) || data.error;
 }
 
-function runBody(acknowledged: boolean): RequestInit {
+function runBody(acknowledged: boolean, extra: Record<string, unknown> = {}): RequestInit {
   return {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(
-      acknowledged ? { acknowledgedUntrustedContent: true } : {}
+      acknowledged ? { ...extra, acknowledgedUntrustedContent: true } : extra
     ),
   };
 }
@@ -82,7 +82,7 @@ export const createClaudeSlice: StoreSlice<
   evaluatingCardIds: [],
   lockedCardIds: [],
 
-  startTask: async (cardId, acknowledged = false) => {
+  startTask: async (cardId, acknowledged = false, verifyScope) => {
     // Optimistic: write processingType locally so the spinner survives a
     // fetchCards poll landing between trigger and backend DB write.
     flushSpinnerOn(() =>
@@ -99,7 +99,10 @@ export const createClaudeSlice: StoreSlice<
 
     try {
       // Start the API call (process starts immediately on backend)
-      const fetchPromise = fetch(`/api/cards/${cardId}/start`, runBody(acknowledged));
+      const fetchPromise = fetch(
+        `/api/cards/${cardId}/start`,
+        runBody(acknowledged, verifyScope ? { verifyScope } : {})
+      );
 
       // Refresh background processes after a short delay to show the new process
       setTimeout(() => get().fetchBackgroundProcesses(), 500);
