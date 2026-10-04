@@ -5,7 +5,6 @@ import { useDroppable } from "@dnd-kit/core";
 import {
   Card as CardType,
   Status,
-  STATUS_COLORS,
   COLUMN_WIP_LIMITS,
   COMPLETED_FILTER_OPTIONS,
   CompletedFilter,
@@ -32,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { StatusIcon } from "@/components/ui/status-icon";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -527,6 +527,8 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
         <div className="py-3 px-2">
           <ChevronRight className="w-4 h-4 text-muted-foreground" />
         </div>
+        {/* The ring names the drawer before the sideways title is read. */}
+        <StatusIcon status={id} size={14} />
         <div className="flex-1 flex flex-col items-center justify-center py-4">
           <span
             className="text-sm font-medium text-foreground whitespace-nowrap"
@@ -577,7 +579,7 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[id]}`} />
+          <StatusIcon status={id} size={14} />
           <h2 className="text-sm font-medium text-foreground truncate">{title}</h2>
           {/* The count says load, not inventory: stale cards are not work in
               flight, and counting them here would let two dead cards push a

@@ -1,4 +1,5 @@
 import { PlatformIcon } from "@/components/icons/platform-icons";
+import { StatusIcon } from "@/components/ui/status-icon";
 import {
   StatusOption,
   PlatformOption,
@@ -76,11 +77,9 @@ function LeadingIcon({ kind, item }: { kind: AutocompleteKind; item: Autocomplet
   if (kind === "platform") {
     return <PlatformIcon platform={(item as PlatformOption).key} size={14} className="shrink-0" />;
   }
-  const color =
-    kind === "project"
-      ? (item as Project).color
-      : kind === "status"
-      ? (item as StatusOption).color
-      : (item as ComplexityOption).color;
+  if (kind === "status") {
+    return <StatusIcon status={(item as StatusOption).key} size={12} />;
+  }
+  const color = kind === "project" ? (item as Project).color : (item as ComplexityOption).color;
   return <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />;
 }

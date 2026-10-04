@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Complexity, Priority, Status, AiPlatform, ProjectMode, getColumnTitle } from "@/lib/types";
-import { STATUS_COLORS, PLATFORM_LABELS } from "../constants";
+import { StatusIcon } from "@/components/ui/status-icon";
+import { PLATFORM_LABELS } from "../constants";
 import { Project } from "../types";
 import { TokenBadge } from "./token-badge";
 
@@ -61,7 +62,7 @@ export function BadgesBar(props: BadgesBarProps) {
       {statusExplicit && (
         <TokenBadge
           label={statusLabel ?? status}
-          color={STATUS_COLORS[status]}
+          icon={<StatusIcon status={status} size={12} />}
           onRemove={onClearStatus}
         />
       )}

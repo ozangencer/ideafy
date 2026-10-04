@@ -1,7 +1,8 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Status, STATUS_COLORS } from "@/lib/types";
+import { Status } from "@/lib/types";
+import { StatusIcon } from "@/components/ui/status-icon";
 
 export interface CardMentionItem {
   id: string;
@@ -19,16 +20,6 @@ interface CardMentionPopupProps {
 export interface CardMentionPopupRef {
   onKeyDown: (event: KeyboardEvent) => boolean;
 }
-
-const STATUS_DOT_COLORS: Record<Status, string> = {
-  ideation: "bg-purple-500",
-  backlog: "bg-gray-500",
-  bugs: "bg-red-500",
-  progress: "bg-yellow-500",
-  test: "bg-blue-500",
-  completed: "bg-green-500",
-  withdrawn: "bg-gray-500",
-};
 
 export const CardMentionPopup = forwardRef<CardMentionPopupRef, CardMentionPopupProps>(
   ({ items, command }, ref) => {
@@ -99,10 +90,7 @@ export const CardMentionPopup = forwardRef<CardMentionPopupRef, CardMentionPopup
                 : "hover:bg-muted"
             }`}
           >
-            {/* Status dot */}
-            <span
-              className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[item.status]}`}
-            />
+            <StatusIcon status={item.status} size={10} />
 
             {/* Content */}
             <div className="flex-1 min-w-0">

@@ -1,22 +1,11 @@
 import { Complexity, Status, AiPlatform, ProjectMode, getColumns } from "@/lib/types";
 
-export const STATUS_COLORS: Record<Status, string> = {
-  ideation: "#8b5cf6",
-  backlog: "#6b7280",
-  bugs: "#ef4444",
-  progress: "#facc15",
-  test: "#3b82f6",
-  completed: "#22c55e",
-  withdrawn: "#6b7280",
-};
-
 // Slash tokens stay on the status ids, so `/test` still means the fifth column
 // in a Work project; only the label shown next to it changes.
 export function getStatusOptions(mode: ProjectMode) {
   return getColumns(mode).map((c) => ({
     key: c.id as Status,
     label: c.title,
-    color: STATUS_COLORS[c.id as Status],
     slash: `/${c.id === "ideation" ? "idea" : c.id === "bugs" ? "bug" : c.id}`,
   }));
 }

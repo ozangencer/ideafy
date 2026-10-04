@@ -18,6 +18,7 @@ import {
   Status,
   STATUS_COLORS,
 } from "@/lib/types";
+import { StatusIcon } from "@/components/ui/status-icon";
 import { CardGroupChip } from "./card-group-chip";
 import { ChainRowMenu } from "./card-group-chain";
 import { FocusBlockHeading, QuietRow } from "./focus-view";
@@ -266,7 +267,7 @@ function ChainRow({
                     : "border-border text-muted-foreground"
                 } ${rank > 0 ? "bg-violet-500/10 dark:bg-violet-400/10" : ""}`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[card.status]}`} />
+                <StatusIcon status={card.status} size={10} />
                 <span className="max-w-[160px] truncate text-current">{displayIdOf(card, projects)}</span>
                 {rank > 0 && (
                   <span className="inline-flex items-center gap-0.5 tabular-nums text-violet-600 group-hover/pill:text-current dark:text-violet-400">
@@ -307,7 +308,7 @@ function ChainRow({
 function SummaryPill({ status, label }: { status: Status; label: string }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-ink/15 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[status]}`} />
+      <StatusIcon status={status} size={10} />
       {label}
     </span>
   );
@@ -491,12 +492,14 @@ function ChainMatrix({ summary }: { summary: CardGroupSummary }) {
                     <td key={column.id} className="px-1 py-1.5 text-center">
                       {card.status === column.id && (
                         <span
-                          className={`inline-block h-2.5 w-2.5 rounded-full ${STATUS_COLORS[card.status]} ${
+                          className={`inline-flex rounded-full align-middle ${
                             isQueued
                               ? "ring-2 ring-violet-500/60 ring-offset-1 ring-offset-card dark:ring-violet-400/60"
                               : ""
                           }`}
-                        />
+                        >
+                          <StatusIcon status={card.status} size={12} />
+                        </span>
                       )}
                     </td>
                   ))}

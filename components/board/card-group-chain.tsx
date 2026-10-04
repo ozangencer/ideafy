@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ListOrdered, MoreHorizontal } from "lucide-react";
-import { Card, getColumnTitle, getDisplayId, Project, STATUS_COLORS } from "@/lib/types";
+import { Card, getColumnTitle, getDisplayId, Project } from "@/lib/types";
+import { StatusIcon } from "@/components/ui/status-icon";
 import { CardGroupSummary, isFinished } from "@/lib/card-group";
 import { useKanbanStore } from "@/lib/store";
 import {
@@ -94,7 +95,7 @@ export function CardGroupChain({ summary }: { summary: CardGroupSummary }) {
                     </span>
                   )}
                   <span className="flex shrink-0 items-center gap-1 text-[10px] text-current opacity-70">
-                    <span className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[card.status]}`} />
+                    <StatusIcon status={card.status} size={10} />
                     {getColumnTitle(card.status, activeWorkspace)}
                   </span>
                 </button>

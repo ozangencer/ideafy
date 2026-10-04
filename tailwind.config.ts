@@ -40,7 +40,7 @@ const config: Config = {
   				ideation: '#8b5cf6',
   				backlog: 'hsl(var(--status-backlog))',
   				bugs: '#ef4444',
-  				progress: '#facc15',
+  				progress: 'hsl(var(--status-progress))',
   				test: '#3b82f6',
   				completed: '#22c55e',
   				withdrawn: '#6b7280'

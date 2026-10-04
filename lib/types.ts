@@ -332,8 +332,9 @@ export const COLUMNS: { id: Status; title: string }[] = [
   { id: "withdrawn", title: "Withdrawn" },
 ];
 
-// Only the titles that name a dev step change; the ids, the order and the
-// colours stay, so a project can switch modes without a single card moving.
+// Only the titles that name a dev step change; the ids, the order, the
+// colours and the status icons stay, so a project can switch modes without a
+// single card moving.
 const WORK_COLUMN_TITLES: Partial<Record<Status, string>> = {
   bugs: "Revisions",
   test: "In Review",
@@ -361,6 +362,18 @@ export const STATUS_COLORS: Record<Status, string> = {
   test: "bg-status-test",
   completed: "bg-status-completed",
   withdrawn: "bg-status-withdrawn",
+};
+
+// StatusIcon draws in currentColor, so it needs the text- side of the same
+// colours. Written out in full: Tailwind never generates a built class name.
+export const STATUS_TEXT_COLORS: Record<Status, string> = {
+  ideation: "text-status-ideation",
+  backlog: "text-status-backlog",
+  bugs: "text-status-bugs",
+  progress: "text-status-progress",
+  test: "text-status-test",
+  completed: "text-status-completed",
+  withdrawn: "text-status-withdrawn",
 };
 
 /**

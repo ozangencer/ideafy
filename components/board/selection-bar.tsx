@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { ArrowRightLeft, ChevronDown, Trash2, X } from "lucide-react";
 import { useKanbanStore } from "@/lib/store";
-import { getColumns, STATUS_COLORS } from "@/lib/types";
+import { getColumns } from "@/lib/types";
+import { StatusIcon } from "@/components/ui/status-icon";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -102,7 +103,7 @@ export function SelectionBar() {
                 key={col.id}
                 onClick={() => void moveCards(selectedCardIds, col.id)}
               >
-                <span className={`mr-2 h-2 w-2 rounded-full ${STATUS_COLORS[col.id]}`} />
+                <StatusIcon status={col.id} size={12} />
                 {col.title}
               </DropdownMenuItem>
             ))}
