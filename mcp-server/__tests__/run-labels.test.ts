@@ -9,7 +9,15 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { autonomousRunTitle, phaseLabel, processRowLabel, processBaseLabel, processTimeHint } = interop(labelsNs);
+const {
+  autonomousRunTitle,
+  phaseLabel,
+  processRowLabel,
+  processBaseLabel,
+  processShortLabel,
+  processTimeHint,
+  formatElapsedShort,
+} = interop(labelsNs);
 const { getColumnTitle } = interop(typesNs);
 
 test("run title: each phase reads its own completion", () => {
@@ -109,4 +117,22 @@ test("popover row: elapsed while running, ago once finished", () => {
   assert.equal(processTimeHint({ status: "completed", startedAt: start, completedAt: "2026-10-04T11:59:00.000Z" }, now), "4m ago");
   assert.equal(processTimeHint({ status: "completed", startedAt: start, completedAt: "2026-10-04T12:03:00.000Z" }, now), "just now");
   assert.equal(processTimeHint({ status: "completed", startedAt: start }, now), null);
+});
+
+test("focus line: a running run reads its phase, target column and minutes", () => {
+  assert.equal(processRowLabel(row({ phase: "implementation", targetColumn: "Human Test" })), "Implementation → Human Test");
+  assert.equal(processRowLabel(row({ processType: "quick-fix" })), "Quick Fix");
+  assert.equal(formatElapsedShort(14 * 60000 + 59000), "14m");
+  assert.equal(formatElapsedShort(30000), "0m");
+  assert.equal(formatElapsedShort(65 * 60000), "1h 05m");
+  assert.equal(formatElapsedShort(-5000), "0m");
+});
+
+test("focus line: three or more runs fall back to the short phase", () => {
+  assert.equal(processShortLabel(row({ phase: "implementation", targetColumn: "Human Test" })), "impl");
+  assert.equal(processShortLabel(row({ phase: "verify" })), "verify");
+  assert.equal(processShortLabel(row({ phase: "planning" })), "plan");
+  assert.equal(processShortLabel(row({ phase: "retest" })), "retest");
+  assert.equal(processShortLabel(row({ processType: "evaluate" })), "AI Opinion");
+  assert.equal(processShortLabel(row({ phase: "generate" })), "Autonomous task");
 });
