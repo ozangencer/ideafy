@@ -194,6 +194,19 @@ function findFuzzyMatch(target: string, candidates: string[]): string | null {
   return best?.key ?? null;
 }
 
+/**
+ * A taskItem's opening `<li`, whichever order its attributes come in. The
+ * editor saves `data-checked` first, convertToTipTapTaskList writes
+ * `data-type` first; a regex expecting one order read the other as an empty
+ * checklist, so a verify run's write-back never saw the person's own ticks.
+ */
+const TASK_ITEM_OPEN = String.raw`<li\b(?=[^>]*data-type="taskItem")`;
+
+/** Groups: attributes up to `data-checked="`, the rest through `<p>`, the text, `</p>`. */
+function taskItemCheckRegex(): RegExp {
+  return new RegExp(String.raw`${TASK_ITEM_OPEN}([^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)`, "gi");
+}
+
 export interface TaskItemState {
   normalized: string;
   checked: boolean;
@@ -207,7 +220,7 @@ export interface TaskItemState {
 export function extractTaskItems(html: string): TaskItemState[] {
   const items: TaskItemState[] = [];
   const normalized = normalizeTestsHtml(html);
-  const regex = /<li[^>]*data-type="taskItem"[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>/gi;
+  const regex = new RegExp(String.raw`${TASK_ITEM_OPEN}[^>]*data-checked="(true|false)"[^>]*>.*?<p>(.*?)<\/p>`, "gi");
   let match;
   while ((match = regex.exec(normalized)) !== null) {
     const checked = match[1] === "true";
@@ -297,7 +310,7 @@ export function mergeTestCheckState(existingHtml: string, newHtml: string): stri
   for (const item of existingItems) checkedMap.set(item.normalized, item.checked);
 
   return normalizeTestsHtml(newHtml).replace(
-    /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
+    taskItemCheckRegex(),
     (fullMatch, prefix, middle, text, suffix) => {
       const normalized = normalizeTaskText(text);
       if (!normalized) return fullMatch;
@@ -335,7 +348,7 @@ export function mergeStaleTestWrite(existingHtml: string, formHtml: string): str
   const existingNormalized = normalizeTestsHtml(existingHtml);
 
   const updatedExisting = existingNormalized.replace(
-    /<li([^>]*data-type="taskItem"[^>]*data-checked=")(?:true|false)("[^>]*>.*?<p>)(.*?)(<\/p>)/gi,
+    taskItemCheckRegex(),
     (fullMatch, prefix, middle, text, suffix) => {
       const normalized = normalizeTaskText(text);
       if (!normalized) return fullMatch;

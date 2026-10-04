@@ -51,3 +51,36 @@ test("IDE-324: ticks already on the card survive a merge with run output", async
   const merged = mergeTestCheckState(EDITOR_HTML, html);
   assert.deepEqual(extractTaskItems(merged).map((i) => i.checked), [true, false]);
 });
+
+// The editor's real attribute order: data-checked before data-type (IDE-449).
+const editorItem = (checked: boolean, text: string) =>
+  `<li data-checked="${checked}" data-type="taskItem"><label><input type="checkbox"${checked ? ' checked="checked"' : ""}><span></span></label><div><p>${text}</p></div></li>`;
+
+test("IDE-449: a checklist saved with data-checked first is still read", () => {
+  const html = `<h2>Regresyon</h2><ul data-type="taskList">${editorItem(true, "Bir")}${editorItem(false, "İki")}</ul>`;
+  assert.deepEqual(
+    extractTaskItems(html).map((i) => i.checked),
+    [true, false]
+  );
+});
+
+test("IDE-449: a tick made during a run survives the run's write-back", async () => {
+  // While the run worked, the person ticked the Regresyon item in the editor.
+  const current =
+    `<h2>Temel akış</h2><ul data-type="taskList">${editorItem(true, "Kartı aç")}</ul>` +
+    `<h2>Kenar durumlar</h2><ul data-type="taskList">${editorItem(false, "Boş çeklist")}</ul>` +
+    `<h2>Regresyon</h2><ul data-type="taskList">${editorItem(true, "Eski akış bozulmamalı")}</ul>`;
+  // The agent passed the edge case but left the regression item unticked.
+  const runOutput = await runOutputHtml(
+    "## Temel akış\n- [x] Kartı aç\n## Kenar durumlar\n- [x] Boş çeklist\n## Regresyon\n- [ ] Eski akış bozulmamalı\n"
+  );
+  assert.equal(assessTestRewrite(current, runOutput).safe, true);
+  assert.deepEqual(
+    extractTaskItems(mergeTestCheckState(current, runOutput)).map((i) => [i.rawText, i.checked]),
+    [
+      ["Kartı aç", true],
+      ["Boş çeklist", true],
+      ["Eski akış bozulmamalı", true],
+    ]
+  );
+});
