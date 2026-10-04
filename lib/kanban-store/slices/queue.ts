@@ -140,7 +140,7 @@ export const createQueueSlice: StoreSlice<
           const self = result.items.find((item) => item.cardId === cardId);
           for (const overlap of result.overlaps) {
             overlapLines.push(
-              `${self?.displayId ?? "This card"} shares ${overlap.files.join(", ")} with ${overlap.displayId}`
+              `${self?.displayId ?? "This card"} may conflict with ${overlap.displayId} when merged (both change ${overlap.files.join(", ")})`
             );
           }
           if (result.worktreeWarning) worktreeWarnings.push(result.worktreeWarning);

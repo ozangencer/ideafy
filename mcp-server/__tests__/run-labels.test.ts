@@ -14,7 +14,6 @@ const {
   phaseLabel,
   processRowLabel,
   processBaseLabel,
-  processShortLabel,
   processTimeHint,
   formatElapsedShort,
 } = interop(labelsNs);
@@ -126,13 +125,4 @@ test("focus line: a running run reads its phase, target column and minutes", () 
   assert.equal(formatElapsedShort(30000), "0m");
   assert.equal(formatElapsedShort(65 * 60000), "1h 05m");
   assert.equal(formatElapsedShort(-5000), "0m");
-});
-
-test("focus line: three or more runs fall back to the short phase", () => {
-  assert.equal(processShortLabel(row({ phase: "implementation", targetColumn: "Human Test" })), "impl");
-  assert.equal(processShortLabel(row({ phase: "verify" })), "verify");
-  assert.equal(processShortLabel(row({ phase: "planning" })), "plan");
-  assert.equal(processShortLabel(row({ phase: "retest" })), "retest");
-  assert.equal(processShortLabel(row({ processType: "evaluate" })), "AI Opinion");
-  assert.equal(processShortLabel(row({ phase: "generate" })), "Autonomous task");
 });

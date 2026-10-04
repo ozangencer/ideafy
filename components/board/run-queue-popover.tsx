@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ListVideo, MoreHorizontal, Pause, Play } from "lucide-react";
-import type { QueueSnapshot } from "@/lib/card-queue";
+import { GitMerge, ListVideo, MoreHorizontal, Pause, Play } from "lucide-react";
+import type { QueueOverlap, QueueSnapshot } from "@/lib/card-queue";
 import { useKanbanStore } from "@/lib/store";
 import {
   Popover,
@@ -208,9 +208,6 @@ export function RunQueueChip({
             const anchors = queue.items.filter(
               (other, i) => other.cardId !== item.cardId && i !== index - 1
             );
-            const overlapText = item.overlaps
-              .map((o) => `${o.displayId}: ${o.files.join(", ")}`)
-              .join("\n");
             return (
               <li key={item.cardId} className="group/row flex items-center gap-0.5">
                 <button
@@ -258,10 +255,9 @@ export function RunQueueChip({
                     </span>
                   )}
                   {item.overlaps.length > 0 && (
-                    <span
-                      title={`Shares files with work ahead of it:\n${overlapText}`}
-                      aria-label="Shares files with work ahead of it"
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                    <OverlapMark
+                      overlaps={item.overlaps}
+                      titleOf={(id) => cards.find((c) => c.id === id)?.title}
                     />
                   )}
                 </button>
@@ -308,6 +304,58 @@ export function RunQueueChip({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * A queued implementation whose plan names files that code-writing work
+ * ahead of it also changes. The queue still starts it; the mark is there so
+ * the merge conflict waiting at Human Test is no surprise. The tooltip says
+ * what that means in words, then which card and which files.
+ */
+function OverlapMark({
+  overlaps,
+  titleOf,
+}: {
+  overlaps: QueueOverlap[];
+  titleOf: (cardId: string) => string | undefined;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          aria-label="May conflict with work ahead of it"
+          className="-m-1 inline-flex shrink-0 p-1 text-amber-600 dark:text-amber-400 group-hover/item:text-current"
+        >
+          <GitMerge className="h-3 w-3" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" className="max-w-72 space-y-1.5">
+        <div className="font-medium">May conflict when merged</div>
+        <p className="text-muted-foreground">
+          Work ahead of it changes the same files, so one of the two will need a hand
+          merge. The queue still starts it.
+        </p>
+        {overlaps.map((overlap) => {
+          const title = titleOf(overlap.cardId);
+          return (
+            <div key={overlap.cardId} className="min-w-0">
+              <div className="truncate">
+                <span className="font-mono text-[10px]">{overlap.displayId}</span>
+                {title && <span className="text-muted-foreground"> · {title}</span>}
+              </div>
+              <ul className="mt-0.5 space-y-0.5">
+                {overlap.files.map((file) => (
+                  <li key={file} className="truncate pl-2 font-mono text-[10px] text-muted-foreground">
+                    {file}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

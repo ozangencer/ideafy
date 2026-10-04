@@ -21,7 +21,7 @@ import {
   unreadSignalsByCard,
 } from "@/lib/board-focus";
 import type { PhaseAction } from "@/lib/card-phase";
-import { formatElapsedShort, processRowLabel, processShortLabel } from "@/lib/process-labels";
+import { formatElapsedShort, processRowLabel } from "@/lib/process-labels";
 import { useKanbanStore } from "@/lib/store";
 import { prefetchToday } from "@/lib/today-cache";
 import {
@@ -291,9 +291,13 @@ function YourTurnRow({ row }: { row: FocusRow }) {
   );
 }
 
-// Up to this many runs each get their own line with the full label; past it
-// they share one line and the phase shrinks to "impl" / "verify".
-const MAX_RUN_LINES = 2;
+// Past this many runs the rest fold into one "+N more" line. A machine rarely
+// carries more, and a block that holds no decisions should not outgrow Your
+// turn above it, which does.
+const MAX_RUN_LINES = 4;
+
+// Queue items spelled out in the chain before it ends in "+N".
+const MAX_QUEUE_CHAIN = 4;
 
 const ELAPSED_TICK_MS = 30_000;
 
@@ -328,8 +332,10 @@ function runningProcessFor(card: Card, processes: BackgroundProcess[]): Backgrou
 /**
  * What each running agent is doing and for how long: "IDE-432 Implementation →
  * Human Test · 14m". "Running" alone does not answer the only question this
- * block is read for — come back now, or in an hour? Still quiet text, not rows
- * with buttons: none of it is a decision.
+ * block is read for — come back now, or in an hour? One line per run with the
+ * time in a right-hand column, so the block scans top to bottom: runs packed
+ * into one line read as a run-on sentence. Still quiet text, not rows with
+ * buttons: none of it is a decision.
  */
 function AgentRunningLines({ cards }: { cards: Card[] }) {
   const projects = useKanbanStore((s) => s.projects);
@@ -345,7 +351,6 @@ function AgentRunningLines({ cards }: { cards: Card[] }) {
     return () => clearInterval(interval);
   }, []);
 
-  const compact = cards.length > MAX_RUN_LINES;
   const runs = cards.map((card) => {
     const project = projects.find((p) => p.id === card.projectId);
     const displayId = getDisplayId(card, project);
@@ -357,81 +362,71 @@ function AgentRunningLines({ cards }: { cards: Card[] }) {
       card,
       project,
       displayId,
-      label: compact && process ? processShortLabel(process) : label,
+      label,
       elapsed,
-      // The full wording survives truncation and the compact line in the tooltip.
+      // The full wording survives truncation in the tooltip.
       full: [`${displayId ?? card.title} ${label}`, elapsed].filter(Boolean).join(" · "),
     };
   });
 
-  const renderRun = (run: (typeof runs)[number]) => (
-    <>
-      <button
-        type="button"
-        onClick={() => {
-          selectCard(run.card);
-          openModal();
-        }}
-        className={
-          run.displayId
-            ? "transition-opacity hover:opacity-80"
-            : "transition-colors hover:text-foreground"
-        }
-      >
-        {run.displayId ? (
-          <ProjectIdPill displayId={run.displayId} project={run.project} />
-        ) : (
-          run.card.title
-        )}
-      </button>{" "}
-      {run.label}
-      {run.elapsed && (
-        <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground/60">
-          {" · "}
-          {run.elapsed}
-        </span>
-      )}
-    </>
-  );
-
+  const shown = runs.length > MAX_RUN_LINES ? runs.slice(0, MAX_RUN_LINES - 1) : runs;
+  const rest = runs.slice(shown.length);
   const icon = <Cpu className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />;
 
-  if (!compact) {
-    return (
-      <>
-        {runs.map((run) => (
-          <QuietRow key={run.card.id}>
-            {icon}
-            <span className="min-w-0 truncate" title={run.full}>
-              {renderRun(run)}
-            </span>
-          </QuietRow>
-        ))}
-      </>
-    );
-  }
-
   return (
-    <QuietRow>
-      {icon}
-      <span className="min-w-0 truncate" title={runs.map((run) => run.full).join("\n")}>
-        {runs.map((run, index) => (
-          <span key={run.card.id}>
-            {index > 0 && " · "}
-            {renderRun(run)}
+    <>
+      {shown.map((run) => (
+        <QuietRow key={run.card.id}>
+          {icon}
+          <button
+            type="button"
+            onClick={() => {
+              selectCard(run.card);
+              openModal();
+            }}
+            className={`shrink-0 ${
+              run.displayId
+                ? "transition-opacity hover:opacity-80"
+                : "max-w-[40%] truncate transition-colors hover:text-foreground"
+            }`}
+          >
+            {run.displayId ? (
+              <ProjectIdPill displayId={run.displayId} project={run.project} />
+            ) : (
+              run.card.title
+            )}
+          </button>
+          <span className="min-w-0 flex-1 truncate" title={run.full}>
+            {run.label}
           </span>
-        ))}
-      </span>
-    </QuietRow>
+          {run.elapsed && (
+            <span className="ml-auto shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground/60">
+              {run.elapsed}
+            </span>
+          )}
+        </QuietRow>
+      ))}
+      {rest.length > 0 && (
+        <QuietRow>
+          {icon}
+          <span className="min-w-0 truncate" title={rest.map((run) => run.full).join("\n")}>
+            +{rest.length} more
+          </span>
+        </QuietRow>
+      )}
+    </>
   );
 }
 
 /**
- * The run queue as one line under Agent running: what the agent picks up
- * next, in order, and which run each one is waiting for. One quiet line for
- * the same reason the running cards get quiet lines — none of it is a
- * decision — and managing it is the board's popover, opened
- * from Manage, not a second list to keep in step with it.
+ * The run queue as one chain under the running agents, read left to right:
+ * "IDE-431 → IDE-436 impl → IDE-421 impl". The arrow carries the order and
+ * the run the head waits for, so there is no position number and no "starts
+ * after" clause to parse. Paused, the chain opens on "paused ⇢": nothing is
+ * running for it, it starts when you resume. One quiet line for the same
+ * reason the running cards get quiet lines — none of it is a decision — and
+ * managing it is the board's popover, opened from Manage, not a second list
+ * to keep in step with it.
  */
 function QueueLine() {
   const queue = useKanbanStore((s) => s.queueState);
@@ -443,6 +438,10 @@ function QueueLine() {
   if (!queue || queue.items.length === 0) return null;
   const paused = !queue.armed;
   const waitingBehind = paused ? null : queue.running?.displayId ?? null;
+  const shown =
+    queue.items.length > MAX_QUEUE_CHAIN ? queue.items.slice(0, MAX_QUEUE_CHAIN - 1) : queue.items;
+  const rest = queue.items.slice(shown.length);
+  const arrow = <span className="text-muted-foreground/50"> → </span>;
 
   return (
     <QuietRow>
@@ -451,23 +450,36 @@ function QueueLine() {
           paused ? "text-amber-600 dark:text-amber-400" : "text-violet-600 dark:text-violet-400"
         }`}
       />
-      <span className="min-w-0 flex-1 truncate">
-        <span
-          className={`font-mono text-[10.5px] tabular-nums ${
-            paused ? "text-amber-600 dark:text-amber-400" : ""
-          }`}
-        >
-          Queue {queue.items.length}
-          {paused && " · paused"}
-        </span>
-        {queue.items.map((item, index) => {
+      <span
+        className="min-w-0 flex-1 truncate"
+        title={[
+          paused ? "Paused" : waitingBehind ? `After ${waitingBehind}` : null,
+          ...queue.items.map((item, index) => `${index + 1}. ${item.displayId} ${QUEUE_KIND_SHORT[item.kind]}`),
+        ]
+          .filter(Boolean)
+          .join("\n")}
+      >
+        {paused ? (
+          <>
+            <span className="font-mono text-[10.5px] text-amber-600 dark:text-amber-400">paused</span>
+            <span className="text-muted-foreground/50"> ⇢ </span>
+          </>
+        ) : (
+          waitingBehind && (
+            <>
+              <span className="font-mono text-[10.5px] text-muted-foreground/60">{waitingBehind}</span>
+              {arrow}
+            </>
+          )
+        )}
+        {shown.map((item, index) => {
           // The queue is global, so a card from another project shows up here
           // too; its pill wears that project's colour, which says so.
           const card = cards.find((c) => c.id === item.cardId);
           const project = projects.find((p) => p.id === card?.projectId);
           return (
             <span key={item.cardId}>
-              {" · "}
+              {index > 0 && arrow}
               <button
                 type="button"
                 title={item.title}
@@ -481,14 +493,15 @@ function QueueLine() {
                 <ProjectIdPill displayId={item.displayId} project={project} />
               </button>{" "}
               {QUEUE_KIND_SHORT[item.kind]}
-              {/* Why the head of the queue has not started. Not while paused:
-                  there it starts after nothing until you resume it. */}
-              {index === 0 && waitingBehind && (
-                <span className="text-muted-foreground/60">, starts after {waitingBehind}</span>
-              )}
             </span>
           );
         })}
+        {rest.length > 0 && (
+          <>
+            {arrow}
+            <span className="font-mono text-[10.5px] tabular-nums">+{rest.length}</span>
+          </>
+        )}
       </span>
       <RunQueueChip
         align="end"
@@ -587,10 +600,16 @@ export function FocusView({
 
           {(focus.agentRunning.length > 0 || queueLength > 0) && (
             <div className="flex flex-col gap-1.5">
+              {/* Running and queued counted apart: a queue alone under a
+                  heading that says "running 2" reads as two agents at work. */}
               <FocusBlockHeading
-                title="Agent running"
-                count={focus.agentRunning.length + queueLength}
-                note="nothing for you"
+                title="Agents"
+                note={[
+                  `${focus.agentRunning.length} running`,
+                  queueLength > 0 ? `${queueLength} queued` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               />
               {/* Quiet lines, not rows with buttons: these are not decisions,
                   and a list of them would compete with the block above that is. */}

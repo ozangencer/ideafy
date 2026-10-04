@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   Brain,
   Check,
@@ -27,6 +27,7 @@ import {
   canVerifyAllGroups,
   nextVerifyGroup,
   parseTestProgress,
+  testGroupLabel,
   verifyTargets,
   type VerifyScope,
 } from "@/lib/test-progress";
@@ -175,6 +176,12 @@ interface CardPhaseActionsProps {
    */
   onHandOff?: (handOff: PhaseHandOff) => void;
   softLock?: boolean;
+  /**
+   * Drawn in Play's place while the card waits in the run queue. The board
+   * card passes its queue chip: a dimmed Play only says "not now", the chip
+   * says when. Surfaces that pass nothing keep the dimmed icon.
+   */
+  queuedSlot?: React.ReactNode;
 }
 
 // `stopped` marks a run you killed: not a success, but nothing to report either.
@@ -219,6 +226,7 @@ export function CardPhaseActions({
   beforeRun,
   onHandOff,
   softLock,
+  queuedSlot,
 }: CardPhaseActionsProps) {
   // Narrow selectors: boolean membership checks re-render only when THIS
   // card's flag flips, not on every fetchCards poll replacing the array.
@@ -698,6 +706,16 @@ export function CardPhaseActions({
     );
   };
 
+  const renderIcons = () => {
+    const shown = actions.filter((action) => isPhaseActionShown(action, flags, isBlocked));
+    if (!queuedSlot) return shown.map(renderIcon);
+    const icons = shown.map((action) =>
+      action === "play" ? <Fragment key="play">{queuedSlot}</Fragment> : renderIcon(action)
+    );
+    // A queued card whose phase draws no Play still has to say it is queued.
+    return shown.includes("play") ? icons : [...icons, <Fragment key="play">{queuedSlot}</Fragment>];
+  };
+
   // --- Modal footer: one spelled-out primary, the rest as icons ---
   const renderLabeled = () => {
     if (isBackgroundProcessing) {
@@ -836,7 +854,7 @@ export function CardPhaseActions({
                   <>
                     <DropdownMenuItem onSelect={() => void handleAddToQueue(undefined, "next")}>
                       <ListPlus />
-                      <span className="truncate">Add to queue: {queue.verifyGroup.heading}</span>
+                      <span className="line-clamp-2">Add to queue: {testGroupLabel(queue.verifyGroup)}</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => void handleAddToQueue(undefined, "all")}>
                       <ListPlus />
@@ -846,7 +864,9 @@ export function CardPhaseActions({
                 ) : queue.canQueueVerify ? (
                   <DropdownMenuItem onSelect={() => void handleAddToQueue()}>
                     <ListPlus />
-                    Add to queue (pre-verify)
+                    <span className="line-clamp-2">
+                      {queue.verifyGroup ? `Add to queue: ${testGroupLabel(queue.verifyGroup)}` : "Add to queue (pre-verify)"}
+                    </span>
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuSub>
@@ -893,9 +913,7 @@ export function CardPhaseActions({
     <>
       {variant === "labeled"
         ? renderLabeled()
-        : actions
-            .filter((action) => isPhaseActionShown(action, flags, isBlocked))
-            .map(renderIcon)}
+        : renderIcons()}
 
       {/* Dialogs portal out of the DOM but not out of the React tree, so
           their events would still bubble into the board card — opening the
@@ -1101,8 +1119,8 @@ export function CardPhaseActions({
                           <label className="text-sm font-medium">All remaining groups</label>
                           <p className="text-xs text-muted-foreground">
                             {dialogVerifyScope === "all"
-                              ? remainingVerifyGroups.map((g) => g.heading).join(", ")
-                              : `This group only: ${verifyGroup?.heading ?? ""}`}
+                              ? remainingVerifyGroups.map(testGroupLabel).join(", ")
+                              : `This group only: ${verifyGroup ? testGroupLabel(verifyGroup) : ""}`}
                           </p>
                         </div>
                         <Switch

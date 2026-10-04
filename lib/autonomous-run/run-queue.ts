@@ -210,15 +210,22 @@ function testsChatCardIds(): Set<string> {
  * queued card branches from main before the one ahead of it is merged, so
  * two cards on the same file meet again at merge time. The queue only makes
  * sure you hear about it before you walk away.
+ *
+ * Only runs that write code count, on either side: a pre-verify walks a
+ * checklist and a plan run writes the plan, so neither leaves a diff to
+ * meet at merge time.
  */
 function overlapsFor(cardId: string, queue: QueueRow[], running: QueueRow[]): QueueOverlap[] {
   const self = queue.find((r) => r.id === cardId) ?? getRow(cardId);
-  if (!self) return [];
+  if (!self || kindOf(self) === "verify") return [];
   const mine = extractPlanFiles(self.solutionSummary);
   if (mine.length === 0) return [];
 
   const index = queue.findIndex((r) => r.id === cardId);
-  const ahead = [...running, ...(index === -1 ? queue : queue.slice(0, index))];
+  const ahead = [
+    ...running.filter((row) => writesCode(liveKindOf(row))),
+    ...(index === -1 ? queue : queue.slice(0, index)).filter((row) => kindOf(row) !== "verify"),
+  ];
   const seen = new Set<string>();
   const overlaps: QueueOverlap[] = [];
   for (const other of ahead) {
@@ -243,6 +250,11 @@ export function overlapsForCard(cardId: string): QueueOverlap[] {
 /** What the card's run does, or is doing: a quick fix, else the Start phase. */
 function liveKindOf(row: QueueRow): LiveRunKind {
   return row.processingType === "quick-fix" ? "quick-fix" : detectPhase(row);
+}
+
+/** Runs that leave a code diff behind. */
+function writesCode(kind: LiveRunKind): boolean {
+  return kind === "implementation" || kind === "quick-fix" || kind === "retest";
 }
 
 /**

@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardGroup, getDisplayId, getColumns, RUN_MODE_LABELS } from "@/lib/types";
 import { CardGroupChip } from "./card-group-chip";
 import { cardLastActivityAt, formatAgeLong, getCardStaleness } from "@/lib/card-age";
-import { parseTestProgress, type VerifyScope } from "@/lib/test-progress";
+import { parseTestProgress, testGroupLabel, type VerifyScope } from "@/lib/test-progress";
 import {
   BOARD_PHASE_ACTIONS,
   getPhaseActionFlags,
@@ -124,6 +124,10 @@ const GROUP_FRAME_W = 24;
 const FOOTER_ICON_W = 26;
 const FOOTER_BADGE_W = 52;
 const FOOTER_CORE_BADGE_W = 88;
+// The queue chip ("1 · verify") that stands in for Play while a card waits.
+const FOOTER_QUEUE_CHIP_W = 84;
+// "1 · verify all": four more mono characters.
+const FOOTER_QUEUE_CHIP_ALL_EXTRA_W = 24;
 // Below this the name would clip to two or three letters — a label too short
 // to identify anything while still taking the space of one.
 const FOOTER_NAME_MIN_W = 72;
@@ -216,6 +220,7 @@ function TaskCardImpl({
   const selectCardRange = useKanbanStore((s) => s.selectCardRange);
   const moveCards = useKanbanStore((s) => s.moveCards);
   const setBulkDeleteConfirmOpen = useKanbanStore((s) => s.setBulkDeleteConfirmOpen);
+  const clearCardSelection = useKanbanStore((s) => s.clearCardSelection);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isServerLoading, setIsServerLoading] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging: isBeingDragged } = useDraggable({
@@ -270,9 +275,13 @@ function TaskCardImpl({
   const isQueued = queueRank > 0 && !isBackgroundProcessing;
   // A running chat hides the interactive icons too, so it counts as a lock here.
   const isChatting = useCardChatRunning(card.id);
-  const shownPhaseActions = BOARD_PHASE_ACTIONS.filter((action) =>
+  const shownActionList = BOARD_PHASE_ACTIONS.filter((action) =>
     isPhaseActionShown(action, phaseFlags, isLocked || isChatting)
-  ).length;
+  );
+  // The queue chip takes Play's slot, so Play's icon is not spent on top of it.
+  const showsQueueChip = isQueued && !!queueKind;
+  const shownPhaseActions =
+    shownActionList.length - (showsQueueChip && shownActionList.includes("play") ? 1 : 0);
   // "Direct on main" only means something where branches exist at all.
   const showsMainBadge = !!project && !effectiveUseWorktree && phaseFlags.showDevControls;
 
@@ -289,7 +298,8 @@ function TaskCardImpl({
     const ordered = Array.from(document.querySelectorAll<HTMLElement>("[data-card-id]"))
       .map((el) => el.dataset.cardId!)
       .filter((id) => selected.delete(id));
-    void addToQueue(useWorktree, [...ordered, ...Array.from(selected)], verifyScope);
+    // Done with the selection, the way a bulk move lets go of it.
+    void addToQueue(useWorktree, [...ordered, ...Array.from(selected)], verifyScope).then(clearCardSelection);
   };
 
   const style = {
@@ -440,6 +450,7 @@ function TaskCardImpl({
     [showsWorktreeBadge, FOOTER_ICON_W],
     [showsMainBadge && !isBackgroundProcessing, FOOTER_ICON_W],
     [showsSolutionBadge, FOOTER_ICON_W],
+    [showsQueueChip, FOOTER_QUEUE_CHIP_W + (queueVerifyScope === "all" ? FOOTER_QUEUE_CHIP_ALL_EXTRA_W : 0)],
   ];
   const fixedFooterWidth = fixedFooterSlots.reduce(
     (sum, [shown, width]) => (shown ? sum + width : sum),
@@ -488,10 +499,24 @@ function TaskCardImpl({
             onContextMenu={handleContextMenu}
             // Selected is a solid ink border, not a ring: ring-2 ring-ink/40 is
             // what the drag overlay looks like, and the two must not be mixed up.
-            // Queued is a dashed violet one: the shape reads "waiting, not
-            // started" while scanning a column, colour or not. Selection wins.
+            // Queued is a violet wash with a violet border, not a dashed line:
+            // dashes already mean "container" on the board (group frames, the
+            // show-more button), so a dashed card read as a placeholder. The
+            // wash is an area, so it is caught while scanning a column, and it
+            // speaks the same violet as the footer's queue chip. Selection
+            // wins the border; the wash stays under it.
             className={`bg-card border rounded-md p-3 transition-colors group touch-none select-none relative ${
-              isSelected ? "border-ink" : isQueued ? "border-dashed border-violet-500/50" : "border-border"
+              isSelected
+                ? "border-ink"
+                : isQueued
+                ? "border-violet-500/[0.45] dark:border-violet-400/35"
+                : "border-border"
+            } ${
+              // A flat gradient layered over bg-card, not an overlay div: an
+              // absolute overlay paints over the text and tints it too.
+              isQueued
+                ? "bg-gradient-to-b from-violet-500/10 to-violet-500/10 dark:from-violet-400/10 dark:to-violet-400/10"
+                : ""
             } ${
               isDragging ? "shadow-2xl ring-2 ring-ink/40" : ""
             } ${isBeingDragged ? "z-50" : ""} ${
@@ -502,7 +527,7 @@ function TaskCardImpl({
                 : extraWrapperClassName
                 ? extraWrapperClassName
                 : isQueued
-                ? "hover:border-violet-500/80"
+                ? "hover:border-violet-500/70 dark:hover:border-violet-400/60"
                 : "hover:border-ink/40"
             }`}
           >
@@ -575,22 +600,6 @@ function TaskCardImpl({
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top">{group.name}</TooltipContent>
-                </Tooltip>
-              )}
-              {/* Same icon as the column's queue chip, so the card and the
-                  popover read as one thing. The tooltip reads the snapshot
-                  only while it is open. */}
-              {isQueued && queueKind && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums px-1 py-0.5 rounded shrink-0 cursor-default bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                      <ListVideo className="h-3 w-3" />
-                      {queueRank} · {queueKindLabel(queueKind, queueVerifyScope)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <QueuePlaceText cardId={card.id} />
-                  </TooltipContent>
                 </Tooltip>
               )}
               {/* Three lines, because the description quote below used to be
@@ -709,7 +718,30 @@ function TaskCardImpl({
 
               {/* Badges and Action Buttons */}
               <div className={`flex items-center gap-1 flex-wrap justify-end ${nameYields ? "shrink-0 max-w-full" : "min-w-0"}`}>
-                <CardPhaseActions card={card} softLock={softLock} />
+                <CardPhaseActions
+                  card={card}
+                  softLock={softLock}
+                  queuedSlot={
+                    // In the footer, not the title row: beside the id chip it
+                    // halved the title's width and clipped it at three words.
+                    // Same icon as the column's queue chip, so the card and the
+                    // popover read as one thing. The tooltip reads the snapshot
+                    // only while it is open.
+                    showsQueueChip && queueKind ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 h-[22px] px-1.5 rounded text-[10px] font-mono tabular-nums shrink-0 cursor-default bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                            <ListVideo className="h-3 w-3" />
+                            {queueRank} · {queueKindLabel(queueKind, queueVerifyScope)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <QueuePlaceText cardId={card.id} />
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : undefined
+                  }
+                />
                 {showsRunButton && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -900,20 +932,23 @@ function TaskCardImpl({
             // same choice; each card works out its own groups when it starts.
             <>
               <ContextMenuItem onClick={() => handleAddToQueue(undefined, "next")}>
-                <ListPlus className="w-4 h-4 mr-2" />
-                <span className="truncate">Add to queue: {queueVerifyGroup.heading}</span>
+                <ListPlus className="w-4 h-4 mr-2 shrink-0" />
+                <span className="line-clamp-2">Add to queue: {testGroupLabel(queueVerifyGroup)}</span>
                 {isSelected && <SelectionCount />}
               </ContextMenuItem>
               <ContextMenuItem onClick={() => handleAddToQueue(undefined, "all")}>
-                <ListPlus className="w-4 h-4 mr-2" />
+                <ListPlus className="w-4 h-4 mr-2 shrink-0" />
                 Add to queue: all remaining groups
                 {isSelected && <SelectionCount />}
               </ContextMenuItem>
             </>
           ) : canQueueVerify ? (
             <ContextMenuItem onClick={() => handleAddToQueue()}>
-              <ListPlus className="w-4 h-4 mr-2" />
-              Add to queue (pre-verify)
+              <ListPlus className="w-4 h-4 mr-2 shrink-0" />
+              {/* The menu is narrow; a group name wraps rather than clipping to "Edge…". */}
+              <span className="line-clamp-2">
+                {queueVerifyGroup ? `Add to queue: ${testGroupLabel(queueVerifyGroup)}` : "Add to queue (pre-verify)"}
+              </span>
               {isSelected && <SelectionCount />}
             </ContextMenuItem>
           ) : (

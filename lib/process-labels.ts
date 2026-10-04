@@ -30,16 +30,6 @@ export const PHASE_LABEL: Record<Phase, string> = {
   verify: "Pre-verify",
 };
 
-// For a line that holds several runs at once (Focus' Agent running). Same
-// words as the queue chip's QUEUE_KIND_SHORT, so one run reads the same
-// everywhere.
-export const PHASE_SHORT: Record<Phase, string> = {
-  planning: "plan",
-  implementation: "impl",
-  retest: "retest",
-  verify: "verify",
-};
-
 /** Label for a phase stored in a payload or registry entry; null when absent or unknown. */
 export function phaseLabel(phase: unknown): string | null {
   return typeof phase === "string" && phase in PHASE_LABEL ? PHASE_LABEL[phase as Phase] : null;
@@ -109,14 +99,6 @@ export function processRowLabel(process: ProcessLike): string {
     );
   }
   return autonomousRunTitle(process.phase, "completed", process.targetColumn) ?? `${base} completed`;
-}
-
-/** A running run in a line shared with others: "impl", "verify"; "Quick Fix" without a phase. */
-export function processShortLabel(process: ProcessLike): string {
-  const phase = process.phase;
-  return typeof phase === "string" && phase in PHASE_SHORT
-    ? PHASE_SHORT[phase as Phase]
-    : processBaseLabel(process);
 }
 
 // Copy of activity-registry's formatDuration: that module imports the db, so
