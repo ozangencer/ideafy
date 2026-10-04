@@ -324,6 +324,8 @@ export interface KanbanStore {
   toggleGroupCollapse: (groupKey: string) => void;
   // Refolds every chain and the Stale row in one column and re-caps it.
   collapseColumn: (columnId: Status) => void;
+  // Opens the given fold keys in one column and lifts its cap.
+  expandColumn: (columnId: Status, keys: string[]) => void;
 
   // Column render-cap actions
   toggleColumnCap: (columnId: Status) => void;

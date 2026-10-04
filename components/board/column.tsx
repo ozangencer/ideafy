@@ -25,7 +25,7 @@ import { TaskCard } from "./card";
 import { CardGroupChip } from "./card-group-chip";
 import { CardGroupChain } from "./card-group-chain";
 import { RunQueueChip } from "./run-queue-popover";
-import { ChevronLeft, ChevronRight, ChevronsDownUp, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, ChevronUp } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -477,7 +477,7 @@ interface ColumnProps {
 }
 
 export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps) {
-  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap, collapseColumn } = useKanbanStore(
+  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap, collapseColumn, expandColumn } = useKanbanStore(
     useShallow((s) => ({
       openNewCardModal: s.openNewCardModal,
       activeProjectId: s.activeProjectId,
@@ -488,10 +488,18 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
       uncappedColumns: s.uncappedColumns,
       toggleColumnCap: s.toggleColumnCap,
       collapseColumn: s.collapseColumn,
+      expandColumn: s.expandColumn,
     }))
   );
   const { setNodeRef, isOver } = useDroppable({ id });
   const { ref: widthRef, width: columnWidth } = useColumnWidth();
+  // A queue of nothing but pre-verifies never touches In Progress: those
+  // cards wait and run in Human Test, so the chip goes where they are.
+  const queueColumn = useKanbanStore((s) =>
+    s.queueState?.items.length && s.queueState.items.every((item) => item.kind === "verify")
+      ? "test"
+      : "progress"
+  );
 
   const isCollapsed = collapsedColumns.includes(id);
   const rows = useMemo(
@@ -514,6 +522,16 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
 
   const isUncapped = uncappedColumns.includes(id);
   const canCollapseAll = hasOpenFold || (isUncapped && rows.length > COLUMN_ROW_CAP);
+  // Chains only: "everything" means the work, and Stale is hidden on purpose.
+  // Collapse all still folds a Stale row you opened by hand.
+  const chainFoldKeys = useMemo(
+    () => Array.from(foldKeys).filter((key) => key !== groupFoldKey(STALE_GROUP_ID, id)),
+    [foldKeys, id]
+  );
+  // One button, two states. Anything open wins, so tidying up stays one click;
+  // a half-open column takes two to expand fully.
+  const canExpandAll =
+    !canCollapseAll && (chainFoldKeys.length > 0 || rows.length > COLUMN_ROW_CAP);
   const visibleRows = isUncapped ? rows : rows.slice(0, COLUMN_ROW_CAP);
   // Cards, not rows: "+3 more" over a hidden chain of fourteen would be a
   // number that undersells what you are not looking at.
@@ -621,9 +639,9 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
                 (isOverWip ? ` · ${cards.length - wipLimit} over the limit of ${wipLimit}` : ` · limit ${wipLimit}`)}
             </TooltipContent>
           </Tooltip>
-          {/* The queue is global, but In Progress is where its runs land and
-              where you look for what is running next. */}
-          {id === "progress" && <RunQueueChip />}
+          {/* The queue is global, but one chip shows it, in the column its
+              runs land in: In Progress as soon as one implementation waits. */}
+          {id === queueColumn && <RunQueueChip />}
           {id === "completed" && (
             <Select
               value={completedFilter}
@@ -659,6 +677,20 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
               </button>
             </TooltipTrigger>
             <TooltipContent side="top">Collapse all</TooltipContent>
+          </Tooltip>
+        )}
+        {canExpandAll && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => expandColumn(id, chainFoldKeys)}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted flex-shrink-0 ml-1"
+                aria-label="Expand all"
+              >
+                <ChevronsUpDown className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Expand all</TooltipContent>
           </Tooltip>
         )}
         <button

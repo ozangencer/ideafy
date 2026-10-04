@@ -36,6 +36,29 @@ export function collapseColumnFolds(
 }
 
 /**
+ * A column's "Expand all", the inverse of the above. The caller passes the
+ * keys: a suffix names a column but not the chains in it, and only the rows
+ * on screen are worth opening. The cap lifts too, or chains past the seventh
+ * row would stay behind "+N more" and the button would only half-expand.
+ */
+export function expandColumnFolds(
+  expandedGroups: string[],
+  uncappedColumns: Status[],
+  columnId: Status,
+  keys: string[]
+): { expandedGroups: string[]; uncappedColumns: Status[] } {
+  const added = keys.filter(
+    (key, i) => !expandedGroups.includes(key) && keys.indexOf(key) === i
+  );
+  return {
+    expandedGroups: added.length > 0 ? [...expandedGroups, ...added] : expandedGroups,
+    uncappedColumns: uncappedColumns.includes(columnId)
+      ? uncappedColumns
+      : [...uncappedColumns, columnId],
+  };
+}
+
+/**
  * The reserved id for a column's Stale row, which folds through the same
  * `expandedGroups` set as a real chain.
  *
