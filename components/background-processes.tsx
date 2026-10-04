@@ -114,7 +114,7 @@ function ProcessItem({
           variant="ghost"
           size="sm"
           onClick={handleKillClick}
-          className="h-6 px-2 text-xs text-destructive hover:text-destructive shrink-0 mt-0.5"
+          className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0 mt-0.5"
         >
           Kill
         </Button>
@@ -443,7 +443,7 @@ export function BackgroundProcesses() {
               variant="ghost"
               size="sm"
               onClick={handleClearCompleted}
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-6 px-2 text-xs text-muted-foreground"
             >
               Clear
             </Button>

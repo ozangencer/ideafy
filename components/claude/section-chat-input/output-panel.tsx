@@ -36,7 +36,7 @@ export function OutputPanel({ isLoading, content, error, visible, onToggle, onCl
               size="sm"
               variant="ghost"
               onClick={onClear}
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className="h-6 px-2 text-xs text-muted-foreground"
             >
               Clear
             </Button>
@@ -46,7 +46,7 @@ export function OutputPanel({ isLoading, content, error, visible, onToggle, onCl
             variant="ghost"
             onClick={onToggle}
             disabled={isLoading}
-            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground disabled:opacity-50"
+            className="h-6 w-6 p-0 text-muted-foreground disabled:opacity-50"
           >
             {visible ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>

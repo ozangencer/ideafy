@@ -205,7 +205,7 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
               variant="ghost"
               size="sm"
               onClick={handleMarkAll}
-              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+              className="h-7 text-xs text-muted-foreground"
             >
               Mark all read
             </Button>

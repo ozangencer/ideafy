@@ -173,7 +173,7 @@ export function CardModalHeader({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground shrink-0 mt-1"
+              className="text-muted-foreground shrink-0 mt-1"
             >
               <ChevronsRight className="h-5 w-5" />
             </Button>

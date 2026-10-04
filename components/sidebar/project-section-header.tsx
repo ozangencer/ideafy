@@ -57,7 +57,7 @@ export function ProjectSectionHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/section:opacity-100 data-[state=open]:opacity-100"
+            className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover/section:opacity-100 data-[state=open]:opacity-100"
             title="Section actions"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
