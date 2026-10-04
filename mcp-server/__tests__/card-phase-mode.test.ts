@@ -147,6 +147,7 @@ test("Pre-verify's label names the group past the core flow", () => {
     '<h2>Kenar durumlar</h2><ul><li data-type="taskItem" data-checked="false"><p>y</p></li></ul>';
   const card = makeCard({ status: "test", testScenarios: html });
   const flags = getPhaseActionFlags(card, "plan", "x y", parseTestProgress(html));
-  assert.equal(flags.labels.play, "Pre-verify: Kenar durumlar (Autonomous)");
+  // The checklist is Turkish, the button is not: the contract's groups read in English.
+  assert.equal(flags.labels.play, "Pre-verify: Edge cases (Autonomous)");
   assert.equal(flags.canRunAutonomous, true);
 });

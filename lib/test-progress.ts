@@ -171,6 +171,28 @@ export function untickedIn(groups: TestGroup[]): number {
 }
 
 /**
+ * The contract's own group names, in both languages it writes checklists in.
+ * The checklist follows the card's language; the app's chrome does not, so a
+ * Turkish `## Kenar durumlar` still reads "Edge cases" on a button.
+ */
+const KNOWN_GROUP_LABELS: [RegExp, string][] = [
+  [CORE_HEADING, "Core flow"],
+  [/^(edge\s*cases?|kenar\s*durumlar[ıi]?)$/, "Edge cases"],
+  [/^(regression(\s*tests?)?|regresyon(\s*testleri)?)$/, "Regression"],
+];
+
+/**
+ * How the app's UI names a group. The contract's groups get their English
+ * name; a heading the card chose for itself is shown as written. Prompts keep
+ * using the heading itself (`describeTestGroup`) — the agent has to find it.
+ */
+export function testGroupLabel(group: TestGroup): string {
+  const label = group.heading.toLowerCase();
+  const known = KNOWN_GROUP_LABELS.find(([pattern]) => pattern.test(label));
+  return known ? known[1] : group.heading;
+}
+
+/**
  * How a prompt names a group: its heading, plus which one when the same
  * heading appears more than once.
  */

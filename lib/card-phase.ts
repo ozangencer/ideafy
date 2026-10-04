@@ -18,7 +18,7 @@
  * button. Unifying them is a backend change, not a UI one.
  */
 
-import { nextVerifyGroup, TestGroup, TestProgress, VerifyScope } from "./test-progress";
+import { nextVerifyGroup, TestGroup, TestProgress, testGroupLabel, VerifyScope } from "./test-progress";
 import { Card, ProjectMode } from "./types";
 
 export type { VerifyScope } from "./test-progress";
@@ -90,7 +90,7 @@ export function getPhaseLabels(
       return {
         play:
           verifyGroup && !verifyGroup.core
-            ? `Pre-verify: ${verifyGroup.heading} (Autonomous)`
+            ? `Pre-verify: ${testGroupLabel(verifyGroup)} (Autonomous)`
             : "Pre-verify core flow (Autonomous)",
         // Human Test'te terminal, çeklisti yürüten değil çeklistin dışına çıkan
         // oturumdur: gündemi kullanıcı getirir, kartta yazmayan bir şeydir.
@@ -153,10 +153,10 @@ export function canTestTogetherFor(card: Card, testScenariosText: string): boole
  */
 export function verifyRunBlurb(scope: VerifyScope, group: TestGroup | null): string {
   if (scope === "all" && group) {
-    return `The agent runs every group that still has unticked steps, starting with "${group.heading}", and ticks the steps that pass. Your own ticks stay untouched.`;
+    return `The agent runs every group that still has unticked steps, starting with "${testGroupLabel(group)}", and ticks the steps that pass. Your own ticks stay untouched.`;
   }
   if (group && !group.core) {
-    return `The agent runs the "${group.heading}" group only and ticks the steps that pass. Other groups and your own ticks stay untouched.`;
+    return `The agent runs the "${testGroupLabel(group)}" group only and ticks the steps that pass. Other groups and your own ticks stay untouched.`;
   }
   return "The agent runs the core flow only and ticks the steps that pass. Later groups and your own ticks stay untouched.";
 }

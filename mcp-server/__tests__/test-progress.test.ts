@@ -8,7 +8,7 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { parseTestProgress, nextVerifyGroup, verifyTargets, canVerifyAllGroups, describeTestGroup, untickedIn } =
+const { parseTestProgress, nextVerifyGroup, verifyTargets, canVerifyAllGroups, describeTestGroup, testGroupLabel, untickedIn } =
   interop(progressNs);
 
 const item = (checked: boolean, text = "adım") =>
@@ -73,4 +73,13 @@ test("a repeated heading is named by which one it is", () => {
   assert.equal(next.occurrence, 2);
   assert.equal(describeTestGroup(next, progress.groups), "the 2nd `## Regression` group");
   assert.equal(describeTestGroup(progress.groups[0], progress.groups), "`## Core flow`");
+});
+
+test("the UI names the contract's groups in English, whatever language the checklist is in", () => {
+  const progress = parseTestProgress(
+    group("Temel akış", true) + group("Kenar durumlar", false) + group("Regresyon", false) + group("Dark mode", false)
+  )!;
+  assert.deepEqual(progress.groups.map(testGroupLabel), ["Core flow", "Edge cases", "Regression", "Dark mode"]);
+  // The prompt still names the heading as written: that is what the agent looks for.
+  assert.equal(describeTestGroup(progress.groups[1], progress.groups), "`## Kenar durumlar`");
 });
