@@ -13,7 +13,7 @@ import type {
 
 const HISTORY_MAX = 10;
 // Bell entries below this duration would only flood the inbox — the toast in
-// background-processes.tsx already covers short completions.
+// background-processes.tsx already covers short completions. Chat is exempt.
 const BELL_MIN_DURATION_MS = 60_000;
 
 interface RecordInput {
@@ -217,7 +217,7 @@ interface ProcessCompletionInput {
 }
 
 /**
- * Bridge from process-registry → activity bell. Skips short jobs (toast is
+ * Bridge from process-registry → activity bell. Skips short non-chat jobs (toast is
  * enough) and aborted runs (stopped on purpose). A run that finished with a
  * warning is always recorded, however short: the toast is the only other place
  * that explains why the card did not change. Chat is grouped by section so
@@ -233,7 +233,10 @@ export function recordProcessCompleted(input: ProcessCompletionInput): void {
 
   const durationMs = new Date(input.completedAt).getTime() - new Date(input.startedAt).getTime();
   const warning = input.warning ?? null;
-  if (!warning && durationMs < BELL_MIN_DURATION_MS) return;
+  // A chat answer is addressed to you however fast it came, and it raises an
+  // "AI replied" banner when the window is in the background; a banner whose
+  // bell row never appears is a notification you cannot find again.
+  if (!warning && input.processType !== "chat" && durationMs < BELL_MIN_DURATION_MS) return;
 
   let type: ActivityType | null;
   let title: string;

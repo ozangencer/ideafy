@@ -56,8 +56,11 @@ export const createActivitySlice: StoreSlice<
       // A reply that lands while its card is open was read as it streamed.
       // The modal only marks on card switch, so without this the bell dot and
       // Focus's "new reply" would outlive the conversation you just watched.
+      // Only while the window has focus: an open modal behind another app was
+      // not read, and that is exactly when the OS banner sent you here.
       const { isModalOpen, selectedCard } = get();
-      const openId = isModalOpen ? selectedCard?.id : undefined;
+      const watching = typeof document !== "undefined" && document.hasFocus();
+      const openId = isModalOpen && watching ? selectedCard?.id : undefined;
       if (
         openId &&
         !openId.startsWith("draft-") &&
