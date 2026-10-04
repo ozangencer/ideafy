@@ -1,5 +1,6 @@
 import { eq, isNotNull } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
+import { db, schema, sqlite } from "@/lib/db";
+import { clearQueue as clearQueueRows, type ClearedQueueCard } from "@/lib/card-ops";
 import { getAllProcesses } from "@/lib/process-registry";
 import { recordActivity } from "@/lib/activity-registry";
 import { detectPhase, stripHtml } from "@/lib/prompts";
@@ -219,6 +220,52 @@ export function dequeueCard(cardId: string): boolean {
     [cardId]
   );
   return true;
+}
+
+/**
+ * Empties the queue and disarms it. Only waiting cards go: the run the queue
+ * waits behind keeps going, and a card between its Start and its first line
+ * stays put. The queue is left without a pause reason, so the next Add to
+ * queue starts it fresh, as it would after running dry. Returns the cleared
+ * cards in order and whether the queue was running, for Undo.
+ */
+export function clearQueue(): { cleared: ClearedQueueCard[]; wasArmed: boolean } {
+  const state = queueState();
+  const wasArmed = state.armed;
+  const cleared = clearQueueRows(sqlite(), state.inFlight);
+  state.armed = false;
+  return { cleared, wasArmed };
+}
+
+/**
+ * Undo for clearQueue: puts the cards back in their old order, in front of
+ * anything queued since, and re-arms the queue when it was running before. A
+ * card that can no longer be queued — moved to Human Test, a run going on it
+ * — is skipped and named, rather than dropped without a word.
+ */
+export function restoreQueue(
+  cardIds: string[],
+  resume: boolean
+): { skipped: { cardId: string; displayId: string; reason: string }[] } {
+  const members = listQueueRows();
+  const queued = new Set(members.map((m) => m.id));
+  const restored: string[] = [];
+  const skipped: { cardId: string; displayId: string; reason: string }[] = [];
+  for (const cardId of new Set(cardIds)) {
+    // Queued again since: it moves back to its old place with the others.
+    if (queued.has(cardId)) {
+      restored.push(cardId);
+      continue;
+    }
+    const row = getRow(cardId);
+    const reason = row ? ineligibleReason(row) : "it was deleted";
+    if (reason) skipped.push({ cardId, displayId: row ? displayIdOf(row) : cardId, reason });
+    else restored.push(cardId);
+  }
+  const back = new Set(restored);
+  writeQueueOrder([...restored, ...members.filter((m) => !back.has(m.id)).map((m) => m.id)]);
+  if (resume && restored.length > 0) resumeQueue();
+  return { skipped };
 }
 
 // ============================================================================

@@ -1,4 +1,4 @@
-import type { QueueAddResult, QueueSnapshot } from "../../card-queue";
+import type { QueueAddResult, QueueClearResult, QueueRestoreResult, QueueSnapshot } from "../../card-queue";
 import { worktreeOverrideFor } from "../../workspace";
 import { parseJson } from "../helpers";
 import { KanbanStore, StoreSlice } from "../types";
@@ -19,6 +19,8 @@ export const createQueueSlice: StoreSlice<
     | "addToQueue"
     | "setQueuedCardWorktree"
     | "removeFromQueue"
+    | "clearQueue"
+    | "restoreQueue"
     | "moveInQueue"
     | "setQueueRunning"
   >
@@ -186,6 +188,44 @@ export const createQueueSlice: StoreSlice<
       } catch (error) {
         console.error("Failed to remove from queue:", error);
         toast({ title: "Couldn't remove from queue", variant: "destructive" });
+      }
+    },
+
+    // The Undo toast is the caller's: it needs a JSX action this file cannot
+    // hold. So the result goes back to it, and null means the toast here
+    // already said it failed.
+    clearQueue: async () => {
+      try {
+        const result = await request<QueueClearResult>("DELETE", { all: true });
+        apply(result);
+        return result;
+      } catch (error) {
+        console.error("Failed to clear the queue:", error);
+        toast({ title: "Couldn't clear the queue", variant: "destructive" });
+        return null;
+      }
+    },
+
+    restoreQueue: async (cardIds, resume) => {
+      try {
+        const result = await request<QueueRestoreResult>("PATCH", { action: "restore", cardIds, resume });
+        apply(result);
+        if (result.skipped.length > 0) {
+          toast({
+            title:
+              result.skipped.length === 1
+                ? `${result.skipped[0].displayId} could not go back in the queue`
+                : `${result.skipped.length} cards could not go back in the queue`,
+            description: result.skipped.map((s) => `${s.displayId}: ${s.reason}`).join("; "),
+          });
+        }
+      } catch (error) {
+        console.error("Failed to restore the queue:", error);
+        toast({
+          title: "Couldn't restore the queue",
+          description: error instanceof Error ? error.message : undefined,
+          variant: "destructive",
+        });
       }
     },
 

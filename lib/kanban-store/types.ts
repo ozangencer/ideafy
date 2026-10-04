@@ -1,5 +1,5 @@
 import { StateCreator } from "zustand";
-import type { QueueSnapshot } from "../card-queue";
+import type { QueueClearResult, QueueSnapshot } from "../card-queue";
 import {
   ActivityEvent,
   AgentListItem,
@@ -448,6 +448,10 @@ export interface KanbanStore {
   addToQueue: (cardIds: string[], options?: { useWorktree?: boolean }) => Promise<void>;
   setQueuedCardWorktree: (cardId: string, useWorktree: boolean) => Promise<void>;
   removeFromQueue: (cardId: string) => Promise<void>;
+  // Empties the queue; the result (null on failure) carries what Undo needs.
+  // restoreQueue puts those cards back in order and re-arms when `resume`.
+  clearQueue: () => Promise<QueueClearResult | null>;
+  restoreQueue: (cardIds: string[], resume: boolean) => Promise<void>;
   moveInQueue: (cardId: string, afterCardId: string | null) => Promise<void>;
   setQueueRunning: (running: boolean) => Promise<void>;
 

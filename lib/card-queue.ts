@@ -174,3 +174,18 @@ export interface QueueAddResult extends QueueSnapshot {
   overlaps: QueueOverlap[];
   worktreeWarning: string | null;
 }
+
+/**
+ * DELETE /api/queue with `{ all: true }`: the snapshot plus what Clear took
+ * out, in run order, and whether the queue was running — what Undo needs to
+ * put it back as it was.
+ */
+export interface QueueClearResult extends QueueSnapshot {
+  cleared: { cardId: string; displayId: string }[];
+  wasArmed: boolean;
+}
+
+/** PATCH /api/queue `restore`: the snapshot plus the cards Undo could not put back. */
+export interface QueueRestoreResult extends QueueSnapshot {
+  skipped: { cardId: string; displayId: string; reason: string }[];
+}

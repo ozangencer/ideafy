@@ -25,6 +25,8 @@ const CAPABILITIES = {
   groupOrder: ["cards", "group_order"],
   /** git_branch_status — whether a card's branch is merged, for list_open_work. */
   branchStatus: ["cards", "git_branch_status"],
+  /** queue_position (0017) — a card's place in the run queue. */
+  queuePosition: ["cards", "queue_position"],
   /** ai_score (0021) — the opinion's Final Score, written by save_opinion. */
   aiScore: ["cards", "ai_score"],
 } as const satisfies Record<string, readonly [string, string]>;

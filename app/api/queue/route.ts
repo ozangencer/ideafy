@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   armIfIdle,
+  clearQueue,
   dequeueCard,
   enqueueCard,
   getQueueSnapshot,
   overlapsForCard,
   pauseQueue,
   QueueError,
+  restoreQueue,
   resumeQueue,
   worktreeWarningFor,
 } from "@/lib/autonomous-run/run-queue";
+import type { QueueClearResult, QueueRestoreResult } from "@/lib/card-queue";
 
 /** The queue in order, whether it is running, and what is running now. */
 export async function GET() {
@@ -48,9 +51,17 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ...getQueueSnapshot(), overlaps, worktreeWarning });
 }
 
-/** `{ cardId }` — take a card out of the queue. */
+/**
+ * `{ cardId }` — take a card out of the queue. `{ all: true }` — empty it; the
+ * answer lists what went, in order, for Undo (PATCH `restore`).
+ */
 export async function DELETE(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
+  if (body.all === true) {
+    const { cleared, wasArmed } = clearQueue();
+    const result: QueueClearResult = { ...getQueueSnapshot(), cleared, wasArmed };
+    return NextResponse.json(result);
+  }
   const cardId = typeof body.cardId === "string" ? body.cardId : null;
   if (!cardId) {
     return NextResponse.json({ error: "cardId is required" }, { status: 400 });
@@ -59,11 +70,26 @@ export async function DELETE(request: NextRequest) {
   return NextResponse.json(getQueueSnapshot());
 }
 
-/** `{ action: "resume" | "pause" }`. */
+/**
+ * `{ action: "resume" | "pause" }`, or `{ action: "restore", cardIds, resume }`
+ * to undo a clear: the cards go back in that order, ahead of anything queued
+ * since, and `resume` re-arms the queue if it was running before.
+ */
 export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
+  if (body.action === "restore") {
+    const cardIds = Array.isArray(body.cardIds)
+      ? body.cardIds.filter((id: unknown): id is string => typeof id === "string")
+      : [];
+    if (cardIds.length === 0) {
+      return NextResponse.json({ error: "cardIds is required" }, { status: 400 });
+    }
+    const { skipped } = restoreQueue(cardIds, body.resume === true);
+    const result: QueueRestoreResult = { ...getQueueSnapshot(), skipped };
+    return NextResponse.json(result);
+  }
   if (body.action === "resume") resumeQueue();
   else if (body.action === "pause") pauseQueue();
-  else return NextResponse.json({ error: 'action must be "resume" or "pause"' }, { status: 400 });
+  else return NextResponse.json({ error: 'action must be "resume", "pause" or "restore"' }, { status: 400 });
   return NextResponse.json(getQueueSnapshot());
 }

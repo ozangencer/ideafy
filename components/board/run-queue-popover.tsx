@@ -20,6 +20,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ToastAction } from "@/components/ui/toast";
+import { toast } from "@/hooks/use-toast";
 import { useQueuePlace } from "./use-card-queue-actions";
 
 type QueueItem = QueueSnapshot["items"][number];
@@ -134,10 +136,38 @@ export function RunQueueChip({
   const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
   const setQueuedCardWorktree = useKanbanStore((s) => s.setQueuedCardWorktree);
   const setQueueRunning = useKanbanStore((s) => s.setQueueRunning);
+  const clearQueue = useKanbanStore((s) => s.clearQueue);
+  const restoreQueue = useKanbanStore((s) => s.restoreQueue);
   const [open, setOpen] = useState(false);
 
   if (!queue || queue.items.length === 0) return null;
   const paused = !queue.armed;
+
+  // No confirm dialog: one opened over this popover fights it for focus and
+  // outside clicks. Clear acts at once and the toast's Undo puts every card
+  // back where it was. The popover closes with it — an empty queue draws no
+  // chip to hang it on.
+  const handleClear = async () => {
+    const result = await clearQueue();
+    if (!result || result.cleared.length === 0) return;
+    setOpen(false);
+    const { cleared, wasArmed, running } = result;
+    toast({
+      title:
+        cleared.length === 1 ? `Cleared ${cleared[0].displayId} from the queue` : `Cleared ${cleared.length} cards from the queue`,
+      description: running ? `${running.displayId} keeps running.` : undefined,
+      // Longer than the default 5s: Undo is the only guard against a misclick.
+      duration: 10000,
+      action: (
+        <ToastAction
+          altText="Undo clearing the queue"
+          onClick={() => restoreQueue(cleared.map((c) => c.cardId), wasArmed)}
+        >
+          Undo
+        </ToastAction>
+      ),
+    });
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -251,6 +281,17 @@ export function RunQueueChip({
           >
             {statusLine(queue)}
           </span>
+          {/* A single card has Remove in its row; Clear earns its place from two. */}
+          {queue.items.length > 1 && (
+            <button
+              type="button"
+              onClick={handleClear}
+              title="Take every waiting card out of the queue. A run already going keeps going."
+              className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              Clear
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setQueueRunning(paused)}

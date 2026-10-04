@@ -43,9 +43,10 @@ export const {
   statusAfterPlan,
   statusAfterTests,
   saveOpinion,
+  clearQueue,
 } = unwrap(cardOpsNs);
 export const { normalizeComplexity, describeOpinionMarkers } = unwrap(opinionMarkersNs);
 
 export type { CardResolver, LinkedCard } from "../lib/card-links";
 export type { ChainCardRef, ChainContext } from "../lib/chain-order";
-export type { SqlDb, Statement, MoveCardResult } from "../lib/card-ops";
+export type { SqlDb, Statement, MoveCardResult, ClearedQueueCard } from "../lib/card-ops";

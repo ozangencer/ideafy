@@ -28,3 +28,4 @@ export {
   type SaveOpinionResult,
   type SavedOpinionFields,
 } from "./save-opinion";
+export { clearQueue, type ClearedQueueCard } from "./queue";

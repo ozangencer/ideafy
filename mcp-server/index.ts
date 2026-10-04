@@ -30,6 +30,7 @@ import {
   buildPhaseHint,
   buildPhasePolicyBody,
   buildTestStyleContract,
+  clearQueue,
   completedAtFor,
   completedAtOnCreate,
   describeOpinionMarkers,
@@ -889,6 +890,14 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             },
           },
           required: ["id", "path"],
+        },
+      },
+      {
+        name: "clear_queue",
+        description: "Empty the run queue: every card waiting for an autonomous run is taken out, the same as Clear in the app's queue popover. Only waiting cards go — a run already going keeps going; this is not Stop. Call it only when the user explicitly asks to clear the whole queue; to take one card out, the app's row menu has Remove. There is no Undo here: the result lists the cleared cards in their old order, so tell the user which ones went. Whether the queue is running stays the app's call — the next card added there starts it fresh.",
+        inputSchema: {
+          type: "object",
+          properties: {},
         },
       },
       {
@@ -2275,6 +2284,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 : `${bound} This column has no phase policy.`,
             },
           ],
+        };
+      }
+
+      case "clear_queue": {
+        if (!hasCapability(db, "queuePosition")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("clear_queue", "queuePosition") }],
+            isError: true,
+          };
+        }
+        // The same clear the app makes: lib/card-ops/queue.ts. The app sees
+        // the empty queue on its next 10s poll.
+        const cleared = clearQueue(db);
+        return {
+          content: [{
+            type: "text",
+            text: cleared.length === 0
+              ? "The run queue was already empty."
+              : `Cleared ${cleared.length} card(s) from the run queue, in their old order: ${cleared.map((c) => c.displayId).join(", ")}. A run already going was not touched.`,
+          }],
         };
       }
 
