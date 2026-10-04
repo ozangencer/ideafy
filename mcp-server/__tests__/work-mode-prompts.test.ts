@@ -171,3 +171,46 @@ test("the Work brief fallback marks empty answers as not provided", () => {
   assert.match(content, /^# Project Brief: Northwind rollout/);
   assert.equal(content.match(/_Not provided_/g)?.length, 6);
 });
+
+// IDE-404: the in-app Opinion chat writes the evaluation Evaluate, Ideate and
+// a terminal session write. prompt-builder pulls in @/ aliases this runner
+// cannot resolve, so the wiring is checked against the source; the text
+// itself comes from lib/prompts/evaluation.ts, which loads fine.
+test("the Opinion chat carries the evaluation rule, the chain and the template", () => {
+  const source = readFileSync(new URL("../../lib/ai/prompt-builder.ts", import.meta.url), "utf8");
+  const evaluation = source.slice(source.indexOf("function buildEvaluationContext"));
+  assert.match(evaluation, /\$\{buildChainSection\(ctx\.chain\)\}\$\{buildPriorDecisionsSection\(\{ id: ctx\.uuid, projectId: ctx\.projectId \}\)\}/);
+  assert.match(evaluation, /\$\{EVALUATION_OUTPUT_SCHEMA\}/);
+  assert.match(evaluation, /Only when the user asks for an evaluation/);
+
+  const opinion = source.slice(source.indexOf("  opinion: (ctx) =>"), source.indexOf("  solution: (ctx) =>"));
+  assert.match(opinion, /\$\{buildEvaluationContext\(ctx\)\}/);
+  assert.doesNotMatch(source, /include the Summary Verdict \/ Strengths/, "the hand-written section list is back");
+
+  const route = readFileSync(new URL("../../app/api/cards/[id]/chat-stream/route.ts", import.meta.url), "utf8");
+  assert.match(route, /chain: sectionType === "opinion" \? loadCardChain\(card\) : null/);
+  assert.match(route, /projectId: card\.projectId/);
+});
+
+test("Evaluate, Ideate and the Opinion chat take the template from one module", () => {
+  const card = readFileSync(new URL("../../lib/prompts/card.ts", import.meta.url), "utf8");
+  assert.match(card, /from "\.\/evaluation"/);
+  assert.doesNotMatch(card, /const EVALUATION_OUTPUT_SCHEMA/, "card.ts grew its own copy again");
+});
+
+test("the chain section lists every member in chain order", async () => {
+  const evaluationNs = await import("../../lib/prompts/evaluation");
+  const { buildChainSection, buildEvaluationGuide, EVALUATION_OUTPUT_SCHEMA } = interop(evaluationNs);
+  const section = buildChainSection({
+    groupCode: "SCORE",
+    groupName: "Ideation skoru",
+    position: 2,
+    total: 3,
+    predecessors: [{ displayId: "IDE-403", title: "Skor", status: "completed" }],
+    successors: [{ displayId: null, title: "Taslak", status: "ideation" }],
+    next: { displayId: "IDE-404", title: "Bu kart", status: "progress" },
+  });
+  assert.match(section, /1\. IDE-403 · Skor — completed\n2\. \(this card\)\n3\. Taslak \(draft, no displayId\) — ideation/);
+  assert.equal(buildChainSection(null), "");
+  assert.ok(buildEvaluationGuide().endsWith(EVALUATION_OUTPUT_SCHEMA));
+});

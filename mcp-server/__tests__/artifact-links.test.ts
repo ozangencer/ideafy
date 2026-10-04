@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { marked } from "marked";
 
 import * as linksNs from "../../lib/artifact-links";
 import * as urlNs from "../../lib/artifact-url";
@@ -12,7 +13,8 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { persistArtifactLinks, persistArtifacts, destinationFor } = interop(linksNs);
+const { persistArtifactLinks, persistArtifacts, destinationFor, cardArtifactDir, persistCardArtifacts, materializeArtifactFences } =
+  interop(linksNs);
 const { fileUrlToPath, pathToFileUrl, artifactHtmlToMarkdownLinks, codePathsToFileLinks, codePathsToArtifactChips } =
   interop(urlNs);
 
@@ -209,5 +211,88 @@ test("destinationFor reuses a matching file and numbers a different one", () => 
     assert.equal(destinationFor("new.html", t.cardDir, () => false), join(t.cardDir, "new.html"));
   } finally {
     t.cleanup();
+  }
+});
+
+// IDE-404: the MCP's save_opinion and save_plan run Apply's artifact pass, so
+// a mockup made in a terminal session is kept in the card folder too. The
+// MCP server finds that folder from the home directory alone.
+
+const CARD_ID = "596a657e-c279-4a19-b654-7482ed32ebc8";
+
+function makeHome() {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "ideafy-home-")));
+  const tmp = join(home, "tmp");
+  mkdirSync(tmp);
+  return { home, tmp, cardDir: join(home, ".ideafy", "images", CARD_ID), cleanup: () => rmSync(home, { recursive: true, force: true }) };
+}
+
+/** What save_opinion / save_plan store, short of the [[ card links: markdown → HTML → artifact pass. */
+function saveViaMcp(markdown: string, home: string): string {
+  const withFiles = materializeArtifactFences(markdown, cardArtifactDir(CARD_ID, home));
+  return persistCardArtifacts(marked.parse(withFiles) as string, CARD_ID, home);
+}
+
+test("the card folder is ~/.ideafy/images/<cardId>", () => {
+  assert.equal(cardArtifactDir(CARD_ID, "/home/me"), `/home/me/.ideafy/images/${CARD_ID}`);
+});
+
+test("a /tmp mockup linked from a terminal opinion is copied into a card folder that did not exist yet", () => {
+  const h = makeHome();
+  try {
+    const source = join(h.tmp, "kuyruk mockup.html");
+    writeFileSync(source, "<h1>mockup</h1>");
+
+    const stored = saveViaMcp(`## Summary Verdict\n[VERDICT: yes] — ok\n\n[Kuyruk mockup](${pathToFileUrl(source)})`, h.home);
+    const copy = join(h.cardDir, "kuyruk mockup.html");
+
+    assert.equal(readFileSync(copy, "utf8"), "<h1>mockup</h1>");
+    assert.match(stored, /data-type="artifactMention"/);
+    assert.ok(stored.includes(`data-path="${copy}"`), "the chip points at the card folder, not /tmp");
+    assert.match(stored, />Kuyruk mockup<\/span>/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("a backticked absolute path in a terminal plan is kept the same way", () => {
+  const h = makeHome();
+  try {
+    const source = join(h.tmp, "plan.png");
+    writeFileSync(source, "png");
+
+    const stored = saveViaMcp(`Mockup: \`${source}\` and \`lib/artifact-links.ts\``, h.home);
+
+    assert.deepEqual(readdirSync(h.cardDir), ["plan.png"]);
+    assert.ok(stored.includes(`data-path="${join(h.cardDir, "plan.png")}"`));
+    assert.ok(stored.includes("<code>lib/artifact-links.ts</code>"), "a repo path stays code");
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("an artifact block lands in scratch first, then in the card root as a chip", () => {
+  const h = makeHome();
+  try {
+    const block = "```html artifact=\"queue.html\"\n<p>queue</p>\n```";
+    const stored = saveViaMcp(`## Mockup\n${block}\n\nNotes.`, h.home);
+
+    assert.equal(readFileSync(join(h.cardDir, "scratch", "queue.html"), "utf8"), "<p>queue</p>\n");
+    assert.equal(readFileSync(join(h.cardDir, "queue.html"), "utf8"), "<p>queue</p>\n");
+    assert.ok(stored.includes(`data-path="${join(h.cardDir, "queue.html")}"`));
+    assert.doesNotMatch(stored, /artifact=/, "the block itself is not stored on the card");
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("an opinion without file links is left alone and makes no folder", () => {
+  const h = makeHome();
+  try {
+    const html = "<p>Plain <code>app/page.tsx</code> opinion.</p>";
+    assert.equal(persistCardArtifacts(html, CARD_ID, h.home), html);
+    assert.equal(readdirSync(h.home).includes(".ideafy"), false);
+  } finally {
+    h.cleanup();
   }
 });

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { buildChainContext } from "@/lib/chain-order";
-import type { PromptChain } from "@/lib/prompts/card";
+import type { PromptChain } from "@/lib/prompts/evaluation";
 
 /**
  * A card's place in its chain, for the prompts that never call get_card —

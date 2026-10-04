@@ -2,6 +2,7 @@ import {
   AI_OPINION_PLANNING_RULE,
   CHAIN_IMPLEMENTATION_RULE,
   PRIOR_DECISIONS_RULE,
+  buildEvaluationGuide,
 } from "./shared.js";
 
 // Normalize SQLite INTEGER boolean columns (stored as 0/1 or NULL) to JS
@@ -128,6 +129,25 @@ export function buildOpinionPlanningNote(card: {
 export function buildPriorDecisionsNote(card: { status: string }): string | null {
   if (!PLANNING_STATUSES.has(card.status)) return null;
   return `Before you write a plan for this card:\n${PRIOR_DECISIONS_RULE}`;
+}
+
+// ============================================================================
+// Evaluation note
+// ============================================================================
+
+// An idea waiting for its evaluation. A session opened by hand on it has none
+// of the Evaluate or Ideate prompts, so get_card hands it the same rule and
+// template — Related Cards, the chain and the four markers come out the way
+// they do in the app. Once an opinion is written the note stops: a card that
+// is only being read should not carry ~5 KB of rule every time. `statuses`
+// is open so create_card can attach the same note to a card it just opened.
+export function buildEvaluationNote(
+  card: { status: string; aiOpinion?: string | null },
+  statuses: readonly string[] = ["ideation"]
+): string | null {
+  if (!statuses.includes(card.status)) return null;
+  if (hasHtmlText(card.aiOpinion)) return null;
+  return `If you are evaluating this idea:\n${buildEvaluationGuide()}`;
 }
 
 // ============================================================================

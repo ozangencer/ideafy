@@ -7,6 +7,13 @@ import type { AiPlatform } from "../types";
 export const IDEAFY_MCP_SERVER = "ideafy";
 
 /**
+ * The Ideafy plugin's MCP server as the sidebar lists it. The plugin is how a
+ * chat turn reaches Ideafy (see claude-provider/ideafy-mcp.ts), so this is the
+ * id `mcpServerKey` turns into the name its tools are allowed under.
+ */
+export const IDEAFY_PLUGIN_MCP_ID = "ideafy:ideafy";
+
+/**
  * The server key Claude Code registers an MCP mention under.
  *
  * A plugin's `.mcp.json` server is listed in the sidebar as `<plugin>:<server>`

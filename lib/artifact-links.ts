@@ -1,7 +1,18 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
+import { homedir } from "os";
 import path from "path";
 import { ARTIFACT_FENCE_MAX_BYTES, extractArtifactFences } from "./artifact-fence";
-import { artifactBasename, fileLinksToArtifactChips, fileUrlToPath, pathToFileUrl } from "./artifact-url";
+import {
+  artifactBasename,
+  codePathsToFileLinks,
+  fileLinksToArtifactChips,
+  fileUrlToPath,
+  pathToFileUrl,
+} from "./artifact-url";
+
+// Node built-ins and the two pure string modules above only: the MCP server
+// bundles this file (via mcp-server/shared.ts) so save_opinion and save_plan
+// keep artifacts the way Apply does.
 
 // Big enough for any mockup, deck or screenshot; a stray link to a disk image
 // or a video should not be silently duplicated into the card folder.
@@ -10,6 +21,15 @@ const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024;
 // Chat writes throwaway files here (see buildFileLinkRule); the sweep in
 // lib/scratch-sweep.ts deletes it, never the card root.
 export const SCRATCH_DIR = "scratch";
+
+/**
+ * A card's permanent folder: `~/.ideafy/images/<cardId>`. Chat attachments,
+ * saved mockups and applied artifacts all live here, and the MCP server finds
+ * the same folder without asking the app.
+ */
+export function cardArtifactDir(cardId: string, homeDir: string = homedir()): string {
+  return path.join(homeDir, ".ideafy", "images", cardId);
+}
 
 function isInside(child: string, parent: string): boolean {
   return child === parent || child.startsWith(parent + path.sep);
@@ -90,6 +110,25 @@ function escapeAttr(value: string): string {
  */
 export function persistArtifacts(html: string, cardDir: string): string {
   return fileLinksToArtifactChips(persistArtifactLinks(html, cardDir));
+}
+
+/**
+ * The save-time pass every write of an opinion or a plan runs — Apply in the
+ * app, save_opinion and save_plan over MCP. A backticked path counts as a link
+ * (that is how Claude usually names the file); every linked file outside the
+ * card folder is copied in, and the links are stored as chips. The folder is
+ * made first: persistArtifactLinks leaves everything alone when it is missing.
+ */
+export function persistCardArtifacts(html: string, cardId: string, homeDir: string = homedir()): string {
+  const linked = codePathsToFileLinks(html, homeDir);
+  if (!linked.includes("file://")) return linked;
+  const cardDir = cardArtifactDir(cardId, homeDir);
+  try {
+    mkdirSync(cardDir, { recursive: true });
+  } catch (error) {
+    console.error("Failed to create the card folder:", cardDir, error);
+  }
+  return persistArtifacts(linked, cardDir);
 }
 
 /**

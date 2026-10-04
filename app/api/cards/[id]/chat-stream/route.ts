@@ -36,6 +36,7 @@ import {
 } from "@/lib/ai/prompt-builder";
 import { testScenariosToMarkdown } from "@/lib/markdown";
 import { materializeArtifactFences } from "@/lib/artifact-links";
+import { loadCardChain } from "@/lib/card-chain";
 import { mcpServerKey } from "@/lib/platform/mcp-tool-names";
 import type { StoppedBackgroundTask } from "@/lib/platform/types";
 import { isTestActionFor } from "@/lib/ai/allowed-tools";
@@ -234,6 +235,9 @@ export async function POST(
     mode: projectMode,
     provider: provider.id,
     artifactDir,
+    projectId: card.projectId,
+    // Only the Opinion chat lists the chain, in its evaluation section.
+    chain: sectionType === "opinion" ? loadCardChain(card) : null,
   };
   const systemPrompt = SECTION_SYSTEM_PROMPTS[sectionType as SectionType](cardContext);
   const conversationContext = buildConversationContext(parsedHistory, (content, msgIndex) => {

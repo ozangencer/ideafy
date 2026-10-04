@@ -58,8 +58,7 @@ Use the Ideafy MCP tools to list, create, update, and move cards for the current
 ## Common Actions
 
 - List cards: call \`mcp__ideafy__list_cards\` with the resolved \`projectId\`. It returns a summary per card; read content with \`get_card\`.
-- Find earlier decisions: call \`mcp__ideafy__search_cards\` with the \`projectId\` and 2-3 keywords. A newer decision overrides an older one; \`withdrawn\` means tried and abandoned.
-- See unmerged work: call \`mcp__ideafy__list_open_work\` with the \`projectId\` and your planned \`files\` to get each open card's files and the ones you share under \`overlap\`. Check both before writing a plan or an evaluation.
+- Before writing a plan or an evaluation: follow the rule \`mcp__ideafy__get_card\` returns with the card — it covers \`search_cards\`, \`list_open_work\` and the chain, and on an ideation card the evaluation template too.
 - Show a card: call \`mcp__ideafy__get_card\` with a UUID, display ID, or task number.
 - Create a card: call \`mcp__ideafy__create_card\` with a title, projectId, and any provided description, priority, complexity, or status.
 - Update a card: call \`mcp__ideafy__update_card\` only for fields the user explicitly asked to change.

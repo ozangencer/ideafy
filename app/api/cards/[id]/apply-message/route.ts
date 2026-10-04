@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import os from "os";
 import { eq } from "drizzle-orm";
 import { db, schema, sqlite } from "@/lib/db";
 import { linkCardsInHtml } from "@/lib/card-link-resolver";
@@ -14,9 +13,7 @@ import {
 } from "@/lib/markdown";
 import { recordApplyMessage } from "@/lib/activity-registry";
 import { saveOpinion, statusAfterPlan, type SavedOpinionFields } from "@/lib/card-ops";
-import { persistArtifacts as persistArtifactFiles } from "@/lib/artifact-links";
-import { getCardImageDir } from "@/lib/prompts";
-import { codePathsToFileLinks } from "@/lib/artifact-url";
+import { persistCardArtifacts } from "@/lib/artifact-links";
 
 type Field = "description" | "solutionSummary" | "aiOpinion" | "testScenarios";
 type Mode = "replace" | "append";
@@ -80,12 +77,9 @@ export async function POST(
 
   // An approved artifact (mockup, image, doc) linked as file://… is copied
   // out of /var/folders or /tmp into the card's own folder so the chip keeps
-  // opening after macOS cleans the temp dir. A backticked path counts too —
-  // that is how Claude usually names the file.
-  const persistArtifacts = (html: string) => {
-    const linked = codePathsToFileLinks(html, os.homedir());
-    return linked.includes("file://") ? persistArtifactFiles(linked, getCardImageDir(id)) : linked;
-  };
+  // opening after macOS cleans the temp dir. The MCP's save_opinion and
+  // save_plan run the same pass.
+  const persistArtifacts = (html: string) => persistCardArtifacts(html, id);
 
   let nextHtml: string;
   let added: number | undefined;

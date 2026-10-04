@@ -99,3 +99,21 @@ test("a read-only Tests turn shares the flag with the write denials", () => {
   assert.ok(denied.includes("Edit"));
   assert.ok(denied.includes("Bash"));
 });
+
+// IDE-404: the Opinion chat runs the earlier-cards check Evaluate runs. A -p
+// turn denies whatever is not allow-listed, so its read-only Ideafy tools are
+// allowed without a mention — and its write tools still are not.
+test("the Opinion chat can read the card, search the board and list open work", () => {
+  const tools = getAllowedTools("opinion");
+  for (const tool of ["get_card", "search_cards", "list_open_work"]) {
+    assert.ok(tools.includes(`mcp__plugin_ideafy_ideafy__${tool}`), tool);
+    assert.ok(tools.includes(`mcp__ideafy__${tool}`), `${tool} as a plain server`);
+  }
+  assert.ok(!tools.some((t) => /save_opinion|update_card|move_card|__\*$/.test(t)));
+});
+
+test("only the Opinion chat gets the evaluation tools without a mention", () => {
+  for (const section of ["detail", "solution"] as const) {
+    assert.deepEqual(getAllowedTools(section), ["Read", "Grep", "Glob"], section);
+  }
+});

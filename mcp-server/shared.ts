@@ -9,8 +9,9 @@
 // unwrapped once.
 //
 // Whatever is imported here ends up in the plugin bundle. Only import-free
-// modules and lib/card-ops/ belong here — never lib/db, drizzle or anything
-// that reaches better-sqlite3 or Next (__tests__/bundle-deps.test.ts fails the
+// modules, modules that use nothing but node built-ins (lib/artifact-links)
+// and lib/card-ops/ belong here — never lib/db, drizzle or anything that
+// reaches better-sqlite3 or Next (__tests__/bundle-deps.test.ts fails the
 // build if one does).
 
 import * as testStyleNs from "../lib/prompts/test-style";
@@ -22,6 +23,8 @@ import * as chainOrderNs from "../lib/chain-order";
 import * as planFilesNs from "../lib/plan-files";
 import * as cardOpsNs from "../lib/card-ops";
 import * as opinionMarkersNs from "../lib/opinion-markers";
+import * as evaluationNs from "../lib/prompts/evaluation";
+import * as artifactLinksNs from "../lib/artifact-links";
 
 function unwrap<T extends object>(ns: T): T {
   return (Reflect.get(ns, "default") as T | undefined) ?? ns;
@@ -63,6 +66,8 @@ export const {
   moveCardInChain,
 } = unwrap(cardOpsNs);
 export const { normalizeComplexity, describeOpinionMarkers } = unwrap(opinionMarkersNs);
+export const { EVALUATION_OUTPUT_SCHEMA, EVALUATION_HEADINGS_RULE, buildEvaluationGuide } = unwrap(evaluationNs);
+export const { cardArtifactDir, materializeArtifactFences, persistCardArtifacts } = unwrap(artifactLinksNs);
 
 export type { CardResolver, LinkedCard } from "../lib/card-links";
 export type { ChainCardRef, ChainContext } from "../lib/chain-order";

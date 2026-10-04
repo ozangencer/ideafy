@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { tmpdir, homedir } from "os";
+import { tmpdir } from "os";
+import { cardArtifactDir } from "../artifact-links";
 
 export interface SavedImage {
   id: string;
@@ -15,7 +16,7 @@ export interface SavedImage {
  * in their conversation history.
  */
 export function getCardImageDir(cardId: string): string {
-  const dir = join(homedir(), ".ideafy", "images", cardId);
+  const dir = cardArtifactDir(cardId);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

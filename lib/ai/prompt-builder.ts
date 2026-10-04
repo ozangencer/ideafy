@@ -11,6 +11,13 @@ import { detectCardLanguage } from "@/lib/prompts/test-style";
 import { buildVoicePrompt } from "@/lib/prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "@/lib/prompts/opinion";
 import { PRIOR_DECISIONS_RULE } from "@/lib/prompts/prior-decisions";
+import {
+  EVALUATION_HEADINGS_RULE,
+  EVALUATION_OUTPUT_SCHEMA,
+  buildChainSection,
+  buildPriorDecisionsSection,
+  type PromptChain,
+} from "@/lib/prompts/evaluation";
 import { getProviderContextRef } from "@/lib/ai/provider-context-ref";
 import { APPLY_OPEN_MARKER, APPLY_CLOSE_MARKER } from "@/lib/apply-content";
 import { artifactHtmlToMarkdownLinks } from "@/lib/artifact-url";
@@ -68,6 +75,13 @@ export interface CardContext {
    * without file access (remote runner) leave it unset and get no rule.
    */
   artifactDir?: string;
+  /**
+   * The card's project and its place in a chain, for the Opinion chat's
+   * evaluation section: the earlier-cards check needs the projectId, and the
+   * chain lines are spelled out as Evaluate spells them. Unset drops each part.
+   */
+  projectId?: string | null;
+  chain?: PromptChain | null;
 }
 
 // Get allowed tools for non-test sections (test section uses --dangerously-skip-permissions)
@@ -111,6 +125,23 @@ ${markUntrusted(clipped, ctx.externallyAuthored === true)}
 
 ${AI_OPINION_PLANNING_RULE}
 `;
+}
+
+// The Opinion chat writes the evaluation Evaluate, Ideate and a terminal
+// session write: the same earlier-cards check, the same chain lines, the same
+// template. Gated on the user asking for one, so a question about the idea
+// stays a quick answer — IDE-361 cut Evaluate's cost on purpose, and a chat
+// turn that searches the board for every question would undo it.
+function buildEvaluationContext(ctx: CardContext): string {
+  return `
+
+## When you write an evaluation
+Only when the user asks for an evaluation, an opinion or a re-evaluation — not for a question about the idea — read the chain and run the earlier-cards check below (whichever of them is present) before you write it, then write it in the template at the end of this section. Answer a question directly, without the check. get_card may hand you the same rule ending in save_opinion; in this chat the user saves it with Apply instead.
+${buildChainSection(ctx.chain)}${buildPriorDecisionsSection({ id: ctx.uuid, projectId: ctx.projectId })}
+### Evaluation template
+${EVALUATION_HEADINGS_RULE}
+
+${EVALUATION_OUTPUT_SCHEMA}`;
 }
 
 // Build section behavior context based on section type and card status
@@ -286,7 +317,7 @@ ${section === "solution" ? `
 Do NOT call save_plan. The user reviews your plan and clicks Append or Replace via the Apply buttons in the chat UI; clicking Apply also moves the card to In Progress automatically when appropriate. If you call save_plan you will silently overwrite their existing solution — that is the destructive bug Apply was built to prevent. Respond with your plan as normal markdown text and let the user click Apply.
 Do NOT automatically generate test scenarios when producing a plan. Only generate tests if the user explicitly asks for it.` : ""}${section === "detail" ? `
 Do NOT call update_card to write the description. The user reviews your reply and decides whether to Append or Replace via the Apply buttons in the chat UI. If you call update_card with a description, you will silently overwrite their existing content — that is the destructive bug Apply was built to prevent. Respond with your refined content as normal markdown text and let the user click Apply.` : ""}${section === "opinion" ? `
-Do NOT call save_opinion. The user reviews your evaluation and clicks Append or Replace via the Apply buttons in the chat UI; the card's verdict, score, priority and complexity are read from your [VERDICT: …], [SCORE: X/10], [PRIORITY: …] and [COMPLEXITY: …] markers when Apply is clicked — write each with exactly one English value. If you call save_opinion you will silently overwrite their existing opinion — that is the destructive bug Apply was built to prevent. Respond with your evaluation as normal markdown (include the Summary Verdict / Strengths / Concerns / Recommendations / Priority / Final Score sections) and let the user click Apply.` : ""}${section === "tests" ? `
+Do NOT call save_opinion. The user reviews your evaluation and clicks Append or Replace via the Apply buttons in the chat UI; the card's verdict, score, priority and complexity are read from your [VERDICT: …], [SCORE: X/10], [PRIORITY: …] and [COMPLEXITY: …] markers when Apply is clicked — write each with exactly one English value. If you call save_opinion you will silently overwrite their existing opinion — that is the destructive bug Apply was built to prevent. Respond with your evaluation as normal markdown in the evaluation template above and let the user click Apply.` : ""}${section === "tests" ? `
 On the turns where you do call save_tests, send markdown checkbox format and NEVER use update_card for testScenarios — it bypasses checkbox state preservation. Send the full checklist the card should end up with: existing items plus your additions on an append, or the surviving items only when the user asked for a removal and you pass allowDeletion. save_tests merges checkbox states automatically on appends.
 After ${isWork ? "changing the output" : "a code change"}, do not reach for save_tests reflexively. Describe what you changed, propose any new scenarios as checkboxes in your reply, and let the user apply them.` : ""}${buildApplyMarkerContext(section)}${CHAT_TURN_RULE}`;
 }
@@ -326,7 +357,7 @@ ${ctx.narrativeContent}
 
 ${isWork
   ? "Assess what the work needs, where it could go wrong, suggest approaches, and gauge its size."
-  : "Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity."} Be direct and constructive.
+  : "Provide technical analysis, identify potential challenges, suggest approaches, and assess complexity."} Be direct and constructive.${buildEvaluationContext(ctx)}
 
 ${voice}${buildSectionBehaviorContext(ctx, "opinion")}${buildToolUsageContext("opinion", ctx.mode)}${buildArtifactLinkRule(ctx, "opinion")}`;
     return prompt;

@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { extractCardImages, buildOpinionPlanningNote } from "../serialize-card.js";
+import { extractCardImages, buildOpinionPlanningNote, buildEvaluationNote } from "../serialize-card.js";
 import * as opinionNs from "../../lib/prompts/opinion";
+import * as evaluationNs from "../../lib/prompts/evaluation";
+import * as priorDecisionsNs from "../../lib/prompts/prior-decisions";
 
 /** See run-output.test.ts — `lib/` comes back through the CJS interop. */
 function interop<T extends object>(ns: T): T {
@@ -10,6 +12,8 @@ function interop<T extends object>(ns: T): T {
 }
 
 const { AI_OPINION_PLANNING_RULE } = interop(opinionNs);
+const { EVALUATION_OUTPUT_SCHEMA } = interop(evaluationNs);
+const { PRIOR_DECISIONS_EVALUATION_RULE } = interop(priorDecisionsNs);
 
 // A plan can only build on the AI Opinion if get_card hands it over. The
 // SELECT lives inside the tool handler, so read it straight from the source.
@@ -89,4 +93,61 @@ test("save_plan's description carries the planning rule", () => {
     indexSource.indexOf('name: "save_tests"')
   );
   assert.match(region, /\$\{AI_OPINION_PLANNING_RULE\}/);
+});
+
+// IDE-404: a terminal session evaluating an idea has none of Evaluate's or
+// Ideate's prompts, so get_card carries the same rule and template — but only
+// while the idea is still waiting for its opinion.
+
+test("an ideation card without an opinion gets the evaluation rule and the template", () => {
+  for (const aiOpinion of [null, "", "<p></p>"]) {
+    const note = buildEvaluationNote({ status: "ideation", aiOpinion });
+    assert.ok(note, "no evaluation note for an unevaluated idea");
+    assert.ok(note.startsWith("If you are evaluating this idea:\n"));
+    assert.ok(note.includes(PRIOR_DECISIONS_EVALUATION_RULE), "the rule differs from Evaluate's");
+    assert.ok(note.includes(EVALUATION_OUTPUT_SCHEMA), "the template differs from Evaluate's");
+    assert.match(note, /save_opinion/);
+  }
+});
+
+test("the evaluation note stops once the opinion is written or the card left Ideation", () => {
+  assert.equal(buildEvaluationNote({ status: "ideation", aiOpinion: "<p>Yes.</p>" }), null);
+  for (const status of ["backlog", "bugs", "progress", "test", "completed", "withdrawn"]) {
+    assert.equal(buildEvaluationNote({ status, aiOpinion: null }), null, status);
+  }
+});
+
+test("the evaluation note's columns are open for a caller that needs another one", () => {
+  assert.ok(buildEvaluationNote({ status: "backlog", aiOpinion: null }, ["ideation", "backlog"]));
+  assert.equal(buildEvaluationNote({ status: "ideation", aiOpinion: null }, ["backlog"]), null);
+});
+
+test("the get_card handler sends the evaluation note as its own block before the images", () => {
+  const noteAt = getCardHandler.indexOf("buildEvaluationNote(card)");
+  assert.ok(noteAt !== -1, "get_card no longer builds the evaluation note");
+  assert.ok(
+    getCardHandler.indexOf("JSON.stringify(cleanedCard") < noteAt &&
+      noteAt < getCardHandler.indexOf('type: "image"'),
+  );
+});
+
+test("save_opinion's aiOpinion description is the template Evaluate uses", () => {
+  const region = indexSource.slice(
+    indexSource.indexOf('name: "save_opinion"'),
+    indexSource.indexOf('name: "save_output"')
+  );
+  assert.match(region, /\$\{EVALUATION_OUTPUT_SCHEMA\}/);
+  assert.match(region, /get_card returns the full evaluation rule/);
+  // The full rule stays out of the tool list: it would ride on every session.
+  assert.doesNotMatch(region, /PRIOR_DECISIONS_EVALUATION_RULE/);
+});
+
+test("save_opinion and save_plan keep linked artifacts the way Apply does", () => {
+  for (const [tool, next] of [["save_plan", "save_tests"], ["save_opinion", "save_output"]]) {
+    const handler = indexSource.slice(indexSource.indexOf(`case "${tool}"`), indexSource.indexOf(`case "${next}"`));
+    assert.match(handler, /cardFieldHtml\(id, /, `${tool} skips the artifact pass`);
+  }
+  const helper = indexSource.slice(indexSource.indexOf("function cardFieldHtml"));
+  assert.match(helper, /materializeArtifactFences\(markdown, cardArtifactDir\(id\)\)/);
+  assert.match(helper, /persistCardArtifacts\(linked, id\)/);
 });

@@ -20,16 +20,20 @@ import {
   buildOpinionPlanningNote,
   buildPriorDecisionsNote,
   buildChainImplementationNote,
+  buildEvaluationNote,
   type ExtractedImage,
 } from "./serialize-card.js";
 import { parseOutputPaths, recordOutputPath } from "./output-paths.js";
 import { hasCapability, missingCapabilityMessage } from "./schema-caps.js";
 import {
   AI_OPINION_PLANNING_RULE,
+  EVALUATION_HEADINGS_RULE,
+  EVALUATION_OUTPUT_SCHEMA,
   PRIOR_DECISIONS_RULE,
   buildPhaseHint,
   buildPhasePolicyBody,
   buildTestStyleContract,
+  cardArtifactDir,
   clearQueue,
   completedAtFor,
   dequeueCard,
@@ -38,8 +42,10 @@ import {
   describeOpinionMarkers,
   isStatus,
   listQueueRows,
+  materializeArtifactFences,
   moveCard,
   normalizeComplexity,
+  persistCardArtifacts,
   queueDisplayId,
   queueKindOf,
   queuedRunsInWorktree,
@@ -543,6 +549,17 @@ function readStatus(id: string): string {
   return row?.status ?? "unknown";
 }
 
+// An opinion or a plan as the card stores it, built the way the app's Apply
+// builds it. A ```html artifact="…" block is saved into the card's scratch/
+// and becomes a link; "IDE-318" becomes a [[ chip; and every linked file —
+// a mockup in /tmp included — is copied into the card folder and stored as an
+// artifact chip, so it still opens after macOS clears the temp dir.
+function cardFieldHtml(id: string, markdown: string): string {
+  const withFiles = materializeArtifactFences(markdown, cardArtifactDir(id));
+  const linked = linkCardsInHtml(db, markdownToTiptapHtml(withFiles), projectIdOfCard(db, id));
+  return persistCardArtifacts(linked, id);
+}
+
 // ai_score arrived with 0021, which an app older than this plugin has not run
 // yet: read cards still list, with no score.
 function aiScoreColumn(conn: typeof db): string {
@@ -780,7 +797,7 @@ Reading the results: a newer decision overrides an older one (compare completedA
       },
       {
         name: "save_plan",
-        description: `Save a solution plan to a card. A card in Ideation, Backlog or Bugs moves to In Progress; anywhere else it stays in its column. Use this when you've completed planning a task.
+        description: `Save a solution plan to a card. A card in Ideation, Backlog or Bugs moves to In Progress; anywhere else it stays in its column. Use this when you've completed planning a task. A mockup or any other file linked in the plan (a file:// link, a backticked absolute path, or a \`\`\`html artifact="name.html" block) is copied into the card's folder and shown as a chip, the way the app's Apply keeps it.
 
 NOT the exit from Ideation. A card in the \`ideation\` column has not been evaluated yet: it needs save_opinion first, then the user's yes to move_card. Calling save_plan on an ideation card skips the evaluation the user asked for and jumps the card two columns at once — check the card's column before you call this.
 
@@ -861,7 +878,11 @@ Before drafting, call get_card to read the project's voice. The required section
 - builder (default) — Balance product and technical lenses. Name key risks (race conditions, schema drift) as 1-line callouts; mention rough complexity in plain words. File names appear inline only when they meaningfully shape the verdict.
 - engineer — Lead with technical risk: race conditions, n+1, schema drift, API contract breaks, perf cliffs, refactor opportunities, testability and dependency cost. File:line references welcome. Product framing is secondary.
 
-All three voices still produce the same Summary Verdict / Strengths / Concerns / Recommendations / Priority / Complexity / Final Score sections and the same four markers — voice changes the prose inside, not the schema.`,
+All three voices still produce the same sections of the template (see aiOpinion) and the same four markers — voice changes the prose inside, not the schema.
+
+BEFORE YOU WRITE: get_card returns the full evaluation rule with an ideation card that has no opinion yet — follow it. When you re-evaluate a card that already has one, run the same check before writing: search_cards for earlier decisions and duplicates, list_open_work for overlapping work, and the chain get_card returns; report what you found under Related Cards.
+
+A mockup or any other file linked in the opinion (a file:// link, a backticked absolute path, or a \`\`\`html artifact="name.html" block) is copied into the card's folder and shown as a chip, the way the app's Apply keeps it.`,
         inputSchema: {
           type: "object",
           properties: {
@@ -871,7 +892,11 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             },
             aiOpinion: {
               type: "string",
-              description: "AI opinion in markdown. MUST include these sections: ## Summary Verdict ([VERDICT: strong_yes|yes|maybe|no|strong_no] — one sentence), ## Strengths (bullet points), ## Concerns (bullet points), ## Recommendations (bullet points), ## Priority ([PRIORITY: low|medium|high] — reasoning), ## Complexity ([COMPLEXITY: low|medium|high] — assessment), ## Final Score ([SCORE: X/10] — justification). The server reads the card's verdict, score, priority and complexity from these four markers and writes them itself — do not call update_card for priority or complexity. Marker values stay English in every card language. Adapt the prose inside each section to the project's voice (see tool description).",
+              description: `AI opinion in markdown, in this template. ${EVALUATION_HEADINGS_RULE}
+
+${EVALUATION_OUTPUT_SCHEMA}
+
+The server writes the card's verdict, score, priority and complexity from those markers itself — do not call update_card for priority or complexity. Adapt the prose inside each section to the project's voice (see tool description).`,
             },
             aiVerdict: {
               type: "string",
@@ -1200,6 +1225,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const chainImplementationNote = buildChainImplementationNote(card, chain);
         if (chainImplementationNote) {
           content.push({ type: "text", text: chainImplementationNote });
+        }
+        // An ideation card still waiting for its opinion gets the evaluation
+        // rule and template Evaluate and Ideate run on.
+        const evaluationNote = buildEvaluationNote(card);
+        if (evaluationNote) {
+          content.push({ type: "text", text: evaluationNote });
         }
 
         // Add images as separate content blocks
@@ -1780,10 +1811,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Convert markdown to Tiptap-compatible HTML with TaskList support;
-        // "IDE-318" in Edge Cases becomes a clickable [[ chip.
-        const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(solutionSummary), projectIdOfCard(db, id));
-
         // The plan and the column move land together. Which column, and its
         // completed_at, come from lib/card-ops — the rule the app's Apply uses.
         if (!hasCapability(db, "completedAt")) {
@@ -1792,6 +1819,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+
+        // Tiptap HTML with [[ chips for "IDE-318" in Edge Cases and linked
+        // mockups kept in the card folder, as Apply stores a plan.
+        const htmlContent = cardFieldHtml(id, solutionSummary);
         const saved = saveFieldAndMove(id, "solution_summary", htmlContent, statusAfterPlan);
         if (!saved) {
           return {
@@ -1934,9 +1965,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        // Convert markdown to Tiptap-compatible HTML; "IDE-318" under Related
-        // Cards becomes a clickable [[ chip.
-        const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(aiOpinion), projectIdOfCard(db, id));
+        // Tiptap HTML with [[ chips for "IDE-318" under Related Cards and
+        // linked mockups kept in the card folder, as Apply stores an opinion.
+        const htmlContent = cardFieldHtml(id, aiOpinion);
 
         // Verdict, score, priority and complexity are read from the opinion's
         // markers, as Evaluate and Apply do; the aiVerdict argument only fills

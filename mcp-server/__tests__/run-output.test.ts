@@ -334,7 +334,12 @@ test("every contract is still demanded by its prompt", () => {
     new URL("../../lib/prompts/card.ts", import.meta.url),
     "utf8",
   );
-  const all = prompts + cardPrompts;
+  // The evaluation template lives in its own module since IDE-404.
+  const evaluationPrompts = readFileSync(
+    new URL("../../lib/prompts/evaluation.ts", import.meta.url),
+    "utf8",
+  );
+  const all = prompts + cardPrompts + evaluationPrompts;
 
   // What each contract's patterns should find verbatim in the prompt text.
   const EXPECTED: Record<keyof typeof RUN_OUTPUT_CONTRACTS, string[]> = {
