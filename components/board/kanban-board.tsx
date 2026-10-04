@@ -14,27 +14,21 @@ import {
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useKanbanStore } from "@/lib/store";
 import { useUndoShortcut } from "@/hooks/use-undo-shortcut";
-import { COLUMNS, Card, Status, Priority, Complexity, CompletedFilter, getColumns, TodaySource } from "@/lib/types";
+import { COLUMNS, Card, Status, CompletedFilter, getColumns, TodaySource } from "@/lib/types";
 import { isCardInWorkspace } from "@/lib/workspace";
 import { summarizeCardGroups } from "@/lib/card-group";
 import { partitionStaleCards } from "@/lib/card-age";
+import {
+  sortCards,
+  sortIdeationCards,
+  sortCompletedCards,
+  sortByRecentUpdate,
+} from "@/lib/board-sort";
 import { FocusView } from "./focus-view";
 import { ChainsView } from "./chains-view";
 import { SelectionBar } from "./selection-bar";
-
-// Priority order: high > medium > low (descending)
-const PRIORITY_ORDER: Record<Priority, number> = {
-  high: 3,
-  medium: 2,
-  low: 1,
-};
-
-// Complexity order: low > medium > high (ascending)
-const COMPLEXITY_ORDER: Record<Complexity, number> = {
-  low: 1,
-  medium: 2,
-  high: 3,
-};
+import { Column } from "./column";
+import { TaskCard } from "./card";
 
 // Filter completed cards by date filter
 function filterByCompletedDate(cards: Card[], filter: CompletedFilter): Card[] {
@@ -77,40 +71,6 @@ function filterByCompletedDate(cards: Card[], filter: CompletedFilter): Card[] {
   }
 }
 
-// Sort cards by priority (desc) then complexity (asc)
-function sortCards(cards: Card[]): Card[] {
-  return [...cards].sort((a, b) => {
-    // Primary: Priority descending (urgent first)
-    const priorityDiff =
-      (PRIORITY_ORDER[b.priority] || 2) - (PRIORITY_ORDER[a.priority] || 2);
-    if (priorityDiff !== 0) return priorityDiff;
-
-    // Secondary: Complexity ascending (low first)
-    return (
-      (COMPLEXITY_ORDER[a.complexity] || 2) - (COMPLEXITY_ORDER[b.complexity] || 2)
-    );
-  });
-}
-
-// Sort completed cards by completedAt (desc) - most recently completed first
-function sortCompletedCards(cards: Card[]): Card[] {
-  return [...cards].sort((a, b) => {
-    const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-    const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-    return dateB - dateA;
-  });
-}
-
-// Sort test and withdrawn cards by updatedAt (desc) - most recently updated first
-function sortByRecentUpdate(cards: Card[]): Card[] {
-  return [...cards].sort((a, b) => {
-    const dateA = new Date(a.updatedAt).getTime();
-    const dateB = new Date(b.updatedAt).getTime();
-    return dateB - dateA;
-  });
-}
-import { Column } from "./column";
-import { TaskCard } from "./card";
 
 interface KanbanBoardProps {
   // Cloud wrapper passes team pool activity here for Focus view's Today
@@ -251,7 +211,9 @@ export function KanbanBoard({ todaySources }: KanbanBoardProps = {}) {
               ? sortCompletedCards(columnCards)
               : column.id === 'test' || column.id === 'withdrawn'
                 ? sortByRecentUpdate(columnCards)
-                : sortCards(columnCards);
+                : column.id === 'ideation'
+                  ? sortIdeationCards(columnCards)
+                  : sortCards(columnCards);
             // Split after sorting, so the Stale row keeps the column's own
             // order rather than inventing a second one.
             const { live, stale } = partitionStaleCards(
