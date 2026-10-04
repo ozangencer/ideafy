@@ -29,6 +29,9 @@ export {
   type NarrativeData,
   buildNarrativePrompt,
   generateFallbackContent,
+  type WorkBriefData,
+  buildWorkBriefPrompt,
+  generateWorkBriefFallback,
 } from "./prompts/narrative";
 
 // ------------------------------------------------------------------

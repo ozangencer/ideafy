@@ -497,7 +497,7 @@ export function EditProjectModal({
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <label htmlFor="edit-narrativePath" className="text-sm font-medium">
-                Product Narrative Path
+                {mode === "work" ? "Project Brief Path" : "Product Narrative Path"}
               </label>
               <span className="text-xs text-muted-foreground">(optional)</span>
             </div>
@@ -542,38 +542,41 @@ export function EditProjectModal({
             </div>
             <div className="flex items-center gap-2">
               <p className="text-xs text-muted-foreground flex-1">
-                Relative path to the product narrative file. Leave empty to use default (docs/product-narrative.md).
+                Relative path to the {mode === "work" ? "project brief" : "product narrative"} file. Leave empty to use default (docs/product-narrative.md).
               </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 text-xs"
-                disabled={isLaunchingSkill}
-                onClick={async () => {
-                  setIsLaunchingSkill(true);
-                  try {
-                    const res = await fetch(`/api/projects/${project.id}/narrative-skill`, {
-                      method: "POST",
-                    });
-                    if (!res.ok) {
-                      const data = await res.json();
-                      console.error("Failed to launch skill:", data.error);
+              {/* The /product-narrative skill scans a codebase; a Work folder has none. */}
+              {mode === "development" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5 text-xs"
+                  disabled={isLaunchingSkill}
+                  onClick={async () => {
+                    setIsLaunchingSkill(true);
+                    try {
+                      const res = await fetch(`/api/projects/${project.id}/narrative-skill`, {
+                        method: "POST",
+                      });
+                      if (!res.ok) {
+                        const data = await res.json();
+                        console.error("Failed to launch skill:", data.error);
+                      }
+                    } catch (error) {
+                      console.error("Failed to launch skill:", error);
+                    } finally {
+                      setIsLaunchingSkill(false);
                     }
-                  } catch (error) {
-                    console.error("Failed to launch skill:", error);
-                  } finally {
-                    setIsLaunchingSkill(false);
-                  }
-                }}
-              >
-                {isLaunchingSkill ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Terminal className="h-3 w-3" />
+                  }}
+                >
+                  {isLaunchingSkill ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Terminal className="h-3 w-3" />
                 )}
                 Generate with Skill
               </Button>
+              )}
             </div>
           </div>
 

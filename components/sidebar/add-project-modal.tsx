@@ -48,24 +48,18 @@ interface AddProjectModalProps {
   onClose: () => void;
 }
 
-interface NarrativeData {
-  storyBehindThis: string;
-  problem: string;
-  targetUsers: string;
-  coreFeatures: string;
-  nonGoals: string;
-  techStack: string;
-  successMetrics: string;
-}
-
 type NarrativeMode = "create" | "existing" | "skip" | "skill";
 
 // Step 1: basics, step 2: how to describe the project, step 3: the interview
 // (only reached when the user chose to write the narrative with AI).
 type Step = 1 | 2 | 3;
 
+// The answers are posted as-is; the narrative route reads them as a product
+// narrative or a Work brief depending on the project's mode.
+type Answers = Record<string, string>;
+
 interface Question {
-  key: keyof NarrativeData;
+  key: string;
   title: string;
   /** Shorter label for the question list on the left. */
   short?: string;
@@ -119,34 +113,107 @@ const QUESTIONS: Question[] = [
   },
 ];
 
-const MODE_OPTIONS: {
+// A Work project is an engagement, an area or a commitment, so the questions
+// are facts about it. Tone and audience are left to the Work voice (IDE-335).
+const WORK_QUESTIONS: Question[] = [
+  {
+    key: "context",
+    title: "Context",
+    placeholder: "What is this project?",
+    help: "Client, area or commitment. “GRC rollout for a holding group” beats “consulting”.",
+  },
+  {
+    key: "stakeholders",
+    title: "Stakeholders",
+    placeholder: "Who is involved, and what does each expect?",
+    help: "Names and roles. Who signs off, who just gets copied.",
+  },
+  {
+    key: "outputs",
+    title: "Outputs",
+    placeholder: "What gets produced in this project?",
+    help: "Minutes, mail, proposals, reports, research. Name the ones you actually write here, and who reads them.",
+  },
+  {
+    key: "outOfScope",
+    title: "Out of scope",
+    placeholder: "What does this project not cover?",
+    help: "The requests you'll be tempted to say yes to.",
+  },
+  {
+    key: "references",
+    title: "References",
+    placeholder: "Where does the reference material live?",
+    help: "Contracts, earlier proposals, folders. Paths relative to the project folder.",
+  },
+  {
+    key: "doneAndRhythm",
+    title: "Done & rhythm",
+    placeholder: "What does done look like, or what's the rhythm?",
+    help: "A deadline, a weekly SteerCo, a monthly report.",
+  },
+];
+
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+interface ModeOption {
   value: NarrativeMode;
   title: string;
   description: string;
   icon?: ReactNode;
-}[] = [
-  {
-    value: "create",
-    title: "Write it with AI",
-    description: "Answer seven short questions; AI drafts docs/product-narrative.md",
-  },
-  {
-    value: "existing",
-    title: "Use an existing file",
-    description: "Point at a README or spec you already have",
-  },
-  {
-    value: "skill",
-    title: "Interview in the terminal",
-    description: "Opens /product-narrative for a guided conversation",
-    icon: <Terminal className="h-3.5 w-3.5 text-muted-foreground" />,
-  },
-  {
-    value: "skip",
-    title: "Skip for now",
-    description: "Evaluations will be thinner until a narrative exists",
-  },
-];
+}
+
+function modeOptions(isWork: boolean, questionCount: number): ModeOption[] {
+  const count = NUMBER_WORDS[questionCount] ?? String(questionCount);
+  if (isWork) {
+    // No terminal interview: the shipped /product-narrative skill scans a
+    // codebase, which a folder of documents does not have.
+    return [
+      {
+        value: "create",
+        title: "Write it with AI",
+        description: `Answer ${count} short questions; AI drafts a project brief at docs/product-narrative.md`,
+      },
+      {
+        value: "existing",
+        title: "Use an existing file",
+        description: "Point at a brief, scope doc or index you already have",
+      },
+      {
+        value: "skip",
+        title: "Skip for now",
+        description: "Evaluations will be thinner until a brief exists",
+      },
+    ];
+  }
+  return [
+    {
+      value: "create",
+      title: "Write it with AI",
+      description: `Answer ${count} short questions; AI drafts docs/product-narrative.md`,
+    },
+    {
+      value: "existing",
+      title: "Use an existing file",
+      description: "Point at a README or spec you already have",
+    },
+    {
+      value: "skill",
+      title: "Interview in the terminal",
+      description: "Opens /product-narrative for a guided conversation",
+      icon: <Terminal className="h-3.5 w-3.5 text-muted-foreground" />,
+    },
+    {
+      value: "skip",
+      title: "Skip for now",
+      description: "Evaluations will be thinner until a narrative exists",
+    },
+  ];
+}
+
+function emptyAnswers(questions: Question[]): Answers {
+  return Object.fromEntries(questions.map((q) => [q.key, ""]));
+}
 
 function countWords(text: string): number {
   const matches = text.trim().match(/\S+/g);
@@ -158,6 +225,11 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     useShallow((s) => ({ activeWorkspace: s.activeWorkspace }))
   );
   const { toast } = useToast();
+  // The workspace cannot change while this modal is open, so the question set
+  // is fixed for the modal's lifetime.
+  const isWork = activeWorkspace === "work";
+  const questions = isWork ? WORK_QUESTIONS : QUESTIONS;
+  const docName = isWork ? "brief" : "narrative";
 
   const [step, setStep] = useState<Step>(1);
 
@@ -170,15 +242,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
   // Step 2 / 3 fields (narrative)
   const [narrativeMode, setNarrativeMode] = useState<NarrativeMode>("create");
   const [existingNarrativePath, setExistingNarrativePath] = useState("");
-  const [narrative, setNarrative] = useState<NarrativeData>({
-    storyBehindThis: "",
-    problem: "",
-    targetUsers: "",
-    coreFeatures: "",
-    nonGoals: "",
-    techStack: "",
-    successMetrics: "",
-  });
+  const [narrative, setNarrative] = useState<Answers>(() => emptyAnswers(questions));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const answerRef = useRef<HTMLTextAreaElement>(null);
 
@@ -200,9 +264,9 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     return Object.values(narrative).some((v) => v.trim() !== "");
   };
 
-  const answeredCount = QUESTIONS.filter((q) => narrative[q.key].trim() !== "").length;
+  const answeredCount = questions.filter((q) => narrative[q.key].trim() !== "").length;
 
-  const updateNarrative = (field: keyof NarrativeData, value: string) => {
+  const updateNarrative = (field: string, value: string) => {
     setNarrative((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -214,7 +278,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
   }, [step, currentQuestion]);
 
   const goToQuestion = (index: number) => {
-    setCurrentQuestion(Math.max(0, Math.min(QUESTIONS.length - 1, index)));
+    setCurrentQuestion(Math.max(0, Math.min(questions.length - 1, index)));
   };
 
   const handleCreateProject = async () => {
@@ -313,8 +377,8 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     }
   })();
 
-  const question = QUESTIONS[currentQuestion];
-  const isLastQuestion = currentQuestion === QUESTIONS.length - 1;
+  const question = questions[currentQuestion];
+  const isLastQuestion = currentQuestion === questions.length - 1;
 
   return (
     <Dialog
@@ -346,7 +410,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
               <span className="shrink-0 tabular-nums">Step {step} of {totalSteps}</span>
               <Progress value={(step / totalSteps) * 100} className="h-1" />
               <span className="shrink-0 tabular-nums">
-                {step === 2 ? "How to describe it" : `${answeredCount} of ${QUESTIONS.length} answered`}
+                {step === 2 ? "How to describe it" : `${answeredCount} of ${questions.length} answered`}
               </span>
             </div>
           )}
@@ -357,7 +421,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
           </DialogTitle>
           {step === 2 && (
             <DialogDescription>
-              Pick one. You can point at a different narrative file later from project settings.
+              Pick one. You can point at a different {docName} file later from project settings.
             </DialogDescription>
           )}
           {step === 3 && (
@@ -395,9 +459,10 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
               <RadioGroup
                 value={narrativeMode}
                 onValueChange={(value) => setNarrativeMode(value as NarrativeMode)}
-                className="grid gap-3 sm:grid-cols-2"
+                // Three options in Work would leave an empty cell in a 2x2 grid.
+                className={cn("grid gap-3", !isWork && "sm:grid-cols-2")}
               >
-                {MODE_OPTIONS.map((option) => (
+                {modeOptions(isWork, questions.length).map((option) => (
                   <FieldLabel
                     key={option.value}
                     htmlFor={`narrative-mode-${option.value}`}
@@ -429,7 +494,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                       id="existing-narrative-path"
                       value={existingNarrativePath}
                       onChange={(e) => setExistingNarrativePath(e.target.value)}
-                      placeholder="README.md"
+                      placeholder={isWork ? "brief.md" : "README.md"}
                       className="flex-1 h-8 text-sm"
                       autoFocus
                     />
@@ -478,10 +543,18 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                 )}
                 <span>
                   {narrativeMode === "skip"
-                    ? "Without a narrative file, AI evaluations may be limited. "
+                    ? `Without a ${docName} file, AI evaluations may be limited. `
                     : ""}
-                  A CLAUDE.md file in the project folder improves evaluations too &mdash;{" "}
-                  <code className="px-1 py-0.5 bg-muted rounded text-[11px]">claude /init</code> creates one.
+                  {isWork ? (
+                    // claude /init writes a code-oriented CLAUDE.md; a Work folder
+                    // needs the user's own rules instead.
+                    "A CLAUDE.md in the project folder that spells out your rules (language, file naming, where documents go) improves every evaluation and run."
+                  ) : (
+                    <>
+                      A CLAUDE.md file in the project folder improves evaluations too &mdash;{" "}
+                      <code className="px-1 py-0.5 bg-muted rounded text-[11px]">claude /init</code> creates one.
+                    </>
+                  )}
                 </span>
               </p>
             </div>
@@ -494,7 +567,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
               className="flex flex-col gap-0.5 border-r pr-4 overflow-y-auto"
               aria-label="Questions"
             >
-              {QUESTIONS.map((q, index) => {
+              {questions.map((q, index) => {
                 const answered = narrative[q.key].trim() !== "";
                 const active = index === currentQuestion;
                 return (
@@ -620,7 +693,7 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
               <Button onClick={handleCreateProject} disabled={isSubmitting}>
                 {isSubmitting
                   ? hasNarrativeContent()
-                    ? "AI generating narrative..."
+                    ? `AI generating ${docName}...`
                     : "Creating..."
                   : "Create Project"}
               </Button>

@@ -90,3 +90,98 @@ ${data.successMetrics || "_Not provided_"}
 Generated: ${now}
 `;
 }
+
+/**
+ * The Work counterpart of NarrativeData. A Work project is a client
+ * engagement, an area or a commitment, not a product, so the questions are
+ * facts about the engagement. Tone and audience are deliberately not asked:
+ * IDE-335 left those to the Work voice and the output templates.
+ */
+export interface WorkBriefData {
+  context: string;
+  stakeholders: string;
+  outputs: string;
+  outOfScope: string;
+  references: string;
+  doneAndRhythm: string;
+}
+
+/**
+ * Project brief generation prompt for Work projects. Same job as
+ * buildNarrativePrompt, but the document is a brief: no vision, architecture or
+ * competitive sections that make no sense for a proposal or a rollout.
+ */
+export function buildWorkBriefPrompt(projectName: string, data: WorkBriefData): string {
+  return `You are writing a project brief: the reference document an AI reads before working on any task in this project.
+
+## Project: ${projectName}
+
+## User's Input (expand and structure these):
+
+**Context:**
+${data.context || "Not provided"}
+
+**Stakeholders:**
+${data.stakeholders || "Not provided"}
+
+**Outputs:**
+${data.outputs || "Not provided"}
+
+**Out of scope:**
+${data.outOfScope || "Not provided"}
+
+**References:**
+${data.references || "Not provided"}
+
+**Done & rhythm:**
+${data.doneAndRhythm || "Not provided"}
+
+## Your Task
+
+Write a concise project brief in markdown with these sections, in this order:
+
+1. Context: what the project is, for whom, and the commitment behind it
+2. Stakeholders: who is involved, their role, and what each expects
+3. Outputs: the kinds of documents and deliverables produced here, and who reads them
+4. Out of scope: what this project does not cover
+5. References: where the reference material lives, as paths relative to the project folder when given
+6. Working rhythm: what done looks like, deadlines and recurring meetings or reports
+
+Requirements:
+- Stay with the facts the user gave. Do not invent names, dates or numbers.
+- When an input is "Not provided", keep the section and write a one-line placeholder saying it is still open.
+- Write in the language the user answered in.
+- Use short paragraphs, lists and tables where they help.
+- End with document metadata (date).
+
+Output ONLY the markdown content, no explanations.`;
+}
+
+/** Generate fallback brief content when AI is unavailable. */
+export function generateWorkBriefFallback(projectName: string, data: WorkBriefData): string {
+  const now = new Date().toISOString().split("T")[0];
+
+  return `# Project Brief: ${projectName}
+
+## Context
+${data.context || "_Not provided_"}
+
+## Stakeholders
+${data.stakeholders || "_Not provided_"}
+
+## Outputs
+${data.outputs || "_Not provided_"}
+
+## Out of scope
+${data.outOfScope || "_Not provided_"}
+
+## References
+${data.references || "_Not provided_"}
+
+## Working rhythm
+${data.doneAndRhythm || "_Not provided_"}
+
+---
+Generated: ${now}
+`;
+}

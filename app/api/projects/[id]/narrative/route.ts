@@ -5,8 +5,11 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   buildNarrativePrompt,
+  buildWorkBriefPrompt,
   generateFallbackContent,
+  generateWorkBriefFallback,
   type NarrativeData,
+  type WorkBriefData,
 } from "@/lib/prompts";
 import { runAutonomousCli } from "@/lib/autonomous-run/run-autonomous-cli";
 import { prependWarningMarkdown } from "@/lib/autonomous-run/select-run-output";
@@ -44,6 +47,26 @@ async function generateNarrative(prompt: string, cwd: string): Promise<string> {
     throw new Error("Narrative generation produced no content");
   }
   return warning ? prependWarningMarkdown(content, warning) : content;
+}
+
+/**
+ * A Work project gets a project brief instead of a product narrative. The
+ * wizard sends whichever answers it asked for; the project's mode decides how
+ * they are read, so a Work body never lands in the product template.
+ */
+function pickBuilder(project: { name: string; mode: string | null }, body: unknown) {
+  if (project.mode === "work") {
+    const data = body as WorkBriefData;
+    return {
+      prompt: buildWorkBriefPrompt(project.name, data),
+      fallback: () => generateWorkBriefFallback(project.name, data),
+    };
+  }
+  const data = body as NarrativeData;
+  return {
+    prompt: buildNarrativePrompt(project.name, data),
+    fallback: () => generateFallbackContent(project.name, data),
+  };
 }
 
 // GET - Read narrative from project folder
@@ -100,7 +123,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body: NarrativeData = await request.json();
+  const body: unknown = await request.json();
 
   const project = db
     .select()
@@ -128,7 +151,7 @@ export async function POST(
     }
 
     // Build prompt for Claude
-    const prompt = buildNarrativePrompt(project.name, body);
+    const { prompt } = pickBuilder(project, body);
 
     console.log("Running AI CLI for narrative generation...");
 
@@ -148,7 +171,7 @@ export async function POST(
 
     // Fallback to simple template if Claude fails
     try {
-      const fallbackContent = generateFallbackContent(project.name, body);
+      const fallbackContent = pickBuilder(project, body).fallback();
       fs.writeFileSync(narrativePath, fallbackContent, "utf-8");
 
       return NextResponse.json({
@@ -172,7 +195,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body: NarrativeData = await request.json();
+  const body: unknown = await request.json();
 
   const project = db
     .select()
@@ -200,7 +223,7 @@ export async function PUT(
     }
 
     // Build prompt for Claude
-    const prompt = buildNarrativePrompt(project.name, body);
+    const { prompt } = pickBuilder(project, body);
 
     console.log("Running AI CLI for narrative update...");
 
@@ -220,7 +243,7 @@ export async function PUT(
 
     // Fallback to simple template if Claude fails
     try {
-      const fallbackContent = generateFallbackContent(project.name, body);
+      const fallbackContent = pickBuilder(project, body).fallback();
       fs.writeFileSync(narrativePath, fallbackContent, "utf-8");
 
       return NextResponse.json({

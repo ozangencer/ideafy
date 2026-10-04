@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import * as phasePolicyNs from "../../lib/prompts/phase-policy";
 import * as voiceStyleNs from "../../lib/prompts/voice-style";
 import * as priorDecisionsNs from "../../lib/prompts/prior-decisions";
+import * as narrativeNs from "../../lib/prompts/narrative";
 
 // See run-output.test.ts: lib/ modules come back through the CJS interop.
 function interop<T extends object>(ns: T): T {
@@ -135,4 +136,38 @@ test("the chain implementation rule rides on the runs that write code, not the p
   assert.match(CHAIN_IMPLEMENTATION_RULE, /## Regresyon/);
   assert.match(CHAIN_IMPLEMENTATION_RULE, /Never put it in the core group/);
   assert.match(CHAIN_IMPLEMENTATION_RULE, /With no `chain` field, ignore this part/);
+});
+
+// IDE-358: a Work project's wizard writes a project brief, not a product
+// narrative. The brief keeps the six sections the wizard asks about and drops
+// the product-only ones.
+const { buildWorkBriefPrompt, generateWorkBriefFallback } = interop(narrativeNs);
+
+const EMPTY_BRIEF = {
+  context: "",
+  stakeholders: "",
+  outputs: "",
+  outOfScope: "",
+  references: "",
+  doneAndRhythm: "",
+};
+
+test("the Work brief prompt asks for brief sections, not product ones", () => {
+  const prompt = buildWorkBriefPrompt("Northwind rollout", {
+    ...EMPTY_BRIEF,
+    context: "GRC rollout for a holding group",
+  });
+  assert.match(prompt, /GRC rollout for a holding group/);
+  for (const section of ["Context", "Stakeholders", "Outputs", "Out of scope", "References", "Working rhythm"]) {
+    assert.match(prompt, new RegExp(section), `missing ${section}`);
+  }
+  assert.doesNotMatch(prompt, /Competitive Positioning/);
+  assert.doesNotMatch(prompt, /Vision Statement/);
+  assert.doesNotMatch(prompt, /Product Architect/);
+});
+
+test("the Work brief fallback marks empty answers as not provided", () => {
+  const content = generateWorkBriefFallback("Northwind rollout", EMPTY_BRIEF);
+  assert.match(content, /^# Project Brief: Northwind rollout/);
+  assert.equal(content.match(/_Not provided_/g)?.length, 6);
 });
