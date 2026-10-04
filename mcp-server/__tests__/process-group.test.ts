@@ -9,7 +9,7 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { stopProcessGroup, isProcessGroupLeader } = interop(groupNs);
+const { stopProcessGroup, stopProcessGroupById, stopProcess, isProcessGroupLeader } = interop(groupNs);
 
 function alive(pid: number): boolean {
   try {
@@ -85,4 +85,40 @@ test("process group: a non-leader PID is signalled alone", async () => {
   assert.equal(await stopProcessGroup(pid), true);
   assert.equal(alive(pid), false);
   assert.equal(alive(process.pid), true);
+});
+
+// The shape the old Stop left behind: npm (the leader) dead, its children
+// still running in npm's group.
+async function spawnHeadlessGroup(): Promise<{ pgid: number; members: number[] }> {
+  const child = spawn("sh", ["-c", "sleep 60 & sleep 60 & exit 0"], { detached: true, stdio: "ignore" });
+  child.unref();
+  const pgid = child.pid!;
+  for (let i = 0; i < 40; i++) {
+    const members = groupMembers(pgid);
+    if (members.length >= 2 && !alive(pgid)) return { pgid, members };
+    await sleep(50);
+  }
+  throw new Error("headless group never came up");
+}
+
+test("process group: a group whose leader died is stopped by id", async () => {
+  const { pgid, members } = await spawnHeadlessGroup();
+  // The leader-checked path refuses it: the leader PID is gone.
+  assert.equal(await stopProcessGroup(pgid), false);
+  assert.ok(members.every(alive), "children died with the leader");
+
+  assert.equal(await stopProcessGroupById(pgid), true);
+  for (const pid of members) assert.equal(alive(pid), false, `pid ${pid} survived`);
+  assert.equal(await stopProcessGroupById(pgid), false);
+});
+
+test("process group: stopProcess leaves the rest of a group alone", async () => {
+  const { leader, members } = await spawnGroup("sleep 60 & sleep 60 & wait");
+  const [victim] = members.filter((pid) => pid !== leader);
+
+  assert.equal(await stopProcess(victim), true);
+  assert.equal(alive(victim), false);
+  assert.equal(alive(leader), true);
+
+  await stopProcessGroup(leader);
 });

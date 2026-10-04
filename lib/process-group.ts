@@ -61,8 +61,44 @@ export async function stopProcessGroup(
 ): Promise<boolean> {
   if (!Number.isInteger(pid) || pid <= 1) return false;
 
-  const target = isProcessGroupLeader(pid) ? -pid : pid;
+  return signalUntilGone(isProcessGroupLeader(pid) ? -pid : pid, { graceMs, pollMs });
+}
 
+/**
+ * Stop a process group by its id, whether or not its leader is still alive.
+ *
+ * `stopProcessGroup` refuses a group whose leader is gone, because then it
+ * cannot tell a stale PID from a live group. The orphan-server panel can: it
+ * has just seen the members in `ps`. That is exactly the shape the old Stop
+ * left behind — npm dead, `next-server` still running in npm's group.
+ */
+export async function stopProcessGroupById(
+  pgid: number,
+  { graceMs = 3000, pollMs = 100 }: StopProcessGroupOptions = {}
+): Promise<boolean> {
+  if (!Number.isInteger(pgid) || pgid <= 1 || process.platform === "win32") return false;
+  if (!alive(-pgid)) return false;
+  return signalUntilGone(-pgid, { graceMs, pollMs });
+}
+
+/**
+ * Stop one process and nothing else, even when it leads a group. For a server
+ * that shares its group with processes that must survive.
+ */
+export async function stopProcess(
+  pid: number,
+  { graceMs = 3000, pollMs = 100 }: StopProcessGroupOptions = {}
+): Promise<boolean> {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  return signalUntilGone(pid, { graceMs, pollMs });
+}
+
+// SIGTERM, wait for the target (a PID, or a group as -pgid) to go, SIGKILL
+// once the grace period runs out.
+async function signalUntilGone(
+  target: number,
+  { graceMs, pollMs }: Required<StopProcessGroupOptions>
+): Promise<boolean> {
   try {
     process.kill(target, "SIGTERM");
   } catch {
