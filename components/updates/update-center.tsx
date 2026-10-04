@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import { useEffect } from "react";
 import { useUpdates } from "./update-provider";
 
 /** One "status line + action button" row, shared by the app and plugin. */
@@ -39,6 +40,15 @@ function UpdateRow({
 
 export function UpdateCenter() {
   const updates = useUpdates();
+  const refreshPlugin = updates?.refreshPlugin;
+
+  // Opening the panel is an explicit "what's my status" — recheck in the
+  // background (no "Checking…" flash) so a terminal-side plugin update shows
+  // up here instead of the version from the last periodic check.
+  useEffect(() => {
+    refreshPlugin?.();
+  }, [refreshPlugin]);
+
   if (!updates) return null;
 
   const { app, plugin, pluginBusy, checkApp, downloadApp, installApp, updatePlugin } =
@@ -219,7 +229,10 @@ export function UpdateCenter() {
     );
   } else {
     pluginStatus = (
-      <span className="text-green-600 dark:text-green-500 flex items-center gap-1">
+      <span
+        className="text-green-600 dark:text-green-500 flex items-center gap-1"
+        title={plugin.latestVersion ? `Latest release: v${plugin.latestVersion}` : undefined}
+      >
         <Check className="h-3.5 w-3.5" />
         v{plugin.currentVersion} · up to date
       </span>

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -84,6 +85,10 @@ const PLUGIN_FALLBACK: PluginUpdateState = {
 // cheap (one GitHub request each) and neither is worth doing more often.
 const PLUGIN_RECHECK_MS = 4 * 60 * 60 * 1000;
 
+// Floor for the focus-driven recheck, so alt-tabbing back and forth doesn't
+// turn into a GitHub request per switch.
+const PLUGIN_FOCUS_RECHECK_MS = 60 * 1000;
+
 interface UpdatesContextValue {
   app: AppUpdateState;
   plugin: PluginUpdateState;
@@ -122,7 +127,15 @@ export function UpdatesProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Several triggers can overlap (mount, focus, interval, the post-update
+  // recheck), so only the newest request may write: a slow check that started
+  // before an update would otherwise put the old version back.
+  const pluginRequestSeq = useRef(0);
+  const pluginCheckedAt = useRef(0);
+
   const refreshPlugin = useCallback(async () => {
+    const seq = ++pluginRequestSeq.current;
+    pluginCheckedAt.current = Date.now();
     try {
       const response = await fetch("/api/integrations/claude-code", {
         method: "POST",
@@ -131,8 +144,10 @@ export function UpdatesProvider({ children }: { children: ReactNode }) {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as Omit<PluginUpdateState, "loading">;
+      if (seq !== pluginRequestSeq.current) return;
       setPlugin({ ...data, loading: false, error: data.error ?? null });
     } catch (error) {
+      if (seq !== pluginRequestSeq.current) return;
       setPlugin((prev) => ({
         ...prev,
         loading: false,
@@ -148,6 +163,23 @@ export function UpdatesProvider({ children }: { children: ReactNode }) {
     refreshPlugin();
     const timer = setInterval(refreshPlugin, PLUGIN_RECHECK_MS);
     return () => clearInterval(timer);
+  }, [refreshPlugin]);
+
+  // The plugin is often updated from a terminal (`claude plugin update`), which
+  // never reaches this state. Coming back to the window is the moment the user
+  // expects to see it, so recheck then — throttled.
+  useEffect(() => {
+    const recheckIfStale = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - pluginCheckedAt.current < PLUGIN_FOCUS_RECHECK_MS) return;
+      refreshPlugin();
+    };
+    window.addEventListener("focus", recheckIfStale);
+    document.addEventListener("visibilitychange", recheckIfStale);
+    return () => {
+      window.removeEventListener("focus", recheckIfStale);
+      document.removeEventListener("visibilitychange", recheckIfStale);
+    };
   }, [refreshPlugin]);
 
   const checkApp = useCallback(async () => {
