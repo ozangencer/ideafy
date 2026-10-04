@@ -22,6 +22,7 @@ import {
 } from "./extension-row";
 import { NameDialog } from "./name-dialog";
 import { ChevronRight, Folder, FolderMinus, Pencil, Pin } from "lucide-react";
+import { SIDEBAR_SECTION_COUNT, SIDEBAR_SECTION_LABEL } from "./sidebar-section-label";
 
 type ResolvedPin = { pin: ToolkitItem; entry: ExtensionEntry | null };
 
@@ -168,11 +169,11 @@ export function ToolkitList() {
 
   return (
     <Collapsible defaultOpen className="px-2 mt-4">
-      <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground group">
+      <CollapsibleTrigger className={`flex items-center gap-2 w-full px-3 py-1.5 ${SIDEBAR_SECTION_LABEL} transition-colors hover:text-foreground group`}>
         <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
         <Pin className="h-3 w-3" />
         <span>Toolkit</span>
-        <span className="ml-auto text-[10px] opacity-60">{toolkitItems.length}</span>
+        <span className={SIDEBAR_SECTION_COUNT}>{toolkitItems.length}</span>
       </CollapsibleTrigger>
 
       <CollapsibleContent className="mt-1 space-y-0.5">

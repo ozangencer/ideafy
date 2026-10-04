@@ -67,7 +67,7 @@ export function ProjectItem({
         }
       }}
       style={activeStyle}
-      className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-sm transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 group/project cursor-pointer relative overflow-hidden ${
+      className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-[13px] transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 group/project cursor-pointer relative overflow-hidden ${
         isActive
           ? "text-foreground font-medium"
           : "text-foreground hover:bg-muted"

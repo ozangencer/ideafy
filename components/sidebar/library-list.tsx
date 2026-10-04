@@ -25,6 +25,7 @@ import {
   type ExtensionEntry,
 } from "./extension-row";
 import { ChevronRight, Library } from "lucide-react";
+import { SIDEBAR_SECTION_COUNT, SIDEBAR_SECTION_LABEL } from "./sidebar-section-label";
 
 type KindFilter = "all" | ToolkitKind;
 
@@ -209,11 +210,11 @@ export function LibraryList() {
       }}
       className={`px-2 ${activeProjectId ? "mt-2" : "mt-4"}`}
     >
-      <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground group">
+      <CollapsibleTrigger className={`flex items-center gap-2 w-full px-3 py-1.5 ${SIDEBAR_SECTION_LABEL} transition-colors hover:text-foreground group`}>
         <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
         <Library className="h-3 w-3" />
         <span>Library</span>
-        <span className="ml-auto text-[10px] opacity-60">
+        <span className={SIDEBAR_SECTION_COUNT}>
           {query ? `${matchedCount} / ${totalCount}` : totalCount}
         </span>
       </CollapsibleTrigger>

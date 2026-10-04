@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { HighlightedText, SidebarSearchInput } from "./sidebar-search-input";
 import { FileText, File, ChevronRight, FolderOpen, Folder } from "lucide-react";
+import { SIDEBAR_SECTION_COUNT, SIDEBAR_SECTION_LABEL } from "./sidebar-section-label";
 
 /** How long the box waits after the last keystroke before asking the server. */
 const CONTENT_SEARCH_DEBOUNCE_MS = 250;
@@ -185,7 +186,7 @@ function FileItem({
   return (
     <button
       onClick={() => openDocument(node.document!)}
-      className={`w-full text-left py-2 rounded-md text-sm transition-colors flex items-center gap-2 ${
+      className={`w-full text-left py-2 rounded-md text-[13px] transition-colors flex items-center gap-2 ${
         isSelected
           ? "bg-paper-cream text-ink font-medium border-l-2 border-ink"
           : isClaudeMd
@@ -241,7 +242,7 @@ function FolderItem({
       }}
     >
       <CollapsibleTrigger
-        className="flex items-center gap-2 w-full py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        className="flex items-center gap-2 w-full py-2 rounded-md text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         style={{ paddingLeft: `${depth * 16 + 12}px`, paddingRight: "12px" }}
       >
         <ChevronRight
@@ -491,16 +492,16 @@ export function DocumentList() {
       }}
       className="px-2 relative z-0"
     >
-      <CollapsibleTrigger className="flex items-center gap-2 w-full px-2 py-2 text-xs text-muted-foreground uppercase tracking-wider font-medium hover:text-foreground transition-colors">
+      <CollapsibleTrigger className={`flex items-center gap-2 w-full px-3 py-1.5 ${SIDEBAR_SECTION_LABEL} hover:text-foreground transition-colors`}>
         <ChevronRight
           className={`h-3 w-3 transition-transform duration-200 ${
             isOpen ? "rotate-90" : ""
           }`}
         />
-        <FolderOpen className="h-3.5 w-3.5" />
+        <FolderOpen className="h-3 w-3" />
         <span>Documents</span>
         {documents.length > 0 && (
-          <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded normal-case">
+          <span className={SIDEBAR_SECTION_COUNT}>
             {query ? `${matchCount} / ${documents.length}` : documents.length}
           </span>
         )}
@@ -508,7 +509,7 @@ export function DocumentList() {
 
       <CollapsibleContent className="mt-1 space-y-0.5">
         {documents.length === 0 ? (
-          <p className="text-xs text-muted-foreground px-2 py-2">
+          <p className="text-xs text-muted-foreground px-3 py-2">
             No documents found
           </p>
         ) : (

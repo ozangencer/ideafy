@@ -8,6 +8,7 @@ import { AddProjectModal } from "./add-project-modal";
 import { EditProjectModal } from "./edit-project-modal";
 import { UnpushedDialog } from "./unpushed-dialog";
 import { ProjectSectionHeader } from "./project-section-header";
+import { SIDEBAR_SECTION_LABEL } from "./sidebar-section-label";
 import { NameDialog } from "./name-dialog";
 import { Project } from "@/lib/types";
 import { OPEN_ADD_PROJECT_EVENT, projectsInWorkspace } from "@/lib/workspace";
@@ -198,7 +199,7 @@ export function ProjectList() {
         aria-expanded={isProjectListExpanded}
         aria-controls="projects-collapsible-content"
         onClick={toggleProjectListExpanded}
-        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted"
+        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[13px] font-medium text-foreground transition-colors duration-150 hover:bg-muted"
       >
         <span className="flex items-center gap-2">
           <ChevronDown
@@ -216,7 +217,7 @@ export function ProjectList() {
       {/* Pinned Projects */}
       {pinnedProjects.length > 0 && (
         <div className="mt-3">
-          <span className="text-xs text-muted-foreground px-3 uppercase tracking-wider font-medium">
+          <span className={`px-3 ${SIDEBAR_SECTION_LABEL}`}>
             Pinned
           </span>
           <div className="mt-1 space-y-0.5">
@@ -238,7 +239,7 @@ export function ProjectList() {
         <button
           type="button"
           onClick={() => setActiveProject(activeUnpinnedProject.id)}
-          className="mt-3 flex w-full items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2 text-left text-sm text-foreground transition-colors duration-150 hover:bg-muted"
+          className="mt-3 flex w-full items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 py-2 text-left text-[13px] text-foreground transition-colors duration-150 hover:bg-muted"
         >
           <span
             aria-hidden="true"
@@ -269,7 +270,7 @@ export function ProjectList() {
         {projects.length > 0 && (
         <button
           onClick={() => setActiveProject(null)}
-          className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-sm transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 relative overflow-hidden ${
+          className={`w-full text-left pl-4 pr-3 py-2 rounded-md text-[13px] transition-[background-color,box-shadow,color] duration-150 flex items-center gap-2 relative overflow-hidden ${
             activeProjectId === null
               ? "bg-muted text-foreground font-medium shadow-[inset_0_0_0_1px_hsl(var(--border))]"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -340,7 +341,7 @@ export function ProjectList() {
         {/* Projects without a section */}
         {unsectionedProjects.length > 0 && (
           <div className="mt-3">
-            <span className="text-xs text-muted-foreground px-3 uppercase tracking-wider font-medium">
+            <span className={`px-3 ${SIDEBAR_SECTION_LABEL}`}>
               {sections.length > 0 ? "Other" : "All Projects"}
             </span>
             <div className="mt-1 space-y-0.5">
@@ -355,7 +356,7 @@ export function ProjectList() {
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 text-muted-foreground justify-start h-9"
+            className="flex-1 text-[13px] text-muted-foreground justify-start h-9"
             onClick={() => setIsAddModalOpen(true)}
           >
             <Plus className="h-4 w-4 mr-2" />

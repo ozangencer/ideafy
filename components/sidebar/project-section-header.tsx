@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronDown, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { SIDEBAR_SECTION_COUNT, SIDEBAR_SECTION_LABEL } from "./sidebar-section-label";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -39,7 +40,7 @@ export function ProjectSectionHeader({
         type="button"
         aria-expanded={!section.collapsed}
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-3 py-1 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-3 py-1 text-left ${SIDEBAR_SECTION_LABEL} transition-colors duration-150 hover:text-foreground`}
       >
         <ChevronDown
           className={`h-3 w-3 shrink-0 transition-transform duration-200 ${
@@ -47,7 +48,7 @@ export function ProjectSectionHeader({
           }`}
         />
         <span className="truncate">{section.name}</span>
-        <span className="shrink-0 font-normal normal-case tracking-normal tabular-nums">
+        <span className={`shrink-0 ${SIDEBAR_SECTION_COUNT}`}>
           {projectCount}
         </span>
       </button>
