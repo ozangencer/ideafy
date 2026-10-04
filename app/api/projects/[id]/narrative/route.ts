@@ -14,6 +14,7 @@ import {
 import { runAutonomousCli } from "@/lib/autonomous-run/run-autonomous-cli";
 import { prependWarningMarkdown } from "@/lib/autonomous-run/select-run-output";
 import { safeResolvePath } from "@/lib/path-utils";
+import { addBriefPointer } from "@/lib/brief-pointer";
 
 /**
  * Generate narrative markdown by running the active provider's CLI.
@@ -67,6 +68,29 @@ function pickBuilder(project: { name: string; mode: string | null }, body: unkno
     prompt: buildNarrativePrompt(project.name, data),
     fallback: () => generateFallbackContent(project.name, data),
   };
+}
+
+/**
+ * The Work wizard's "Add a pointer to CLAUDE.md" box arrives as
+ * `?briefPointer=1` (the body is read as the brief's answers, so it stays out
+ * of there). Called only after the brief is on disk, so the line never points
+ * at a file that is not there. A failure here does not fail the brief.
+ */
+function maybeAddBriefPointer(
+  request: NextRequest,
+  project: { folderPath: string; mode: string | null },
+  relativePath: string
+) {
+  if (request.nextUrl.searchParams.get("briefPointer") !== "1" || project.mode !== "work") {
+    return {};
+  }
+  try {
+    const { result, file } = addBriefPointer(project.folderPath, relativePath);
+    return { pointer: result, pointerFile: file };
+  } catch (error) {
+    console.error("Error adding brief pointer:", error);
+    return { pointer: "failed" as const };
+  }
 }
 
 // GET - Read narrative from project folder
@@ -165,6 +189,7 @@ export async function POST(
       path: narrativePath,
       message: "Product narrative created with AI assistance",
       aiGenerated: true,
+      ...maybeAddBriefPointer(request, project, relativePath),
     });
   } catch (error) {
     console.error("Error creating narrative with AI CLI:", error);
@@ -179,6 +204,7 @@ export async function POST(
         path: narrativePath,
         message: "Product narrative created (fallback - AI unavailable)",
         aiGenerated: false,
+        ...maybeAddBriefPointer(request, project, relativePath),
       });
     } catch (fallbackError) {
       return NextResponse.json(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { removeIdeafyHook } from "@/lib/hooks";
+import { retargetBriefPointer } from "@/lib/brief-pointer";
 import { type Voice } from "@/lib/types";
 import {
   normalizeProjectMode,
@@ -131,6 +132,18 @@ export async function PUT(
       .set(updatedProject)
       .where(eq(schema.projects.id, id))
       .run();
+
+    // A brief pointer the wizard wrote into CLAUDE.md / AGENTS.md follows the
+    // brief to its new path. Folders without the marked line are untouched,
+    // and a failure here must not fail the save.
+    const effectiveNarrativePath = (value: string | null) => value || "docs/product-narrative.md";
+    if (effectiveNarrativePath(narrativePath) !== effectiveNarrativePath(existing.narrativePath)) {
+      try {
+        retargetBriefPointer(updatedProject.folderPath, effectiveNarrativePath(narrativePath));
+      } catch (error) {
+        console.error("Failed to update brief pointer:", error);
+      }
+    }
 
     return NextResponse.json(serializeProject({ ...existing, ...updatedProject }));
   } catch (error) {

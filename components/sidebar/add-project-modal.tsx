@@ -266,6 +266,14 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
 
   const answeredCount = questions.filter((q) => narrative[q.key].trim() !== "").length;
 
+  // The CLAUDE.md pointer only makes sense when the brief will have a
+  // References list to point at. Off by default: it writes into the user's file.
+  const [addPointer, setAddPointer] = useState(false);
+  const hasReferences = isWork && (narrative.references ?? "").trim() !== "";
+  useEffect(() => {
+    if (!hasReferences) setAddPointer(false);
+  }, [hasReferences]);
+
   const updateNarrative = (field: string, value: string) => {
     setNarrative((prev) => ({ ...prev, [field]: value }));
   };
@@ -333,11 +341,21 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
 
       // Create narrative if mode is "create" and has content
       if (narrativeMode === "create" && hasNarrativeContent()) {
-        await fetch(`/api/projects/${newProject.id}/narrative`, {
+        const pointerQuery = addPointer && hasReferences ? "?briefPointer=1" : "";
+        const narrativeResponse = await fetch(`/api/projects/${newProject.id}/narrative${pointerQuery}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(narrative),
         });
+        if (pointerQuery) {
+          const result = await narrativeResponse.json().catch(() => null);
+          if (result?.pointer === "failed") {
+            toast({
+              title: "Brief created, pointer not added",
+              description: "Couldn't write to CLAUDE.md. Add the line by hand if you want runs to see the references.",
+            });
+          }
+        }
       }
 
       // Launch skill terminal if mode is "skill"
@@ -690,6 +708,32 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
+              {hasReferences && (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={addPointer}
+                  onClick={() => setAddPointer((on) => !on)}
+                  className="flex items-start gap-2 text-left sm:mr-3"
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded border",
+                      addPointer
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted-foreground/50"
+                    )}
+                  >
+                    {addPointer && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-sm">Add a pointer to CLAUDE.md</span>
+                    <span className="text-xs text-muted-foreground">
+                      One line pointing at the brief. Goes to AGENTS.md if the folder only has that.
+                    </span>
+                  </span>
+                </button>
+              )}
               <Button onClick={handleCreateProject} disabled={isSubmitting}>
                 {isSubmitting
                   ? hasNarrativeContent()
