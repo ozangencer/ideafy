@@ -94,15 +94,21 @@ export function queueDisplayId(row: Pick<QueueRow, "idPrefix" | "taskNumber" | "
  * and checks that on its own side.
  */
 export function queueRowIneligibleReason(row: QueueRow): string | null {
-  return queueIneligibleReason({
+  const core = parseTestProgress(row.testScenarios ?? "")?.core;
+  const reason = queueIneligibleReason({
     status: row.status,
     hasDescription: stripHtml(row.description ?? "") !== "",
     phase: detectPhase(row),
     processingType: row.processingType,
     projectMode: row.projectMode,
-    hasCoreFlow: !!parseTestProgress(row.testScenarios ?? "")?.core,
+    hasCoreFlow: !!core,
     gitBranchStatus: row.gitBranchStatus,
   });
+  if (reason) return reason;
+  // A pre-verify skips ticked core items, so a fully ticked core flow leaves
+  // it nothing to run. Same rule as the board's Pre-verify button.
+  if (row.status === "test" && core && core.checked >= core.total) return "its core flow is already ticked";
+  return null;
 }
 
 export function queueKindOf(row: QueueRow): QueueRunKind {

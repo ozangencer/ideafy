@@ -95,9 +95,12 @@ export function getPhaseLabels(
  * Human Test'te otonom koşu yalnızca temel akışı doğrular. Bu grubu ilan
  * etmeyen bir çeklistte agent hangi maddenin temel olduğunu bilemez, o yüzden
  * orada buton hiç çıkmaz — çıkarsa hiçbir şey işaretlemeyen bir koşu vaat eder.
+ * Temel akışın tamamı zaten işaretliyse de çıkmaz: koşu işaretli maddeleri
+ * atlar, geriye yürütecek madde kalmamıştır.
  */
 export function canPreVerify(card: Card, testProgress: TestProgress | null): boolean {
-  return card.status === "test" && !!testProgress?.core;
+  const core = testProgress?.core;
+  return card.status === "test" && !!core && core.checked < core.total;
 }
 
 export function canStartCard(card: Card): boolean {

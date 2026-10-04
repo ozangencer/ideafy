@@ -184,6 +184,14 @@ for (const driver of DRIVERS) {
     assert.deepEqual(order(db), ["c501", "c502"]);
   });
 
+  t("a pre-verify with every core item ticked is refused, one left open is queued", (db) => {
+    db.exec(`UPDATE cards SET test_scenarios = '${CORE.replace('"false"', '"true"')}' WHERE id = 'c505'`);
+    const ticked = enqueueCard(db, "c505");
+    assert.ok(!ticked.ok && ticked.reason === "ineligible" && /core flow is already ticked/.test(ticked.message));
+    db.exec(`UPDATE cards SET test_scenarios = '${CORE}' WHERE id = 'c505'`);
+    assert.ok(enqueueCard(db, "c505").ok);
+  });
+
   t("dequeue closes the gap and says whether the card was queued", (db) => {
     enqueueCard(db, "c503");
     assert.equal(dequeueCard(db, "c502"), true);

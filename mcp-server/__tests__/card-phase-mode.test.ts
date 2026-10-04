@@ -122,3 +122,11 @@ test("column labels: ids and order are shared, only dev titles change", () => {
   assert.equal(title(work, "progress"), "In Progress");
   assert.equal(title(dev, "test"), "Human Test");
 });
+
+test("Pre-verify is offered only while a core-flow item is still unticked", () => {
+  const { canPreVerify } = interop(cardPhaseNs);
+  const card = makeCard({ status: "test" });
+  assert.equal(canPreVerify(card, { checked: 1, total: 3, core: { checked: 1, total: 2 } }), true);
+  assert.equal(canPreVerify(card, { checked: 2, total: 3, core: { checked: 2, total: 2 } }), false);
+  assert.equal(canPreVerify(card, { checked: 0, total: 3 }), false);
+});

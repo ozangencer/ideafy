@@ -242,6 +242,7 @@ ${inWorktree && !isWork ? "\nThis folder is the card's own branch worktree, wher
 Run ONLY the items under the checklist's first group — \`## Core flow\` (English) or \`## Temel akış\` (Turkish). Those are the steps that decide whether the feature works at all; everything after them exists to catch what they cannot, and stays for the human.
 
 - Do NOT run, tick, or edit items in any later group (\`## Edge cases\`, \`## Regression\`, and so on).
+- Skip core items that are already ticked (\`- [x]\`): a person or an earlier pre-verify has already seen them pass, and some steps (migrations, \`--apply\` scripts, restarts) should not run twice. Leave them ticked and run only the unticked ones. If every core item is already ticked, run nothing and hand the checklist back unchanged.
 - If the checklist has no \`## Core flow\` / \`## Temel akış\` group, tick nothing and say so — without that heading you cannot tell which items are essential, and guessing would hand back a checklist that looks verified and is not.
 - ${isWork
   ? "Verify by actually checking the output — open the file the step names in the project folder (get_card lists them as outputPaths) and confirm what the step asks. Reasoning that a step \"should\" pass is not verification."
@@ -253,7 +254,7 @@ Reproduce the ENTIRE checklist: every group, every item, in the original order a
 
 - Do not reword, merge, split, add, or drop items. Later groups come back exactly as they were.
 - Leave a core item unticked when it failed or you could not run it.
-- After the checklist, add one short line naming what blocked any core item you left unticked. Nothing else.
+- After the checklist, add one short line naming what blocked any core item you ran and left unticked. Nothing else.
 - Your final message is always the checklist itself — even when you could not finish a single item. A message that only says what you are still waiting for leaves the card untouched.
 
 ${NO_SAVE_TOOLS_RULE}
