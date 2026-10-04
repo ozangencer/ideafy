@@ -20,7 +20,10 @@ export interface CardFormValues {
  * the modal's hasUnsavedChanges. The auto-save sends only these: a form left
  * behind by a run it never saw (IDE-366) would otherwise write back the
  * status, plan and description it opened with, over what the run wrote.
- * `projectFolder` rides along only when the project itself changed.
+ * `projectFolder` rides along only when the project itself changed, and so
+ * does `groupId`: the card the form compares against can still hold the
+ * group from before an auto-save landed, so a group cleared by the project
+ * change would look untouched and the server would refuse the move.
  */
 export function buildDirtyCardPayload(
   form: CardFormValues,
@@ -42,6 +45,7 @@ export function buildDirtyCardPayload(
   if (form.projectId !== card.projectId) {
     payload.projectId = form.projectId;
     payload.projectFolder = projectFolderFor(form.projectId) || card.projectFolder;
+    payload.groupId = form.groupId;
   }
 
   return payload;

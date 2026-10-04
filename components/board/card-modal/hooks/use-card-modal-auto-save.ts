@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import type { AiPlatform, Card, Complexity, Priority, Project, Status } from "@/lib/types";
 import type { CardUpdatePayload } from "@/lib/kanban-store/types";
 import { buildDirtyCardPayload } from "@/lib/card-dirty-fields";
+import { toast } from "@/hooks/use-toast";
 
 interface UseCardModalAutoSaveOptions {
   selectedCard: Card | null;
@@ -144,20 +145,32 @@ export function useCardModalAutoSave(options: UseCardModalAutoSaveOptions) {
       setSaveStatus("saving");
 
       autoSaveInFlightRef.current = true;
-      updateCard(selectedCard.id, payload).finally(() => {
-        setTimeout(() => {
-          autoSaveInFlightRef.current = false;
-        }, 200);
-      });
-
-      setSaveStatus("saved");
-
-      if (savedTimeoutRef.current) {
-        clearTimeout(savedTimeoutRef.current);
-      }
-      savedTimeoutRef.current = setTimeout(() => {
-        setSaveStatus("idle");
-      }, 2000);
+      updateCard(selectedCard.id, payload)
+        .then((ok) => {
+          // A refused save used to show "saved" and leave only a console line,
+          // while the card stayed as it was on disk.
+          if (ok === false) {
+            setSaveStatus("idle");
+            toast({
+              variant: "destructive",
+              title: "Couldn't save your changes",
+              description: "The card was left as it was. Check the project and group, then try again.",
+            });
+            return;
+          }
+          setSaveStatus("saved");
+          if (savedTimeoutRef.current) {
+            clearTimeout(savedTimeoutRef.current);
+          }
+          savedTimeoutRef.current = setTimeout(() => {
+            setSaveStatus("idle");
+          }, 2000);
+        })
+        .finally(() => {
+          setTimeout(() => {
+            autoSaveInFlightRef.current = false;
+          }, 200);
+        });
     }, 500);
 
     return () => {

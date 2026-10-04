@@ -63,12 +63,23 @@ test("dirty fields: a null complexity matches the form's medium default", () => 
   assert.equal("complexity" in payload, false);
 });
 
-test("dirty fields: a project change carries its folder", () => {
+test("dirty fields: a project change carries its folder and group", () => {
   const payload = buildDirtyCardPayload({ ...formOf(card), projectId: "p2" }, card, folderFor);
-  assert.deepEqual(payload, { projectId: "p2", projectFolder: "/work/cloud" });
+  assert.deepEqual(payload, { projectId: "p2", projectFolder: "/work/cloud", groupId: null });
 });
 
 test("dirty fields: a project with no known folder keeps the card's", () => {
   const payload = buildDirtyCardPayload({ ...formOf(card), projectId: "p9" }, card, folderFor);
-  assert.deepEqual(payload, { projectId: "p9", projectFolder: "/work/ideafy" });
+  assert.deepEqual(payload, { projectId: "p9", projectFolder: "/work/ideafy", groupId: null });
+});
+
+// The group was picked and auto-saved, but the card the form compares
+// against still says null — a project change that clears the group must
+// still send groupId: null, or the server keeps the card in the old
+// project's group and refuses the move.
+test("dirty fields: a project change sends a cleared group even when the card looks ungrouped", () => {
+  const form = { ...formOf(card), projectId: "p2", groupId: null };
+  const payload = buildDirtyCardPayload(form, card, folderFor);
+  assert.equal("groupId" in payload, true);
+  assert.equal(payload.groupId, null);
 });
