@@ -25,7 +25,7 @@ import { TaskCard } from "./card";
 import { CardGroupChip } from "./card-group-chip";
 import { CardGroupChain } from "./card-group-chain";
 import { RunQueueChip } from "./run-queue-popover";
-import { ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsDownUp, ChevronUp } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -477,7 +477,7 @@ interface ColumnProps {
 }
 
 export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps) {
-  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap } = useKanbanStore(
+  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap, collapseColumn } = useKanbanStore(
     useShallow((s) => ({
       openNewCardModal: s.openNewCardModal,
       activeProjectId: s.activeProjectId,
@@ -487,6 +487,7 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
       setCompletedFilter: s.setCompletedFilter,
       uncappedColumns: s.uncappedColumns,
       toggleColumnCap: s.toggleColumnCap,
+      collapseColumn: s.collapseColumn,
     }))
   );
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -498,7 +499,21 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
     [cards, groupSummaries]
   );
 
+  // Only rows actually on screen count. expandedGroups is never pruned and is
+  // shared across projects, so a suffix match here would light the button for
+  // a deleted chain and leave a click that changes nothing.
+  const foldKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const row of rows) {
+      if (row.kind === "group") keys.add(groupFoldKey(row.summary.group.id, id));
+    }
+    if (stale) keys.add(groupFoldKey(STALE_GROUP_ID, id));
+    return keys;
+  }, [rows, stale, id]);
+  const hasOpenFold = useKanbanStore((s) => s.expandedGroups.some((key) => foldKeys.has(key)));
+
   const isUncapped = uncappedColumns.includes(id);
+  const canCollapseAll = hasOpenFold || (isUncapped && rows.length > COLUMN_ROW_CAP);
   const visibleRows = isUncapped ? rows : rows.slice(0, COLUMN_ROW_CAP);
   // Cards, not rows: "+3 more" over a hidden chain of fourteen would be a
   // number that undersells what you are not looking at.
@@ -630,6 +645,22 @@ export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps)
             </Select>
           )}
         </div>
+        {/* Only while something here is open: an idle button in every header
+            would be clutter, and folded is where a column starts anyway. */}
+        {canCollapseAll && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => collapseColumn(id)}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted flex-shrink-0 ml-1"
+                aria-label="Collapse all"
+              >
+                <ChevronsDownUp className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Collapse all</TooltipContent>
+          </Tooltip>
+        )}
         <button
           onClick={handleAddCard}
           className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted flex-shrink-0 ml-1"

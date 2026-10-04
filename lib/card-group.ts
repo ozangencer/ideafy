@@ -16,6 +16,26 @@ export function groupFoldKey(groupId: string, columnId: Status): string {
 }
 
 /**
+ * A column's "Collapse all". Folded is the default, so this creates no state:
+ * it drops the exceptions the user opened in that column — every chain row,
+ * the Stale row, and the render cap with them, since a column still past its
+ * cap after its chains fold would look like the button only did half the job.
+ * Other columns keep theirs. Matching on the suffix lives here, next to the
+ * key format, so the two change together.
+ */
+export function collapseColumnFolds(
+  expandedGroups: string[],
+  uncappedColumns: Status[],
+  columnId: Status
+): { expandedGroups: string[]; uncappedColumns: Status[] } {
+  const suffix = `:${columnId}`;
+  return {
+    expandedGroups: expandedGroups.filter((key) => !key.endsWith(suffix)),
+    uncappedColumns: uncappedColumns.filter((id) => id !== columnId),
+  };
+}
+
+/**
  * The reserved id for a column's Stale row, which folds through the same
  * `expandedGroups` set as a real chain.
  *

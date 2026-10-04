@@ -322,6 +322,8 @@ export interface KanbanStore {
 
   // Card-group fold actions. Takes a groupFoldKey, not a bare group id.
   toggleGroupCollapse: (groupKey: string) => void;
+  // Refolds every chain and the Stale row in one column and re-caps it.
+  collapseColumn: (columnId: Status) => void;
 
   // Column render-cap actions
   toggleColumnCap: (columnId: Status) => void;

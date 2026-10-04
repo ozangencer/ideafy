@@ -1,4 +1,5 @@
 import { BoardView, BoardViewPreference, SectionType, StaleThresholds, Status } from "../../types";
+import { collapseColumnFolds } from "../../card-group";
 import { KanbanStore, StoreSlice } from "../types";
 
 export const createUiSlice: StoreSlice<
@@ -28,6 +29,7 @@ export const createUiSlice: StoreSlice<
     | "toggleProjectListExpanded"
     | "toggleColumnCollapse"
     | "toggleGroupCollapse"
+    | "collapseColumn"
     | "toggleColumnCap"
     | "setCompletedFilter"
     | "setBoardView"
@@ -90,6 +92,9 @@ export const createUiSlice: StoreSlice<
         ? state.expandedGroups.filter((key) => key !== groupKey)
         : [...state.expandedGroups, groupKey],
     })),
+
+  collapseColumn: (columnId) =>
+    set((state) => collapseColumnFolds(state.expandedGroups, state.uncappedColumns, columnId)),
 
   toggleColumnCap: (columnId) =>
     set((state) => ({
