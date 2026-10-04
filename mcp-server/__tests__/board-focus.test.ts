@@ -243,3 +243,48 @@ test("a Maybe asks to discuss, not to move or withdraw (IDE-400)", () => {
   const result = board([card("idea", "ideation", { aiVerdict: "maybe" } as Partial<Card>)], []);
   assert.deepEqual(result.yourTurn.map((row) => row.state), ["your-decision"]);
 });
+
+test("a Human Test card queued for pre-verify leaves Your turn for the queue", () => {
+  const cards = [card("a", "test"), card("b", "test")];
+
+  const before = buildFocusBoard(cards, undefined, NOW);
+  assert.deepEqual(before.yourTurn.map((row) => row.card.id), ["a", "b"]);
+
+  const after = buildFocusBoard(cards, undefined, NOW, "development", new Map(), new Set(["a"]));
+  assert.deepEqual(after.yourTurn.map((row) => row.card.id), ["b"]);
+  assert.deepEqual(after.queued.map((c) => c.id), ["a"]);
+});
+
+test("a Backlog card queued for implementation drops out of Waiting, in queue order", () => {
+  const cards = [card("a", "backlog"), card("b", "backlog"), card("c", "bugs")];
+
+  const focus = buildFocusBoard(cards, undefined, NOW, "development", new Map(), new Set(["c", "a"]));
+  assert.equal(focus.waiting.total, 1);
+  assert.deepEqual(focus.queued.map((c) => c.id), ["c", "a"]);
+
+  // A run that started before the next poll is running, not queued.
+  const running = buildFocusBoard(
+    [card("a", "backlog", { processingType: "autonomous" })],
+    undefined,
+    NOW,
+    "development",
+    new Map(),
+    new Set(["a"])
+  );
+  assert.deepEqual(running.agentRunning.map((c) => c.id), ["a"]);
+  assert.equal(running.queued.length, 0);
+});
+
+test("a queued card with an unread reply stays in Your turn", () => {
+  const cards = [card("a", "test")];
+  const focus = buildFocusBoard(
+    cards,
+    undefined,
+    NOW,
+    "development",
+    unreadSignalsByCard([event("a", "queue", RECENT, { title: "Dropped from queue" })]),
+    new Set(["a"])
+  );
+  assert.deepEqual(focus.yourTurn.map((row) => [row.card.id, row.state]), [["a", "your-reply"]]);
+  assert.equal(focus.queued.length, 0);
+});

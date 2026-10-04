@@ -376,6 +376,11 @@ export interface WaitingBucket {
 export interface FocusBoard {
   yourTurn: FocusRow[];
   agentRunning: Card[];
+  /**
+   * Waiting in the run queue, in queue order. The next move is the agent's,
+   * so these are neither Your turn nor Waiting: they sit under Agent running.
+   */
+  queued: Card[];
   waiting: {
     /** Includes `stale`, so the heading equals the sum of the line beneath it. */
     total: number;
@@ -412,23 +417,45 @@ function attentionRank(row: FocusRow): number {
  * An unread signal lifts an otherwise waiting card into Your turn: someone
  * answered you, or something you started stopped, so the next move is yours
  * whatever column the card sits in.
+ *
+ * A card in the run queue is the agent's next job, not yours: a Human Test
+ * card queued for pre-verify is not a test for you to walk yet, and a Backlog
+ * card queued for implementation is not just sitting in Backlog. Both leave
+ * Your turn and Waiting for `queued`, and neither counts as stale — it is
+ * about to be worked on. A running card stays under Agent running, which is
+ * checked first, so a run that started before the next poll is not listed
+ * twice. An unread signal still wins: "Dropped from queue" or a chat answer
+ * is yours to read whatever the queue says.
  */
 export function buildFocusBoard(
   cards: Card[],
   staleThresholds?: StaleThresholds,
   now = Date.now(),
   mode: ProjectMode = "development",
-  unreadReplies: Map<string, UnreadReply> = new Map()
+  unreadReplies: Map<string, UnreadReply> = new Map(),
+  /** The run queue's card ids, in queue order. */
+  queuedIds: ReadonlySet<string> = new Set()
 ): FocusBoard {
   const yourTurn: FocusRow[] = [];
   const agentRunning: Card[] = [];
+  const queued: Card[] = [];
   const waitingByStatus = new Map<Status, number>();
   let stale = 0;
 
   for (const column of COLUMNS) {
     if (isFinished(column.id)) continue;
 
-    const columnCards = cards.filter((card) => card.status === column.id);
+    const columnCards: Card[] = [];
+    for (const card of cards) {
+      if (card.status !== column.id) continue;
+      if (!queuedIds.has(card.id) || getFocusState(card) === "agent-running") {
+        columnCards.push(card);
+        continue;
+      }
+      const reply = unreadReplies.get(card.id);
+      if (reply) yourTurn.push({ card, state: "your-reply", reply });
+      else queued.push(card);
+    }
     const { live, stale: staleGroup } = partitionStaleCards(
       columnCards,
       column.id,
@@ -470,6 +497,9 @@ export function buildFocusBoard(
     );
   });
 
+  const queueOrder = Array.from(queuedIds);
+  queued.sort((a, b) => queueOrder.indexOf(a.id) - queueOrder.indexOf(b.id));
+
   const buckets = getColumns(mode).filter((column) => waitingByStatus.has(column.id)).map((column) => ({
     status: column.id,
     title: column.title,
@@ -479,6 +509,7 @@ export function buildFocusBoard(
   return {
     yourTurn,
     agentRunning,
+    queued,
     waiting: {
       total: buckets.reduce((sum, bucket) => sum + bucket.count, 0) + stale,
       buckets,
