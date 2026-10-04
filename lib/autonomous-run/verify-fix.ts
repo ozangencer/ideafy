@@ -73,7 +73,11 @@ export function splitVerifyMarkers(markdown: string): VerifyMarkers {
     }
   }
 
-  return { checklist: kept.join("\n").trimEnd(), fixes, blocked, regressions };
+  // A run sometimes opens with a sentence about what it did before the
+  // checklist it was told to return alone; it is not part of the checklist.
+  const firstHeading = kept.findIndex((line) => /^#{1,6}\s/.test(line));
+  const checklist = (firstHeading > 0 ? kept.slice(firstHeading) : kept).join("\n").trimEnd();
+  return { checklist, fixes, blocked, regressions };
 }
 
 /** A fix tied to the checklist item it names, in the checklist's own words. */

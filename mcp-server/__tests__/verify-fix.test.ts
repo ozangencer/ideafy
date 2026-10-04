@@ -74,6 +74,11 @@ test("markers: FIX, BLOCKED and REGRESSION lines come out, the checklist stays w
   assert.deepEqual(markers.regressions, [{ item: "Projeyi aç ve board'u yükle", reason: "board boş açıldı" }]);
 });
 
+test("markers: a sentence before the checklist does not reach the card", () => {
+  const markers = splitVerifyMarkers(`Hedef maddeyi yeniden çalıştırdım, artık 10 yazdırıyor.\n\n${CHECKLIST_MD}`);
+  assert.equal(markers.checklist, CHECKLIST_MD);
+});
+
 test("markers: a response without markers is the checklist itself", () => {
   const markers = splitVerifyMarkers(`${CHECKLIST_MD}\n`);
   assert.equal(markers.checklist, CHECKLIST_MD);
