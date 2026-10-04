@@ -21,6 +21,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "verify-server": "node --experimental-strip-types --no-warnings=ExperimentalWarning ./scripts/verify-server.mjs",
     "preelectron": "node ./scripts/prepare-dev-electron.mjs",
     "electron": "electron .",
     "rebuild:electron": "electron-builder install-app-deps",
