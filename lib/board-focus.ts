@@ -131,6 +131,7 @@ export const FOCUS_STATE_STYLES: Record<
 const PROCESSING_LABELS: Record<string, string> = {
   autonomous: "running autonomously",
   "quick-fix": "quick fix",
+  "verify-fix": "fixing what pre-verify found",
   evaluate: "evaluating",
   generate: "generating",
 };

@@ -116,6 +116,12 @@ export const RUN_OUTPUT_CONTRACTS = {
     label: "doğrulanmış çeklist",
     requires: [CORE_FLOW_HEADING],
   },
+  // A pre-verify's automatic fix (IDE-459). Its product is the commits; the
+  // summary only says which item each one fixed.
+  verifyFix: {
+    label: "düzeltme özeti",
+    requires: [/^##\s*Verify\s*Fix\s*Summary/im],
+  },
   evaluate: {
     label: "değerlendirme",
     requires: [/^##\s*Summary\s*Verdict/im, /\[VERDICT:/i, /^##\s*Final\s*Score/im],

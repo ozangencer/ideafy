@@ -11,7 +11,9 @@ export type Complexity = "low" | "medium" | "high";
 export type Priority = "low" | "medium" | "high";
 export type GitBranchStatus = "active" | "merged" | "rolled_back" | null;
 export type GitWorktreeStatus = "active" | "removed" | null;
-export type ProcessingType = "autonomous" | "quick-fix" | "evaluate" | "generate" | null;
+// "verify-fix": a pre-verify's automatic fix is writing code (IDE-459). The
+// run queue reads it to count the run as one that leaves a diff.
+export type ProcessingType = "autonomous" | "quick-fix" | "evaluate" | "generate" | "verify-fix" | null;
 
 // What git itself says about a card's branch, as opposed to what the DB
 // remembers. `gitBranchStatus` only ever leaves "active" when the merge or

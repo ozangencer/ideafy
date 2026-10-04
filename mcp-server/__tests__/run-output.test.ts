@@ -339,7 +339,12 @@ test("every contract is still demanded by its prompt", () => {
     new URL("../../lib/prompts/evaluation.ts", import.meta.url),
     "utf8",
   );
-  const all = prompts + cardPrompts + evaluationPrompts;
+  // The pre-verify's automatic fix keeps its prompts apart (IDE-459).
+  const verifyFixPrompts = readFileSync(
+    new URL("../../lib/prompts/verify-fix.ts", import.meta.url),
+    "utf8",
+  );
+  const all = prompts + cardPrompts + evaluationPrompts + verifyFixPrompts;
 
   // What each contract's patterns should find verbatim in the prompt text.
   const EXPECTED: Record<keyof typeof RUN_OUTPUT_CONTRACTS, string[]> = {
@@ -347,6 +352,7 @@ test("every contract is still demanded by its prompt", () => {
     implementation: ["## Core flow", "## Temel akış"],
     retest: ["## Core flow", "## Temel akış"],
     verify: ["## Core flow", "## Temel akış"],
+    verifyFix: ["## Verify Fix Summary"],
     evaluate: ["## Summary Verdict", "[VERDICT:", "## Final Score"],
     quickFix: ["## Quick Fix Summary", "## Core flow", "## Temel akış"],
     generate: ["## Output Summary", "## Core flow", "## Temel akış"],

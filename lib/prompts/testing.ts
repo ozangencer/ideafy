@@ -75,6 +75,15 @@ For each test scenario:
 3. Ask: "Did this test pass? (yes/no)"
 4. If NO → Help debug, suggest fixes, run commands if needed
 5. If YES → Move to the next test
+
+## Fixing a Failure
+When a test fails because of a plain code bug, you may fix it here — the same
+rules an automatic pre-verify fix follows:
+- Say what you found (file, cause) and get the user's go-ahead before changing code.
+- Fix the code, never the expectation: no edited assertions or checklist items to make it pass.
+- Run \`git status\` first. Leave alone any file that holds someone else's uncommitted changes — other sessions may share this folder.
+- Commit each fix on its own. Stage files by name (\`git add <file>\`), never \`git add -u\` or \`-A\`.${displayId ? ` End the message with the trailer \`Card: ${displayId}\` on its own line.` : ""}
+- Run the failed step again and tick it only when you saw it pass.
 `;
 
   return `${intro}

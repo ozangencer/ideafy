@@ -234,6 +234,57 @@ export function extractTaskItems(html: string): TaskItemState[] {
 }
 
 /**
+ * The checklist item an agent named in free text, by the same fuzzy match the
+ * merge uses, or null when it names nothing on the list. An agent quoting an
+ * item rarely copies it to the letter.
+ */
+export function matchTaskItem(text: string, html: string): TaskItemState | null {
+  const target = normalizeTaskText(text);
+  if (!target) return null;
+  const items = extractTaskItems(html);
+  const key = findFuzzyMatch(target, items.map((i) => i.normalized));
+  return key ? items.find((i) => i.normalized === key) ?? null : null;
+}
+
+/** Index of the candidate that names the same item as `text`, or -1. */
+export function closestTaskText(text: string, candidates: string[]): number {
+  const target = normalizeTaskText(text);
+  if (!target) return -1;
+  const keys = candidates.map(normalizeTaskText);
+  const key = findFuzzyMatch(target, keys.filter(Boolean));
+  return key ? keys.indexOf(key) : -1;
+}
+
+/**
+ * Untick the named items and leave every other box as it is. The one write
+ * that may take a tick away: a re-verify that saw an item break after an
+ * automatic fix.
+ */
+export function untickTaskItems(html: string, itemTexts: string[]): string {
+  // Each name resolves to its one closest item first: matching the other way
+  // round, a short name would take down every item that contains it.
+  const keys = extractTaskItems(html).map((i) => i.normalized);
+  const hits = new Set(
+    itemTexts
+      .map((text) => normalizeTaskText(text))
+      .filter(Boolean)
+      .map((target) => findFuzzyMatch(target, keys))
+      .filter((key): key is string => key !== null)
+  );
+  if (hits.size === 0) return html;
+  return normalizeTestsHtml(html).replace(
+    taskItemCheckRegex(),
+    (fullMatch, prefix, middle, text, suffix) => {
+      if (!hits.has(normalizeTaskText(text))) return fullMatch;
+      return `<li${prefix}false${middle}${text}${suffix}`.replace(
+        /<input type="checkbox"(?:\s+checked="checked")?>/,
+        '<input type="checkbox">'
+      );
+    }
+  );
+}
+
+/**
  * Count how many existing items have a fuzzy match in the new HTML.
  * Used by the shrink guard to decide whether a rewrite is safe.
  */

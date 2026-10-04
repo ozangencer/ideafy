@@ -58,6 +58,13 @@ test("run title: no phase falls back to the caller's label", () => {
   assert.equal(phaseLabel("verify"), "Pre-verify");
 });
 
+test("run title: a pre-verify's fix chain names its own steps", () => {
+  assert.equal(phaseLabel("verify-fix"), "Pre-verify fix");
+  assert.equal(phaseLabel("reverify"), "Re-verify");
+  assert.equal(autonomousRunTitle("verify-fix", "failed", null), "Pre-verify fix failed");
+  assert.equal(autonomousRunTitle("reverify", "completed", null), "Re-verify completed");
+});
+
 type Row = Parameters<typeof processRowLabel>[0];
 
 function row(overrides: Partial<Row>): Row {

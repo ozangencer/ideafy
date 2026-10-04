@@ -249,12 +249,15 @@ export function overlapsForCard(cardId: string): QueueOverlap[] {
 
 /** What the card's run does, or is doing: a quick fix, else the Start phase. */
 function liveKindOf(row: QueueRow): LiveRunKind {
-  return row.processingType === "quick-fix" ? "quick-fix" : detectPhase(row);
+  if (row.processingType === "quick-fix") return "quick-fix";
+  // A pre-verify's automatic fix, mid-chain on a Human Test card (IDE-459).
+  if (row.processingType === "verify-fix") return "verify-fix";
+  return detectPhase(row);
 }
 
 /** Runs that leave a code diff behind. */
 function writesCode(kind: LiveRunKind): boolean {
-  return kind === "implementation" || kind === "quick-fix" || kind === "retest";
+  return kind === "implementation" || kind === "quick-fix" || kind === "retest" || kind === "verify-fix";
 }
 
 /**
@@ -267,7 +270,8 @@ function writesCode(kind: LiveRunKind): boolean {
 function runsInWorktree(row: QueueRow, kind: LiveRunKind = liveKindOf(row)): boolean {
   const activeWorktree = !!row.gitWorktreePath && row.gitWorktreeStatus === "active";
   // A Tests chat, like a pre-verify, works in the card's active worktree.
-  if (kind === "verify" || kind === "tests-chat") return activeWorktree;
+  // The automatic fix runs where its pre-verify did.
+  if (kind === "verify" || kind === "verify-fix" || kind === "tests-chat") return activeWorktree;
   if (kind === "planning") return false;
   const useWorktree = shouldUseWorktree(
     { useWorktree: row.useWorktree },

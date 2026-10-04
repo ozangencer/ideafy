@@ -38,6 +38,12 @@ const IMPLEMENTATION_HARD_LIMIT_MINUTES: Record<string, number> = {
 const OTHER_PHASE_HARD_LIMIT_MINUTES = 30;
 
 /**
+ * A pre-verify's automatic fix (IDE-459) only takes small, diagnosed bugs; one
+ * that needs longer was not the plain bug the verify run took it for.
+ */
+const VERIFY_FIX_HARD_LIMIT_MINUTES = 20;
+
+/**
  * A pre-verify that walks every group left (IDE-449) grows with the checklist:
  * a regression group can take far longer than the core flow. Each unticked
  * item past the core flow buys a few minutes, up to a ceiling the queue can
@@ -64,7 +70,9 @@ export function autonomousRunLimits(
   let minutes =
     phase === "implementation"
       ? IMPLEMENTATION_HARD_LIMIT_MINUTES[complexity ?? ""] ?? 40
-      : OTHER_PHASE_HARD_LIMIT_MINUTES;
+      : phase === "verify-fix"
+        ? VERIFY_FIX_HARD_LIMIT_MINUTES
+        : OTHER_PHASE_HARD_LIMIT_MINUTES;
   if (phase === "verify" && verifyAllExtraItems > 0) {
     minutes = Math.min(minutes + VERIFY_ALL_MINUTES_PER_ITEM * verifyAllExtraItems, VERIFY_ALL_MAX_MINUTES);
   }

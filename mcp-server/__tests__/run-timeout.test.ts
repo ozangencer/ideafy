@@ -33,6 +33,11 @@ test("run limits: a pre-verify of all remaining groups grows with its items, up 
   assert.equal(autonomousRunLimits("planning", null, 5).hardMs, 30 * MIN);
 });
 
+test("run limits: a pre-verify's automatic fix gets 20 minutes, whatever the card", () => {
+  assert.equal(autonomousRunLimits("verify-fix", "very_high").hardMs, 20 * MIN);
+  assert.equal(autonomousRunLimits("verify-fix", null).hardMs, 20 * MIN);
+});
+
 test("run limits: unknown complexity falls back to medium", () => {
   assert.equal(autonomousRunLimits("implementation", null).hardMs, 40 * MIN);
   assert.equal(autonomousRunLimits("implementation", "huge").hardMs, 40 * MIN);

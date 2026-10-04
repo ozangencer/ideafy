@@ -49,6 +49,12 @@ import { AI_OPINION_PLANNING_RULE } from "./prompts/opinion";
 import { CHAIN_IMPLEMENTATION_RULE, PRIOR_DECISIONS_RULE } from "./prompts/prior-decisions";
 import { DEFAULT_VOICE, type ProjectMode, type Voice } from "./types";
 import type { VerifyScope } from "./test-progress";
+import {
+  REVERIFY_MARKERS_RULE,
+  VERIFY_MARKERS_RULE,
+  VERIFY_NO_CODE_CHANGES_RULE,
+  buildReverifyWhatToRun,
+} from "./prompts/verify-fix";
 
 /**
  * What a pre-verify run walks, worked out from the card's checklist the moment
@@ -60,6 +66,12 @@ export interface VerifyTarget {
   scope: VerifyScope;
   groups: string[];
   core: boolean;
+  /**
+   * Re-verify after an automatic fix (IDE-459): the fixed items, run again
+   * whatever group they sit in, plus the core flow's safe-to-repeat steps as
+   * a regression check. `groups` and `core` are ignored when set.
+   */
+  items?: string[];
 }
 
 const NO_SAVE_TOOLS_RULE =
@@ -248,12 +260,17 @@ ${ONE_SHOT_RUN_RULE}`;
     case "verify": {
       const target = verifyTarget ?? { scope: "next" as const, groups: [], core: true };
       const onlyCore = target.core || target.groups.length === 0;
-      const task = onlyCore
+      const reverifyItems = !isWork && target.items?.length ? target.items : null;
+      const task = reverifyItems
+        ? `re-verify "${title}" after an automatic fix`
+        : onlyCore
         ? `pre-verify the core flow of "${title}"`
         : target.groups.length === 1
           ? `pre-verify the ${target.groups[0]} group of "${title}"`
           : `pre-verify the groups of "${title}" that still have unticked items`;
-      const whatToRun = onlyCore
+      const whatToRun = reverifyItems
+        ? buildReverifyWhatToRun(reverifyItems)
+        : onlyCore
         ? `Run ONLY the items under the checklist's first group — \`## Core flow\` (English) or \`## Temel akış\` (Turkish). Those are the steps that decide whether the feature works at all; everything after them exists to catch what they cannot, and stays for the human. Those core items are your target items.
 
 - Do NOT run, tick, or edit items in any later group (\`## Edge cases\`, \`## Regression\`, and so on).`
@@ -273,20 +290,24 @@ ${inWorktree && !isWork ? "\nThis folder is the card's own branch worktree, wher
 ## What to run
 
 ${whatToRun}
-- Skip target items that are already ticked (\`- [x]\`): a person or an earlier pre-verify has already seen them pass, and some steps (migrations, \`--apply\` scripts, restarts) should not run twice. Leave them ticked and run only the unticked ones. If every target item is already ticked, run nothing and hand the checklist back unchanged.
-- If the checklist has no \`## Core flow\` / \`## Temel akış\` group, tick nothing and say so — without that heading you cannot tell which items are essential, and guessing would hand back a checklist that looks verified and is not.
+${reverifyItems ? "" : `- Skip target items that are already ticked (\`- [x]\`): a person or an earlier pre-verify has already seen them pass, and some steps (migrations, \`--apply\` scripts, restarts) should not run twice. Leave them ticked and run only the unticked ones. If every target item is already ticked, run nothing and hand the checklist back unchanged.
+`}- If the checklist has no \`## Core flow\` / \`## Temel akış\` group, tick nothing and say so — without that heading you cannot tell which items are essential, and guessing would hand back a checklist that looks verified and is not.
 - ${isWork
   ? "Verify by actually checking the output — open the file the step names in the project folder (get_card lists them as outputPaths) and confirm what the step asks. Reasoning that a step \"should\" pass is not verification."
   : "Verify by actually exercising the code — read it, run it, run the build or the test the step names. Reasoning that a step \"should\" pass is not verification."}
-
+${isWork ? "" : `- ${VERIFY_NO_CODE_CHANGES_RULE}
+`}
 ## FINAL response format
 
 Reproduce the ENTIRE checklist: every group, every item, in the original order and wording. The only edit you may make is \`- [ ]\` → \`- [x]\` on target items you ran and saw pass.
 
 - Do not reword, merge, split, add, or drop items. Every group you were not asked to run comes back exactly as it was.
 - Leave a target item unticked when it failed or you could not run it.
-- After the checklist, add one short line naming what blocked any target item you ran and left unticked. Nothing else.
-- Your final message is always the checklist itself — even when you could not finish a single item. A message that only says what you are still waiting for leaves the card untouched.
+${isWork
+  ? "- After the checklist, add one short line naming what blocked any target item you ran and left unticked. Nothing else.\n"
+  : reverifyItems
+    ? `${REVERIFY_MARKERS_RULE}\n`
+    : `${VERIFY_MARKERS_RULE}\n`}- Your final message is always the checklist itself — even when you could not finish a single item. A message that only says what you are still waiting for leaves the card untouched.
 
 ${NO_SAVE_TOOLS_RULE}
 

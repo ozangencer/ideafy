@@ -20,19 +20,27 @@ export const PROCESS_LABEL: Record<ProcessType, string> = {
   chat: "Chat",
 };
 
+/**
+ * A step of an autonomous run: one of the four phases, or one of the two runs
+ * a pre-verify chains after itself when it finds a plain code bug (IDE-459).
+ */
+export type RunStep = Phase | "verify-fix" | "reverify";
+
 // An autonomous run is one of four phases, and "Autonomous task completed"
 // does not say which. The phase is captured when the run starts — read at the
 // end, a finished plan already looks like an implementation card.
-export const PHASE_LABEL: Record<Phase, string> = {
+export const PHASE_LABEL: Record<RunStep, string> = {
   planning: "Plan",
   implementation: "Implementation",
   retest: "Fix & retest",
   verify: "Pre-verify",
+  "verify-fix": "Pre-verify fix",
+  reverify: "Re-verify",
 };
 
 /** Label for a phase stored in a payload or registry entry; null when absent or unknown. */
 export function phaseLabel(phase: unknown): string | null {
-  return typeof phase === "string" && phase in PHASE_LABEL ? PHASE_LABEL[phase as Phase] : null;
+  return typeof phase === "string" && phase in PHASE_LABEL ? PHASE_LABEL[phase as RunStep] : null;
 }
 
 export type RunOutcome = "completed" | "warning" | "failed";

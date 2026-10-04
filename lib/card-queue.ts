@@ -124,7 +124,14 @@ export function sharedWorkingCopyWith<T extends WorkingCopyRun>(self: WorkingCop
  * What a live or about-to-start run does in its folder. `tests-chat` is a
  * Tests tab chat with write access answering right now.
  */
-export type LiveRunKind = "planning" | "implementation" | "retest" | "verify" | "quick-fix" | "tests-chat";
+export type LiveRunKind =
+  | "planning"
+  | "implementation"
+  | "retest"
+  | "verify"
+  | "verify-fix"
+  | "quick-fix"
+  | "tests-chat";
 
 /** A running or about-to-start run, as far as sharing a folder at once goes. */
 export interface FolderRun {

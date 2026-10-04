@@ -34,6 +34,15 @@ import {
   type VerifyScope,
 } from "@/lib/test-progress";
 import { parseOpinionMarkers } from "@/lib/opinion-markers";
+import { detectCardLanguage } from "@/lib/prompts/test-style";
+import {
+  buildFixNoteHtml,
+  matchFixTargets,
+  splitVerifyMarkers,
+  type FixNote,
+  type FixTarget,
+} from "@/lib/autonomous-run/verify-fix";
+import { runVerifyFixChain } from "@/lib/autonomous-run/verify-fix-chain";
 
 export interface StartCardRunResult {
   ok: boolean;
@@ -246,8 +255,14 @@ async function runCardStart(id: string, options: StartCardRunOptions): Promise<S
       },
     });
 
+    // A development pre-verify leaves [FIX] / [BLOCKED] lines under its
+    // checklist (IDE-459). They are for the server, not the card: taken out
+    // here, they come back as the note the chain writes at the end.
+    const mode = normalizeProjectMode(project?.mode);
+    const verifyMarkers = phase === "verify" && mode !== "work" ? splitVerifyMarkers(result.response) : null;
+
     // Convert markdown response to HTML for the TipTap editor.
-    const markedHtml = await marked(result.response);
+    const markedHtml = await marked(verifyMarkers ? verifyMarkers.checklist : result.response);
     let htmlResponse = convertToTipTapTaskList(markedHtml);
     // A plan's Edge Cases names other cards as "IDE-318"; save them as [[ chips.
     if (phase === "planning") htmlResponse = linkCardsInHtml(htmlResponse, card.projectId);
@@ -329,18 +344,75 @@ async function runCardStart(id: string, options: StartCardRunOptions): Promise<S
       }
     }
 
+    // What the verify found that it could not tick. A plain code bug that
+    // names a real, unticked item goes to the automatic fix; the rest is
+    // written under the checklist as it stands.
+    const lang = detectCardLanguage({ title: card.title, description: card.description });
+    let fixTargets: FixTarget[] = [];
+    const verifyNotes: FixNote[] = [];
+    if (verifyMarkers && updates.testScenarios) {
+      fixTargets = matchFixTargets(verifyMarkers.fixes, updates.testScenarios);
+      for (const fix of verifyMarkers.fixes) {
+        if (!fixTargets.some((t) => t.item === fix.item)) {
+          verifyNotes.push({ kind: "blocked", item: fix.item, reason: fix.cause });
+        }
+      }
+      for (const blocked of verifyMarkers.blocked) verifyNotes.push({ kind: "blocked", ...blocked });
+    }
+    const runsFix = fixTargets.length > 0;
+    if (runsFix) {
+      // Still locked: the chain's runs follow straight on.
+      updates.processingType = "autonomous";
+    } else if (verifyNotes.length > 0 && updates.testScenarios) {
+      updates.testScenarios += buildFixNoteHtml(verifyNotes, lang);
+    }
+
     db.update(schema.cards)
       .set(updates)
       .where(eq(schema.cards.id, id))
       .run();
 
-    const outputWarning = verifyWarning ?? result.warning;
+    let outputWarning = verifyWarning ?? result.warning;
 
     // Mark process as completed AFTER DB updates, so the UI stays in sync.
     // The warning rides along so the completion toast can say why the card
     // did not change instead of reporting a plain success.
     completeProcess(processKey, "completed", { warning: outputWarning });
-    onRunFinished({ cardId: id, outcome: "completed" });
+
+    let chainStopped = false;
+    if (runsFix) {
+      let notes: FixNote[] = verifyNotes;
+      try {
+        const chain = await runVerifyFixChain({
+          card: { ...card, testScenarios: updates.testScenarios ?? card.testScenarios },
+          displayId: promptDisplayId,
+          voice: normalizeVoice(project?.voice),
+          mode,
+          cwd: actualWorkingDir,
+          inWorktree: actualWorkingDir !== workingDir,
+          processKey,
+          targets: fixTargets,
+        });
+        notes = [...verifyNotes, ...chain.notes];
+        outputWarning = outputWarning ?? chain.warning;
+        chainStopped = chain.stopped;
+      } catch (error) {
+        console.error(`[verify-fix] chain for ${id} threw:`, error);
+        outputWarning = outputWarning ?? `Automatic fix failed: ${describeRunError(error)}`;
+      }
+      const current = db
+        .select({ testScenarios: schema.cards.testScenarios })
+        .from(schema.cards)
+        .where(eq(schema.cards.id, id))
+        .get();
+      updates.testScenarios = (current?.testScenarios ?? "") + buildFixNoteHtml(notes, lang);
+      db.update(schema.cards)
+        .set({ testScenarios: updates.testScenarios, processingType: null, updatedAt: new Date().toISOString() })
+        .where(eq(schema.cards.id, id))
+        .run();
+    }
+
+    onRunFinished({ cardId: id, outcome: chainStopped ? "stopped" : "completed" });
 
     return {
       ok: true,
@@ -350,7 +422,9 @@ async function runCardStart(id: string, options: StartCardRunOptions): Promise<S
         cardId: id,
         phase,
         newStatus,
-        response: htmlResponse,
+        // A verify hands back what the card now holds — merged with the
+        // person's ticks and the fix chain's result — not the run's raw copy.
+        response: phase === "verify" && updates.testScenarios ? updates.testScenarios : htmlResponse,
         outputWarning,
         complexity,
         priority,

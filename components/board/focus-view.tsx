@@ -306,6 +306,8 @@ function processingFallback(card: Card): string {
   switch (card.processingType) {
     case "quick-fix":
       return "quick fix";
+    case "verify-fix":
+      return "fixing what pre-verify found";
     case "evaluate":
       return "evaluating";
     case "generate":
