@@ -9,35 +9,35 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { SECTION_CONFIG } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { notifyFinishedRuns } from "@/lib/system-notifications";
 import { firstLine } from "@/lib/run-error";
+import { processBaseLabel, processRowLabel, processTimeHint } from "@/lib/process-labels";
 import { RunErrorDetails, RunErrorToggle } from "@/components/run-error-details";
 import type { BackgroundProcess, ProcessType } from "@/lib/types";
 
-// Process type config for display
-const PROCESS_TYPE_CONFIG: Record<ProcessType, { label: string; color: string; bgColor: string }> = {
-  chat: { label: "Chat", color: "text-ink", bgColor: "bg-ink" },
-  autonomous: { label: "Autonomous", color: "text-ink", bgColor: "bg-ink" },
-  "quick-fix": { label: "Quick Fix", color: "text-amber-500", bgColor: "bg-amber-500" },
-  evaluate: { label: "Evaluate", color: "text-cyan-500", bgColor: "bg-cyan-500" },
-  generate: { label: "Generate", color: "text-violet-500", bgColor: "bg-violet-500" },
+// Colour per process type; the row text comes from processRowLabel.
+const PROCESS_TYPE_CONFIG: Record<ProcessType, { color: string; bgColor: string }> = {
+  chat: { color: "text-ink", bgColor: "bg-ink" },
+  autonomous: { color: "text-ink", bgColor: "bg-ink" },
+  "quick-fix": { color: "text-amber-500", bgColor: "bg-amber-500" },
+  evaluate: { color: "text-cyan-500", bgColor: "bg-cyan-500" },
+  generate: { color: "text-violet-500", bgColor: "bg-violet-500" },
 };
 
-/** Short popover suffix for a run that finished with a warning. */
-function warningSuffix(warning: string): string {
-  return /checklist left untouched/i.test(warning) ? "Checklist untouched" : "Check output";
-}
+// How often an open popover re-renders its elapsed / "ago" hints.
+const TIME_HINT_TICK_MS = 15000;
 
 function ProcessItem({
   process,
+  now,
   onKill,
   onCardClick,
   detailsOpen,
   onToggleDetails,
 }: {
   process: BackgroundProcess;
+  now: number;
   onKill: () => void;
   onCardClick: () => void;
   detailsOpen: boolean;
@@ -45,27 +45,17 @@ function ProcessItem({
 }) {
   const displayName = process.displayId || process.cardId.slice(0, 8);
   const processConfig = PROCESS_TYPE_CONFIG[process.processType];
-  const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
 
   const isAborted = process.status === "completed" && process.endReason === "aborted";
   const isFailed = process.status === "completed" && process.endReason === "failed";
   const hasWarning = process.status === "completed" && !isAborted && !isFailed && !!process.warning;
   const error = isFailed ? process.error ?? null : null;
 
-  // Build label: for chat include section name, for others show process type.
-  // Append an "· Interrupted on reload" suffix for aborted entries so users
-  // can tell a reload-killed chat apart from a cleanly finished one, and a
-  // warning suffix so a run that left the card as it was doesn't read as done.
-  const baseLabel = process.processType === "chat" && sectionConfig
-    ? `Chat (${sectionConfig.label.toLowerCase()})`
-    : processConfig.label;
-  const label = isAborted
-    ? `${baseLabel} · Interrupted on reload`
-    : isFailed
-    ? `${baseLabel} · Failed`
-    : hasWarning
-    ? `${baseLabel} · ${warningSuffix(process.warning!)}`
-    : baseLabel;
+  // The phase and target column say which run this is; two runs of one card
+  // otherwise both read "Autonomous". The warning text itself sits in the tooltip.
+  const label = processRowLabel(process);
+  const timeHint = processTimeHint(process, now);
+  const tooltip = hasWarning && process.warning ? `${label}\n${process.warning}` : label;
 
   const handleKillClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card modal from opening
@@ -100,13 +90,13 @@ function ProcessItem({
             <span className="text-xs font-medium text-muted-foreground shrink-0">{displayName}</span>
             <span className="text-sm font-medium truncate">{process.cardTitle}</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`text-xs ${subLabelClass}`}
-              title={hasWarning ? process.warning ?? undefined : undefined}
-            >
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`text-xs truncate ${subLabelClass}`} title={tooltip}>
               {label}
             </span>
+            {timeHint && (
+              <span className="text-xs text-muted-foreground shrink-0">· {timeHint}</span>
+            )}
             {error && <RunErrorToggle expanded={detailsOpen} onToggle={onToggleDetails} />}
           </div>
           {error && detailsOpen && <RunErrorDetails error={error} />}
@@ -157,6 +147,7 @@ export function BackgroundProcesses() {
     }))
   );
   const [isOpen, setIsOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const [openDetailIds, setOpenDetailIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -226,12 +217,6 @@ export function BackgroundProcesses() {
     previousRunning.forEach((process, id) => {
       if (!currentRunning.has(id)) {
         const displayName = process.displayId || process.cardId.slice(0, 8);
-        const processConfig = PROCESS_TYPE_CONFIG[process.processType];
-        const sectionConfig = process.sectionType ? SECTION_CONFIG[process.sectionType] : null;
-
-        const label = process.processType === "chat" && sectionConfig
-          ? `Chat (${sectionConfig.label.toLowerCase()})`
-          : processConfig.label;
 
         // Clear processing state on the card so spinner stops.
         // Chat processes don't set card.processingType and may run concurrently
@@ -258,29 +243,30 @@ export function BackgroundProcesses() {
           killedIdsRef.current.delete(id);
           toast({
             title: "Process Cancelled",
-            description: `${label} was stopped for ${displayName}`,
+            description: `${processBaseLabel(process)} was stopped for ${displayName}`,
           });
         } else {
+          // The completed entry carries endReason and warning; without it
+          // the running one still names the phase.
           const completed = completedById.get(id);
           const warning = completed?.warning;
+          const label = `${displayName}: ${processRowLabel(completed ?? { ...process, status: "completed", endReason: "completed" })}`;
           if (completed?.endReason === "failed") {
             toast({
               variant: "destructive",
               title: "Process Failed",
-              description: completed.error
-                ? `${label} failed for ${displayName}: ${firstLine(completed.error)}`
-                : `${label} failed for ${displayName}`,
+              description: completed.error ? `${label}: ${firstLine(completed.error)}` : label,
             });
           } else if (warning) {
             toast({
               variant: "warning",
               title: "Completed with a warning",
-              description: `${displayName}: ${warning}`,
+              description: `${label} — ${warning}`,
             });
           } else {
             toast({
               title: "Process Completed",
-              description: `${label} finished for ${displayName}`,
+              description: label,
             });
           }
         }
@@ -340,6 +326,14 @@ export function BackgroundProcesses() {
     }, 10000);
     return () => clearInterval(interval);
   }, [fetchBackgroundProcesses, fetchQueue]);
+
+  // Elapsed / "ago" hints only matter while someone is looking.
+  useEffect(() => {
+    if (!isOpen) return;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), TIME_HINT_TICK_MS);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   const runningCount = runningProcesses.length;
   const completedCount = completedProcesses.length;
@@ -406,6 +400,7 @@ export function BackgroundProcesses() {
             <ProcessItem
               key={process.id}
               process={process}
+              now={now}
               onKill={() => handleKill(process.id)}
               onCardClick={() => handleCardClick(process.cardId)}
               detailsOpen={openDetailIds.has(process.id)}
@@ -421,6 +416,7 @@ export function BackgroundProcesses() {
             <ProcessItem
               key={process.id}
               process={process}
+              now={now}
               onKill={() => handleKill(process.id)}
               onCardClick={() => handleCardClick(process.cardId)}
               detailsOpen={openDetailIds.has(process.id)}

@@ -9,7 +9,7 @@ function interop<T extends object>(ns: T): T {
   return (ns as { default?: T }).default ?? ns;
 }
 
-const { autonomousRunTitle, phaseLabel } = interop(labelsNs);
+const { autonomousRunTitle, phaseLabel, processRowLabel, processBaseLabel, processTimeHint } = interop(labelsNs);
 const { getColumnTitle } = interop(typesNs);
 
 test("run title: each phase reads its own completion", () => {
@@ -49,4 +49,64 @@ test("run title: no phase falls back to the caller's label", () => {
   assert.equal(autonomousRunTitle("generate", "completed", null), null);
   assert.equal(phaseLabel(undefined), null);
   assert.equal(phaseLabel("verify"), "Pre-verify");
+});
+
+type Row = Parameters<typeof processRowLabel>[0];
+
+function row(overrides: Partial<Row>): Row {
+  return {
+    processType: "autonomous",
+    sectionType: null,
+    status: "running",
+    endReason: undefined,
+    warning: null,
+    phase: null,
+    targetColumn: null,
+    ...overrides,
+  };
+}
+
+test("popover row: a running run names its phase and where it moves the card", () => {
+  assert.equal(processRowLabel(row({ phase: "planning", targetColumn: "In Progress" })), "Plan → In Progress");
+  assert.equal(processRowLabel(row({ phase: "implementation", targetColumn: "Human Test" })), "Implementation → Human Test");
+  assert.equal(processRowLabel(row({ phase: "retest", targetColumn: null })), "Fix & retest");
+  assert.equal(processRowLabel(row({ phase: "verify" })), "Pre-verify");
+});
+
+test("popover row: a finished run reads like the bell", () => {
+  const done = { status: "completed" as const, endReason: "completed" as const };
+  assert.equal(
+    processRowLabel(row({ ...done, phase: "implementation", targetColumn: "Human Test" })),
+    "Implementation completed → Human Test"
+  );
+  assert.equal(
+    processRowLabel(row({ ...done, phase: "verify", warning: "Checklist left untouched" })),
+    "Pre-verify finished with a warning"
+  );
+  assert.equal(
+    processRowLabel(row({ status: "completed", endReason: "failed", phase: "implementation", targetColumn: "Human Test" })),
+    "Implementation failed"
+  );
+  assert.equal(
+    processRowLabel(row({ status: "completed", endReason: "aborted", phase: "implementation" })),
+    "Implementation · Interrupted on reload"
+  );
+});
+
+test("popover row: no phase falls back to the generic label", () => {
+  assert.equal(processRowLabel(row({})), "Autonomous task");
+  assert.equal(processRowLabel(row({ status: "completed", endReason: "completed" })), "Autonomous task completed");
+  assert.equal(processRowLabel(row({ processType: "chat", sectionType: "tests" })), "Chat (Tests)");
+  assert.equal(processRowLabel(row({ processType: "evaluate" })), "AI Opinion");
+  assert.equal(processRowLabel(row({ processType: "quick-fix", status: "completed", endReason: "failed" })), "Quick Fix failed");
+  assert.equal(processBaseLabel(row({ phase: "verify", targetColumn: "Human Test" })), "Pre-verify");
+});
+
+test("popover row: elapsed while running, ago once finished", () => {
+  const start = "2026-10-04T12:00:00.000Z";
+  const now = Date.parse("2026-10-04T12:03:12.000Z");
+  assert.equal(processTimeHint({ status: "running", startedAt: start }, now), "3m 12s");
+  assert.equal(processTimeHint({ status: "completed", startedAt: start, completedAt: "2026-10-04T11:59:00.000Z" }, now), "4m ago");
+  assert.equal(processTimeHint({ status: "completed", startedAt: start, completedAt: "2026-10-04T12:03:00.000Z" }, now), "just now");
+  assert.equal(processTimeHint({ status: "completed", startedAt: start }, now), null);
 });

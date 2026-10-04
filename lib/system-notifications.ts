@@ -1,7 +1,7 @@
 "use client";
 
-import type { BackgroundProcess, ProcessType, SectionType } from "@/lib/types";
-import { PROCESS_LABEL, SECTION_LABEL, autonomousRunTitle } from "@/lib/process-labels";
+import type { BackgroundProcess, SectionType } from "@/lib/types";
+import { SECTION_LABEL, autonomousRunTitle, runLabel } from "@/lib/process-labels";
 import { firstLine } from "@/lib/run-error";
 
 // Renderer side of the OS-banner bridge in electron/notifications.js. Every
@@ -60,11 +60,6 @@ export function onNotificationOpenCard(
     if (typeof cardId !== "string" || !cardId) return;
     callback(cardId, section && section in SECTION_LABEL ? (section as SectionType) : null);
   });
-}
-
-function runLabel(processType: ProcessType, sectionType: SectionType | null): string {
-  if (processType === "chat") return `Chat (${SECTION_LABEL[sectionType ?? "detail"]})`;
-  return PROCESS_LABEL[processType];
 }
 
 function sectionFor(process: BackgroundProcess): SectionType | null {
