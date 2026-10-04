@@ -104,7 +104,7 @@ export async function POST(
 
     if (card.devServerPid && isProcessRunning(card.devServerPid)) {
       console.log(`[Complete] Stopping dev server with PID ${card.devServerPid}`);
-      stopDevServer(card.devServerPid);
+      await stopDevServer(card.devServerPid);
     }
 
     if (card.gitWorktreePath) {

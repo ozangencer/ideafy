@@ -608,7 +608,7 @@ function nativeQuitConfirm() {
     cancelId: 0,
     title: "Quit Ideafy?",
     message: "Quit Ideafy?",
-    detail: "Any in-flight Claude sessions and background tasks will stop.",
+    detail: "Any in-flight Claude sessions, background tasks and Run servers will stop.",
   };
   const choice = parent
     ? dialog.showMessageBoxSync(parent, options)
@@ -661,7 +661,37 @@ app.on("before-quit", (e) => {
   }, QUIT_CONFIRM_TIMEOUT_MS);
 });
 
-app.on("will-quit", () => {
+// Run servers started from cards are detached process groups. Once Ideafy is
+// gone nothing can reach them through Stop, so they would linger as orphans
+// holding a GB or two each. Electron has no DB access, so the Next server
+// stops them before it goes down itself.
+const RUN_STOP_TIMEOUT_MS = 5000;
+let runServersStopped = false;
+
+function stopRunServers() {
+  return new Promise((resolve) => {
+    const req = http.request(
+      `${DEV_URL}/api/cards/dev-servers/stop-all`,
+      { method: "POST", timeout: RUN_STOP_TIMEOUT_MS },
+      (res) => {
+        res.resume();
+        res.on("end", resolve);
+      }
+    );
+    // A dead or hung Next server must not keep the user from quitting.
+    req.on("timeout", () => req.destroy());
+    req.on("error", resolve);
+    req.end();
+  });
+}
+
+app.on("will-quit", (e) => {
+  if (DEV_URL && !runServersStopped) {
+    e.preventDefault();
+    runServersStopped = true;
+    stopRunServers().finally(() => app.quit());
+    return;
+  }
   globalShortcut.unregisterAll();
   stopUpdater();
   killNextServer();

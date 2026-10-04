@@ -98,7 +98,7 @@ export async function POST(
   // Stop dev server if running
   if (card.devServerPid && isProcessRunning(card.devServerPid)) {
     console.log(`[Merge] Stopping dev server with PID ${card.devServerPid}`);
-    stopDevServer(card.devServerPid);
+    await stopDevServer(card.devServerPid);
   }
 
   // Build commit message

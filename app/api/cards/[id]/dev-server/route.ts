@@ -208,8 +208,8 @@ export async function DELETE(
 
   console.log(`[Run] Stopping PID ${card.devServerPid} for card ${id}`);
 
-  // Stop the server
-  const stopped = stopDevServer(card.devServerPid);
+  // Stop the whole process group and wait until it is actually gone
+  const stopped = await stopDevServer(card.devServerPid);
 
   // Clear server info from database regardless of stop result
   const updatedAt = new Date().toISOString();

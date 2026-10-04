@@ -77,7 +77,7 @@ export async function POST(
   // Stop dev server if running
   if (card.devServerPid && isProcessRunning(card.devServerPid)) {
     console.log(`[Rollback] Stopping dev server with PID ${card.devServerPid}`);
-    stopDevServer(card.devServerPid);
+    await stopDevServer(card.devServerPid);
   }
 
   try {

@@ -54,7 +54,8 @@ export function QuitConfirmDialog() {
         <AlertDialogHeader>
           <AlertDialogTitle>Quit Ideafy?</AlertDialogTitle>
           <AlertDialogDescription>
-            Any in-flight Claude sessions and background tasks will stop.
+            Any in-flight Claude sessions, background tasks and Run servers
+            will stop.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -5,6 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { buildEnv } from "./platform/base-provider";
 import { applyPort, tokenizeCommand } from "./run-target";
+import { stopProcessGroup } from "./process-group";
 
 const execFileAsync = promisify(execFile);
 
@@ -212,31 +213,13 @@ export async function openInXcode(
 }
 
 /**
- * Stop a dev server by its PID
- * Returns true if successfully stopped, false otherwise
+ * Stop a run command together with its process group — npm's children
+ * (`next dev`, `next-server`, vite…) included.
+ * Resolves true once the group is gone, false if it was already gone or
+ * something survived SIGKILL.
  */
-export function stopDevServer(pid: number): boolean {
-  try {
-    // Try SIGTERM first (graceful)
-    process.kill(pid, "SIGTERM");
-
-    // Check if it's still running after a brief moment
-    setTimeout(() => {
-      if (isProcessRunning(pid)) {
-        // Force kill if still running
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {
-          // Process might have exited by now
-        }
-      }
-    }, 500);
-
-    return true;
-  } catch {
-    // Process might not exist
-    return false;
-  }
+export function stopDevServer(pid: number): Promise<boolean> {
+  return stopProcessGroup(pid);
 }
 
 /**
