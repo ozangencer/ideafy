@@ -5,6 +5,24 @@ import { PhaseActionFlags } from "@/lib/card-phase";
 import { useKanbanStore } from "@/lib/store";
 
 /**
+ * Where one card stands in the run queue, and nothing else. Rows that only
+ * draw the queue chip (Focus, Chains) read this instead of the full hook,
+ * which needs the card's phase flags and project.
+ */
+export function useQueuePlace(cardId: string) {
+  // A number, not the snapshot: every 10s poll rebuilds the snapshot, and only
+  // the cards whose place actually changed should re-render. 0 = not queued.
+  const rank = useKanbanStore(
+    (s) => (s.queueState?.items.findIndex((item) => item.cardId === cardId) ?? -1) + 1
+  );
+  // A string for the same reason; null when not queued.
+  const kind = useKanbanStore(
+    (s) => s.queueState?.items.find((item) => item.cardId === cardId)?.kind ?? null
+  );
+  return { rank, kind };
+}
+
+/**
  * The run queue as one card sees it: where it stands, whether it may join,
  * and the add/remove calls. The board card's context menu and the modal
  * footer both read it, so the next queue rule lands in one place instead of
@@ -21,15 +39,7 @@ export function useCardQueueActions({
   flags: PhaseActionFlags;
   project: Project | undefined;
 }) {
-  // A number, not the snapshot: every 10s poll rebuilds the snapshot, and only
-  // the cards whose place actually changed should re-render. 0 = not queued.
-  const rank = useKanbanStore(
-    (s) => (s.queueState?.items.findIndex((item) => item.cardId === card.id) ?? -1) + 1
-  );
-  // A string for the same reason; null when not queued.
-  const kind = useKanbanStore(
-    (s) => s.queueState?.items.find((item) => item.cardId === card.id)?.kind ?? null
-  );
+  const { rank, kind } = useQueuePlace(card.id);
   const addToQueue = useKanbanStore((s) => s.addToQueue);
   const removeFromQueue = useKanbanStore((s) => s.removeFromQueue);
 

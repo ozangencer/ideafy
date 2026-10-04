@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ListVideo, MoreHorizontal, Pause, Play } from "lucide-react";
 import type { QueueSnapshot } from "@/lib/card-queue";
 import { useKanbanStore } from "@/lib/store";
@@ -19,6 +19,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useQueuePlace } from "./use-card-queue-actions";
 
 type QueueItem = QueueSnapshot["items"][number];
 
@@ -57,6 +59,43 @@ export function QueuePlaceText({ cardId }: { cardId: string }) {
   return <>{queue ? describeQueuePlace(queue, cardId) : null}</>;
 }
 
+/**
+ * A queued card's place, "1 · impl", in the violet the board uses for the
+ * queue. The board card's footer, the Chains pills and matrix all draw this
+ * one chip, so a queued card reads the same wherever it shows up. Renders
+ * nothing when the card is not queued; the caller decides whether a running
+ * card should hide it.
+ */
+export function QueueRankChip({
+  cardId,
+  size = "footer",
+  className = "",
+}: {
+  cardId: string;
+  size?: "footer" | "inline";
+  className?: string;
+}) {
+  const { rank, kind } = useQueuePlace(cardId);
+  if (rank === 0 || !kind) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`inline-flex shrink-0 cursor-default items-center gap-1 rounded bg-violet-500/10 font-mono tabular-nums text-violet-600 dark:text-violet-400 ${
+            size === "footer" ? "h-[22px] px-1.5 text-[10px]" : "px-1 text-[9.5px] leading-[14px]"
+          } ${className}`}
+        >
+          <ListVideo className={size === "footer" ? "h-3 w-3" : "h-2.5 w-2.5"} />
+          {rank} · {QUEUE_KIND_SHORT[kind]}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <QueuePlaceText cardId={cardId} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function statusLine(queue: QueueSnapshot): string {
   if (queue.running) {
     return queue.running.fromQueue
@@ -75,7 +114,18 @@ function statusLine(queue: QueueSnapshot): string {
  * numbers to count. The footer says what the queue is doing, which is the
  * question you come back with after walking away from it.
  */
-export function RunQueueChip() {
+export function RunQueueChip({
+  trigger,
+  align = "start",
+}: {
+  /**
+   * Draws the button that opens the popover, for surfaces other than the
+   * column header (Focus, Chains). It must render one element that takes a
+   * ref, a <button>. Left out, the header's icon-and-count chip is drawn.
+   */
+  trigger?: (state: { count: number; paused: boolean }) => ReactNode;
+  align?: "start" | "end";
+} = {}) {
   const queue = useKanbanStore((s) => s.queueState);
   const cards = useKanbanStore((s) => s.cards);
   const selectCard = useKanbanStore((s) => s.selectCard);
@@ -92,24 +142,28 @@ export function RunQueueChip() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        {/* Icon and count only: the header already holds the title, the WIP
-            counter and the add button, and a worded chip truncated "In
-            Progress" to "In Pr…". The tooltip says the rest. */}
-        <button
-          type="button"
-          aria-label={`Run queue: ${queue.items.length} waiting${paused ? ", paused" : ""}`}
-          title={`Run queue · ${queue.items.length} waiting${paused ? " · paused" : ""}`}
-          className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded flex-shrink-0 font-mono tabular-nums transition-colors ${
-            paused
-              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
-              : "bg-ink/[0.06] text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <ListVideo className="h-3 w-3" />
-          {queue.items.length}
-        </button>
+        {trigger ? (
+          trigger({ count: queue.items.length, paused })
+        ) : (
+          // Icon and count only: the header already holds the title, the WIP
+          // counter and the add button, and a worded chip truncated "In
+          // Progress" to "In Pr…". The tooltip says the rest.
+          <button
+            type="button"
+            aria-label={`Run queue: ${queue.items.length} waiting${paused ? ", paused" : ""}`}
+            title={`Run queue · ${queue.items.length} waiting${paused ? " · paused" : ""}`}
+            className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded flex-shrink-0 font-mono tabular-nums transition-colors ${
+              paused
+                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
+                : "bg-ink/[0.06] text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <ListVideo className="h-3 w-3" />
+            {queue.items.length}
+          </button>
+        )}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-1.5">
+      <PopoverContent align={align} className="w-80 p-1.5">
         <div className="px-1.5 pb-1.5 pt-0.5 text-[11px] text-muted-foreground">
           Run queue · starts when the run before it ends
         </div>

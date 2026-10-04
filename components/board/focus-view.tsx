@@ -8,6 +8,7 @@ import {
   Cpu,
   FlaskConical,
   Lightbulb,
+  ListVideo,
   MessageSquare,
   Unlock,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
 } from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CardPhaseActions } from "./card-phase-actions";
+import { RunQueueChip } from "./run-queue-popover";
 import { TodayPanel } from "./today-panel";
 
 const STATE_ICONS = {
@@ -125,10 +127,13 @@ export function FocusBlockHeading({
   title,
   count,
   note,
+  action,
 }: {
   title: string;
   count?: number;
   note?: string;
+  /** A control at the far right, after the note. */
+  action?: React.ReactNode;
 }) {
   return (
     <div className="flex items-baseline gap-1.5">
@@ -141,6 +146,7 @@ export function FocusBlockHeading({
         </span>
       )}
       {note && <span className="ml-auto text-[10.5px] text-muted-foreground/70">{note}</span>}
+      {action && <span className={`shrink-0 self-center ${note ? "ml-2" : "ml-auto"}`}>{action}</span>}
     </div>
   );
 }
@@ -283,6 +289,81 @@ function YourTurnRow({ row }: { row: FocusRow }) {
   );
 }
 
+/**
+ * The run queue as one line under Agent running: what the agent picks up
+ * next, in order. One line for the same reason the running cards get one —
+ * none of it is a decision — and managing it is the board's popover, opened
+ * from Manage, not a second list to keep in step with it.
+ */
+function QueueLine() {
+  const queue = useKanbanStore((s) => s.queueState);
+  const cards = useKanbanStore((s) => s.cards);
+  const projects = useKanbanStore((s) => s.projects);
+  const selectCard = useKanbanStore((s) => s.selectCard);
+  const openModal = useKanbanStore((s) => s.openModal);
+
+  if (!queue || queue.items.length === 0) return null;
+  const paused = !queue.armed;
+
+  return (
+    <QuietRow>
+      <ListVideo
+        className={`w-3.5 h-3.5 shrink-0 ${
+          paused ? "text-amber-600 dark:text-amber-400" : "text-violet-600 dark:text-violet-400"
+        }`}
+      />
+      <span className="min-w-0 flex-1 truncate">
+        <span
+          className={`font-mono text-[10.5px] tabular-nums ${
+            paused ? "text-amber-600 dark:text-amber-400" : ""
+          }`}
+        >
+          Queue {queue.items.length}
+          {paused && " · paused"}
+        </span>
+        {queue.items.map((item, index) => {
+          // The queue is global, so a card from another project shows up here
+          // too; its pill wears that project's colour, which says so.
+          const card = cards.find((c) => c.id === item.cardId);
+          const project = projects.find((p) => p.id === card?.projectId);
+          return (
+            <span key={item.cardId}>
+              {" · "}
+              <span className="font-mono text-[10.5px] tabular-nums text-violet-600 dark:text-violet-400">
+                {index + 1}
+              </span>{" "}
+              <button
+                type="button"
+                title={item.title}
+                onClick={() => {
+                  if (!card) return;
+                  selectCard(card);
+                  openModal();
+                }}
+                className="transition-opacity hover:opacity-80"
+              >
+                <ProjectIdPill displayId={item.displayId} project={project} />
+              </button>
+            </span>
+          );
+        })}
+      </span>
+      <RunQueueChip
+        align="end"
+        trigger={({ count }) => (
+          <button
+            type="button"
+            aria-label={`Manage run queue: ${count} waiting${paused ? ", paused" : ""}`}
+            className="ml-auto shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground transition-colors hover:border-ink/40 hover:text-foreground"
+          >
+            Manage
+          </button>
+        )}
+      />
+    </QuietRow>
+  );
+}
+
 export function QuietRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-2.5 py-2 text-[11.5px] text-muted-foreground">
@@ -319,16 +400,27 @@ export function FocusView({
   // instead of fetching its own and drifting from the bell's dots.
   const activityEvents = useKanbanStore((s) => s.activityEvents);
 
+  // The store keeps the same snapshot when a poll changes nothing, so this
+  // and the board below only recompute when the queue really moved.
+  const queueState = useKanbanStore((s) => s.queueState);
+
   const unreadReplies = useMemo(() => unreadSignalsByCard(activityEvents), [activityEvents]);
+  const queuedIds = useMemo(
+    () => new Set(queueState?.items.map((item) => item.cardId) ?? []),
+    [queueState]
+  );
+  const queueLength = queueState?.items.length ?? 0;
 
   const focus = useMemo(
-    () => buildFocusBoard(cards, staleThresholds, Date.now(), activeWorkspace, unreadReplies),
-    [cards, staleThresholds, activeWorkspace, unreadReplies]
+    () =>
+      buildFocusBoard(cards, staleThresholds, Date.now(), activeWorkspace, unreadReplies, queuedIds),
+    [cards, staleThresholds, activeWorkspace, unreadReplies, queuedIds]
   );
 
   const isQuiet =
     focus.yourTurn.length === 0 &&
     focus.agentRunning.length === 0 &&
+    focus.queued.length === 0 &&
     focus.waiting.total === 0 &&
     focus.waiting.stale === 0;
 
@@ -354,54 +446,57 @@ export function FocusView({
             )}
           </div>
 
-          {focus.agentRunning.length > 0 && (
+          {(focus.agentRunning.length > 0 || queueLength > 0) && (
             <div className="flex flex-col gap-1.5">
               <FocusBlockHeading
                 title="Agent running"
-                count={focus.agentRunning.length}
+                count={focus.agentRunning.length + queueLength}
                 note="nothing for you"
               />
               {/* One line, not one row per card: these are not decisions, and a
                   list of them would compete with the block above that is. */}
-              <QuietRow>
-                <Cpu className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-                <span className="min-w-0 truncate">
-                  {focus.agentRunning.map((card, index) => {
-                    const project = projects.find((p) => p.id === card.projectId);
-                    const displayId = getDisplayId(card, project);
-                    return (
-                      <span key={card.id}>
-                        {index > 0 && " · "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            selectCard(card);
-                            openModal();
-                          }}
-                          className={
-                            displayId
-                              ? "transition-opacity hover:opacity-80"
-                              : "transition-colors hover:text-foreground"
-                          }
-                        >
-                          {displayId ? (
-                            <ProjectIdPill displayId={displayId} project={project} />
-                          ) : (
-                            card.title
-                          )}
-                        </button>{" "}
-                        {card.processingType === "quick-fix"
-                          ? "quick fix"
-                          : card.processingType === "evaluate"
-                            ? "evaluating"
-                            : card.processingType === "generate"
-                              ? "generating"
-                              : "running"}
-                      </span>
-                    );
-                  })}
-                </span>
-              </QuietRow>
+              {focus.agentRunning.length > 0 && (
+                <QuietRow>
+                  <Cpu className="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+                  <span className="min-w-0 truncate">
+                    {focus.agentRunning.map((card, index) => {
+                      const project = projects.find((p) => p.id === card.projectId);
+                      const displayId = getDisplayId(card, project);
+                      return (
+                        <span key={card.id}>
+                          {index > 0 && " · "}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              selectCard(card);
+                              openModal();
+                            }}
+                            className={
+                              displayId
+                                ? "transition-opacity hover:opacity-80"
+                                : "transition-colors hover:text-foreground"
+                            }
+                          >
+                            {displayId ? (
+                              <ProjectIdPill displayId={displayId} project={project} />
+                            ) : (
+                              card.title
+                            )}
+                          </button>{" "}
+                          {card.processingType === "quick-fix"
+                            ? "quick fix"
+                            : card.processingType === "evaluate"
+                              ? "evaluating"
+                              : card.processingType === "generate"
+                                ? "generating"
+                                : "running"}
+                        </span>
+                      );
+                    })}
+                  </span>
+                </QuietRow>
+              )}
+              <QueueLine />
             </div>
           )}
 

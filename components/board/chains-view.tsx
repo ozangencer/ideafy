@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, ListVideo } from "lucide-react";
 import {
   CardGroupSummary,
   chainOrderAnomaly,
@@ -21,16 +21,42 @@ import {
 import { CardGroupChip } from "./card-group-chip";
 import { ChainRowMenu } from "./card-group-chain";
 import { FocusBlockHeading, QuietRow } from "./focus-view";
+import { QueueRankChip, RunQueueChip } from "./run-queue-popover";
 
 // Past this many members a segment drops under ~3px on a normal window and the
 // bar turns to noise. Runs of the same status then merge into one block —
 // still in chain order, so a withdrawn card stays where it was dropped.
 const SEGMENT_LIMIT = 40;
 
-type Segment = { key: string; status: Status; weight: number; isNext: boolean; label: string };
+type Segment = {
+  key: string;
+  status: Status;
+  weight: number;
+  isNext: boolean;
+  queued: boolean;
+  label: string;
+};
 
 function displayIdOf(card: Card, projects: Project[]): string {
   return getDisplayId(card, projects.find((p) => p.id === card.projectId)) ?? card.title;
+}
+
+/**
+ * Each queued card's place, 1-based. The view reads the whole snapshot,
+ * which the board cards must not; here it is one map per poll that actually
+ * changed the queue, since the store keeps the snapshot otherwise.
+ */
+function useQueueRanks(): Map<string, number> {
+  const queue = useKanbanStore((s) => s.queueState);
+  return useMemo(
+    () => new Map(queue?.items.map((item, index) => [item.cardId, index + 1]) ?? []),
+    [queue]
+  );
+}
+
+/** Queued and not yet running: the board's `isQueued`, for a card in a chain. */
+function queuedRank(card: Card, ranks: Map<string, number>): number {
+  return card.processingType ? 0 : ranks.get(card.id) ?? 0;
 }
 
 /**
@@ -71,6 +97,28 @@ export function ChainsView({ summaries }: { summaries: Map<string, CardGroupSumm
           title="Chains"
           count={open.length}
           note="ordered by last move · progress excludes withdrawn"
+          action={
+            // The board's queue popover, so the order can be fixed or the
+            // queue paused without leaving the chains for the board.
+            <RunQueueChip
+              align="end"
+              trigger={({ count, paused }) => (
+                <button
+                  type="button"
+                  aria-label={`Run queue: ${count} waiting${paused ? ", paused" : ""}`}
+                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums transition-colors ${
+                    paused
+                      ? "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:text-amber-400"
+                      : "bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 dark:text-violet-400"
+                  }`}
+                >
+                  <ListVideo className="h-3 w-3" />
+                  Queue {count}
+                  {paused && " · paused"}
+                </button>
+              )}
+            />
+          }
         />
         {open.length === 0 && finished.length === 0 ? (
           <QuietRow>
@@ -142,6 +190,7 @@ function ChainRow({
   const projects = useKanbanStore((s) => s.projects);
   const selectCard = useKanbanStore((s) => s.selectCard);
   const openModal = useKanbanStore((s) => s.openModal);
+  const queueRanks = useQueueRanks();
 
   const { group, total, done, withdrawn, nextCard } = summary;
   const denominator = total - withdrawn;
@@ -176,7 +225,7 @@ function ChainRow({
           <CardGroupChip group={group} />
         </span>
         <span className="truncate text-[13px] font-medium text-card-foreground">{group.name}</span>
-        <ChainBar summary={summary} projects={projects} />
+        <ChainBar summary={summary} projects={projects} queueRanks={queueRanks} />
         <span className="truncate text-right font-mono text-[11px] tabular-nums text-muted-foreground">
           <span className={done > 0 ? "font-semibold text-green-500" : undefined}>{done}</span>/
           {denominator}
@@ -199,20 +248,35 @@ function ChainRow({
           {withdrawn > 0 && (
             <SummaryPill status="withdrawn" label={`${withdrawn} withdrawn`} />
           )}
-          {pills.map((card) => (
-            <button
-              key={card.id}
-              type="button"
-              title={card.title}
-              onClick={() => openCard(card)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px] transition-colors hover:bg-accent hover:text-accent-foreground ${
-                card.id === nextCard?.id ? "border-ink/60 text-foreground" : "border-border text-muted-foreground"
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[card.status]}`} />
-              <span className="max-w-[160px] truncate text-current">{displayIdOf(card, projects)}</span>
-            </button>
-          ))}
+          {pills.map((card) => {
+            const rank = queuedRank(card, queueRanks);
+            return (
+              <button
+                key={card.id}
+                type="button"
+                title={rank > 0 ? `${card.title} · queued #${rank}` : card.title}
+                onClick={() => openCard(card)}
+                // Queued speaks the board's violet: the wash and border a
+                // queued card wears in its column. Next keeps its ink border.
+                className={`group/pill inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10.5px] transition-colors hover:bg-accent hover:text-accent-foreground ${
+                  card.id === nextCard?.id
+                    ? "border-ink/60 text-foreground"
+                    : rank > 0
+                    ? "border-violet-500/[0.45] text-muted-foreground dark:border-violet-400/35"
+                    : "border-border text-muted-foreground"
+                } ${rank > 0 ? "bg-violet-500/10 dark:bg-violet-400/10" : ""}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${STATUS_COLORS[card.status]}`} />
+                <span className="max-w-[160px] truncate text-current">{displayIdOf(card, projects)}</span>
+                {rank > 0 && (
+                  <span className="inline-flex items-center gap-0.5 tabular-nums text-violet-600 group-hover/pill:text-current dark:text-violet-400">
+                    <ListVideo className="h-2.5 w-2.5" />
+                    {rank}
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {more > 0 && (
             <button
               type="button"
@@ -254,21 +318,41 @@ function SummaryPill({ status, label }: { status: Status; label: string }) {
  * card in its status colour, next outlined. "Where is that card?" is answered
  * here without opening anything.
  */
-function ChainBar({ summary, projects }: { summary: CardGroupSummary; projects: Project[] }) {
+function ChainBar({
+  summary,
+  projects,
+  queueRanks,
+}: {
+  summary: CardGroupSummary;
+  projects: Project[];
+  queueRanks: Map<string, number>;
+}) {
   const activeWorkspace = useKanbanStore((s) => s.activeWorkspace);
   const { members, nextCard } = summary;
 
   const segments: Segment[] = [];
   for (const card of members) {
     const isNext = card.id === nextCard?.id;
-    const label = `${displayIdOf(card, projects)} · ${getColumnTitle(card.status, activeWorkspace)}`;
+    const rank = queuedRank(card, queueRanks);
+    const label = `${displayIdOf(card, projects)} · ${getColumnTitle(card.status, activeWorkspace)}${
+      rank > 0 ? ` · queued #${rank}` : ""
+    }`;
     const last = segments[segments.length - 1];
-    if (members.length > SEGMENT_LIMIT && !isNext && last && !last.isNext && last.status === card.status) {
+    // A queued card keeps its own segment, or its place would merge away.
+    if (
+      members.length > SEGMENT_LIMIT &&
+      !isNext &&
+      rank === 0 &&
+      last &&
+      !last.isNext &&
+      !last.queued &&
+      last.status === card.status
+    ) {
       last.weight += 1;
       last.label = `${last.weight} × ${getColumnTitle(card.status, activeWorkspace)}`;
       continue;
     }
-    segments.push({ key: card.id, status: card.status, weight: 1, isNext, label });
+    segments.push({ key: card.id, status: card.status, weight: 1, isNext, queued: rank > 0, label });
   }
 
   return (
@@ -303,6 +387,7 @@ function ChainMatrix({ summary }: { summary: CardGroupSummary }) {
   const openModal = useKanbanStore((s) => s.openModal);
   const placeCardInChain = useKanbanStore((s) => s.placeCardInChain);
   const [showPrefix, setShowPrefix] = useState(false);
+  const queueRanks = useQueueRanks();
 
   const { group, members, nextCard } = summary;
 
@@ -367,6 +452,7 @@ function ChainMatrix({ summary }: { summary: CardGroupSummary }) {
             if (index < prefixLength && !showPrefix) return null;
             const project = projects.find((p) => p.id === card.projectId);
             const isNext = card.id === nextCard?.id;
+            const isQueued = queuedRank(card, queueRanks) > 0;
             // "After X" is a no-op when X already sits right in front.
             const anchors = members.filter(
               (member, i) => member.id !== card.id && i !== index - 1
@@ -396,13 +482,20 @@ function ChainMatrix({ summary }: { summary: CardGroupSummary }) {
                           next
                         </span>
                       )}
+                      {/* "In Backlog, but up next for the agent" without
+                          reading the row: the board's queue chip, small. */}
+                      {isQueued && <QueueRankChip cardId={card.id} size="inline" />}
                     </div>
                   </td>
                   {columns.map((column) => (
                     <td key={column.id} className="px-1 py-1.5 text-center">
                       {card.status === column.id && (
                         <span
-                          className={`inline-block h-2.5 w-2.5 rounded-full ${STATUS_COLORS[card.status]}`}
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${STATUS_COLORS[card.status]} ${
+                            isQueued
+                              ? "ring-2 ring-violet-500/60 ring-offset-1 ring-offset-card dark:ring-violet-400/60"
+                              : ""
+                          }`}
                         />
                       )}
                     </td>
