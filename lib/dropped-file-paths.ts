@@ -14,7 +14,7 @@ function normalizePath(pathValue: string): string {
   return withoutTrailingSlash || "/";
 }
 
-function readElectronFilePath(file: File): string | null {
+export function readElectronFilePath(file: File): string | null {
   const electronApi = (
     window as Window & {
       electronAPI?: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +42,8 @@ import {
   Terminal,
 } from "lucide-react";
 import { BasicInfoFields } from "./project-form/basic-info-fields";
+import { ReferencesPicker } from "./project-form/references-picker";
+import { serializeReferences, type BriefReference } from "@/lib/work-brief-references";
 import { cn } from "@/lib/utils";
 
 interface AddProjectModalProps {
@@ -144,7 +146,7 @@ const WORK_QUESTIONS: Question[] = [
     key: "references",
     title: "References",
     placeholder: "Where does the reference material live?",
-    help: "Contracts, earlier proposals, folders. Paths relative to the project folder.",
+    help: "Tick what AI should read before writing anything here, and say in a few words what each one is. Nothing is copied.",
   },
   {
     key: "doneAndRhythm",
@@ -153,6 +155,10 @@ const WORK_QUESTIONS: Question[] = [
     help: "A deadline, a weekly SteerCo, a monthly report.",
   },
 ];
+
+// A Work project records its brief path explicitly instead of relying on the
+// docs/product-narrative.md default, so the file name matches what it holds.
+const WORK_BRIEF_PATH = "docs/project-brief.md";
 
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
@@ -172,7 +178,7 @@ function modeOptions(isWork: boolean, questionCount: number): ModeOption[] {
       {
         value: "create",
         title: "Write it with AI",
-        description: `Answer ${count} short questions; AI drafts a project brief at docs/product-narrative.md`,
+        description: `Answer ${count} short questions; AI drafts a project brief at ${WORK_BRIEF_PATH}`,
       },
       {
         value: "existing",
@@ -244,6 +250,9 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
   const [existingNarrativePath, setExistingNarrativePath] = useState("");
   const [narrative, setNarrative] = useState<Answers>(() => emptyAnswers(questions));
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  // Work's References question is a picked list; its markdown form lives in
+  // narrative.references like every other answer.
+  const [references, setReferences] = useState<BriefReference[]>([]);
   const answerRef = useRef<HTMLTextAreaElement>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -278,6 +287,18 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
     setNarrative((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateReferences = (next: BriefReference[]) => {
+    setReferences(next);
+    updateNarrative("references", serializeReferences(next));
+  };
+
+  // Picked references point into the folder chosen on step 1; a different
+  // folder makes them meaningless.
+  useEffect(() => {
+    setReferences([]);
+    setNarrative((prev) => ("references" in prev ? { ...prev, references: "" } : prev));
+  }, [folderPath]);
+
   // Put the cursor in the answer box whenever the interview shows a question.
   useEffect(() => {
     if (step === 3) {
@@ -298,8 +319,10 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
       let narrativePath: string | null = null;
       if (narrativeMode === "existing" && existingNarrativePath.trim()) {
         narrativePath = existingNarrativePath.trim();
+      } else if (isWork) {
+        narrativePath = WORK_BRIEF_PATH;
       }
-      // If mode is "create" or "skip", narrativePath stays null (use default or skip)
+      // Development "create" or "skip" keeps null and uses the default path
 
       // Create project
       const response = await fetch("/api/projects", {
@@ -397,6 +420,14 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
 
   const question = questions[currentQuestion];
   const isLastQuestion = currentQuestion === questions.length - 1;
+  const isReferencePicker = isWork && question.key === "references";
+
+  const handleAnswerKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (!isLastQuestion) goToQuestion(currentQuestion + 1);
+    }
+  };
 
   return (
     <Dialog
@@ -634,24 +665,30 @@ export function AddProjectModal({ onClose }: AddProjectModalProps) {
                 <p className="text-xs text-muted-foreground mt-1">{question.help}</p>
               </div>
               <InputGroup className="flex-1 min-h-0 flex-col items-stretch">
-                <InputGroupTextarea
-                  ref={answerRef}
-                  id={`narrative-${question.key}`}
-                  value={narrative[question.key]}
-                  onChange={(e) => updateNarrative(question.key, e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                      e.preventDefault();
-                      if (!isLastQuestion) goToQuestion(currentQuestion + 1);
-                    }
-                  }}
-                  placeholder={question.placeholder}
-                  className="flex-1 min-h-0 px-3.5 text-[15px] leading-relaxed"
-                />
+                {isReferencePicker ? (
+                  <ReferencesPicker
+                    folderPath={folderPath}
+                    references={references}
+                    onChange={updateReferences}
+                    onPickingChange={setIsPickingNarrativeFile}
+                    onKeyDown={handleAnswerKeyDown}
+                  />
+                ) : (
+                  <InputGroupTextarea
+                    ref={answerRef}
+                    id={`narrative-${question.key}`}
+                    value={narrative[question.key]}
+                    onChange={(e) => updateNarrative(question.key, e.target.value)}
+                    onKeyDown={handleAnswerKeyDown}
+                    placeholder={question.placeholder}
+                    className="flex-1 min-h-0 px-3.5 text-[15px] leading-relaxed"
+                  />
+                )}
                 <InputGroupAddon align="block-end" className="border-t">
                   <InputGroupText className="tabular-nums">
-                    {countWords(narrative[question.key])}{" "}
-                    {countWords(narrative[question.key]) === 1 ? "word" : "words"}
+                    {isReferencePicker
+                      ? `${references.length} selected`
+                      : `${countWords(narrative[question.key])} ${countWords(narrative[question.key]) === 1 ? "word" : "words"}`}
                   </InputGroupText>
                   {!isLastQuestion && (
                     <InputGroupText className="ml-auto text-xs">

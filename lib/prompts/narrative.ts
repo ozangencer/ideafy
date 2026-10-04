@@ -144,7 +144,7 @@ Write a concise project brief in markdown with these sections, in this order:
 2. Stakeholders: who is involved, their role, and what each expects
 3. Outputs: the kinds of documents and deliverables produced here, and who reads them
 4. Out of scope: what this project does not cover
-5. References: where the reference material lives, as paths relative to the project folder when given
+5. References: the user's list as given, one item per line with its note. Do not rename, shorten or invent paths and links
 6. Working rhythm: what done looks like, deadlines and recurring meetings or reports
 
 Requirements:
