@@ -36,6 +36,15 @@ test("chat sections allow get_card under the registered server name", () => {
   assert.ok(!tools.some((t) => t.includes("ideafy:ideafy")));
 });
 
+test("a chat outside the Tests tab cannot queue a card", () => {
+  // queue_card starts an unattended run; only the Tests tab gets the whole
+  // server, and the other tabs stay on get_card.
+  for (const section of ["detail", "opinion", "solution"] as const) {
+    const tools = getAllowedTools(section, [PLUGIN_MCP]);
+    assert.ok(!tools.some((t) => /queue_card|__\*$/.test(t)), section);
+  }
+});
+
 test("the tests section allows every tool of the mentioned server", () => {
   const tools = getAllowedTools("tests", [PLUGIN_MCP]);
   assert.ok(tools.includes("mcp__plugin_ideafy_ideafy__*"));

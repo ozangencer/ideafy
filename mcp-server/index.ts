@@ -32,11 +32,17 @@ import {
   buildTestStyleContract,
   clearQueue,
   completedAtFor,
+  dequeueCard,
+  enqueueCard,
   completedAtOnCreate,
   describeOpinionMarkers,
   isStatus,
+  listQueueRows,
   moveCard,
   normalizeComplexity,
+  queueDisplayId,
+  queueKindOf,
+  queuedRunsInWorktree,
   saveOpinion,
   statusAfterPlan,
   statusAfterTests,
@@ -896,10 +902,55 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
       },
       {
         name: "clear_queue",
-        description: "Empty the run queue: every card waiting for an autonomous run is taken out, the same as Clear in the app's queue popover. Only waiting cards go — a run already going keeps going; this is not Stop. Call it only when the user explicitly asks to clear the whole queue; to take one card out, the app's row menu has Remove. There is no Undo here: the result lists the cleared cards in their old order, so tell the user which ones went. Whether the queue is running stays the app's call — the next card added there starts it fresh.",
+        description: "Empty the run queue: every card waiting for an autonomous run is taken out, the same as Clear in the app's queue popover. Only waiting cards go — a run already going keeps going; this is not Stop. Call it only when the user explicitly asks to clear the whole queue; to take one card out, use unqueue_card. There is no Undo here: the result lists the cleared cards in their old order, so tell the user which ones went. Whether the queue is running stays the app's call — the next card added there starts it fresh.",
         inputSchema: {
           type: "object",
           properties: {},
+        },
+      },
+      {
+        name: "list_queue",
+        description: "List the run queue: the cards waiting for an autonomous run, in the order the app will start them — the order its queue popover shows. One queue serves every project; pass projectId to see one project's cards (rank stays the card's place in the whole queue). Each row: rank, id, displayId, title, status, projectId, kind (implementation = build from its plan; verify = pre-verify walk of a Human Test checklist's core flow) and runsInWorktree. Whether the queue is running or paused lives in the app's memory and cannot be read from here: runState is always \"unknown\" — do not guess it. The app's warnings about files shared with live runs are not included either; for file overlap with other open work, use list_open_work.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            projectId: {
+              type: "string",
+              description: "Only this project's queued cards (optional)",
+            },
+          },
+        },
+      },
+      {
+        name: "queue_card",
+        description: "Add a card to the run queue, or move one already queued. Queueing is consent to an unattended, code-writing run: never call this unless the user explicitly asked to queue this card. The app's Add to queue rules apply — a Backlog or In Progress card with a plan and no checklist yet (implementation), or a Human Test card whose checklist opens with Core flow / Temel akış (pre-verify); a refusal says why and writes nothing. What happens next is the app's call, not this tool's: if the app's queue is running, the card starts within about 10 seconds or once the run ahead of it ends; if it is paused, it waits for Resume in the app; if the app is closed, nothing starts, and the queue opens paused on the next launch. This tool cannot start, pause or resume the queue. Moving a card does not bump its updatedAt.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cardId: {
+              type: "string",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
+            },
+            afterCardId: {
+              type: ["string", "null"],
+              description: "Where it goes. Omit to put it last; a queued card's id or displayId puts it right behind that card; null puts it first. On a card already queued, this moves it.",
+            },
+          },
+          required: ["cardId"],
+        },
+      },
+      {
+        name: "unqueue_card",
+        description: "Take one card out of the run queue, the same as Remove in the app's queue popover; the cards behind it move up. A run already going on the card is not stopped. Calling it on a card that is not queued writes nothing and says so.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cardId: {
+              type: "string",
+              description: "Card ID: UUID, display ID (e.g., KAN-54), or task number",
+            },
+          },
+          required: ["cardId"],
         },
       },
       {
@@ -1229,7 +1280,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: "text",
               text: `update_card does not accept: ${unknownKeys.join(", ")}. ` +
                 `Accepted fields: ${[...Object.keys(fieldMap), "afterCardId"].join(", ")}. ` +
-                `For testScenarios use save_tests; for aiOpinion use save_opinion; for outputPaths use save_output.`,
+                `For testScenarios use save_tests; for aiOpinion use save_opinion; for outputPaths use save_output; ` +
+                `for the run queue use queue_card / unqueue_card.`,
             }],
             isError: true,
           };
@@ -2330,6 +2382,106 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: cleared.length === 0
               ? "The run queue was already empty."
               : `Cleared ${cleared.length} card(s) from the run queue, in their old order: ${cleared.map((c) => c.displayId).join(", ")}. A run already going was not touched.`,
+          }],
+        };
+      }
+
+      case "list_queue": {
+        if (!hasCapability(db, "queuePosition")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("list_queue", "queuePosition") }],
+            isError: true,
+          };
+        }
+        const { projectId } = (args ?? {}) as { projectId?: string };
+        const items = listQueueRows(db)
+          .map((row, index) => ({
+            rank: index + 1,
+            id: row.id,
+            displayId: queueDisplayId(row),
+            title: row.title,
+            status: row.status,
+            projectId: row.projectId,
+            kind: queueKindOf(row),
+            runsInWorktree: queuedRunsInWorktree(row),
+          }))
+          .filter((item) => !projectId || item.projectId === projectId);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(
+              {
+                runState: "unknown",
+                note: "Whether the queue is running or paused lives in the Ideafy app; a terminal cannot see it. The app shows it in its queue popover.",
+                items,
+              },
+              null,
+              2
+            ),
+          }],
+        };
+      }
+
+      case "queue_card": {
+        if (!hasCapability(db, "queuePosition")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("queue_card", "queuePosition") }],
+            isError: true,
+          };
+        }
+        const { cardId: rawCardId, afterCardId: rawAfterCardId } = args as {
+          cardId: string;
+          afterCardId?: string | null;
+        };
+        const cardId = resolveCardId(rawCardId);
+        if (!cardId) {
+          return { content: [{ type: "text", text: `Card not found: ${rawCardId}` }], isError: true };
+        }
+        let afterCardId: string | null | undefined = rawAfterCardId;
+        if (typeof rawAfterCardId === "string") {
+          afterCardId = resolveCardId(rawAfterCardId);
+          if (!afterCardId) {
+            return { content: [{ type: "text", text: `afterCardId not found: ${rawAfterCardId}` }], isError: true };
+          }
+        }
+        // The same write the app's Add to queue makes: lib/card-ops/queue.ts.
+        // The app picks it up on its next 10s poll of the queue.
+        const result = enqueueCard(db, cardId, afterCardId);
+        if (!result.ok) {
+          return { content: [{ type: "text", text: `queue_card: ${result.message}. Nothing was written.` }], isError: true };
+        }
+        const total = listQueueRows(db).length;
+        const name = queueDisplayId(result.row);
+        return {
+          content: [{
+            type: "text",
+            text:
+              `${name} ${result.moved ? "moved to" : "queued at"} #${result.rank} of ${total} in the run queue. ` +
+              "It starts only through the Ideafy app: within about 10 seconds or after the run ahead if the app's queue is running, " +
+              "on Resume if it is paused, and not at all while the app is closed.",
+          }],
+        };
+      }
+
+      case "unqueue_card": {
+        if (!hasCapability(db, "queuePosition")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("unqueue_card", "queuePosition") }],
+            isError: true,
+          };
+        }
+        const { cardId: rawCardId } = args as { cardId: string };
+        const cardId = resolveCardId(rawCardId);
+        if (!cardId) {
+          return { content: [{ type: "text", text: `Card not found: ${rawCardId}` }], isError: true };
+        }
+        const removed = dequeueCard(db, cardId);
+        return {
+          content: [{
+            type: "text",
+            text: removed
+              ? `${rawCardId} was taken out of the run queue. A run already going on it was not touched.`
+              : `${rawCardId} was not in the run queue. Nothing was written.`,
           }],
         };
       }

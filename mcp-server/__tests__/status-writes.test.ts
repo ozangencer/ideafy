@@ -45,3 +45,34 @@ test("no MCP file writes a card's status with its own SQL", () => {
       offenders.join("\n")
   );
 });
+
+// The run queue's order goes through lib/card-ops/queue.ts on both sides, so
+// a terminal and the app read and rewrite it in one transaction each. An MCP
+// tool writing queue_position itself would skip both the eligibility rules
+// and that transaction.
+export function rawQueueWrites(source: string): string[] {
+  const found: string[] = [];
+  for (const match of source.matchAll(/UPDATE\s+cards\s+SET([\s\S]*?)(?:\bWHERE\b|`)/gi)) {
+    if (/\bqueue_position\s*=/.test(match[1])) found.push(match[0].replace(/\s+/g, " ").trim());
+  }
+  return found;
+}
+
+test("the checker catches a raw queue write", () => {
+  assert.equal(rawQueueWrites("db.prepare(`UPDATE cards SET queue_position = ? WHERE id = ?`)").length, 1);
+  assert.equal(rawQueueWrites("`UPDATE cards SET title = ? WHERE queue_position IS NOT NULL`").length, 0);
+});
+
+test("no MCP file writes a card's queue position with its own SQL", () => {
+  const offenders: string[] = [];
+  for (const name of readdirSync(MCP_DIR)) {
+    if (!name.endsWith(".ts") || name.endsWith(".d.ts")) continue;
+    const source = readFileSync(new URL(name, MCP_DIR), "utf8");
+    for (const write of rawQueueWrites(source)) offenders.push(`${name}: ${write}`);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "Queue the card through lib/card-ops (enqueueCard / dequeueCard / clearQueue) instead:\n" + offenders.join("\n")
+  );
+});

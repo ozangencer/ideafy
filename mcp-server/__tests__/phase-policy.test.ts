@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { statusAfterPlan, statusAfterTests } from "../shared.js";
+import { buildPhasePolicyBody, statusAfterPlan, statusAfterTests } from "../shared.js";
 
 // Drift guard between what the phase-aware hook PROMISES the model and what the
 // MCP handlers actually DO.
@@ -322,4 +322,22 @@ test("resolveEffectiveWorktree is identical on both sides", () => {
       "different code paths; a difference is a bug the user sees as a " +
       "branch that keeps changing."
   );
+});
+
+test("every column's policy says queue_card needs the user's explicit ask", () => {
+  for (const status of ["ideation", "backlog", "bugs", "progress", "test"]) {
+    for (const mode of ["development", "work"] as const) {
+      const body = buildPhasePolicyBody({ id: "c1", title: "T", status, displayId: "IDE-1" }, undefined, mode);
+      assert.match(body ?? "", /\d+\. Never call queue_card unless the user explicitly asked to queue that/, `${status} / ${mode}`);
+    }
+  }
+});
+
+test("queue_card's description states the consent rule and what starts the card", () => {
+  const start = indexSrc.indexOf('name: "queue_card"');
+  const region = indexSrc.slice(start, indexSrc.indexOf('name: "unqueue_card"', start));
+  assert.ok(start !== -1 && region.length > 0, "Could not locate queue_card tool definition");
+  assert.match(region, /never call this unless the user explicitly asked to queue this card/);
+  assert.match(region, /paused, it waits for Resume in the app/);
+  assert.match(region, /cannot start, pause or resume the queue/);
 });

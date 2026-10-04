@@ -1,9 +1,11 @@
 /**
  * Centralized prompt builders for Claude Code integration.
  * Most builders live under `@/lib/prompts/*` (see barrel re-exports below);
- * `buildPhasePrompt`, `detectPhase`, and `buildConflictPrompt` stay in this
- * file because the phase prompt is what the solo and cloud repos diverge on,
- * and keeping the divergence on a single file keeps merges simple.
+ * `buildPhasePrompt` and `buildConflictPrompt` stay in this file because the
+ * phase prompt is what the solo and cloud repos diverge on, and keeping the
+ * divergence on a single file keeps merges simple. `detectPhase` moved to
+ * `./prompts/phase` so the run queue's shared rules (lib/card-ops/queue.ts)
+ * can read it without pulling the prompt builders into the MCP bundle.
  */
 
 // ------------------------------------------------------------------
@@ -11,6 +13,7 @@
 // ------------------------------------------------------------------
 
 export { stripHtml, convertToTipTapTaskList, escapeShellArg } from "./prompts/utils";
+export { type Phase, detectPhase } from "./prompts/phase";
 export {
   type SavedImage,
   saveCardImagesToTemp,
@@ -39,6 +42,7 @@ export {
 // ------------------------------------------------------------------
 
 import { stripHtml } from "./prompts/utils";
+import type { Phase } from "./prompts/phase";
 import { detectCardLanguage } from "./prompts/test-style";
 import { buildVoicePrompt } from "./prompts/voice-style";
 import { AI_OPINION_PLANNING_RULE } from "./prompts/opinion";
@@ -89,39 +93,12 @@ function buildCommitInstructions(commitRef: string | null, inWorktree: boolean):
 4. \`git status\` should show a clean tracked tree.`;
 }
 
-export type Phase = "planning" | "implementation" | "retest" | "verify";
-
 export interface CardForPrompt {
   id: string;
   title: string;
   description: string;
   solutionSummary?: string | null;
   testScenarios?: string | null;
-}
-
-/** Detect which phase the card is in based on existing content. */
-export function detectPhase(card: {
-  solutionSummary: string | null;
-  testScenarios: string | null;
-  status?: string | null;
-}): Phase {
-  const hasSolution = card.solutionSummary && stripHtml(card.solutionSummary) !== "";
-  const hasTests = card.testScenarios && stripHtml(card.testScenarios) !== "";
-
-  // Human Test is a queue waiting on a person, and it is the column that grows
-  // fastest because the agent finishes in minutes and verification takes days.
-  // There the autonomous run walks the core flow rather than rewriting the
-  // list, so what reaches the human is the handful of steps a machine could
-  // not settle. Elsewhere a re-run still means "it broke, fix it".
-  //
-  // This test comes first on purpose: a Human Test card with no plan written
-  // to it is still a card awaiting verification, and reading it as "planning"
-  // would move it off the column the person is watching.
-  if (card.status === "test") return "verify";
-
-  if (!hasSolution) return "planning";
-  if (!hasTests) return "implementation";
-  return "retest";
 }
 
 export function buildPhasePrompt(

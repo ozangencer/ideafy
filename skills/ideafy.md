@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__ideafy__get_card, mcp__ideafy__update_card, mcp__ideafy__move_card, mcp__ideafy__list_cards, mcp__ideafy__search_cards, mcp__ideafy__list_open_work, mcp__ideafy__create_card, mcp__ideafy__save_plan, mcp__ideafy__save_tests, mcp__ideafy__save_opinion, mcp__ideafy__get_project_by_folder, mcp__ideafy__list_groups, mcp__ideafy__create_group, mcp__ideafy__update_group, mcp__ideafy__delete_group
+allowed-tools: mcp__ideafy__get_card, mcp__ideafy__update_card, mcp__ideafy__move_card, mcp__ideafy__list_cards, mcp__ideafy__search_cards, mcp__ideafy__list_open_work, mcp__ideafy__create_card, mcp__ideafy__save_plan, mcp__ideafy__save_tests, mcp__ideafy__save_opinion, mcp__ideafy__get_project_by_folder, mcp__ideafy__list_groups, mcp__ideafy__create_group, mcp__ideafy__update_group, mcp__ideafy__delete_group, mcp__ideafy__list_queue, mcp__ideafy__queue_card, mcp__ideafy__unqueue_card
 argument-hint: [action or query]
 description: Manage ideafy cards - list, create, update, move cards and save plans/tests
 ---
@@ -103,6 +103,14 @@ Keywords: group, grup, chain, zincir
 - Create with `mcp__ideafy__create_group`, rename / recolor / move to another project with `mcp__ideafy__update_group`
 - Delete with `mcp__ideafy__delete_group`: the cards stay, in no group
 - Put a card in a group with `update_card`'s `groupId`; `null` or `""` takes it out
+
+#### Run Queue
+Keywords: queue, kuyruk, sıra, sırada, sıraya al
+- Show it with `mcp__ideafy__list_queue`: the cards in run order, with each one's kind (implementation / verify)
+- Whether the queue is running or paused is the app's to know: `runState` is always `unknown`, so say so instead of guessing
+- Queue or reorder with `mcp__ideafy__queue_card` (`afterCardId`: omit = last, a card = right behind it, `null` = first); take one out with `mcp__ideafy__unqueue_card`
+- Only queue a card the user explicitly asked to queue: a queued card runs unattended and writes code
+- Starting, pausing and resuming stay in the app; tell the user a queued card starts only there
 
 ### Step 3: Execute and Report
 

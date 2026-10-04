@@ -244,6 +244,13 @@ export function buildPhasePolicyBody(
     );
   }
 
+  // Queueing a card is consent to an unattended run that writes code; the
+  // terminal can now give it, so it must come from the user, never the model.
+  lines.push(
+    `${next()}. Never call queue_card unless the user explicitly asked to queue that`,
+    "   card. A queued card runs unattended once the app's queue reaches it."
+  );
+
   return lines.join("\n");
 }
 

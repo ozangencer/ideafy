@@ -1,20 +1,26 @@
-import { eq, isNotNull } from "drizzle-orm";
-import { db, schema, sqlite } from "@/lib/db";
-import { clearQueue as clearQueueRows, type ClearedQueueCard } from "@/lib/card-ops";
+import { sqlite } from "@/lib/db";
+import {
+  clearQueue as clearQueueRows,
+  dequeueCard as dequeueQueueRow,
+  enqueueCard as enqueueQueueRow,
+  getQueueRow,
+  listQueueRows as listSharedQueueRows,
+  queueDisplayId,
+  queueKindOf,
+  queueRowIneligibleReason,
+  restoreQueueCards,
+  type ClearedQueueCard,
+  type QueueRow,
+} from "@/lib/card-ops";
 import { getAllProcesses } from "@/lib/process-registry";
 import { recordActivity } from "@/lib/activity-registry";
-import { detectPhase, stripHtml } from "@/lib/prompts";
-import { parseTestProgress } from "@/lib/test-progress";
+import { detectPhase } from "@/lib/prompts";
 import { infrastructureRunError } from "@/lib/run-error";
-import { placeAfter } from "@/lib/card-group";
 import {
-  compareByQueuePosition,
   conflictingLiveRun,
-  queueIneligibleReason,
   sharedWorkingCopyWith,
   type LiveRunKind,
   type QueueOverlap,
-  type QueueRunKind,
   type QueueSnapshot,
 } from "@/lib/card-queue";
 import { extractPlanFiles, sharedPlanFiles } from "@/lib/plan-files";
@@ -87,101 +93,22 @@ export class QueueError extends Error {
 // Rows
 // ============================================================================
 
-interface QueueRow {
-  id: string;
-  title: string;
-  status: string;
-  description: string;
-  solutionSummary: string;
-  testScenarios: string;
-  processingType: string | null;
-  queuePosition: number | null;
-  taskNumber: number | null;
-  useWorktree: boolean | null;
-  gitBranchStatus: string | null;
-  gitWorktreePath: string | null;
-  gitWorktreeStatus: string | null;
-  projectId: string | null;
-  idPrefix: string | null;
-  projectMode: string | null;
-  projectUseWorktrees: boolean | null;
-}
-
-const rowColumns = {
-  id: schema.cards.id,
-  title: schema.cards.title,
-  status: schema.cards.status,
-  description: schema.cards.description,
-  solutionSummary: schema.cards.solutionSummary,
-  testScenarios: schema.cards.testScenarios,
-  processingType: schema.cards.processingType,
-  queuePosition: schema.cards.queuePosition,
-  taskNumber: schema.cards.taskNumber,
-  useWorktree: schema.cards.useWorktree,
-  gitBranchStatus: schema.cards.gitBranchStatus,
-  gitWorktreePath: schema.cards.gitWorktreePath,
-  gitWorktreeStatus: schema.cards.gitWorktreeStatus,
-  projectId: schema.cards.projectId,
-  idPrefix: schema.projects.idPrefix,
-  projectMode: schema.projects.mode,
-  projectUseWorktrees: schema.projects.useWorktrees,
-};
+// The queue's reads and writes live in lib/card-ops/queue.ts, shared with the
+// MCP's queue tools; these wrap them on the app's connection. Never call them
+// from inside a drizzle db.transaction() block: the shared transaction opens
+// its own BEGIN IMMEDIATE.
 
 function listQueueRows(): QueueRow[] {
-  return db
-    .select(rowColumns)
-    .from(schema.cards)
-    .leftJoin(schema.projects, eq(schema.cards.projectId, schema.projects.id))
-    .where(isNotNull(schema.cards.queuePosition))
-    .all()
-    .sort(compareByQueuePosition);
+  return listSharedQueueRows(sqlite());
 }
 
 function getRow(cardId: string): QueueRow | undefined {
-  return db
-    .select(rowColumns)
-    .from(schema.cards)
-    .leftJoin(schema.projects, eq(schema.cards.projectId, schema.projects.id))
-    .where(eq(schema.cards.id, cardId))
-    .get();
+  return getQueueRow(sqlite(), cardId);
 }
 
-function displayIdOf(row: Pick<QueueRow, "idPrefix" | "taskNumber" | "title">): string {
-  return row.idPrefix && row.taskNumber != null ? `${row.idPrefix}-${row.taskNumber}` : row.title;
-}
-
-function ineligibleReason(row: QueueRow): string | null {
-  return queueIneligibleReason({
-    status: row.status,
-    hasDescription: stripHtml(row.description ?? "") !== "",
-    phase: detectPhase(row),
-    processingType: row.processingType,
-    projectMode: row.projectMode,
-    hasCoreFlow: !!parseTestProgress(row.testScenarios ?? "")?.core,
-    gitBranchStatus: row.gitBranchStatus,
-  });
-}
-
-function kindOf(row: QueueRow): QueueRunKind {
-  return detectPhase(row) === "verify" ? "verify" : "implementation";
-}
-
-/**
- * Rewrites the whole queue as 1..N in the given order and clears everyone
- * else who still had a position. Inside one transaction, like the chain order
- * route, so two tabs racing still leave one consistent order. `updatedAt` is
- * left alone: queueing is not work on the card, and the Stale row reads it.
- */
-function writeQueueOrder(ids: string[], removed: string[] = []): void {
-  db.transaction((tx) => {
-    ids.forEach((id, index) => {
-      tx.update(schema.cards).set({ queuePosition: index + 1 }).where(eq(schema.cards.id, id)).run();
-    });
-    for (const id of removed) {
-      tx.update(schema.cards).set({ queuePosition: null }).where(eq(schema.cards.id, id)).run();
-    }
-  });
-}
+const displayIdOf = queueDisplayId;
+const ineligibleReason = queueRowIneligibleReason;
+const kindOf = queueKindOf;
 
 // ============================================================================
 // Order
@@ -192,34 +119,13 @@ function writeQueueOrder(ids: string[], removed: string[] = []): void {
  * `null` moves it to the front. A card already queued is moved, not doubled.
  */
 export function enqueueCard(cardId: string, afterCardId?: string | null): void {
-  if (afterCardId === cardId) throw new QueueError("A card cannot be placed after itself");
-  const row = getRow(cardId);
-  if (!row) throw new QueueError("Card not found", 404);
-  const reason = ineligibleReason(row);
-  if (reason) throw new QueueError(`Cannot queue ${displayIdOf(row)}: ${reason}`);
-
-  const members = listQueueRows();
-  const others = members.filter((m) => m.id !== cardId);
-  if (afterCardId && !others.some((m) => m.id === afterCardId)) {
-    throw new QueueError("afterCardId is not in the queue");
-  }
-  const after = afterCardId === undefined ? others[others.length - 1]?.id ?? null : afterCardId;
-  const chainShaped = members.map((m) => ({ id: m.id, groupOrder: m.queuePosition, taskNumber: m.taskNumber }));
-  if (!members.some((m) => m.id === cardId)) {
-    chainShaped.push({ id: cardId, groupOrder: null, taskNumber: row.taskNumber });
-  }
-  writeQueueOrder(placeAfter(chainShaped, cardId, after));
+  const result = enqueueQueueRow(sqlite(), cardId, afterCardId);
+  if (!result.ok) throw new QueueError(result.message, result.reason === "not-found" ? 404 : 400);
 }
 
 /** Takes a card out of the queue and closes the gap. False if it was not queued. */
 export function dequeueCard(cardId: string): boolean {
-  const members = listQueueRows();
-  if (!members.some((m) => m.id === cardId)) return false;
-  writeQueueOrder(
-    members.filter((m) => m.id !== cardId).map((m) => m.id),
-    [cardId]
-  );
-  return true;
+  return dequeueQueueRow(sqlite(), cardId);
 }
 
 /**
@@ -247,23 +153,7 @@ export function restoreQueue(
   cardIds: string[],
   resume: boolean
 ): { skipped: { cardId: string; displayId: string; reason: string }[] } {
-  const members = listQueueRows();
-  const queued = new Set(members.map((m) => m.id));
-  const restored: string[] = [];
-  const skipped: { cardId: string; displayId: string; reason: string }[] = [];
-  for (const cardId of new Set(cardIds)) {
-    // Queued again since: it moves back to its old place with the others.
-    if (queued.has(cardId)) {
-      restored.push(cardId);
-      continue;
-    }
-    const row = getRow(cardId);
-    const reason = row ? ineligibleReason(row) : "it was deleted";
-    if (reason) skipped.push({ cardId, displayId: row ? displayIdOf(row) : cardId, reason });
-    else restored.push(cardId);
-  }
-  const back = new Set(restored);
-  writeQueueOrder([...restored, ...members.filter((m) => !back.has(m.id)).map((m) => m.id)]);
+  const { restored, skipped } = restoreQueueCards(sqlite(), cardIds);
   if (resume && restored.length > 0) resumeQueue();
   return { skipped };
 }
@@ -411,6 +301,7 @@ export function getQueueSnapshot(): QueueSnapshot {
   const state = queueState();
   const queue = listQueueRows();
   const running = runningRows();
+  nudgeQueue(queue.length);
   const current = running.find((r) => r.id === state.queueStartedCardId) ?? running[0] ?? null;
   return {
     items: queue.map((row) => ({
@@ -477,6 +368,19 @@ export function pauseQueue(): void {
   const state = queueState();
   state.armed = false;
   state.pausedReason = "Paused by you";
+}
+
+/**
+ * A terminal session can queue a card through the MCP, and nothing in this
+ * process hears about it: no Add to queue press, no run ending. The app polls
+ * the snapshot every 10 seconds, so the snapshot is where the queue looks for
+ * work it was not told about. Only an armed, idle queue moves; a paused one
+ * still waits for Resume, as it does after a restart.
+ */
+function nudgeQueue(waiting: number): void {
+  const state = queueState();
+  if (!state.armed || state.advancing || waiting === 0 || hasLiveRun()) return;
+  scheduleAdvance();
 }
 
 function scheduleAdvance(): void {
