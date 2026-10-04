@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { BackupMenu } from "@/components/backup-menu";
 import { BackgroundProcesses } from "@/components/background-processes";
 import { ActivityBell } from "@/components/activity-bell";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { openCardById } from "@/lib/open-card";
 import { onNotificationOpenCard } from "@/lib/system-notifications";
@@ -56,12 +57,37 @@ function Board() {
     activeProjectId,
     activeWorkspace,
     projects,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      fetchCards: s.fetchCards,
+      fetchProjects: s.fetchProjects,
+      fetchSettings: s.fetchSettings,
+      fetchSkills: s.fetchSkills,
+      fetchMcps: s.fetchMcps,
+      fetchAgents: s.fetchAgents,
+      fetchDocuments: s.fetchDocuments,
+      fetchMemory: s.fetchMemory,
+      fetchBackgroundProcesses: s.fetchBackgroundProcesses,
+      isModalOpen: s.isModalOpen,
+      isLoading: s.isLoading,
+      cards: s.cards,
+      searchQuery: s.searchQuery,
+      setSearchQuery: s.setSearchQuery,
+      isDocumentEditorOpen: s.isDocumentEditorOpen,
+      isSkillViewerOpen: s.isSkillViewerOpen,
+      isAgentViewerOpen: s.isAgentViewerOpen,
+      activeProjectId: s.activeProjectId,
+      activeWorkspace: s.activeWorkspace,
+      projects: s.projects,
+    }))
+  );
 
   useKeyboardShortcuts();
 
   // Electron IPC: listen for global Cmd+K trigger
-  const { openQuickEntry } = useKanbanStore();
+  const { openQuickEntry } = useKanbanStore(
+    useShallow((s) => ({ openQuickEntry: s.openQuickEntry }))
+  );
   useEffect(() => {
     const handler = () => openQuickEntry();
     window.addEventListener("trigger-quick-entry", handler);

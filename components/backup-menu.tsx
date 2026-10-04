@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 
 interface NotificationState {
@@ -35,7 +36,9 @@ export function BackupMenu() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [notification, setNotification] = useState<NotificationState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { fetchCards, fetchProjects, fetchSettings } = useKanbanStore();
+  const { fetchCards, fetchProjects, fetchSettings } = useKanbanStore(
+    useShallow((s) => ({ fetchCards: s.fetchCards, fetchProjects: s.fetchProjects, fetchSettings: s.fetchSettings }))
+  );
 
   const showNotification = (type: "success" | "error", title: string, message: string) => {
     setNotification({ type, title, message });

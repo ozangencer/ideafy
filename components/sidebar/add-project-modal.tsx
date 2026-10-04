@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -153,7 +154,9 @@ function countWords(text: string): number {
 }
 
 export function AddProjectModal({ onClose }: AddProjectModalProps) {
-  const { activeWorkspace } = useKanbanStore();
+  const { activeWorkspace } = useKanbanStore(
+    useShallow((s) => ({ activeWorkspace: s.activeWorkspace }))
+  );
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(1);

@@ -13,6 +13,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { useEffect, useRef, useMemo, useCallback, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { buildUnifiedItems } from "@/lib/mentions/unified-items";
 import { UnifiedMention, CardMention, DocumentMention, ArtifactMention, EstimateMarkers } from "@/lib/mention-extension";
@@ -70,7 +71,23 @@ export function MarkdownEditor({
     agentItems,
     projectAgentItems,
     toolkitItems,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      cards: s.cards,
+      projects: s.projects,
+      activeProjectId: s.activeProjectId,
+      documents: s.documents,
+      memoryFiles: s.memoryFiles,
+      skills: s.skills,
+      mcps: s.mcps,
+      agents: s.agents,
+      skillItems: s.skillItems,
+      projectSkillItems: s.projectSkillItems,
+      agentItems: s.agentItems,
+      projectAgentItems: s.projectAgentItems,
+      toolkitItems: s.toolkitItems,
+    }))
+  );
 
   // Local state for project-specific skills/mcps/agents
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);

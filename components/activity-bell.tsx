@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { openCardById } from "@/lib/open-card";
 import { getDisplayId } from "@/lib/types";
@@ -69,7 +70,18 @@ export function ActivityBell({ extraSources = [] }: ActivityBellProps) {
     markAllActivityRead,
     cards,
     projects,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      activityEvents: s.activityEvents,
+      activityUnseenCount: s.activityUnseenCount,
+      fetchActivity: s.fetchActivity,
+      markActivityRead: s.markActivityRead,
+      markActivitySeen: s.markActivitySeen,
+      markAllActivityRead: s.markAllActivityRead,
+      cards: s.cards,
+      projects: s.projects,
+    }))
+  );
 
   const [isOpen, setIsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());

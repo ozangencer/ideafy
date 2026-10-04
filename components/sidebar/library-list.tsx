@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import type { AgentListItem, SkillListItem, SkillSource, ToolkitKind } from "@/lib/types";
 import { isPinned } from "@/lib/toolkit-keys";
@@ -104,7 +105,29 @@ export function LibraryList() {
     sidebarWidth,
     settings,
     updateSettings,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      skills: s.skills,
+      projectSkills: s.projectSkills,
+      skillItems: s.skillItems,
+      projectSkillItems: s.projectSkillItems,
+      agents: s.agents,
+      projectAgents: s.projectAgents,
+      agentItems: s.agentItems,
+      projectAgentItems: s.projectAgentItems,
+      selectedSkill: s.selectedSkill,
+      selectedAgent: s.selectedAgent,
+      openSkillPreview: s.openSkillPreview,
+      openAgentPreview: s.openAgentPreview,
+      activeProjectId: s.activeProjectId,
+      toolkitItems: s.toolkitItems,
+      pinToolkitItem: s.pinToolkitItem,
+      unpinToolkitItem: s.unpinToolkitItem,
+      sidebarWidth: s.sidebarWidth,
+      settings: s.settings,
+      updateSettings: s.updateSettings,
+    }))
+  );
   const [searchValue, setSearchValue] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const query = normalizeSearchQuery(searchValue);

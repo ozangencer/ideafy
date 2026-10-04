@@ -1,5 +1,6 @@
 "use client";
 
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { MarkdownViewerPanel } from "./markdown-viewer-panel";
 
@@ -10,7 +11,9 @@ function formatMetadataLabel(key: string): string {
 }
 
 export function AgentViewer() {
-  const { selectedAgent, isAgentViewerOpen, closeAgentViewer } = useKanbanStore();
+  const { selectedAgent, isAgentViewerOpen, closeAgentViewer } = useKanbanStore(
+    useShallow((s) => ({ selectedAgent: s.selectedAgent, isAgentViewerOpen: s.isAgentViewerOpen, closeAgentViewer: s.closeAgentViewer }))
+  );
 
   if (!isAgentViewerOpen || !selectedAgent) return null;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { AI_PLATFORM_OPTIONS, type ToolkitItem, type ToolkitKind } from "@/lib/types";
 import { groupToolkitByFolder, toolkitFolderNames } from "@/lib/toolkit-keys";
@@ -47,7 +48,24 @@ export function ToolkitList() {
     renameToolkitFolder,
     sidebarWidth,
     settings,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      toolkitItems: s.toolkitItems,
+      skillItems: s.skillItems,
+      projectSkillItems: s.projectSkillItems,
+      agentItems: s.agentItems,
+      projectAgentItems: s.projectAgentItems,
+      selectedSkill: s.selectedSkill,
+      selectedAgent: s.selectedAgent,
+      openSkillPreview: s.openSkillPreview,
+      openAgentPreview: s.openAgentPreview,
+      unpinToolkitItem: s.unpinToolkitItem,
+      moveToolkitItem: s.moveToolkitItem,
+      renameToolkitFolder: s.renameToolkitFolder,
+      sidebarWidth: s.sidebarWidth,
+      settings: s.settings,
+    }))
+  );
   // "new" carries the pin that moves into the folder once it is named.
   const [folderDialog, setFolderDialog] = useState<
     | { mode: "new"; kind: ToolkitKind; name: string }

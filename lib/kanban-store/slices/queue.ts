@@ -31,11 +31,32 @@ export const createQueueSlice: StoreSlice<
       const next = rank.get(card.id) ?? null;
       return card.queuePosition === next ? card : { ...card, queuePosition: next };
     };
-    set((state) => ({
-      queueState: snapshot,
-      cards: state.cards.map(patch),
-      selectedCard: state.selectedCard ? patch(state.selectedCard) : state.selectedCard,
-    }));
+    // The 10s poll mostly brings back what the store already holds. Writing
+    // it anyway hands every card subscriber a new array (and a new snapshot),
+    // so the board and an open modal re-render for nothing; keep the old
+    // references unless something actually moved.
+    set((state) => {
+      const queueState =
+        state.queueState && JSON.stringify(state.queueState) === JSON.stringify(snapshot)
+          ? state.queueState
+          : snapshot;
+      let cardsChanged = false;
+      const patched = state.cards.map((card) => {
+        const next = patch(card);
+        if (next !== card) cardsChanged = true;
+        return next;
+      });
+      const cards = cardsChanged ? patched : state.cards;
+      const selectedCard = state.selectedCard ? patch(state.selectedCard) : state.selectedCard;
+      if (
+        queueState === state.queueState &&
+        cards === state.cards &&
+        selectedCard === state.selectedCard
+      ) {
+        return state;
+      }
+      return { queueState, cards, selectedCard };
+    });
   };
 
   const request = async <T>(method: string, body?: unknown): Promise<T> => {

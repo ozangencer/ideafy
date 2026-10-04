@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { Project } from "@/lib/types";
 import {
@@ -78,7 +79,14 @@ function groupByBranch(
 }
 
 export function UnpushedDialog({ project, onClose, onRefreshed }: UnpushedDialogProps) {
-  const { cards, selectCard, openModal, setActiveProject } = useKanbanStore();
+  const { cards, selectCard, openModal, setActiveProject } = useKanbanStore(
+    useShallow((s) => ({
+      cards: s.cards,
+      selectCard: s.selectCard,
+      openModal: s.openModal,
+      setActiveProject: s.setActiveProject,
+    }))
+  );
   const [data, setData] = useState<UnpushedResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

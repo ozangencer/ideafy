@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectList } from "./project-list";
 import { WorkspaceSwitch } from "./workspace-switch";
@@ -33,7 +34,16 @@ export function Sidebar() {
     setSidebarWidth,
     activeProjectId,
     fetchProjectExtensions,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      isSidebarCollapsed: s.isSidebarCollapsed,
+      sidebarWidth: s.sidebarWidth,
+      toggleSidebar: s.toggleSidebar,
+      setSidebarWidth: s.setSidebarWidth,
+      activeProjectId: s.activeProjectId,
+      fetchProjectExtensions: s.fetchProjectExtensions,
+    }))
+  );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);

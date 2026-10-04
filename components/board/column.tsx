@@ -20,6 +20,7 @@ import {
   STALE_GROUP_ID,
 } from "@/lib/card-group";
 import { formatAgeShort, StaleGroup } from "@/lib/card-age";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { TaskCard } from "./card";
 import { CardGroupChip } from "./card-group-chip";
@@ -476,7 +477,18 @@ interface ColumnProps {
 }
 
 export function Column({ id, title, cards, groupSummaries, stale }: ColumnProps) {
-  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap } = useKanbanStore();
+  const { openNewCardModal, activeProjectId, collapsedColumns, toggleColumnCollapse, completedFilter, setCompletedFilter, uncappedColumns, toggleColumnCap } = useKanbanStore(
+    useShallow((s) => ({
+      openNewCardModal: s.openNewCardModal,
+      activeProjectId: s.activeProjectId,
+      collapsedColumns: s.collapsedColumns,
+      toggleColumnCollapse: s.toggleColumnCollapse,
+      completedFilter: s.completedFilter,
+      setCompletedFilter: s.setCompletedFilter,
+      uncappedColumns: s.uncappedColumns,
+      toggleColumnCap: s.toggleColumnCap,
+    }))
+  );
   const { setNodeRef, isOver } = useDroppable({ id });
   const { ref: widthRef, width: columnWidth } = useColumnWidth();
 

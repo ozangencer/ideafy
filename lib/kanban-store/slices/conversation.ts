@@ -13,6 +13,13 @@ import { KanbanStore, StoreSlice } from "../types";
 type StreamEvent = { type: string; data: unknown };
 
 /**
+ * How long stream events pile up before one store write. setTimeout, not
+ * requestAnimationFrame: Electron pauses rAF while the window is in the
+ * background, and the chat must keep filling in there.
+ */
+const STREAM_FLUSH_MS = 32;
+
+/**
  * Visible text means the thought that was growing in the Live Activity strip
  * is finished: close it so the next `thinking` delta opens its own row.
  */
@@ -189,22 +196,66 @@ export const createConversationSlice: StoreSlice<
   >
 > = (set, get) => {
   /**
-   * Apply `fn` to the bubble at `key` only while `runId` owns it. Every write
-   * a stream loop makes goes through here, so two chats running at once can
-   * never write into each other's bubble.
+   * Stream patches waiting for the next flush, one entry per key+run. With
+   * partial messages on, events arrive token by token; writing each one
+   * re-rendered every subscriber per token, and with a few chats running at
+   * once the board froze. The queue caps writes at one per STREAM_FLUSH_MS
+   * no matter how many chats are streaming.
+   */
+  const pendingPatches = new Map<
+    string,
+    { key: string; runId: string; fns: ((message: ConversationMessage) => ConversationMessage)[] }
+  >();
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Fold every queued patch into `streams` and empty the queue. The runId
+   * check runs here, at write time, so two chats running at once can never
+   * write into each other's bubble. Call it inside any set() that drops a
+   * bubble, in that same write, so no queued patch outlives its bubble and
+   * finishStream still lands as one write.
+   */
+  const drainPendingPatches = (
+    streams: Record<string, ConversationMessage>,
+  ): Record<string, ConversationMessage> => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (pendingPatches.size === 0) return streams;
+    let next = streams;
+    for (const { key, runId, fns } of pendingPatches.values()) {
+      const current = next[key];
+      if (!current || current.runId !== runId) continue;
+      const patched = fns.reduce((message, fn) => fn(message), current);
+      if (patched !== current) next = { ...next, [key]: patched };
+    }
+    pendingPatches.clear();
+    return next;
+  };
+
+  const flushPendingPatches = () =>
+    set((state) => {
+      const next = drainPendingPatches(state.streamingMessages);
+      return next === state.streamingMessages ? state : { streamingMessages: next };
+    });
+
+  /**
+   * Queue `fn` for the bubble at `key`; it lands on the next flush, and only
+   * if `runId` still owns the bubble then. Every write a stream loop makes
+   * goes through here.
    */
   const patchStream = (
     key: string,
     runId: string,
     fn: (message: ConversationMessage) => ConversationMessage,
-  ) =>
-    set((state) => {
-      const current = state.streamingMessages[key];
-      if (!current || current.runId !== runId) return state;
-      const next = fn(current);
-      if (next === current) return state;
-      return { streamingMessages: { ...state.streamingMessages, [key]: next } };
-    });
+  ) => {
+    const entryKey = `${key}\u0000${runId}`;
+    const entry = pendingPatches.get(entryKey);
+    if (entry) entry.fns.push(fn);
+    else pendingPatches.set(entryKey, { key, runId, fns: [fn] });
+    if (!flushTimer) flushTimer = setTimeout(flushPendingPatches, STREAM_FLUSH_MS);
+  };
 
   /** The `close` event lists the background tasks the turn's exit stopped. */
   const recordStrandedTasks = (key: string, data: unknown) => {
@@ -249,11 +300,13 @@ export const createConversationSlice: StoreSlice<
           ...state.conversations,
           [key]: Array.isArray(fresh) ? fresh : state.conversations[key] || [],
         },
-        streamingMessages: withoutRun(state.streamingMessages, key, runId),
+        streamingMessages: withoutRun(drainPendingPatches(state.streamingMessages), key, runId),
         backgroundProcesses: Array.isArray(bg) ? bg : state.backgroundProcesses,
       }));
     } catch {
-      set((state) => ({ streamingMessages: withoutRun(state.streamingMessages, key, runId) }));
+      set((state) => ({
+        streamingMessages: withoutRun(drainPendingPatches(state.streamingMessages), key, runId),
+      }));
     }
     if (hadToolCalls) {
       await get().fetchCards();
@@ -380,7 +433,7 @@ export const createConversationSlice: StoreSlice<
         }
       } finally {
         set((state) => ({
-          streamingMessages: withoutRun(state.streamingMessages, key, runId),
+          streamingMessages: withoutRun(drainPendingPatches(state.streamingMessages), key, runId),
           conversationAbortControllers:
             state.conversationAbortControllers[key] === abortController
               ? withoutKey(state.conversationAbortControllers, key)
@@ -404,7 +457,7 @@ export const createConversationSlice: StoreSlice<
       }
       conversationAbortControllers[key]?.abort();
       set((state) => ({
-        streamingMessages: withoutKey(state.streamingMessages, key),
+        streamingMessages: withoutKey(drainPendingPatches(state.streamingMessages), key),
         conversationAbortControllers: withoutKey(state.conversationAbortControllers, key),
       }));
     },
@@ -467,7 +520,9 @@ export const createConversationSlice: StoreSlice<
       } catch {
         // Reader interrupted — the next attach replays the buffer from the start.
       } finally {
-        set((state) => ({ streamingMessages: withoutRun(state.streamingMessages, key, runId) }));
+        set((state) => ({
+        streamingMessages: withoutRun(drainPendingPatches(state.streamingMessages), key, runId),
+      }));
       }
     },
 

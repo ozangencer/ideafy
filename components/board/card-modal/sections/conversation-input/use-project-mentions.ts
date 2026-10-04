@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { buildUnifiedItems } from "@/lib/mentions/unified-items";
 import type { AgentListItem, SkillListItem, ToolkitItem, UnifiedItem } from "@/lib/types";
@@ -28,7 +29,20 @@ export function useProjectMentions(projectId: string | null, activeProjectId: st
     agentItems,
     projectAgentItems,
     toolkitItems,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      skills: s.skills,
+      mcps: s.mcps,
+      agents: s.agents,
+      documents: s.documents,
+      memoryFiles: s.memoryFiles,
+      skillItems: s.skillItems,
+      projectSkillItems: s.projectSkillItems,
+      agentItems: s.agentItems,
+      projectAgentItems: s.projectAgentItems,
+      toolkitItems: s.toolkitItems,
+    }))
+  );
   const documentsRef = useRef<typeof documents>([]);
   const memoryRef = useRef<typeof memoryFiles>([]);
   const [localProjectSkills, setLocalProjectSkills] = useState<string[]>([]);

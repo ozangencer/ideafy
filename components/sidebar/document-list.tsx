@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { DocumentFile, TreeNode } from "@/lib/types";
 import {
@@ -384,7 +385,16 @@ export function DocumentList() {
     expandedDocFolders,
     toggleDocFolder,
     activeProjectId,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      documents: s.documents,
+      openDocument: s.openDocument,
+      selectedDocument: s.selectedDocument,
+      expandedDocFolders: s.expandedDocFolders,
+      toggleDocFolder: s.toggleDocFolder,
+      activeProjectId: s.activeProjectId,
+    }))
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [content, setContent] = useState<ContentState>(IDLE_CONTENT);

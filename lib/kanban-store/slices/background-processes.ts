@@ -17,7 +17,11 @@ export const createBackgroundProcessesSlice: StoreSlice<
     try {
       const response = await fetch("/api/processes");
       const processes = await parseJson<BackgroundProcess[]>(response);
-      set({ backgroundProcesses: Array.isArray(processes) ? processes : [] });
+      const next = Array.isArray(processes) ? processes : [];
+      // Polled every few seconds: an unchanged list must not hand every
+      // subscriber a new array.
+      if (JSON.stringify(next) === JSON.stringify(get().backgroundProcesses)) return;
+      set({ backgroundProcesses: next });
     } catch (error) {
       console.error("Failed to fetch background processes:", error);
     }

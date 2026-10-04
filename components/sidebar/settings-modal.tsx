@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState, useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import {
   TERMINAL_OPTIONS,
@@ -85,7 +86,22 @@ export function SettingsModal({ onClose, extraTabs = [], defaultTab, generalTabE
     setBoardViewPreference,
     staleThresholds,
     setStaleThreshold,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      settings: s.settings,
+      updateSettings: s.updateSettings,
+      fetchSettings: s.fetchSettings,
+      fetchSkills: s.fetchSkills,
+      fetchMcps: s.fetchMcps,
+      fetchAgents: s.fetchAgents,
+      fetchProjectExtensions: s.fetchProjectExtensions,
+      activeProjectId: s.activeProjectId,
+      boardViewPreference: s.boardViewPreference,
+      setBoardViewPreference: s.setBoardViewPreference,
+      staleThresholds: s.staleThresholds,
+      setStaleThreshold: s.setStaleThreshold,
+    }))
+  );
   const [isStaleOpen, setIsStaleOpen] = useState(false);
   const [aiPlatform, setAiPlatform] = useState<AiPlatform>(DEFAULT_SETTINGS.aiPlatform);
   const [skillsPath, setSkillsPath] = useState(DEFAULT_SETTINGS.skillsPath);

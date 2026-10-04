@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -139,7 +140,22 @@ export function BackgroundProcesses() {
     selectCard,
     openModal,
     settings,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      backgroundProcesses: s.backgroundProcesses,
+      fetchBackgroundProcesses: s.fetchBackgroundProcesses,
+      fetchQueue: s.fetchQueue,
+      fetchActivity: s.fetchActivity,
+      killBackgroundProcess: s.killBackgroundProcess,
+      clearCompletedProcesses: s.clearCompletedProcesses,
+      clearProcessing: s.clearProcessing,
+      syncCardAfterRunEnd: s.syncCardAfterRunEnd,
+      cards: s.cards,
+      selectCard: s.selectCard,
+      openModal: s.openModal,
+      settings: s.settings,
+    }))
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [openDetailIds, setOpenDetailIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();

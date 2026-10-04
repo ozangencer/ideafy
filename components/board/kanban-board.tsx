@@ -12,6 +12,7 @@ import {
   closestCenter,
 } from "@dnd-kit/core";
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { useUndoShortcut } from "@/hooks/use-undo-shortcut";
 import { COLUMNS, Card, Status, CompletedFilter, getColumns, TodaySource } from "@/lib/types";
@@ -79,7 +80,21 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ todaySources }: KanbanBoardProps = {}) {
-  const { cards, cardGroups, projects, activeProjectId, activeWorkspace, searchQuery, moveCard, completedFilter, boardView, staleThresholds, clearCardSelection } = useKanbanStore();
+  const { cards, cardGroups, projects, activeProjectId, activeWorkspace, searchQuery, moveCard, completedFilter, boardView, staleThresholds, clearCardSelection } = useKanbanStore(
+    useShallow((s) => ({
+      cards: s.cards,
+      cardGroups: s.cardGroups,
+      projects: s.projects,
+      activeProjectId: s.activeProjectId,
+      activeWorkspace: s.activeWorkspace,
+      searchQuery: s.searchQuery,
+      moveCard: s.moveCard,
+      completedFilter: s.completedFilter,
+      boardView: s.boardView,
+      staleThresholds: s.staleThresholds,
+      clearCardSelection: s.clearCardSelection,
+    }))
+  );
   useUndoShortcut();
 
   // A selection only means what's on screen. Once the project, a filter or

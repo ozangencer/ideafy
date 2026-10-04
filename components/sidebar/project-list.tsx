@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { ProjectItem } from "./project-item";
 import { AddProjectModal } from "./add-project-modal";
@@ -42,7 +43,24 @@ export function ProjectList() {
     moveProjectSection,
     toggleProjectSectionCollapsed,
     moveProjectToSection,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      projects: s.projects,
+      activeWorkspace: s.activeWorkspace,
+      activeProjectId: s.activeProjectId,
+      setActiveProject: s.setActiveProject,
+      isProjectListExpanded: s.isProjectListExpanded,
+      toggleProjectListExpanded: s.toggleProjectListExpanded,
+      cards: s.cards,
+      projectSections: s.projectSections,
+      createProjectSection: s.createProjectSection,
+      renameProjectSection: s.renameProjectSection,
+      deleteProjectSection: s.deleteProjectSection,
+      moveProjectSection: s.moveProjectSection,
+      toggleProjectSectionCollapsed: s.toggleProjectSectionCollapsed,
+      moveProjectToSection: s.moveProjectToSection,
+    }))
+  );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // The board's empty-workspace view has its own "New … project" button; the

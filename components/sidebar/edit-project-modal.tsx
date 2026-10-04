@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import {
   Project,
@@ -79,7 +80,19 @@ export function EditProjectModal({
     fetchMcps,
     fetchAgents,
     activeProjectId,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      updateProject: s.updateProject,
+      deleteProject: s.deleteProject,
+      cards: s.cards,
+      settings: s.settings,
+      fetchProjectExtensions: s.fetchProjectExtensions,
+      fetchSkills: s.fetchSkills,
+      fetchMcps: s.fetchMcps,
+      fetchAgents: s.fetchAgents,
+      activeProjectId: s.activeProjectId,
+    }))
+  );
   const aiPlatform = settings?.aiPlatform ?? "claude";
 
   // Form state initialized from project

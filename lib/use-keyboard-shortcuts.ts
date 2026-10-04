@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "./store";
 
 export function useKeyboardShortcuts() {
@@ -11,7 +12,18 @@ export function useKeyboardShortcuts() {
     isQuickEntryOpen,
     toggleQuickEntry,
     closeQuickEntry,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      openNewCardModal: s.openNewCardModal,
+      isModalOpen: s.isModalOpen,
+      closeModal: s.closeModal,
+      toggleSidebar: s.toggleSidebar,
+      activeProjectId: s.activeProjectId,
+      isQuickEntryOpen: s.isQuickEntryOpen,
+      toggleQuickEntry: s.toggleQuickEntry,
+      closeQuickEntry: s.closeQuickEntry,
+    }))
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

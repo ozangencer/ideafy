@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { parseSimpleFrontmatter } from "@/lib/skills/frontmatter";
 import { MarkdownViewerPanel } from "./markdown-viewer-panel";
@@ -17,7 +18,14 @@ export function DocumentEditor() {
     documentContent,
     closeDocumentEditor,
     isDocumentEditorOpen,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      selectedDocument: s.selectedDocument,
+      documentContent: s.documentContent,
+      closeDocumentEditor: s.closeDocumentEditor,
+      isDocumentEditorOpen: s.isDocumentEditorOpen,
+    }))
+  );
 
   const parsed = useMemo(
     () => parseSimpleFrontmatter(documentContent ?? ""),

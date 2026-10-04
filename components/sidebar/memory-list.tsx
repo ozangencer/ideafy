@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { DocumentFile } from "@/lib/types";
 import {
@@ -48,7 +49,9 @@ function MemoryFileItem({
 }
 
 export function MemoryList() {
-  const { memoryFiles, openDocument, selectedDocument } = useKanbanStore();
+  const { memoryFiles, openDocument, selectedDocument } = useKanbanStore(
+    useShallow((s) => ({ memoryFiles: s.memoryFiles, openDocument: s.openDocument, selectedDocument: s.selectedDocument }))
+  );
   const [isOpen, setIsOpen] = useState(false);
 
   if (memoryFiles.length === 0) return null;

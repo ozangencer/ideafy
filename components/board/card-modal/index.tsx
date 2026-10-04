@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import {
   type Card,
@@ -10,6 +11,7 @@ import {
   SectionType,
   MentionData,
   type MergeReality,
+  type ConversationMessage,
   RUN_MODE_LABELS,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,8 @@ import { useCardModalAutoSave } from "./hooks/use-card-modal-auto-save";
 import { useCardModalFormReset } from "./hooks/use-card-modal-form-reset";
 import { CardModalContext, type CardModalContextValue } from "./card-modal-context";
 
+const EMPTY_MESSAGES: ConversationMessage[] = [];
+
 export interface CardModalProps {
   /** Replaces the default header entirely. Slot consumer pulls state via `useCardModalContext()`. */
   headerSlot?: ReactNode;
@@ -100,10 +104,7 @@ export function CardModal({
     discardDraft,
     startDevServer,
     stopDevServer,
-    // Conversation state and actions
-    conversations,
-    streamingMessages,
-    conversationAbortControllers,
+    // Conversation actions — the message state is read per key below
     fetchConversation,
     sendMessage,
     cancelConversation,
@@ -118,7 +119,36 @@ export function CardModal({
     pendingCardSection,
     setPendingCardSection,
     markActivityReadForCard,
-  } = useKanbanStore();
+  } = useKanbanStore(
+    useShallow((s) => ({
+      selectedCard: s.selectedCard,
+      closeModal: s.closeModal,
+      updateCard: s.updateCard,
+      deleteCard: s.deleteCard,
+      moveCard: s.moveCard,
+      projects: s.projects,
+      cards: s.cards,
+      selectCard: s.selectCard,
+      openModal: s.openModal,
+      draftCard: s.draftCard,
+      saveDraftCard: s.saveDraftCard,
+      discardDraft: s.discardDraft,
+      startDevServer: s.startDevServer,
+      stopDevServer: s.stopDevServer,
+      fetchConversation: s.fetchConversation,
+      sendMessage: s.sendMessage,
+      cancelConversation: s.cancelConversation,
+      detachConversation: s.detachConversation,
+      attachLiveStream: s.attachLiveStream,
+      clearConversation: s.clearConversation,
+      backgroundProcesses: s.backgroundProcesses,
+      fetchBackgroundProcesses: s.fetchBackgroundProcesses,
+      lockedCardIds: s.lockedCardIds,
+      pendingCardSection: s.pendingCardSection,
+      setPendingCardSection: s.setPendingCardSection,
+      markActivityReadForCard: s.markActivityReadForCard,
+    }))
+  );
   const { toast } = useToast();
 
   // Check if we're in draft mode (creating a new card)
@@ -175,6 +205,19 @@ export function CardModal({
     window.localStorage.setItem("cardModal:isExpanded", String(isExpanded));
   }, [isExpanded]);
   const [activeTab, setActiveTab] = useState<SectionType>("detail");
+
+  // Subscribe to this card+section's conversation only: another card's
+  // stream must not re-render this modal on every token.
+  const conversationKey = selectedCard ? `${selectedCard.id}-${activeTab}` : "";
+  const currentMessages = useKanbanStore(
+    (s) => s.conversations[conversationKey] ?? EMPTY_MESSAGES
+  );
+  const currentStreamingMessage = useKanbanStore(
+    (s) => s.streamingMessages[conversationKey] ?? null
+  );
+  const isConversationLoading = useKanbanStore(
+    (s) => !!s.conversationAbortControllers[conversationKey]
+  );
 
   // Back navigation parks the tab to restore here; the form-reset hook
   // applies it in place of the column's tab when the card switches.
@@ -422,10 +465,6 @@ export function CardModal({
     fetchBackgroundProcesses();
   }, [selectedCard, isDraftMode, fetchBackgroundProcesses]);
 
-  // Get current conversation messages
-  const conversationKey = selectedCard ? `${selectedCard.id}-${activeTab}` : "";
-  const currentMessages = conversations[conversationKey] || [];
-  const currentStreamingMessage = streamingMessages[conversationKey] ?? null;
   const isStreamAttached = currentStreamingMessage !== null;
 
   // Check if there's a background process running for this card+section
@@ -1334,7 +1373,7 @@ export function CardModal({
                   cardId={selectedCard.id}
                   sectionType={activeTab}
                   messages={currentMessages}
-                  isLoading={!!conversationAbortControllers[conversationKey]}
+                  isLoading={isConversationLoading}
                   isBackgroundProcessing={isBackgroundProcessing}
                   streamingMessage={currentStreamingMessage}
                   projectPath={project.folderPath}

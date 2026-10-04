@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { Project, ProjectSection } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,9 @@ export function ProjectItem({
   onMoveToSection,
   onCreateSection,
 }: ProjectItemProps) {
-  const { setActiveProject, toggleProjectPin } = useKanbanStore();
+  const { setActiveProject, toggleProjectPin } = useKanbanStore(
+    useShallow((s) => ({ setActiveProject: s.setActiveProject, toggleProjectPin: s.toggleProjectPin }))
+  );
   const [isSectionPopoverOpen, setIsSectionPopoverOpen] = useState(false);
 
   const showUnpushed = unpushedCount > 0 && Boolean(onShowUnpushed);

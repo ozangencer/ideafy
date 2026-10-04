@@ -7,6 +7,7 @@ import ImageResize from "tiptap-extension-resize-image";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Send, Square } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { UnifiedMention, CardMention, DocumentMention } from "@/lib/mention-extension";
 import {
@@ -54,7 +55,9 @@ export function ConversationInput({
   onCancel,
   placeholder = "Type a message...",
 }: ConversationInputProps) {
-  const { cards, projects, activeProjectId } = useKanbanStore();
+  const { cards, projects, activeProjectId } = useKanbanStore(
+    useShallow((s) => ({ cards: s.cards, projects: s.projects, activeProjectId: s.activeProjectId }))
+  );
   const [isEmpty, setIsEmpty] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const effectiveProjectId = projectId || activeProjectId;

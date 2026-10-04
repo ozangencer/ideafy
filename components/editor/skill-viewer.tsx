@@ -1,5 +1,6 @@
 "use client";
 
+import { useShallow } from "zustand/react/shallow";
 import { useKanbanStore } from "@/lib/store";
 import { MarkdownViewerPanel } from "./markdown-viewer-panel";
 
@@ -10,7 +11,9 @@ function formatMetadataLabel(key: string): string {
 }
 
 export function SkillViewer() {
-  const { selectedSkill, isSkillViewerOpen, closeSkillViewer } = useKanbanStore();
+  const { selectedSkill, isSkillViewerOpen, closeSkillViewer } = useKanbanStore(
+    useShallow((s) => ({ selectedSkill: s.selectedSkill, isSkillViewerOpen: s.isSkillViewerOpen, closeSkillViewer: s.closeSkillViewer }))
+  );
 
   if (!isSkillViewerOpen || !selectedSkill) return null;
 
