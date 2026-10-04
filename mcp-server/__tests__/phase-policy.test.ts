@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { statusAfterPlan, statusAfterTests } from "../shared.js";
 
 // Drift guard between what the phase-aware hook PROMISES the model and what the
 // MCP handlers actually DO.
@@ -57,13 +58,32 @@ function handlerBody(tool: string): string {
   return indexSrc.slice(start, next === -1 ? undefined : next);
 }
 
-/** The literal status a handler writes, or null when it writes none. */
+// The lib/card-ops rules a handler can move a card by. save_plan and
+// save_tests no longer write a literal status: they hand one of these to
+// saveFieldAndMove, which moves through moveCard.
+const MOVE_RULES: Record<string, (current: string) => string | null> = {
+  statusAfterPlan,
+  statusAfterTests,
+};
+
+/** The column a handler moves a card to, or null when it moves none. */
 function statusWrittenBy(tool: string): string | null {
   const body = handlerBody(tool);
-  // Only the hardcoded form (`status = 'progress'`) counts as a claimable
-  // move. A bound `status = ?` is caller-driven, which is move_card's job.
-  const match = body.match(/status\s*=\s*'([a-z]+)'/);
-  return match ? match[1] : null;
+  // A hardcoded `status = 'progress'` would still count (status-writes.test.ts
+  // forbids it, but this test should not go blind if one slips in). A bound
+  // `status = ?` is caller-driven, which is move_card's job.
+  const literal = body.match(/status\s*=\s*'([a-z]+)'/);
+  if (literal) return literal[1];
+  const rule = body.match(/\b(statusAfterPlan|statusAfterTests)\b/)?.[1];
+  if (!rule) return null;
+  // The column the rule sends a card to from the columns it moves at all.
+  const targets = new Set(
+    ["ideation", "backlog", "bugs", "progress", "test", "completed", "withdrawn"]
+      .map(MOVE_RULES[rule])
+      .filter((target): target is string => target !== null)
+  );
+  assert.equal(targets.size, 1, `${rule} sends cards to more than one column`);
+  return [...targets][0];
 }
 
 /** PHASE_INSTRUCTIONS entries as (column, instruction) pairs. */

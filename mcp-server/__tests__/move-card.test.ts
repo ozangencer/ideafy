@@ -2,7 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { openDatabase } from "../db.js";
-import { completedAtFor, moveCard, type SqlDb } from "../shared.js";
+import {
+  completedAtFor,
+  completedAtOnCreate,
+  moveCard,
+  statusAfterPlan,
+  statusAfterTests,
+  type SqlDb,
+} from "../shared.js";
 
 // lib/card-ops/move-card.ts is the one column move the app's routes and the
 // MCP's move_card share. It has to behave the same on both drivers behind
@@ -111,4 +118,22 @@ test("completedAtFor: the rule the app's PUT route and update_card share", () =>
   assert.equal(completedAtFor("completed", "bugs", "t0", "now"), null);
   assert.equal(completedAtFor("completed", "completed", "t0", "now"), "t0");
   assert.equal(completedAtFor("backlog", "progress", null, "now"), null);
+});
+
+test("completedAtOnCreate: a card created into Completed carries its finish date", () => {
+  assert.equal(completedAtOnCreate("completed", "now"), "now");
+  assert.equal(completedAtOnCreate("backlog", "now"), null);
+});
+
+// save_plan and the app's Apply move a card by this rule; save_tests by the
+// second. Before it, save_plan sent a Completed card to In Progress with its
+// completed_at still set, and save_tests did the same into Human Test.
+test("statusAfterPlan: only a card still waiting for a plan moves to In Progress", () => {
+  for (const from of ["ideation", "backlog", "bugs"]) assert.equal(statusAfterPlan(from), "progress");
+  for (const from of ["progress", "test", "completed", "withdrawn"]) assert.equal(statusAfterPlan(from), null);
+});
+
+test("statusAfterTests: a finished card keeps its column when tests are saved", () => {
+  for (const from of ["ideation", "backlog", "bugs", "progress"]) assert.equal(statusAfterTests(from), "test");
+  for (const from of ["test", "completed", "withdrawn"]) assert.equal(statusAfterTests(from), null);
 });

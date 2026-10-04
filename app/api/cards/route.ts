@@ -5,6 +5,7 @@ import { db, schema } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml, ensureTestScenariosHtml } from "@/lib/markdown";
 import { parseOutputPaths } from "@/lib/output-paths";
+import { completedAtOnCreate } from "@/lib/card-ops";
 
 // Processing timeout in milliseconds (30 minutes)
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
     workTemplateId: typeof body.workTemplateId === "string" ? body.workTemplateId : null,
     createdAt: now,
     updatedAt: now,
-    completedAt: (body.status === 'completed') ? now : null,
+    completedAt: completedAtOnCreate(body.status || "backlog", now),
   };
 
   try {

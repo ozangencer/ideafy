@@ -13,7 +13,7 @@ import {
   testScenariosToMarkdown,
 } from "@/lib/markdown";
 import { recordApplyMessage } from "@/lib/activity-registry";
-import { saveOpinion, type SavedOpinionFields } from "@/lib/card-ops";
+import { saveOpinion, statusAfterPlan, type SavedOpinionFields } from "@/lib/card-ops";
 import { persistArtifacts as persistArtifactFiles } from "@/lib/artifact-links";
 import { getCardImageDir } from "@/lib/prompts";
 import { codePathsToFileLinks } from "@/lib/artifact-url";
@@ -131,11 +131,12 @@ export async function POST(
   const updates: Record<string, unknown> = { [field]: nextHtml, updatedAt: now };
 
   // Status auto-transition: applying a Solution plan (the canonical "I have
-  // a plan" moment) bumps a still-planning card into In Progress, mirroring
-  // the side-effect that save_plan used to provide. Skip when the card is
-  // already past planning so we don't bounce a finished card back.
-  if (field === "solutionSummary" && ["ideation", "backlog", "bugs"].includes(existing.status)) {
-    updates.status = "progress";
+  // a plan" moment) bumps a still-planning card into In Progress. Which
+  // columns move is lib/card-ops' statusAfterPlan — the rule the MCP's
+  // save_plan uses — so a finished card is not bounced back on either path.
+  const planStatus = field === "solutionSummary" ? statusAfterPlan(existing.status) : null;
+  if (planStatus) {
+    updates.status = planStatus;
   }
 
   // An Opinion goes through lib/card-ops' saveOpinion — the write Evaluate and

@@ -13,5 +13,13 @@ export {
   type SqlDb,
   type Statement,
 } from "./db";
-export { moveCard, completedAtFor, isStatus, type MoveCardResult } from "./move-card";
+export {
+  moveCard,
+  completedAtFor,
+  completedAtOnCreate,
+  isStatus,
+  statusAfterPlan,
+  statusAfterTests,
+  type MoveCardResult,
+} from "./move-card";
 export { saveOpinion, type SaveOpinionResult, type SavedOpinionFields } from "./save-opinion";

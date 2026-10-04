@@ -31,10 +31,14 @@ import {
   buildPhasePolicyBody,
   buildTestStyleContract,
   completedAtFor,
+  completedAtOnCreate,
   describeOpinionMarkers,
+  isStatus,
   moveCard,
   normalizeComplexity,
   saveOpinion,
+  statusAfterPlan,
+  statusAfterTests,
 } from "./shared.js";
 import {
   createWorktree,
@@ -495,6 +499,26 @@ const STATUSES: readonly Status[] = [
   "ideation", "backlog", "bugs", "progress", "test", "completed", "withdrawn",
 ];
 
+// Write one content column and, when `nextStatus` says so, move the card —
+// one transaction, the move through lib/card-ops' moveCard so completed_at and
+// the queue trigger behave as they do for move_card. false = no such card.
+function saveFieldAndMove(
+  id: string,
+  column: "solution_summary" | "test_scenarios",
+  html: string,
+  nextStatus: (current: string) => Status | null
+): boolean {
+  return transaction(db, () => {
+    const row = db.prepare(`SELECT status FROM cards WHERE id = ?`).get(id) as { status: string } | undefined;
+    if (!row) return false;
+    const now = new Date().toISOString();
+    db.prepare(`UPDATE cards SET ${column} = ?, updated_at = ? WHERE id = ?`).run(html, now, id);
+    const target = nextStatus(row.status);
+    if (target) moveCard(db, id, target, now);
+    return true;
+  });
+}
+
 // Read a card's column back out of the row we just wrote.
 //
 // A tool result is the only thing the model sees, and it repeats it to the user
@@ -747,7 +771,7 @@ Reading the results: a newer decision overrides an older one (compare completedA
       },
       {
         name: "save_plan",
-        description: `Save a solution plan to a card and move it to In Progress. Use this when you've completed planning a task.
+        description: `Save a solution plan to a card. A card in Ideation, Backlog or Bugs moves to In Progress; anywhere else it stays in its column. Use this when you've completed planning a task.
 
 NOT the exit from Ideation. A card in the \`ideation\` column has not been evaluated yet: it needs save_opinion first, then the user's yes to move_card. Calling save_plan on an ideation card skips the evaluation the user asked for and jumps the card two columns at once — check the card's column before you call this.
 
@@ -783,7 +807,7 @@ ${PRIOR_DECISIONS_RULE}`,
       },
       {
         name: "save_tests",
-        description: `Save test scenarios to a card and move it to Human Test. Use this when you've completed implementation.
+        description: `Save test scenarios to a card and move it to Human Test (a Completed or Withdrawn card stays where it is). Use this when you've completed implementation.
 
 ${TEST_STYLE_CONTRACT}
 
@@ -1197,6 +1221,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           updates.complexity = stored;
         }
 
+        // The SDK does not enforce the schema's enum (see move_card): an
+        // unlisted value would be written and the card would leave every column.
+        if (updates.status !== undefined && !isStatus(updates.status)) {
+          return {
+            content: [{
+              type: "text",
+              text: `update_card: "${updates.status}" is not a column. Valid columns: ${STATUSES.join(", ")}.`,
+            }],
+            isError: true,
+          };
+        }
+
         if (updates.groupId !== undefined) {
           const owner = db
             .prepare(`SELECT project_id FROM cards WHERE id = ?`)
@@ -1545,6 +1581,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
         assertValidCardTitle(title);
+        if (!isStatus(status)) {
+          return {
+            content: [{
+              type: "text",
+              text: `create_card: "${status}" is not a column. Valid columns: ${STATUSES.join(", ")}.`,
+            }],
+            isError: true,
+          };
+        }
+        // A card created straight into Completed carries its finish date, as
+        // one the app creates does (lib/card-ops completedAtOnCreate).
+        if (status === "completed" && !hasCapability(db, "completedAt")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("create_card", "completedAt") }],
+            isError: true,
+          };
+        }
         assertGroupAssignable(db, groupId, projectId);
         // Callers that learned the old simple/complex enum still land on the
         // card's three levels; anything unreadable is an error, not a guess.
@@ -1578,12 +1631,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const cardId = uuidv4();
+        // completed_at goes in only when the card starts finished, so a
+        // database without the column still takes every other create.
+        const completedAt = completedAtOnCreate(status, now);
         db.prepare(`
           INSERT INTO cards (
             id, title, description, solution_summary, test_scenarios,
             status, complexity, priority, project_folder, project_id,
-            group_id, task_number, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            group_id, task_number, created_at, updated_at${completedAt ? ", completed_at" : ""}
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${completedAt ? ", ?" : ""})
         `).run(
           cardId,
           title,
@@ -1598,7 +1654,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           groupId,
           taskNumber,
           now,
-          now
+          now,
+          ...(completedAt ? [completedAt] : [])
         );
 
         // The column a card lands in already implies what happens next, but
@@ -1634,13 +1691,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // "IDE-318" in Edge Cases becomes a clickable [[ chip.
         const htmlContent = linkCardsInHtml(db, markdownToTiptapHtml(solutionSummary), projectIdOfCard(db, id));
 
-        const result = db.prepare(`
-          UPDATE cards
-          SET solution_summary = ?, status = 'progress', updated_at = ?
-          WHERE id = ?
-        `).run(htmlContent, new Date().toISOString(), id);
-
-        if (result.changes === 0) {
+        // The plan and the column move land together. Which column, and its
+        // completed_at, come from lib/card-ops — the rule the app's Apply uses.
+        if (!hasCapability(db, "completedAt")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("save_plan", "completedAt") }],
+            isError: true,
+          };
+        }
+        const saved = saveFieldAndMove(id, "solution_summary", htmlContent, statusAfterPlan);
+        if (!saved) {
           return {
             content: [{ type: "text", text: `Card not found: ${id}` }],
             isError: true,
@@ -1729,13 +1789,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ? mergeTestCheckState(existing.test_scenarios, htmlContent)
           : htmlContent;
 
-        const result = db.prepare(`
-          UPDATE cards
-          SET test_scenarios = ?, status = 'test', updated_at = ?
-          WHERE id = ?
-        `).run(mergedHtml, new Date().toISOString(), id);
-
-        if (result.changes === 0) {
+        if (!hasCapability(db, "completedAt")) {
+          return {
+            content: [{ type: "text", text: missingCapabilityMessage("save_tests", "completedAt") }],
+            isError: true,
+          };
+        }
+        const saved = saveFieldAndMove(id, "test_scenarios", mergedHtml, statusAfterTests);
+        if (!saved) {
           return {
             content: [{ type: "text", text: `Card not found: ${id}` }],
             isError: true,
