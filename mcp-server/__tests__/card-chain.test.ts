@@ -24,7 +24,8 @@ function makeDb({ groupOrder = true } = {}) {
       title TEXT NOT NULL,
       status TEXT NOT NULL,
       task_number INTEGER,
-      updated_at TEXT NOT NULL DEFAULT 'then'
+      updated_at TEXT NOT NULL DEFAULT 'then',
+      created_at TEXT NOT NULL DEFAULT 'then'
       ${groupOrder ? ", group_order INTEGER" : ""}
     );
     CREATE TABLE card_groups (
@@ -181,14 +182,31 @@ test("moveCardInChain writes 1..N for the whole chain and leaves updated_at alon
   addCard(db, "b", { task: 2, status: "completed" });
   addCard(db, "c", { task: 3 });
 
-  assert.deepEqual(moveCardInChain(db, "c", "a"), { position: 2, total: 3 });
+  assert.deepEqual(moveCardInChain(db, "c", "a"), { position: 2, total: 3, changed: true });
   assert.deepEqual(order(db), ["a", "c", "b"]);
 
-  assert.deepEqual(moveCardInChain(db, "b", null), { position: 1, total: 3 });
+  assert.deepEqual(moveCardInChain(db, "b", null), { position: 1, total: 3, changed: true });
   assert.deepEqual(order(db), ["b", "a", "c"]);
 
   const stamps = db.prepare(`SELECT DISTINCT updated_at AS u FROM cards`).all() as Array<{ u: string }>;
   assert.deepEqual(stamps.map((s) => s.u), ["then"]);
+});
+
+test("a move that leaves the chain as it was writes nothing", () => {
+  const db = makeDb();
+  // Gapped positions: a rewrite would turn them into 1..3, so any write shows.
+  addCard(db, "a", { task: 1, order: 10 });
+  addCard(db, "b", { task: 2, order: 20 });
+  addCard(db, "c", { task: 3, order: 30 });
+
+  assert.deepEqual(moveCardInChain(db, "b", "a"), { position: 2, total: 3, changed: false });
+  assert.deepEqual(moveCardInChain(db, "a", null), { position: 1, total: 3, changed: false });
+  const orders = db.prepare(`SELECT group_order AS o FROM cards ORDER BY id`).all() as Array<{ o: number }>;
+  assert.deepEqual(orders.map((r) => r.o), [10, 20, 30]);
+
+  // A real move still rewrites the whole chain.
+  assert.deepEqual(moveCardInChain(db, "a", "c"), { position: 3, total: 3, changed: true });
+  assert.deepEqual(order(db), ["b", "c", "a"]);
 });
 
 test("moveCardInChain rejects itself, another group's card, a groupless card and an old DB", () => {
@@ -224,7 +242,7 @@ test("joining a group and moving in the same transaction places the card in the 
     db.prepare(`UPDATE cards SET group_id = 'g1' WHERE id = 'x'`).run();
     return moveCardInChain(db, "x", "a");
   });
-  assert.deepEqual(placed, { position: 2, total: 4 });
+  assert.deepEqual(placed, { position: 2, total: 4, changed: true });
   assert.deepEqual(order(db), ["a", "x", "b", "c"]);
 
   // A rejected move rolls the group write back with it.

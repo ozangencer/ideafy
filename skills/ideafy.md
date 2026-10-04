@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__ideafy__get_card, mcp__ideafy__update_card, mcp__ideafy__move_card, mcp__ideafy__list_cards, mcp__ideafy__search_cards, mcp__ideafy__list_open_work, mcp__ideafy__create_card, mcp__ideafy__save_plan, mcp__ideafy__save_tests, mcp__ideafy__save_opinion, mcp__ideafy__get_project_by_folder
+allowed-tools: mcp__ideafy__get_card, mcp__ideafy__update_card, mcp__ideafy__move_card, mcp__ideafy__list_cards, mcp__ideafy__search_cards, mcp__ideafy__list_open_work, mcp__ideafy__create_card, mcp__ideafy__save_plan, mcp__ideafy__save_tests, mcp__ideafy__save_opinion, mcp__ideafy__get_project_by_folder, mcp__ideafy__list_groups, mcp__ideafy__create_group, mcp__ideafy__update_group, mcp__ideafy__delete_group
 argument-hint: [action or query]
 description: Manage ideafy cards - list, create, update, move cards and save plans/tests
 ---
@@ -96,6 +96,13 @@ Keywords: test, senaryo, scenario
 Keywords: opinion, fikir, degerlendirme, evaluate
 - Use `mcp__ideafy__save_opinion`
 - Requires card ID and AI opinion text
+
+#### Card Groups
+Keywords: group, grup, chain, zincir
+- List with `mcp__ideafy__list_groups` (pass `projectId`); reuse an existing group before creating one
+- Create with `mcp__ideafy__create_group`, rename / recolor / move to another project with `mcp__ideafy__update_group`
+- Delete with `mcp__ideafy__delete_group`: the cards stay, in no group
+- Put a card in a group with `update_card`'s `groupId`; `null` or `""` takes it out
 
 ### Step 3: Execute and Report
 

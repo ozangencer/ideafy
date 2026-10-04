@@ -65,9 +65,11 @@ import { existsSync } from "fs";
 import {
   assertGroupAssignable,
   createGroup,
+  deleteGroup,
   getChainForCard,
   listGroupsWithChains,
   moveCardInChain,
+  normalizeGroupId,
   updateGroup,
 } from "./card-groups.js";
 
@@ -615,7 +617,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             groupId: {
               type: ["string", "null"],
-              description: "card_groups.id this card belongs to — the chain the board folds it into. null removes it from its group. Get ids from list_groups; create_group makes a new one. A group is membership only: it has no status, no completion state and no date of its own, so do not treat it as an epic.",
+              description: "card_groups.id this card belongs to — the chain the board folds it into. null or \"\" removes it from its group. Get ids from list_groups; create_group makes a new one. A group is membership only: it has no status, no completion state and no date of its own, so do not treat it as an epic.",
             },
             afterCardId: {
               type: ["string", "null"],
@@ -763,8 +765,8 @@ Reading the results: a newer decision overrides an older one (compare completedA
               description: "Project ID to associate with (required)",
             },
             groupId: {
-              type: "string",
-              description: "card_groups.id this card belongs to — the chain the board folds it into. Get ids from list_groups; create_group makes a new one. A group is membership only: it has no status, no completion state and no date of its own, so do not treat it as an epic.",
+              type: ["string", "null"],
+              description: "card_groups.id this card belongs to — the chain the board folds it into. Omit, null or \"\" for no group. Get ids from list_groups; create_group makes a new one. A group is membership only: it has no status, no completion state and no date of its own, so do not treat it as an epic.",
             },
           },
           required: ["title", "projectId"],
@@ -933,7 +935,7 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             },
             color: {
               type: "string",
-              description: "Optional hex color, e.g. #22c55e",
+              description: "Optional hex color, e.g. #22c55e. Defaults to the app picker's first color.",
             },
           },
           required: ["code"],
@@ -941,7 +943,7 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
       },
       {
         name: "update_group",
-        description: "Rename a card group or change its code or color. Membership is changed per card with update_card's groupId, not here.",
+        description: "Rename a card group or change its code, color or project. Membership is changed per card with update_card's groupId, not here. Moving a group to a project is refused while it holds cards from another project; making it global (projectId null) always works.",
         inputSchema: {
           type: "object",
           properties: {
@@ -960,6 +962,24 @@ All three voices still produce the same Summary Verdict / Strengths / Concerns /
             color: {
               type: ["string", "null"],
               description: "New hex color, or null to clear it",
+            },
+            projectId: {
+              type: ["string", "null"],
+              description: "Project the group belongs to, or null to offer it in every project",
+            },
+          },
+          required: ["id"],
+        },
+      },
+      {
+        name: "delete_group",
+        description: "Delete a card group, the same as the card modal's Delete. Its cards are not deleted: they stay in their columns, in no group, and lose their chain position. The answer says how many cards were released.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "Group id from list_groups (required)",
             },
           },
           required: ["id"],
@@ -1242,6 +1262,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // "" means "no group" here as in the app's PUT: one rule for both.
+        if (updates.groupId !== undefined) {
+          updates.groupId = normalizeGroupId(updates.groupId) ?? null;
+        }
         if (updates.groupId !== undefined) {
           const owner = db
             .prepare(`SELECT project_id FROM cards WHERE id = ?`)
@@ -1334,9 +1358,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const written = Object.keys(updates).filter((key) => key in fieldMap);
         if (reorder) written.push("afterCardId");
-        const placedNote = outcome.placed
-          ? ` Chain position ${outcome.placed.position}/${outcome.placed.total}.`
-          : "";
+        const placedNote = !outcome.placed
+          ? ""
+          : outcome.placed.changed
+            ? ` Chain position ${outcome.placed.position}/${outcome.placed.total}.`
+            : ` Already at chain position ${outcome.placed.position}/${outcome.placed.total}; the order was not rewritten.`;
         return {
           content: [{
             type: "text",
@@ -1577,7 +1603,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           complexity = "medium",
           priority = "medium",
           projectId = null,
-          groupId = null,
+          groupId: rawGroupId = null,
         } = args as {
           title: string;
           description?: string;
@@ -1607,6 +1633,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+        const groupId = normalizeGroupId(rawGroupId) ?? null;
         assertGroupAssignable(db, groupId, projectId);
         // Callers that learned the old simple/complex enum still land on the
         // card's three levels; anything unreadable is an error, not a guess.
@@ -2327,10 +2354,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "update_group": {
-        const { id, ...updates } = args as { id: string; code?: string; name?: string; color?: string | null };
+        const { id, ...updates } = args as {
+          id: string;
+          code?: string;
+          name?: string;
+          color?: string | null;
+          projectId?: string | null;
+        };
+        // The app's Save may send an unchanged form and get the row back; an
+        // agent that calls with nothing to change has lost track of something,
+        // the same guard update_card has.
+        if (Object.values(updates).every((value) => value === undefined)) {
+          return {
+            content: [{
+              type: "text",
+              text: `update_group: nothing to update for group ${id}. Pass code, name, color or projectId.`,
+            }],
+            isError: true,
+          };
+        }
         const group = updateGroup(db, id, updates);
         return {
           content: [{ type: "text", text: `Group ${group.id} updated: ${group.code} · ${group.name}.` }],
+        };
+      }
+
+      case "delete_group": {
+        const { id } = args as { id: string };
+        const { group, releasedCards } = deleteGroup(db, id);
+        return {
+          content: [{
+            type: "text",
+            text: `Group ${group.code} · ${group.name} deleted. ${releasedCards} card(s) released: they keep their columns and are in no group now.`,
+          }],
         };
       }
 

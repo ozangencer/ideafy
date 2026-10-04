@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
+import { db, schema, sqlite } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { trashCard } from "@/lib/card-trash";
 import { QUEUE_CLEARING_STATUSES } from "@/lib/card-queue";
 import { parseOutputPaths } from "@/lib/output-paths";
-import { completedAtFor, isStatus, opinionEditFields } from "@/lib/card-ops";
+import {
+  CardGroupError,
+  assertGroupAssignable,
+  completedAtFor,
+  isStatus,
+  normalizeGroupId,
+  opinionEditFields,
+} from "@/lib/card-ops";
 import {
   ensureHtml,
   ensureTestScenariosHtml,
@@ -113,6 +120,24 @@ export async function PUT(
   const newProjectId = body.projectId !== undefined ? body.projectId : existing.projectId;
   let taskNumber = existing.taskNumber;
 
+  // `null` and "" both mean "leave the group"; undefined means "don't touch
+  // it". Only the check is shared with update_card — the write stays this
+  // route's one UPDATE, so no second write can race the rest of the save.
+  // Checked on a change only: the modal sends groupId on every save, and a
+  // card already sitting in a stale group must still save its title.
+  const sentGroupId = normalizeGroupId(body.groupId);
+  const newGroupId = sentGroupId !== undefined ? sentGroupId : existing.groupId;
+  if (newGroupId !== existing.groupId || newProjectId !== existing.projectId) {
+    try {
+      assertGroupAssignable(sqlite(), newGroupId, newProjectId ?? null);
+    } catch (err) {
+      if (err instanceof CardGroupError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
+  }
+
   // The same completed_at rule the MCP's move_card and update_card apply.
   let completedAt = completedAtFor(
     existing.status,
@@ -210,9 +235,7 @@ export async function PUT(
       : edited.priority ?? body.priority ?? existing.priority,
     projectFolder: body.projectFolder ?? existing.projectFolder,
     projectId: newProjectId,
-    // `null` is a meaningful value here (leave the group), so an explicit
-    // undefined check is the only way to tell "clear it" from "don't touch it".
-    groupId: body.groupId !== undefined ? (body.groupId || null) : existing.groupId,
+    groupId: newGroupId,
     taskNumber,
     aiPlatform: body.aiPlatform !== undefined ? (body.aiPlatform || null) : existing.aiPlatform,
     useWorktree: body.useWorktree !== undefined

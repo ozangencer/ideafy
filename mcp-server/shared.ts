@@ -44,9 +44,27 @@ export const {
   statusAfterTests,
   saveOpinion,
   clearQueue,
+  DEFAULT_GROUP_COLOR,
+  CardGroupError,
+  normalizeGroupCode,
+  normalizeGroupId,
+  getGroup,
+  listGroups,
+  assertGroupAssignable,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  moveCardInChain,
 } = unwrap(cardOpsNs);
 export const { normalizeComplexity, describeOpinionMarkers } = unwrap(opinionMarkersNs);
 
 export type { CardResolver, LinkedCard } from "../lib/card-links";
 export type { ChainCardRef, ChainContext } from "../lib/chain-order";
-export type { SqlDb, Statement, MoveCardResult, ClearedQueueCard } from "../lib/card-ops";
+export type {
+  SqlDb,
+  Statement,
+  MoveCardResult,
+  ClearedQueueCard,
+  CardGroupRow,
+  ChainMove,
+} from "../lib/card-ops";

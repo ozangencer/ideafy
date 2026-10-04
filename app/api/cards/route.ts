@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { eq, desc, isNotNull, and, lt, sql } from "drizzle-orm";
-import { db, schema } from "@/lib/db";
+import { eq, asc, desc, isNotNull, and, lt, sql } from "drizzle-orm";
+import { db, schema, sqlite } from "@/lib/db";
 import { Card } from "@/lib/types";
 import { ensureHtml, ensureTestScenariosHtml } from "@/lib/markdown";
 import { parseOutputPaths } from "@/lib/output-paths";
-import { completedAtOnCreate, isStatus } from "@/lib/card-ops";
+import {
+  CardGroupError,
+  assertGroupAssignable,
+  completedAtOnCreate,
+  isStatus,
+  normalizeGroupId,
+} from "@/lib/card-ops";
 
 // Processing timeout in milliseconds (30 minutes)
 const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
@@ -24,7 +30,14 @@ export async function GET() {
     )
     .run();
 
-  const rows = db.select().from(schema.cards).orderBy(desc(schema.cards.taskNumber)).all();
+  // createdAt breaks ties the way MCP's chain queries do: the chain sort is
+  // stable, so two unplaced drafts keep this order on the board and in a
+  // terminal alike.
+  const rows = db
+    .select()
+    .from(schema.cards)
+    .orderBy(desc(schema.cards.taskNumber), asc(schema.cards.createdAt))
+    .all();
 
   const cards: Card[] = rows.map((row) => ({
     id: row.id,
@@ -85,6 +98,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Checked before a task number is spent: a group that does not exist or
+  // belongs to another project is refused, the same as create_card does.
+  const groupId = normalizeGroupId(body.groupId) ?? null;
+  try {
+    assertGroupAssignable(sqlite(), groupId, body.projectId || null);
+  } catch (err) {
+    if (err instanceof CardGroupError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+
   let taskNumber: number | null = null;
   let projectFolder = body.projectFolder || "";
 
@@ -126,7 +151,7 @@ export async function POST(request: NextRequest) {
     priority: body.priority || "medium",
     projectFolder,
     projectId: body.projectId || null,
-    groupId: body.groupId || null,
+    groupId,
     groupOrder: null,
     queuePosition: null,
     taskNumber,
