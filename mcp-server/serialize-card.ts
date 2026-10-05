@@ -100,7 +100,7 @@ const PLANNING_STATUSES = new Set(["backlog", "bugs", "progress"]);
 
 // Tiptap can store a cleared field as <p></p>, so a field only counts once its
 // tags and whitespace are gone and something is left.
-function hasHtmlText(html: string | null | undefined): boolean {
+export function hasHtmlText(html: string | null | undefined): boolean {
   if (!html) return false;
   return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
 }
@@ -141,12 +141,19 @@ export function buildPriorDecisionsNote(card: { status: string }): string | null
 // they do in the app. Once an opinion is written the note stops: a card that
 // is only being read should not carry ~5 KB of rule every time. `statuses`
 // is open so create_card can attach the same note to a card it just opened.
+//
+// A backlog card opened without an opinion gets it too (IDE-405): the backlog
+// policy asks for the opinion before the plan, and without the note that
+// opinion would skip the search_cards / list_open_work check. Past Ideation a
+// plan means the card was already decided on, so a planned card reads as
+// before and the note stops the moment either field is written.
 export function buildEvaluationNote(
-  card: { status: string; aiOpinion?: string | null },
-  statuses: readonly string[] = ["ideation"]
+  card: { status: string; aiOpinion?: string | null; solutionSummary?: string | null },
+  statuses: readonly string[] = ["ideation", "backlog"]
 ): string | null {
   if (!statuses.includes(card.status)) return null;
   if (hasHtmlText(card.aiOpinion)) return null;
+  if (card.status !== "ideation" && hasHtmlText(card.solutionSummary)) return null;
   return `If you are evaluating this idea:\n${buildEvaluationGuide()}`;
 }
 

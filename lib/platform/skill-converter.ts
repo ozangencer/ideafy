@@ -60,7 +60,7 @@ Use the Ideafy MCP tools to list, create, update, and move cards for the current
 - List cards: call \`mcp__ideafy__list_cards\` with the resolved \`projectId\`. It returns a summary per card; read content with \`get_card\`.
 - Before writing a plan or an evaluation: follow the rule \`mcp__ideafy__get_card\` returns with the card — it covers \`search_cards\`, \`list_open_work\` and the chain, and on an ideation card the evaluation template too.
 - Show a card: call \`mcp__ideafy__get_card\` with a UUID, display ID, or task number.
-- Create a card: call \`mcp__ideafy__create_card\` with a title, projectId, and any provided description, priority, complexity, or status.
+- Create a card: call \`mcp__ideafy__create_card\` with a title, projectId, and any provided description, priority, complexity, or status. Then do what its result says — on a card opened without a plan outside ideation and bugs, that means writing its AI Opinion in the same turn.
 - Update a card: call \`mcp__ideafy__update_card\` only for fields the user explicitly asked to change.
 - Move a card: call \`mcp__ideafy__move_card\` with one of \`ideation\`, \`backlog\`, \`bugs\`, \`progress\`, \`test\`, \`completed\`, or \`withdrawn\`.
 - Save a plan: call \`mcp__ideafy__save_plan\`; it moves the card to In Progress.

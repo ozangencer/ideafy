@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildPhasePolicyBody, statusAfterPlan, statusAfterTests } from "../shared.js";
+import {
+  buildCreatedCardOpinionClause,
+  buildPhaseHint,
+  buildPhasePolicyBody,
+  statusAfterPlan,
+  statusAfterTests,
+} from "../shared.js";
 
 // Drift guard between what the phase-aware hook PROMISES the model and what the
 // MCP handlers actually DO.
@@ -280,6 +286,45 @@ test("create_card names the expected next action for the column it lands in", ()
     "create_card returns a bare card id. The column already implies what " +
       "happens next; saying so is the cheapest place to say it."
   );
+});
+
+// IDE-405: a card opened from a conversation outside Ideation and Bugs gets
+// its opinion in the same turn. The clause is an exception to "ask before any
+// save_*", so what it allows and what it does not are both pinned here.
+
+test("a card opened without a plan into backlog, progress or test is asked for its opinion", () => {
+  for (const status of ["backlog", "progress", "test"]) {
+    const clause = buildCreatedCardOpinionClause(status, false);
+    assert.ok(clause, status);
+    assert.match(clause, /save_opinion/);
+    assert.match(clause, /without asking/);
+    assert.match(clause, /opinion'sız aç/, "the opt-out phrase is gone");
+    assert.match(
+      clause,
+      /Every other save_\* call and\s+move_card still needs the user's confirmation/,
+      "without this sentence the exception reads as permission for an unconfirmed save_plan"
+    );
+  }
+});
+
+test("ideation, bugs, finished and planned cards get no opinion clause", () => {
+  for (const status of ["ideation", "bugs", "completed", "withdrawn"]) {
+    assert.equal(buildCreatedCardOpinionClause(status, false), null, status);
+  }
+  // /human-test opens a finished piece of work into progress with its plan.
+  for (const status of ["backlog", "progress", "test"]) {
+    assert.equal(buildCreatedCardOpinionClause(status, true), null, status);
+  }
+});
+
+test("create_card attaches the opinion clause and the evaluation note", () => {
+  const body = handlerBody("create_card");
+  assert.match(body, /buildCreatedCardOpinionClause\(status, hasHtmlText\(solutionSummary\)\)/);
+  assert.match(body, /buildEvaluationNote\(/);
+});
+
+test("the backlog hint create_card returns stays one sentence", () => {
+  assert.equal(buildPhaseHint("backlog"), "Column: backlog — expected next action: propose save_plan.");
 });
 
 test("save_plan's description states it is not the exit from Ideation", () => {

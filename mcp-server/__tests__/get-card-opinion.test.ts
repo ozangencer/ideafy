@@ -112,13 +112,36 @@ test("an ideation card without an opinion gets the evaluation rule and the templ
 
 test("the evaluation note stops once the opinion is written or the card left Ideation", () => {
   assert.equal(buildEvaluationNote({ status: "ideation", aiOpinion: "<p>Yes.</p>" }), null);
-  for (const status of ["backlog", "bugs", "progress", "test", "completed", "withdrawn"]) {
+  for (const status of ["bugs", "progress", "test", "completed", "withdrawn"]) {
     assert.equal(buildEvaluationNote({ status, aiOpinion: null }), null, status);
   }
 });
 
+// IDE-405: a backlog card opened without an opinion is asked for one before
+// its plan, so a session that binds to it later needs the same rule.
+test("a backlog card with neither an opinion nor a plan gets the evaluation note", () => {
+  for (const solutionSummary of [null, "", "<p></p>"]) {
+    const note = buildEvaluationNote({ status: "backlog", aiOpinion: null, solutionSummary });
+    assert.ok(note, "no evaluation note for an unevaluated backlog card");
+    assert.ok(note.includes(EVALUATION_OUTPUT_SCHEMA));
+  }
+});
+
+test("a backlog card with a plan or an opinion reads as before", () => {
+  assert.equal(
+    buildEvaluationNote({ status: "backlog", aiOpinion: null, solutionSummary: "<p>Step 1.</p>" }),
+    null,
+  );
+  assert.equal(
+    buildEvaluationNote({ status: "backlog", aiOpinion: "<p>Yes.</p>", solutionSummary: null }),
+    null,
+  );
+  // An ideation card is evaluated whatever its description says about a plan.
+  assert.ok(buildEvaluationNote({ status: "ideation", aiOpinion: null, solutionSummary: "<p>Plan.</p>" }));
+});
+
 test("the evaluation note's columns are open for a caller that needs another one", () => {
-  assert.ok(buildEvaluationNote({ status: "backlog", aiOpinion: null }, ["ideation", "backlog"]));
+  assert.ok(buildEvaluationNote({ status: "progress", aiOpinion: null }, ["backlog", "progress", "test"]));
   assert.equal(buildEvaluationNote({ status: "ideation", aiOpinion: null }, ["backlog"]), null);
 });
 

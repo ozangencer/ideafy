@@ -17,7 +17,7 @@ const PHASE_INSTRUCTIONS: Record<string, string> = {
   ideation:
     "evaluate the idea with the rule and template get_card returns for this card, then propose save_opinion. This tool does NOT move the card. Once the opinion is saved, ask separately whether to move the card — to 'backlog' if the verdict was positive, to 'withdrawn' if it was negative — and call move_card only on a clear yes. Never report the card as moved until move_card has returned.",
   backlog:
-    "propose save_plan. This moves the card to In Progress. Build the plan on the card's AI Opinion when it has one — get_card returns it with the rule.",
+    "propose save_plan. This moves the card to In Progress. Build the plan on the card's AI Opinion when it has one — get_card returns it with the rule. If the card has no AI Opinion yet, propose save_opinion first, with the evaluation rule get_card returns.",
   bugs:
     "propose save_plan. This moves the card to In Progress. Build the plan on the card's AI Opinion when it has one — get_card returns it with the rule.",
   progress:
@@ -61,6 +61,35 @@ export function buildPhaseHint(status: string): string | null {
   if (!instruction) return null;
   const firstSentence = instruction.split(". ")[0].replace(/\.$/, "");
   return `Column: ${status} — expected next action: ${firstSentence}.`;
+}
+
+// The columns a card opened from a conversation gets its AI Opinion in the
+// same turn. Ideation keeps its own flow (the evaluation is asked for), a bug
+// needs fixing rather than evaluating, and completed/withdrawn are records.
+const OPINION_ON_CREATE_STATUSES = new Set(["backlog", "progress", "test"]);
+
+// What create_card adds when a card is opened without a plan into one of the
+// columns above. The user agreed to open the card after a conversation that
+// usually already covered the opinion's content, so that yes covers the
+// opinion too. A card opened with a plan is skipped: /human-test opens a
+// finished piece of work into progress that way, a record rather than an idea.
+//
+// The last sentence is load-bearing. bind_session_to_card usually follows in
+// the same turn and its policy says to ask before any save_* call; without the
+// exception being pinned to this one call, the two instructions contradict
+// each other, or the exception spreads to an unconfirmed save_plan.
+export function buildCreatedCardOpinionClause(status: string, hasPlan: boolean): string | null {
+  if (!OPINION_ON_CREATE_STATUSES.has(status) || hasPlan) return null;
+  return [
+    "The user's yes to opening this card covers its AI Opinion too. In this same turn, without asking,",
+    "write the opinion with the evaluation rule below and save it with save_opinion; only after that",
+    "propose save_plan. If the card was opened into a group, call get_card on it first for its chain.",
+    "Fill Concerns with your own doubts about the idea — do not restate the case you argued in the",
+    "conversation. Skip the opinion if the user asked to open the card without one (\"opinion'sız aç\",",
+    "\"hızlıca at\", \"no opinion\", \"just drop it in\").",
+    "This exception covers only this save_opinion call on this new card. Every other save_* call and",
+    "move_card still needs the user's confirmation first, as the session policy says.",
+  ].join("\n");
 }
 
 // Card titles and project names are interpolated into a <system-reminder>

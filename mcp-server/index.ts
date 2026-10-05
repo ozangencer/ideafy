@@ -21,6 +21,7 @@ import {
   buildPriorDecisionsNote,
   buildChainImplementationNote,
   buildEvaluationNote,
+  hasHtmlText,
   type ExtractedImage,
 } from "./serialize-card.js";
 import { parseOutputPaths, recordOutputPath } from "./output-paths.js";
@@ -30,6 +31,7 @@ import {
   EVALUATION_HEADINGS_RULE,
   EVALUATION_OUTPUT_SCHEMA,
   PRIOR_DECISIONS_RULE,
+  buildCreatedCardOpinionClause,
   buildPhaseHint,
   buildPhasePolicyBody,
   buildTestStyleContract,
@@ -752,7 +754,7 @@ Reading the results: a newer decision overrides an older one (compare completedA
       },
       {
         name: "create_card",
-        description: "Create a new kanban card. Markdown content in description and solutionSummary will be converted to HTML. Test scenarios should be added after implementation using save_tests.",
+        description: "Create a new kanban card. Markdown content in description and solutionSummary will be converted to HTML. Test scenarios should be added after implementation using save_tests. On a backlog, progress or test card opened without a plan, the result asks you to write its AI Opinion in the same turn.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1226,8 +1228,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (chainImplementationNote) {
           content.push({ type: "text", text: chainImplementationNote });
         }
-        // An ideation card still waiting for its opinion gets the evaluation
-        // rule and template Evaluate and Ideate run on.
+        // An ideation card still waiting for its opinion — or a backlog card
+        // with neither an opinion nor a plan — gets the evaluation rule and
+        // template Evaluate and Ideate run on.
         const evaluationNote = buildEvaluationNote(card);
         if (evaluationNote) {
           content.push({ type: "text", text: evaluationNote });
@@ -1788,17 +1791,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // is enough here; bind_session_to_card follows with the full block in
         // the usual flow, and two copies of it in one turn is just noise.
         const hint = buildPhaseHint(status);
+        const content: Array<{ type: "text"; text: string }> = [
+          {
+            type: "text",
+            text: hint
+              ? `Card created: ${cardId} (${title}). ${hint}`
+              : `Card created: ${cardId} (${title})`,
+          },
+        ];
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: hint
-                ? `Card created: ${cardId} (${title}). ${hint}`
-                : `Card created: ${cardId} (${title})`,
-            },
-          ],
-        };
+        // A card opened from a conversation outside Ideation and Bugs gets its
+        // opinion in the same turn (IDE-405). The clause says so and pins the
+        // exception to that one save_opinion; the evaluation note carries the
+        // rule and template Evaluate runs on. Only these openings pay for the
+        // ~5 KB — ideation, bugs and planned cards read as one line.
+        const opinionClause = buildCreatedCardOpinionClause(status, hasHtmlText(solutionSummary));
+        if (opinionClause) {
+          content.push({ type: "text", text: opinionClause });
+          const evaluationNote = buildEvaluationNote(
+            { status, aiOpinion: null },
+            ["backlog", "progress", "test"]
+          );
+          if (evaluationNote) {
+            content.push({ type: "text", text: evaluationNote });
+          }
+        }
+
+        return { content };
       }
 
       case "save_plan": {

@@ -31,7 +31,7 @@ function unwrap<T extends object>(ns: T): T {
 }
 
 export const { buildTestStyleContract } = unwrap(testStyleNs);
-export const { buildPhaseHint, buildPhasePolicyBody } = unwrap(phasePolicyNs);
+export const { buildPhaseHint, buildPhasePolicyBody, buildCreatedCardOpinionClause } = unwrap(phasePolicyNs);
 export const { AI_OPINION_PLANNING_RULE } = unwrap(opinionNs);
 export const { PRIOR_DECISIONS_RULE, CHAIN_IMPLEMENTATION_RULE } = unwrap(priorDecisionsNs);
 export const { linkCardReferences } = unwrap(cardLinksNs);
